@@ -4,18 +4,24 @@
 #include <string.h>
 
 static void add_tri(Vertex* vs, uint32_t* is, int* v, vec3 p1, vec3 p2, vec3 p3) {
-    vec3 e1, e2, n;
-    glm_vec3_sub(p2, p1, e1);
-    glm_vec3_sub(p3, p1, e2);
+    vec3 n1, n2, n3, e1, e2, n;
+    // Normalize points to unit sphere
+    glm_vec3_normalize_to(p1, n1);
+    glm_vec3_normalize_to(p2, n2);
+    glm_vec3_normalize_to(p3, n3);
+    
+    glm_vec3_sub(n2, n1, e1);
+    glm_vec3_sub(n3, n1, e2);
     glm_vec3_cross(e1, e2, n);
     glm_vec3_normalize(n);
+    
     for(int i=0; i<3; i++) {
         memcpy(vs[*v+i].normal, n, 12);
         vs[*v+i].texCoord[0] = 0; vs[*v+i].texCoord[1] = 0;
     }
-    memcpy(vs[*v+0].pos, p1, 12);
-    memcpy(vs[*v+1].pos, p2, 12);
-    memcpy(vs[*v+2].pos, p3, 12);
+    memcpy(vs[*v+0].pos, n1, 12);
+    memcpy(vs[*v+1].pos, n2, 12);
+    memcpy(vs[*v+2].pos, n3, 12);
     is[*v+0] = *v+0; is[*v+1] = *v+1; is[*v+2] = *v+2;
     *v += 3;
 }
@@ -60,14 +66,12 @@ void polyhedron_generate_platonic(PlatonicType type, Vertex** vertices, uint32_t
             *vertices = calloc(*vertexCount, sizeof(Vertex)); *indices = malloc(60 * 4);
             int v=0;
             vec3 p[12] = {{0,1,phi},{0,1,-phi},{0,-1,phi},{0,-1,-phi},{1,phi,0},{1,-phi,0},{-1,phi,0},{-1,-phi,0},{phi,0,1},{-phi,0,1},{phi,0,-1},{-phi,0,-1}};
-            int f[20][3] = {{0,8,4},{0,4,6},{0,6,9},{0,9,2},{0,2,8},{1,4,10},{1,10,11},{1,11,7},{1,7,6},{1,6,4},{2,9,7},{2,7,5},{2,5,8},{3,10,5},{3,5,7},{3,7,11},{3,11,10},{3,10,5},{4,8,10},{5,10,8},{6,7,9},{11,9,7},{3,5,8},{3,8,10}};
-            // For simplicity in bootstrap, using standard face list
             int idx[20][3] = {{0,4,1},{0,9,4},{9,5,4},{4,5,8},{4,8,1},{8,10,1},{8,3,10},{5,3,8},{5,2,3},{2,7,3},{7,10,3},{7,6,10},{7,11,6},{11,0,6},{0,1,6},{6,1,10},{9,0,11},{9,11,2},{9,2,5},{7,2,11}};
             for(int i=0; i<20; i++) add_tri(*vertices, *indices, &v, p[idx[i][0]], p[idx[i][1]], p[idx[i][2]]);
             break;
         }
         case PLATONIC_DODECAHEDRON: {
-            *vertexCount = 108; *indexCount = 108; // 12 faces * 3 triangles/face * 3 verts
+            *vertexCount = 108; *indexCount = 108;
             *vertices = calloc(*vertexCount, sizeof(Vertex)); *indices = malloc(108 * 4);
             int v=0;
             vec3 p[20] = {{1,1,1},{1,1,-1},{1,-1,1},{1,-1,-1},{-1,1,1},{-1,1,-1},{-1,-1,1},{-1,-1,-1},{0,1/phi,phi},{0,1/phi,-phi},{0,-1/phi,phi},{0,-1/phi,-phi},{1/phi,phi,0},{1/phi,-phi,0},{-1/phi,phi,0},{-1/phi,-phi,0},{phi,0,1/phi},{phi,0,-1/phi},{-phi,0,1/phi},{-phi,0,-1/phi}};

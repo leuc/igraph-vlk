@@ -33,6 +33,7 @@ typedef struct {
     VkPipeline graphicsPipeline;
     VkPipeline edgePipeline;
     VkPipeline labelPipeline;
+    VkPipeline uiPipeline;
     VkFramebuffer* framebuffers;
     VkCommandPool commandPool;
     VkCommandBuffer* commandBuffers;
@@ -79,6 +80,13 @@ typedef struct {
     uint32_t labelCharCount;
     bool showLabels;
     float layoutScale;
+
+    // UI
+    VkBuffer uiBgVertexBuffer;
+    VkDeviceMemory uiBgVertexBufferMemory;
+    VkBuffer uiTextInstanceBuffer;
+    VkDeviceMemory uiTextInstanceBufferMemory;
+    uint32_t uiTextCharCount;
 } Renderer;
 
 int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph);
@@ -86,5 +94,6 @@ void renderer_cleanup(Renderer* r);
 void renderer_draw_frame(Renderer* r);
 void renderer_update_view(Renderer* r, vec3 pos, vec3 front, vec3 up);
 void renderer_update_graph(Renderer* r, GraphData* graph);
+void renderer_update_ui(Renderer* r, const char* text);
 
 #endif

@@ -23,6 +23,20 @@ typedef enum {
     CLUSTER_COUNT
 } ClusterType;
 
+typedef enum {
+    CENTRALITY_PAGERANK,
+    CENTRALITY_HUB,
+    CENTRALITY_AUTHORITY,
+    CENTRALITY_BETWEENNESS,
+    CENTRALITY_DEGREE,
+    CENTRALITY_CLOSENESS,
+    CENTRALITY_HARMONIC,
+    CENTRALITY_EIGENVECTOR,
+    CENTRALITY_STRENGTH,
+    CENTRALITY_CONSTRAINT,
+    CENTRALITY_COUNT
+} CentralityType;
+
 typedef struct {
     vec3 position;
     vec3 color;
@@ -46,6 +60,7 @@ typedef struct {
 
 int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_type, int node_limit, const char* node_attr, const char* edge_attr);
 void graph_cluster(const char* filename, GraphData* data, ClusterType type, int node_limit);
+void graph_calculate_centrality(const char* filename, GraphData* data, CentralityType type, int node_limit);
 void graph_free_data(GraphData* data);
 
 #endif

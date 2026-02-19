@@ -21,17 +21,31 @@ int windowedX, windowedY, windowedWidth, windowedHeight;
 Renderer renderer;
 GraphData currentGraph;
 char* currentFilename;
-LayoutType currentLayout;
+LayoutType currentLayout = LAYOUT_FR_3D;
 ClusterType currentCluster = CLUSTER_FASTGREEDY;
+CentralityType currentCentrality = CENTRALITY_PAGERANK;
 int currentNodeLimit;
 char* currentNodeAttr;
 char* currentEdgeAttr;
 
-const char* layout_names[] = { "Fruchterman-Reingold 3D", "Kamada-Kawai 3D", "Random 3D", "Sphere", "Grid 3D", "UMAP 3D", "DrL 3D" };
-const char* cluster_names[] = { "Fast Greedy", "Walktrap", "Label Propagation", "Multilevel", "Leiden" };
+const char* layout_names[] = { "FR", "KK", "Random", "Sphere", "Grid", "UMAP", "DrL" };
+const char* cluster_names[] = { "FastGreedy", "Walktrap", "LabelProp", "Multilevel", "Leiden" };
+const char* centrality_names[] = { "PageRank", "Hub", "Auth", "Betweenness", "Degree", "Closeness", "Harmonic", "Eigen", "Strength", "Constraint" };
+
+void update_ui_text(float fps) {
+    char buf[512];
+    snprintf(buf, sizeof(buf), 
+        "[L]ayout: %s | [G]roup: %s | [C]entrality: %s | [T]ext: %s | FPS: %.1f",
+        layout_names[currentLayout],
+        cluster_names[currentCluster],
+        centrality_names[currentCentrality],
+        renderer.showLabels ? "ON" : "OFF",
+        fps
+    );
+    renderer_update_ui(&renderer, buf);
+}
 
 void update_layout() {
-    printf("Switching to layout: %s\n", layout_names[currentLayout]);
     graph_free_data(&currentGraph);
     if (graph_load_graphml(currentFilename, &currentGraph, currentLayout, currentNodeLimit, currentNodeAttr, currentEdgeAttr) == 0) {
         renderer_update_graph(&renderer, &currentGraph);
@@ -39,8 +53,12 @@ void update_layout() {
 }
 
 void run_clustering() {
-    printf("Running clustering: %s\n", cluster_names[currentCluster]);
     graph_cluster(currentFilename, &currentGraph, currentCluster, currentNodeLimit);
+    renderer_update_graph(&renderer, &currentGraph);
+}
+
+void run_centrality() {
+    graph_calculate_centrality(currentFilename, &currentGraph, currentCentrality, currentNodeLimit);
     renderer_update_graph(&renderer, &currentGraph);
 }
 
@@ -80,28 +98,14 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             }
             isFullscreen = !isFullscreen;
             break;
-        case GLFW_KEY_T:
-            renderer.showLabels = !renderer.showLabels;
-            printf("Labels: %s\n", renderer.showLabels ? "ON" : "OFF");
-            break;
-        case GLFW_KEY_L:
-            currentLayout = (currentLayout + 1) % 7;
-            update_layout();
-            break;
-        case GLFW_KEY_G:
-            currentCluster = (currentCluster + 1) % CLUSTER_COUNT;
-            run_clustering();
-            break;
+        case GLFW_KEY_T: renderer.showLabels = !renderer.showLabels; break;
+        case GLFW_KEY_L: currentLayout = (currentLayout + 1) % 7; update_layout(); break;
+        case GLFW_KEY_G: currentCluster = (currentCluster + 1) % CLUSTER_COUNT; run_clustering(); break;
+        case GLFW_KEY_C: currentCentrality = (currentCentrality + 1) % CENTRALITY_COUNT; run_centrality(); break;
         case GLFW_KEY_KP_ADD:
-        case GLFW_KEY_EQUAL:
-            renderer.layoutScale *= 1.2f;
-            renderer_update_graph(&renderer, &currentGraph);
-            break;
+        case GLFW_KEY_EQUAL: renderer.layoutScale *= 1.2f; renderer_update_graph(&renderer, &currentGraph); break;
         case GLFW_KEY_KP_SUBTRACT:
-        case GLFW_KEY_MINUS:
-            renderer.layoutScale /= 1.2f;
-            renderer_update_graph(&renderer, &currentGraph);
-            break;
+        case GLFW_KEY_MINUS: renderer.layoutScale /= 1.2f; renderer_update_graph(&renderer, &currentGraph); break;
     }
 }
 
@@ -134,54 +138,20 @@ void processInput(GLFWwindow *window, float deltaTime) {
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) { vec3 cross; glm_vec3_cross(cameraFront, cameraUp, cross); glm_vec3_normalize(cross); glm_vec3_scale(cross, cameraSpeed, temp); glm_vec3_add(cameraPos, temp, cameraPos); }
 }
 
-void print_usage(const char* prog) {
-    fprintf(stderr, "Usage: %s [options] <graph.graphml>\n", prog);
-    fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  -l, --layout <type>    Layout type: fr (default), kk, random, sphere, grid, umap, drl\n");
-    fprintf(stderr, "  -n, --nodes <count>    Limit number of nodes to load\n");
-    fprintf(stderr, "  --node-attr <name>     Attribute for node size (default: pagerank)\n");
-    fprintf(stderr, "  --edge-attr <name>     Attribute for edge size (default: betweenness)\n");
-}
-
 int main(int argc, char** argv) {
-    currentLayout = LAYOUT_FR_3D;
-    currentNodeLimit = -1;
-    currentNodeAttr = NULL;
-    currentEdgeAttr = NULL;
     int opt;
-    static struct option long_options[] = {
-        {"layout", required_argument, 0, 'l'},
-        {"nodes", required_argument, 0, 'n'},
-        {"node-attr", required_argument, 0, 1},
-        {"edge-attr", required_argument, 0, 2},
-        {0, 0, 0, 0}
-    };
-
+    static struct option long_options[] = { {"layout", 1, 0, 'l'}, {"nodes", 1, 0, 'n'}, {"node-attr", 1, 0, 1}, {"edge-attr", 1, 0, 2}, {0, 0, 0, 0} };
     while ((opt = getopt_long(argc, argv, "l:n:", long_options, NULL)) != -1) {
         switch (opt) {
-            case 'l':
-                if (strcmp(optarg, "fr") == 0) currentLayout = LAYOUT_FR_3D;
-                else if (strcmp(optarg, "kk") == 0) currentLayout = LAYOUT_KK_3D;
-                else if (strcmp(optarg, "random") == 0) currentLayout = LAYOUT_RANDOM_3D;
-                else if (strcmp(optarg, "sphere") == 0) currentLayout = LAYOUT_SPHERE;
-                else if (strcmp(optarg, "grid") == 0) currentLayout = LAYOUT_GRID_3D;
-                else if (strcmp(optarg, "umap") == 0) currentLayout = LAYOUT_UMAP_3D;
-                else if (strcmp(optarg, "drl") == 0) currentLayout = LAYOUT_DRL_3D;
-                break;
+            case 'l': if (strcmp(optarg, "fr") == 0) currentLayout = LAYOUT_FR_3D; else if (strcmp(optarg, "kk") == 0) currentLayout = LAYOUT_KK_3D; break;
             case 'n': currentNodeLimit = atoi(optarg); break;
             case 1: currentNodeAttr = optarg; break;
             case 2: currentEdgeAttr = optarg; break;
-            default: print_usage(argv[0]); return EXIT_FAILURE;
         }
     }
-
-    if (optind >= argc) { print_usage(argv[0]); return EXIT_FAILURE; }
+    if (optind >= argc) return EXIT_FAILURE;
     currentFilename = argv[optind];
-
-    if (graph_load_graphml(currentFilename, &currentGraph, currentLayout, currentNodeLimit, currentNodeAttr, currentEdgeAttr) != 0) {
-        return EXIT_FAILURE;
-    }
-
+    if (graph_load_graphml(currentFilename, &currentGraph, currentLayout, currentNodeLimit, currentNodeAttr, currentEdgeAttr) != 0) return EXIT_FAILURE;
     if (!glfwInit()) return EXIT_FAILURE;
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     GLFWwindow* window = glfwCreateWindow(3440, 1440, "Graph Sphere", NULL, NULL);
@@ -191,12 +161,19 @@ int main(int argc, char** argv) {
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     if (renderer_init(&renderer, window, &currentGraph) != 0) return EXIT_FAILURE;
     float lastFrame = 0.0f;
+    float fpsTimer = 0.0f;
+    int frameCount = 0;
+    float currentFps = 0.0f;
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = (float)glfwGetTime();
         float deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
+        fpsTimer += deltaTime;
+        frameCount++;
+        if (fpsTimer >= 1.0f) { currentFps = frameCount / fpsTimer; frameCount = 0; fpsTimer = 0.0f; }
         glfwPollEvents();
         processInput(window, deltaTime);
+        update_ui_text(currentFps);
         renderer_update_view(&renderer, cameraPos, cameraFront, cameraUp);
         renderer_draw_frame(&renderer);
     }
