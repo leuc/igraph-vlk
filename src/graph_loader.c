@@ -131,6 +131,79 @@ int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_
     return 0;
 }
 
+void graph_cluster(const char* filename, GraphData* data, ClusterType type, int node_limit) {
+    igraph_t g_full;
+    FILE* fp = fopen(filename, "r");
+    if (!fp) return;
+    if (igraph_read_graph_graphml(&g_full, fp, 0) != IGRAPH_SUCCESS) { fclose(fp); return; }
+    fclose(fp);
+
+    igraph_t g;
+    if (node_limit > 0 && igraph_vcount(&g_full) > node_limit) {
+        igraph_vs_t vs; igraph_vector_int_t vids; igraph_vector_int_init(&vids, node_limit);
+        for(int i=0; i<node_limit; i++) VECTOR(vids)[i] = i;
+        igraph_vs_vector(&vs, &vids);
+        igraph_induced_subgraph(&g_full, &g, vs, IGRAPH_SUBGRAPH_CREATE_FROM_SCRATCH);
+        igraph_vs_destroy(&vs); igraph_vector_int_destroy(&vids); igraph_destroy(&g_full);
+    } else { g = g_full; }
+    igraph_simplify(&g, 1, 1, NULL);
+
+    igraph_vector_int_t membership;
+    igraph_vector_int_init(&membership, igraph_vcount(&g));
+    
+    switch(type) {
+        case CLUSTER_FASTGREEDY: {
+            igraph_matrix_int_t merges; igraph_vector_t modularity;
+            igraph_matrix_int_init(&merges, 0, 0); igraph_vector_init(&modularity, 0);
+            igraph_community_fastgreedy(&g, NULL, &merges, &modularity, &membership);
+            igraph_matrix_int_destroy(&merges); igraph_vector_destroy(&modularity);
+            break;
+        }
+        case CLUSTER_WALKTRAP: {
+            igraph_matrix_int_t merges; igraph_vector_t modularity;
+            igraph_matrix_int_init(&merges, 0, 0); igraph_vector_init(&modularity, 0);
+            igraph_community_walktrap(&g, NULL, 4, &merges, &modularity, &membership);
+            igraph_matrix_int_destroy(&merges); igraph_vector_destroy(&modularity);
+            break;
+        }
+        case CLUSTER_LABEL_PROP:
+            igraph_community_label_propagation(&g, &membership, IGRAPH_ALL, NULL, NULL, NULL);
+            break;
+        case CLUSTER_MULTILEVEL: {
+            igraph_vector_t modularity; igraph_vector_init(&modularity, 0);
+            igraph_community_multilevel(&g, NULL, 1.0, &membership, NULL, &modularity);
+            igraph_vector_destroy(&modularity);
+            break;
+        }
+        case CLUSTER_LEIDEN:
+            igraph_community_leiden(&g, NULL, NULL, 1.0, 0.01, false, 2, &membership, NULL, NULL);
+            break;
+        default: break;
+    }
+
+    int cluster_count = 0;
+    for(int i=0; i<igraph_vector_int_size(&membership); i++) {
+        if(VECTOR(membership)[i] > cluster_count) cluster_count = VECTOR(membership)[i];
+    }
+    cluster_count++;
+
+    vec3* cluster_colors = malloc(sizeof(vec3) * cluster_count);
+    for(int i=0; i<cluster_count; i++) {
+        cluster_colors[i][0] = (float)rand() / RAND_MAX;
+        cluster_colors[i][1] = (float)rand() / RAND_MAX;
+        cluster_colors[i][2] = (float)rand() / RAND_MAX;
+    }
+
+    for(int i=0; i<data->node_count; i++) {
+        int c = VECTOR(membership)[i];
+        memcpy(data->nodes[i].color, cluster_colors[c], 12);
+    }
+
+    free(cluster_colors);
+    igraph_vector_int_destroy(&membership);
+    igraph_destroy(&g);
+}
+
 void graph_free_data(GraphData* data) {
     for (uint32_t i = 0; i < data->node_count; i++) {
         if (data->nodes[i].label) free(data->nodes[i].label);

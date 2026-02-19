@@ -14,6 +14,15 @@ typedef enum {
     LAYOUT_DRL_3D
 } LayoutType;
 
+typedef enum {
+    CLUSTER_FASTGREEDY,
+    CLUSTER_WALKTRAP,
+    CLUSTER_LABEL_PROP,
+    CLUSTER_MULTILEVEL,
+    CLUSTER_LEIDEN,
+    CLUSTER_COUNT
+} ClusterType;
+
 typedef struct {
     vec3 position;
     vec3 color;
@@ -36,6 +45,7 @@ typedef struct {
 } GraphData;
 
 int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_type, int node_limit, const char* node_attr, const char* edge_attr);
+void graph_cluster(const char* filename, GraphData* data, ClusterType type, int node_limit);
 void graph_free_data(GraphData* data);
 
 #endif

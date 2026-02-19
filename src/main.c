@@ -22,11 +22,13 @@ Renderer renderer;
 GraphData currentGraph;
 char* currentFilename;
 LayoutType currentLayout;
+ClusterType currentCluster = CLUSTER_FASTGREEDY;
 int currentNodeLimit;
 char* currentNodeAttr;
 char* currentEdgeAttr;
 
 const char* layout_names[] = { "Fruchterman-Reingold 3D", "Kamada-Kawai 3D", "Random 3D", "Sphere", "Grid 3D", "UMAP 3D", "DrL 3D" };
+const char* cluster_names[] = { "Fast Greedy", "Walktrap", "Label Propagation", "Multilevel", "Leiden" };
 
 void update_layout() {
     printf("Switching to layout: %s\n", layout_names[currentLayout]);
@@ -34,6 +36,12 @@ void update_layout() {
     if (graph_load_graphml(currentFilename, &currentGraph, currentLayout, currentNodeLimit, currentNodeAttr, currentEdgeAttr) == 0) {
         renderer_update_graph(&renderer, &currentGraph);
     }
+}
+
+void run_clustering() {
+    printf("Running clustering: %s\n", cluster_names[currentCluster]);
+    graph_cluster(currentFilename, &currentGraph, currentCluster, currentNodeLimit);
+    renderer_update_graph(&renderer, &currentGraph);
 }
 
 GLFWmonitor* get_current_monitor(GLFWwindow* window) {
@@ -79,6 +87,10 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         case GLFW_KEY_L:
             currentLayout = (currentLayout + 1) % 7;
             update_layout();
+            break;
+        case GLFW_KEY_G:
+            currentCluster = (currentCluster + 1) % CLUSTER_COUNT;
+            run_clustering();
             break;
         case GLFW_KEY_KP_ADD:
         case GLFW_KEY_EQUAL:
