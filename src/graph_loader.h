@@ -57,7 +57,6 @@ typedef struct {
     Edge* edges;
     uint32_t edge_count;
     
-    // Persistent graph state for iterations
     igraph_t g;
     igraph_matrix_t current_layout;
     bool graph_initialized;
@@ -67,6 +66,7 @@ int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_
 void graph_cluster(GraphData* data, ClusterType type);
 void graph_calculate_centrality(GraphData* data, CentralityType type);
 void graph_layout_step(GraphData* data, LayoutType type, int iterations);
+void graph_remove_overlaps(GraphData* data, float layoutScale);
 void graph_free_data(GraphData* data);
 
 #endif

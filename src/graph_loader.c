@@ -88,6 +88,95 @@ void graph_layout_step(GraphData* data, LayoutType type, int iterations) {
     sync_node_positions(data);
 }
 
+void graph_remove_overlaps(GraphData* data, float layoutScale) {
+    if (!data->graph_initialized || data->node_count == 0) return;
+
+    // Use a uniform grid for collision detection O(N)
+    float max_radius = 0.0f;
+    vec3 min_p = {1e10, 1e10, 1e10}, max_p = {-1e10, -1e10, -1e10};
+    
+    for (int i = 0; i < data->node_count; i++) {
+        float r = 0.5f * data->nodes[i].size;
+        if (r > max_radius) max_radius = r;
+        for(int j=0; j<3; j++) {
+            if(data->nodes[i].position[j] < min_p[j]) min_p[j] = data->nodes[i].position[j];
+            if(data->nodes[i].position[j] > max_p[j]) max_p[j] = data->nodes[i].position[j];
+        }
+    }
+
+    // Cell size should be at least the diameter of the largest node
+    float cellSize = (max_radius * 2.0f) + 0.1f;
+    int dimX = (int)((max_p[0] - min_p[0]) / cellSize) + 1;
+    int dimY = (int)((max_p[1] - min_p[1]) / cellSize) + 1;
+    int dimZ = (int)((max_p[2] - min_p[2]) / cellSize) + 1;
+    
+    // Safety check for massive grids
+    if (dimX * dimY * dimZ > 1000000) cellSize *= 2.0f; 
+
+    int totalCells = dimX * dimY * dimZ;
+    int* head = malloc(sizeof(int) * totalCells);
+    int* next = malloc(sizeof(int) * data->node_count);
+    memset(head, -1, sizeof(int) * totalCells);
+
+    for (int i = 0; i < data->node_count; i++) {
+        int cx = (int)((data->nodes[i].position[0] - min_p[0]) / cellSize);
+        int cy = (int)((data->nodes[i].position[1] - min_p[1]) / cellSize);
+        int cz = (int)((data->nodes[i].position[2] - min_p[2]) / cellSize);
+        int cellIdx = cx + cy * dimX + cz * dimX * dimY;
+        if (cellIdx >= 0 && cellIdx < totalCells) {
+            next[i] = head[cellIdx];
+            head[cellIdx] = i;
+        }
+    }
+
+    // Resolve overlaps
+    for (int i = 0; i < data->node_count; i++) {
+        int cx = (int)((data->nodes[i].position[0] - min_p[0]) / cellSize);
+        int cy = (int)((data->nodes[i].position[1] - min_p[1]) / cellSize);
+        int cz = (int)((data->nodes[i].position[2] - min_p[2]) / cellSize);
+
+        for (int nx = cx - 1; nx <= cx + 1; nx++) {
+            for (int ny = cy - 1; ny <= cy + 1; ny++) {
+                for (int nz = cz - 1; nz <= cz + 1; nz++) {
+                    if (nx < 0 || nx >= dimX || ny < 0 || ny >= dimY || nz < 0 || nz >= dimZ) continue;
+                    int cellIdx = nx + ny * dimX + nz * dimX * dimY;
+                    int other = head[cellIdx];
+                    while (other != -1) {
+                        if (i != other) {
+                            vec3 diff;
+                            glm_vec3_sub(data->nodes[i].position, data->nodes[other].position, diff);
+                            float distSq = glm_vec3_norm2(diff);
+                            float r1 = 0.5f * data->nodes[i].size;
+                            float r2 = 0.5f * data->nodes[other].size;
+                            float minDist = (r1 + r2);
+                            if (distSq < minDist * minDist && distSq > 0.0001f) {
+                                float dist = sqrtf(distSq);
+                                float overlap = minDist - dist;
+                                vec3 move;
+                                glm_vec3_scale(diff, 0.5f * overlap / dist, move);
+                                glm_vec3_add(data->nodes[i].position, move, data->nodes[i].position);
+                                glm_vec3_sub(data->nodes[other].position, move, data->nodes[other].position);
+                            }
+                        }
+                        other = next[other];
+                    }
+                }
+            }
+        }
+    }
+
+    free(head);
+    free(next);
+    
+    // Write back to current_layout matrix
+    for (int i = 0; i < data->node_count; i++) {
+        MATRIX(data->current_layout, i, 0) = (igraph_real_t)data->nodes[i].position[0];
+        MATRIX(data->current_layout, i, 1) = (igraph_real_t)data->nodes[i].position[1];
+        if (igraph_matrix_ncol(&data->current_layout) > 2)
+            MATRIX(data->current_layout, i, 2) = (igraph_real_t)data->nodes[i].position[2];
+    }
+}
+
 void graph_cluster(GraphData* data, ClusterType type) {
     igraph_vector_int_t membership; igraph_vector_int_init(&membership, igraph_vcount(&data->g));
     switch(type) {

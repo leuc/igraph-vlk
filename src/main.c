@@ -35,7 +35,7 @@ const char* centrality_names[] = { "PageRank", "Hub", "Auth", "Betweenness", "De
 void update_ui_text(float fps) {
     char buf[512];
     snprintf(buf, sizeof(buf), 
-        "[L]ayout: %s | [G]roup: %s | [C]entrality: %s | [T]ext: %s | [I]terate | FPS: %.1f",
+        "[L]ayout: %s | [G]roup: %s | [C]entrality: %s | [T]ext: %s | [I]terate | [O]verlap | FPS: %.1f",
         layout_names[currentLayout],
         cluster_names[currentCluster],
         centrality_names[currentCentrality],
@@ -110,6 +110,11 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         case GLFW_KEY_G: currentCluster = (currentCluster + 1) % CLUSTER_COUNT; run_clustering(); break;
         case GLFW_KEY_C: currentCentrality = (currentCentrality + 1) % CENTRALITY_COUNT; run_centrality(); break;
         case GLFW_KEY_I: run_iteration(); break;
+        case GLFW_KEY_O:
+            printf("Removing overlaps...\n");
+            graph_remove_overlaps(&currentGraph, renderer.layoutScale);
+            renderer_update_graph(&renderer, &currentGraph);
+            break;
         case GLFW_KEY_KP_ADD:
         case GLFW_KEY_EQUAL: renderer.layoutScale *= 1.2f; renderer_update_graph(&renderer, &currentGraph); break;
         case GLFW_KEY_KP_SUBTRACT:
