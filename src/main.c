@@ -12,11 +12,29 @@ vec3 cameraFront = {0.0f, 0.0f, -1.0f};
 vec3 cameraUp = {0.0f, 1.0f, 0.0f};
 float yaw = -90.0f;
 float pitch = 0.0f;
-float lastX = 400, lastY = 300;
+float lastX = 1720, lastY = 720;
 bool firstMouse = true;
 
 bool isFullscreen = false;
 int windowedX, windowedY, windowedWidth, windowedHeight;
+
+Renderer renderer;
+GraphData currentGraph;
+char* currentFilename;
+LayoutType currentLayout;
+int currentNodeLimit;
+char* currentNodeAttr;
+char* currentEdgeAttr;
+
+const char* layout_names[] = { "Fruchterman-Reingold 3D", "Kamada-Kawai 3D", "Random 3D", "Sphere", "Grid 3D", "UMAP 3D", "DrL 3D" };
+
+void update_layout() {
+    printf("Switching to layout: %s\n", layout_names[currentLayout]);
+    graph_free_data(&currentGraph);
+    if (graph_load_graphml(currentFilename, &currentGraph, currentLayout, currentNodeLimit, currentNodeAttr, currentEdgeAttr) == 0) {
+        renderer_update_graph(&renderer, &currentGraph);
+    }
+}
 
 GLFWmonitor* get_current_monitor(GLFWwindow* window) {
     int nmonitors;
@@ -40,17 +58,38 @@ GLFWmonitor* get_current_monitor(GLFWwindow* window) {
 }
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    if (key == GLFW_KEY_F && action == GLFW_PRESS) {
-        if (!isFullscreen) {
-            glfwGetWindowPos(window, &windowedX, &windowedY);
-            glfwGetWindowSize(window, &windowedWidth, &windowedHeight);
-            GLFWmonitor* monitor = get_current_monitor(window);
-            const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-            glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
-        } else {
-            glfwSetWindowMonitor(window, NULL, windowedX, windowedY, windowedWidth, windowedHeight, 0);
-        }
-        isFullscreen = !isFullscreen;
+    if (action != GLFW_PRESS) return;
+    switch (key) {
+        case GLFW_KEY_F:
+            if (!isFullscreen) {
+                glfwGetWindowPos(window, &windowedX, &windowedY);
+                glfwGetWindowSize(window, &windowedWidth, &windowedHeight);
+                GLFWmonitor* monitor = get_current_monitor(window);
+                const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+                glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+            } else {
+                glfwSetWindowMonitor(window, NULL, windowedX, windowedY, windowedWidth, windowedHeight, 0);
+            }
+            isFullscreen = !isFullscreen;
+            break;
+        case GLFW_KEY_T:
+            renderer.showLabels = !renderer.showLabels;
+            printf("Labels: %s\n", renderer.showLabels ? "ON" : "OFF");
+            break;
+        case GLFW_KEY_L:
+            currentLayout = (currentLayout + 1) % 7;
+            update_layout();
+            break;
+        case GLFW_KEY_KP_ADD:
+        case GLFW_KEY_EQUAL:
+            renderer.layoutScale *= 1.2f;
+            renderer_update_graph(&renderer, &currentGraph);
+            break;
+        case GLFW_KEY_KP_SUBTRACT:
+        case GLFW_KEY_MINUS:
+            renderer.layoutScale /= 1.2f;
+            renderer_update_graph(&renderer, &currentGraph);
+            break;
     }
 }
 
@@ -93,10 +132,10 @@ void print_usage(const char* prog) {
 }
 
 int main(int argc, char** argv) {
-    LayoutType layout_type = LAYOUT_FR_3D;
-    int node_limit = -1;
-    char* node_attr = NULL;
-    char* edge_attr = NULL;
+    currentLayout = LAYOUT_FR_3D;
+    currentNodeLimit = -1;
+    currentNodeAttr = NULL;
+    currentEdgeAttr = NULL;
     int opt;
     static struct option long_options[] = {
         {"layout", required_argument, 0, 'l'},
@@ -109,25 +148,25 @@ int main(int argc, char** argv) {
     while ((opt = getopt_long(argc, argv, "l:n:", long_options, NULL)) != -1) {
         switch (opt) {
             case 'l':
-                if (strcmp(optarg, "fr") == 0) layout_type = LAYOUT_FR_3D;
-                else if (strcmp(optarg, "kk") == 0) layout_type = LAYOUT_KK_3D;
-                else if (strcmp(optarg, "random") == 0) layout_type = LAYOUT_RANDOM_3D;
-                else if (strcmp(optarg, "sphere") == 0) layout_type = LAYOUT_SPHERE;
-                else if (strcmp(optarg, "grid") == 0) layout_type = LAYOUT_GRID_3D;
-                else if (strcmp(optarg, "umap") == 0) layout_type = LAYOUT_UMAP_3D;
-                else if (strcmp(optarg, "drl") == 0) layout_type = LAYOUT_DRL_3D;
+                if (strcmp(optarg, "fr") == 0) currentLayout = LAYOUT_FR_3D;
+                else if (strcmp(optarg, "kk") == 0) currentLayout = LAYOUT_KK_3D;
+                else if (strcmp(optarg, "random") == 0) currentLayout = LAYOUT_RANDOM_3D;
+                else if (strcmp(optarg, "sphere") == 0) currentLayout = LAYOUT_SPHERE;
+                else if (strcmp(optarg, "grid") == 0) currentLayout = LAYOUT_GRID_3D;
+                else if (strcmp(optarg, "umap") == 0) currentLayout = LAYOUT_UMAP_3D;
+                else if (strcmp(optarg, "drl") == 0) currentLayout = LAYOUT_DRL_3D;
                 break;
-            case 'n': node_limit = atoi(optarg); break;
-            case 1: node_attr = optarg; break;
-            case 2: edge_attr = optarg; break;
+            case 'n': currentNodeLimit = atoi(optarg); break;
+            case 1: currentNodeAttr = optarg; break;
+            case 2: currentEdgeAttr = optarg; break;
             default: print_usage(argv[0]); return EXIT_FAILURE;
         }
     }
 
     if (optind >= argc) { print_usage(argv[0]); return EXIT_FAILURE; }
+    currentFilename = argv[optind];
 
-    GraphData graph;
-    if (graph_load_graphml(argv[optind], &graph, layout_type, node_limit, node_attr, edge_attr) != 0) {
+    if (graph_load_graphml(currentFilename, &currentGraph, currentLayout, currentNodeLimit, currentNodeAttr, currentEdgeAttr) != 0) {
         return EXIT_FAILURE;
     }
 
@@ -138,9 +177,7 @@ int main(int argc, char** argv) {
     glfwSetKeyCallback(window, key_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    Renderer renderer;
-    if (renderer_init(&renderer, window, &graph) != 0) return EXIT_FAILURE;
-    graph_free_data(&graph);
+    if (renderer_init(&renderer, window, &currentGraph) != 0) return EXIT_FAILURE;
     float lastFrame = 0.0f;
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = (float)glfwGetTime();
@@ -151,6 +188,7 @@ int main(int argc, char** argv) {
         renderer_update_view(&renderer, cameraPos, cameraFront, cameraUp);
         renderer_draw_frame(&renderer);
     }
+    graph_free_data(&currentGraph);
     renderer_cleanup(&renderer);
     glfwDestroyWindow(window);
     glfwTerminate();

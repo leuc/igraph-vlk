@@ -31,6 +31,7 @@ typedef struct {
     VkPipelineLayout pipelineLayout;
     VkPipeline graphicsPipeline;
     VkPipeline edgePipeline;
+    VkPipeline labelPipeline;
     VkFramebuffer* framebuffers;
     VkCommandPool commandPool;
     VkCommandBuffer* commandBuffers;
@@ -61,11 +62,21 @@ typedef struct {
     VkBuffer edgeVertexBuffer;
     VkDeviceMemory edgeVertexBufferMemory;
     uint32_t edgeCount;
+
+    // Labels
+    VkBuffer labelVertexBuffer;
+    VkDeviceMemory labelVertexBufferMemory;
+    VkBuffer labelInstanceBuffer;
+    VkDeviceMemory labelInstanceBufferMemory;
+    uint32_t labelCharCount;
+    bool showLabels;
+    float layoutScale;
 } Renderer;
 
 int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph);
 void renderer_cleanup(Renderer* r);
 void renderer_draw_frame(Renderer* r);
 void renderer_update_view(Renderer* r, vec3 pos, vec3 front, vec3 up);
+void renderer_update_graph(Renderer* r, GraphData* graph);
 
 #endif

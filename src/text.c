@@ -1,36 +1,47 @@
+#define STB_TRUETYPE_IMPLEMENTATION
+#include <stb/stb_truetype.h>
 #include "text.h"
+#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
-// A very minimal 8x8 font for ASCII 32-127 (just a few characters for demo)
-// In a real app, you'd use a font atlas or FreeType.
-static const uint8_t font8x8_basic[128][8] = {
-    ['H'] = {0x66, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x66, 0x00},
-    ['e'] = {0x00, 0x00, 0x3C, 0x66, 0x7E, 0x60, 0x3C, 0x00},
-    ['l'] = {0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x1C, 0x00},
-    ['o'] = {0x00, 0x00, 0x3C, 0x66, 0x66, 0x66, 0x3C, 0x00},
-    ['W'] = {0x63, 0x63, 0x63, 0x6B, 0x7F, 0x77, 0x63, 0x00},
-    ['r'] = {0x00, 0x00, 0x36, 0x3C, 0x30, 0x30, 0x78, 0x00},
-    ['d'] = {0x06, 0x06, 0x3E, 0x66, 0x66, 0x66, 0x3E, 0x00},
-    [' '] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-    // ... add more if needed, but these are enough for "Hello World"
-};
+int text_generate_atlas(const char* fontPath, FontAtlas* atlas) {
+    FILE* fp = fopen(fontPath, "rb");
+    if (!fp) return -1;
+    fseek(fp, 0, SEEK_END);
+    long size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    unsigned char* fontBuffer = malloc(size);
+    fread(fontBuffer, 1, size, fp);
+    fclose(fp);
 
-void text_generate_texture(const char* text, uint8_t** data, int* width, int* height) {
-    int len = strlen(text);
-    *width = len * 8;
-    *height = 8;
-    *data = calloc((*width) * (*height), 1);
+    atlas->width = 512;
+    atlas->height = 512;
+    atlas->atlasData = malloc(atlas->width * atlas->height);
 
-    for (int i = 0; i < len; i++) {
-        char c = text[i];
-        for (int row = 0; row < 8; row++) {
-            uint8_t bits = font8x8_basic[(int)c][row];
-            for (int col = 0; col < 8; col++) {
-                if (bits & (1 << col)) {
-                    (*data)[row * (*width) + (i * 8 + col)] = 255;
-                }
-            }
+    stbtt_bakedchar baked[96]; // ASCII 32..126
+    stbtt_BakeFontBitmap(fontBuffer, 0, 32.0, atlas->atlasData, atlas->width, atlas->height, 32, 96, baked);
+
+    for (int i = 0; i < 128; i++) {
+        if (i >= 32 && i < 128) {
+            stbtt_bakedchar* b = &baked[i - 32];
+            atlas->chars[i].x0 = b->xoff;
+            atlas->chars[i].y0 = b->yoff;
+            atlas->chars[i].x1 = b->xoff + (b->x1 - b->x0);
+            atlas->chars[i].y1 = b->yoff + (b->y1 - b->y0);
+            atlas->chars[i].u0 = (float)b->x0 / atlas->width;
+            atlas->chars[i].v0 = (float)b->y0 / atlas->height;
+            atlas->chars[i].u1 = (float)b->x1 / atlas->width;
+            atlas->chars[i].v1 = (float)b->y1 / atlas->height;
+            atlas->chars[i].xadvance = b->xadvance;
+        } else {
+            atlas->chars[i].xadvance = 0;
         }
     }
+
+    free(fontBuffer);
+    return 0;
+}
+
+void text_free_atlas(FontAtlas* atlas) {
+    free(atlas->atlasData);
 }

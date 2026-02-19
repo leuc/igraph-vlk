@@ -1,6 +1,8 @@
+#define _GNU_SOURCE
 #include "graph_loader.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_type, int node_limit, const char* node_attr, const char* edge_attr) {
@@ -35,6 +37,9 @@ int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_
     } else {
         g = g_full;
     }
+
+    // Simplify graph: remove self-loops and multiple edges
+    igraph_simplify(&g, 1, 1, NULL);
 
     data->node_count = igraph_vcount(&g);
     data->edge_count = igraph_ecount(&g);
@@ -74,6 +79,7 @@ int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_
     // Node attribute (default "pagerank")
     const char* n_attr = node_attr ? node_attr : "pagerank";
     bool has_node_attr = igraph_cattribute_has_attr(&g, IGRAPH_ATTRIBUTE_VERTEX, n_attr);
+    bool has_label = igraph_cattribute_has_attr(&g, IGRAPH_ATTRIBUTE_VERTEX, "label");
     float max_n_val = 0.0f;
     if (has_node_attr) {
         for (int i = 0; i < data->node_count; i++) {
@@ -91,6 +97,7 @@ int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_
         data->nodes[i].color[1] = (float)rand() / RAND_MAX;
         data->nodes[i].color[2] = (float)rand() / RAND_MAX;
         data->nodes[i].size = (has_node_attr && max_n_val > 0) ? (float)VAN(&g, n_attr, i) / max_n_val : 1.0f;
+        data->nodes[i].label = has_label ? strdup(VAS(&g, "label", i)) : NULL;
     }
 
     // Edge attribute (default "betweenness")
@@ -119,6 +126,9 @@ int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_
 }
 
 void graph_free_data(GraphData* data) {
+    for (uint32_t i = 0; i < data->node_count; i++) {
+        if (data->nodes[i].label) free(data->nodes[i].label);
+    }
     free(data->nodes);
     free(data->edges);
 }

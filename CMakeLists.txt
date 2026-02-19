@@ -17,6 +17,8 @@ set(SHADERS
     shaders/shader.frag
     shaders/edge.vert
     shaders/edge.frag
+    shaders/label.vert
+    shaders/label.frag
 )
 
 foreach(SHADER ${SHADERS})
@@ -59,4 +61,6 @@ target_compile_definitions(graph-sphere PRIVATE
     FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/shader.frag.spv"
     EDGE_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/edge.vert.spv"
     EDGE_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/edge.frag.spv"
+    LABEL_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/label.vert.spv"
+    LABEL_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/label.frag.spv"
 )
