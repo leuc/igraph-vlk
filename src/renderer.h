@@ -5,6 +5,8 @@
 #include <GLFW/glfw3.h>
 #include <cglm/cglm.h>
 
+#include "graph_loader.h"
+
 typedef struct {
     mat4 model;
     mat4 view;
@@ -28,6 +30,7 @@ typedef struct {
     VkDescriptorSetLayout descriptorSetLayout;
     VkPipelineLayout pipelineLayout;
     VkPipeline graphicsPipeline;
+    VkPipeline edgePipeline;
     VkFramebuffer* framebuffers;
     VkCommandPool commandPool;
     VkCommandBuffer* commandBuffers;
@@ -43,15 +46,24 @@ typedef struct {
     VkDeviceMemory* uniformBuffersMemory;
     VkDescriptorPool descriptorPool;
     VkDescriptorSet* descriptorSets;
-    uint32_t indexCount;
+    uint32_t sphereIndexCount;
     UniformBufferObject ubo;
     VkImage textureImage;
     VkDeviceMemory textureImageMemory;
     VkImageView textureImageView;
     VkSampler textureSampler;
+
+    // Graph data
+    VkBuffer instanceBuffer;
+    VkDeviceMemory instanceBufferMemory;
+    uint32_t nodeCount;
+
+    VkBuffer edgeVertexBuffer;
+    VkDeviceMemory edgeVertexBufferMemory;
+    uint32_t edgeCount;
 } Renderer;
 
-int renderer_init(Renderer* r, GLFWwindow* window);
+int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph);
 void renderer_cleanup(Renderer* r);
 void renderer_draw_frame(Renderer* r);
 void renderer_update_view(Renderer* r, vec3 pos, vec3 front, vec3 up);

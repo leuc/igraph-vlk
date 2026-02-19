@@ -6,6 +6,8 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(IGRAPH REQUIRED igraph)
 
 find_path(CGLM_INCLUDE_DIR cglm/cglm.h)
 find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
@@ -13,6 +15,8 @@ find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
 set(SHADERS
     shaders/shader.vert
     shaders/shader.frag
+    shaders/edge.vert
+    shaders/edge.frag
 )
 
 foreach(SHADER ${SHADERS})
@@ -27,22 +31,32 @@ foreach(SHADER ${SHADERS})
     list(APPEND SPIRV_SHADERS ${SPIRV})
 endforeach()
 
-add_executable(graph-sphere src/main.c src/renderer.c src/sphere.c src/text.c ${SPIRV_SHADERS})
+add_executable(graph-sphere 
+    src/main.c 
+    src/renderer.c 
+    src/sphere.c 
+    src/text.c
+    src/graph_loader.c
+    ${SPIRV_SHADERS}
+)
 
 target_include_directories(graph-sphere PRIVATE 
     ${Vulkan_INCLUDE_DIRS}
     ${CGLM_INCLUDE_DIR}
+    ${IGRAPH_INCLUDE_DIRS}
     ${CMAKE_BINARY_DIR}
 )
 
 target_link_libraries(graph-sphere PRIVATE 
     Vulkan::Vulkan
     glfw
+    ${IGRAPH_LIBRARIES}
     m
 )
 
-# Define shader paths for the source code
 target_compile_definitions(graph-sphere PRIVATE 
     VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/shader.vert.spv"
     FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/shader.frag.spv"
+    EDGE_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/edge.vert.spv"
+    EDGE_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/edge.frag.spv"
 )
