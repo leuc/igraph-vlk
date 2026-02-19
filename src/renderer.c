@@ -1,5 +1,5 @@
 #include "renderer.h"
-#include "sphere.h"
+#include "polyhedron.h"
 #include "text.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +11,6 @@
 typedef struct { vec3 pos; vec2 tex; } LabelVertex;
 typedef struct { vec3 nodePos; vec4 charRect; vec4 charUV; } LabelInstance;
 
-// Internal global atlas ref for updates
 static FontAtlas globalAtlas;
 static bool atlasLoaded = false;
 
@@ -95,7 +94,7 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
         VkImageViewCreateInfo vInfo = { .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->swapchainImages[i], .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->swapchainFormat, .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 } };
         vkCreateImageView(r->device, &vInfo, NULL, &r->swapchainImageViews[i]);
     }
-    VkDescriptorSetLayoutBinding bindings[] = { { .binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_VERTEX_BIT }, { .binding = 1, .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT } };
+    VkDescriptorSetLayoutBinding bindings[] = { { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL }, { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL } };
     VkDescriptorSetLayoutCreateInfo layInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 2, .pBindings = bindings };
     vkCreateDescriptorSetLayout(r->device, &layInfo, NULL, &r->descriptorSetLayout);
     VkPipelineLayoutCreateInfo plyLayInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->descriptorSetLayout };
@@ -109,10 +108,10 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
     VkCommandPoolCreateInfo cpI = { .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = 0 }; vkCreateCommandPool(r->device, &cpI, NULL, &r->commandPool);
 
     if(!atlasLoaded) { text_generate_atlas(FONT_PATH, &globalAtlas); atlasLoaded = true; }
+    createImage(r->device, r->physicalDevice, globalAtlas.width, globalAtlas.height, VK_FORMAT_R8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->textureImage, &r->textureImageMemory);
     VkDeviceSize imgSize = globalAtlas.width * globalAtlas.height; VkBuffer sBuf; VkDeviceMemory sBufM;
     createBuffer(r->device, r->physicalDevice, imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &sBuf, &sBufM);
     void* dPtr; vkMapMemory(r->device, sBufM, 0, imgSize, 0, &dPtr); memcpy(dPtr, globalAtlas.atlasData, imgSize); vkUnmapMemory(r->device, sBufM);
-    createImage(r->device, r->physicalDevice, globalAtlas.width, globalAtlas.height, VK_FORMAT_R8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->textureImage, &r->textureImageMemory);
     transitionImageLayout(r->device, r->commandPool, r->graphicsQueue, r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     VkCommandBufferAllocateInfo aI = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandPool = r->commandPool, .commandBufferCount = 1 };
     VkCommandBuffer cB; vkAllocateCommandBuffers(r->device, &aI, &cB);
@@ -144,7 +143,7 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
 
     VkPipelineShaderStageCreateInfo nstages[] = { {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,VK_SHADER_STAGE_VERTEX_BIT,vMod,"main",NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,VK_SHADER_STAGE_FRAGMENT_BIT,fMod,"main",NULL} };
     VkVertexInputBindingDescription nb[] = { {0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX}, {1, sizeof(Node), VK_VERTEX_INPUT_RATE_INSTANCE} };
-    VkVertexInputAttributeDescription na[] = { {0,0,VK_FORMAT_R32G32B32_SFLOAT,0}, {1,0,VK_FORMAT_R32G32B32_SFLOAT,12}, {2,0,VK_FORMAT_R32_SFLOAT,24}, {3,1,VK_FORMAT_R32G32B32_SFLOAT,0}, {4,1,VK_FORMAT_R32G32B32_SFLOAT,12}, {5,1,VK_FORMAT_R32_SFLOAT,24} };
+    VkVertexInputAttributeDescription na[] = { {0,0,VK_FORMAT_R32G32B32_SFLOAT,0}, {1,0,VK_FORMAT_R32G32B32_SFLOAT,12}, {2,0,VK_FORMAT_R32_SFLOAT,24}, {3,1,VK_FORMAT_R32G32B32_SFLOAT,offsetof(Node, position)}, {4,1,VK_FORMAT_R32G32B32_SFLOAT,offsetof(Node, color)}, {5,1,VK_FORMAT_R32_SFLOAT,offsetof(Node, size)} };
     VkPipelineVertexInputStateCreateInfo nvi = { .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 2, .pVertexBindingDescriptions = nb, .vertexAttributeDescriptionCount = 6, .pVertexAttributeDescriptions = na };
     VkPipelineInputAssemblyStateCreateInfo niAs = { .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST };
     VkGraphicsPipelineCreateInfo pInfo = { .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = nstages, .pVertexInputState = &nvi, .pInputAssemblyState = &niAs, .pViewportState = &vpS, .pRasterizationState = &ras, .pMultisampleState = &mul, .pColorBlendState = &colS, .layout = r->pipelineLayout, .renderPass = r->renderPass };
@@ -174,18 +173,21 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
     r->framebuffers = malloc(sizeof(VkFramebuffer) * r->swapchainImageCount);
     for (uint32_t i = 0; i < r->swapchainImageCount; i++) { VkFramebufferCreateInfo fbi = { .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = r->renderPass, .attachmentCount = 1, .pAttachments = &r->swapchainImageViews[i], .width = 3440, .height = 1440, .layers = 1 }; vkCreateFramebuffer(r->device, &fbi, NULL, &r->framebuffers[i]); }
 
-    Vertex* vgeo; uint32_t vgc; uint32_t* igeo; sphere_generate(1.0f, 16, 8, &vgeo, &vgc, &igeo, &r->sphereIndexCount);
-    createBuffer(r->device, r->physicalDevice, sizeof(Vertex)*vgc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->vertexBuffer, &r->vertexBufferMemory);
-    updateBuffer(r->device, r->vertexBufferMemory, sizeof(Vertex)*vgc, vgeo);
-    createBuffer(r->device, r->physicalDevice, sizeof(uint32_t)*r->sphereIndexCount, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->indexBuffer, &r->indexBufferMemory);
-    updateBuffer(r->device, r->indexBufferMemory, sizeof(uint32_t)*r->sphereIndexCount, igeo);
-    free(vgeo); free(igeo);
+    // Platonic Geometries
+    for (int i = 0; i < PLATONIC_COUNT; i++) {
+        Vertex* v; uint32_t vc; uint32_t* is; polyhedron_generate_platonic(i, &v, &vc, &is, &r->platonicIndexCounts[i]);
+        createBuffer(r->device, r->physicalDevice, sizeof(Vertex)*vc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->vertexBuffers[i], &r->vertexBufferMemories[i]);
+        updateBuffer(r->device, r->vertexBufferMemories[i], sizeof(Vertex)*vc, v);
+        createBuffer(r->device, r->physicalDevice, sizeof(uint32_t)*r->platonicIndexCounts[i], VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->indexBuffers[i], &r->indexBufferMemories[i]);
+        updateBuffer(r->device, r->indexBufferMemories[i], sizeof(uint32_t)*r->platonicIndexCounts[i], is);
+        free(v); free(is);
+    }
 
     createBuffer(r->device, r->physicalDevice, sizeof(Node)*r->nodeCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->instanceBuffer, &r->instanceBufferMemory);
     createBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex)*r->edgeCount*2, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
-    LabelVertex lv[] = { {{0,0,0},{0,0}}, {{1,0,0},{1,0}}, {{0,1,0},{0,1}}, {{1,1,0},{1,1}} };
-    createBuffer(r->device, r->physicalDevice, sizeof(lv), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->labelVertexBuffer, &r->labelVertexBufferMemory);
-    updateBuffer(r->device, r->labelVertexBufferMemory, sizeof(lv), lv);
+    LabelVertex lverts[] = { {{0,0,0},{0,0}}, {{1,0,0},{1,0}}, {{0,1,0},{0,1}}, {{1,1,0},{1,1}} };
+    createBuffer(r->device, r->physicalDevice, sizeof(lverts), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->labelVertexBuffer, &r->labelVertexBufferMemory);
+    updateBuffer(r->device, r->labelVertexBufferMemory, sizeof(lverts), lverts);
 
     uint32_t tc = 0; for(uint32_t i=0; i<r->nodeCount; i++) if(graph->nodes[i].label) tc += strlen(graph->nodes[i].label);
     r->labelCharCount = tc;
@@ -207,7 +209,6 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
         VkWriteDescriptorSet dw[] = { {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,NULL,r->descriptorSets[i],0,0,1,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,NULL,&bi,NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,NULL,r->descriptorSets[i],1,0,1,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,&ii,NULL,NULL} };
         vkUpdateDescriptorSets(r->device, 2, dw, 0, NULL);
     }
-    VkPresentInfoKHR pi = { .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 1 }; // Reuse later
     r->commandBuffers = malloc(sizeof(VkCommandBuffer)*MAX_FRAMES_IN_FLIGHT);
     VkCommandBufferAllocateInfo cba = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = r->commandPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = MAX_FRAMES_IN_FLIGHT };
     vkAllocateCommandBuffers(r->device, &cba, r->commandBuffers);
@@ -221,34 +222,55 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
 void renderer_update_graph(Renderer* r, GraphData* graph) {
     vkDeviceWaitIdle(r->device);
     
-    // Create nodes with scale applied
-    Node* nodes = malloc(sizeof(Node) * graph->node_count);
-    for(uint32_t i=0; i<graph->node_count; i++) {
-        nodes[i] = graph->nodes[i];
-        glm_vec3_scale(nodes[i].position, r->layoutScale, nodes[i].position);
-    }
-    updateBuffer(r->device, r->instanceBufferMemory, sizeof(Node)*graph->node_count, nodes);
+    // Group nodes by shape (Platonic Type)
+    Node* sortedNodes = malloc(sizeof(Node) * graph->node_count);
+    uint32_t currentOffset = 0;
+    for (int t = 0; t < PLATONIC_COUNT; t++) {
+        r->platonicDrawCalls[t].firstInstance = currentOffset;
+        uint32_t count = 0;
+        for (uint32_t i = 0; i < graph->node_count; i++) {
+            int deg = graph->nodes[i].degree;
+            PlatonicType pt;
+            if (deg < 4) pt = PLATONIC_TETRAHEDRON;
+            else if (deg < 6) pt = PLATONIC_CUBE;
+            else if (deg < 8) pt = PLATONIC_OCTAHEDRON;
+            else if (deg < 12) pt = PLATONIC_DODECAHEDRON;
+            else pt = PLATONIC_ICOSAHEDRON;
 
-    // Edges
+            if (pt == (PlatonicType)t) {
+                sortedNodes[currentOffset + count] = graph->nodes[i];
+                glm_vec3_scale(sortedNodes[currentOffset + count].position, r->layoutScale, sortedNodes[currentOffset + count].position);
+                count++;
+            }
+        }
+        r->platonicDrawCalls[t].count = count;
+        currentOffset += count;
+    }
+    updateBuffer(r->device, r->instanceBufferMemory, sizeof(Node)*graph->node_count, sortedNodes);
+
     typedef struct { vec3 pos; vec3 color; float size; } EdgeVertex;
     EdgeVertex* evs = malloc(sizeof(EdgeVertex)*graph->edge_count*2);
+    // Use the positions from the updated layout
     for(uint32_t i=0; i<graph->edge_count; i++) {
-        memcpy(evs[i*2].pos, nodes[graph->edges[i].from].position, 12); memcpy(evs[i*2].color, nodes[graph->edges[i].from].color, 12); evs[i*2].size = graph->edges[i].size;
-        memcpy(evs[i*2+1].pos, nodes[graph->edges[i].to].position, 12); memcpy(evs[i*2+1].color, nodes[graph->edges[i].to].color, 12); evs[i*2+1].size = graph->edges[i].size;
+        vec3 p1, p2; 
+        glm_vec3_scale(graph->nodes[graph->edges[i].from].position, r->layoutScale, p1);
+        glm_vec3_scale(graph->nodes[graph->edges[i].to].position, r->layoutScale, p2);
+        memcpy(evs[i*2].pos, p1, 12); memcpy(evs[i*2].color, graph->nodes[graph->edges[i].from].color, 12); evs[i*2].size = graph->edges[i].size;
+        memcpy(evs[i*2+1].pos, p2, 12); memcpy(evs[i*2+1].color, graph->nodes[graph->edges[i].to].color, 12); evs[i*2+1].size = graph->edges[i].size;
     }
     updateBuffer(r->device, r->edgeVertexBufferMemory, sizeof(EdgeVertex)*graph->edge_count*2, evs);
     free(evs);
 
-    // Labels
     if(r->labelCharCount > 0) {
         LabelInstance* li = malloc(sizeof(LabelInstance)*r->labelCharCount); uint32_t k = 0;
         for(uint32_t i=0; i<graph->node_count; i++) {
             if(!graph->nodes[i].label) continue;
             int len = strlen(graph->nodes[i].label); float xoff = 0;
+            vec3 pos; glm_vec3_scale(graph->nodes[i].position, r->layoutScale, pos);
             for(int j=0; j<len; j++) {
-                unsigned char c = graph->nodes[i].label[j];
-                CharInfo* ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
-                memcpy(li[k].nodePos, nodes[i].position, 12);
+                unsigned char c = graph->nodes[i].label[j]; CharInfo* ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
+                memcpy(li[k].nodePos, pos, 12);
+                li[k].nodePos[1] += (0.5f * graph->nodes[i].size) + 0.3f;
                 li[k].charRect[0] = xoff + ci->x0; li[k].charRect[1] = ci->y0; li[k].charRect[2] = xoff + ci->x1; li[k].charRect[3] = ci->y1;
                 li[k].charUV[0] = ci->u0; li[k].charUV[1] = ci->v0; li[k].charUV[2] = ci->u1; li[k].charUV[3] = ci->v1;
                 xoff += ci->xadvance; k++;
@@ -257,7 +279,7 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
         updateBuffer(r->device, r->labelInstanceBufferMemory, sizeof(LabelInstance)*r->labelCharCount, li);
         free(li);
     }
-    free(nodes);
+    free(sortedNodes);
 }
 
 void renderer_update_view(Renderer* r, vec3 pos, vec3 front, vec3 up) { vec3 c; glm_vec3_add(pos, front, c); glm_lookat(pos, c, up, r->ubo.view); }
@@ -278,8 +300,13 @@ void renderer_draw_frame(Renderer* r) {
     VkDeviceSize off = 0; vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1, &r->edgeVertexBuffer, &off); vkCmdDraw(r->commandBuffers[r->currentFrame], r->edgeCount*2, 1, 0, 0);
     
     vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->graphicsPipeline);
-    VkBuffer vbs[] = {r->vertexBuffer, r->instanceBuffer}; VkDeviceSize vos[] = {0, 0}; vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, vbs, vos);
-    vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->indexBuffer, 0, VK_INDEX_TYPE_UINT32); vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->sphereIndexCount, r->nodeCount, 0, 0, 0);
+    for (int i = 0; i < PLATONIC_COUNT; i++) {
+        if (r->platonicDrawCalls[i].count == 0) continue;
+        VkBuffer vbs[] = {r->vertexBuffers[i], r->instanceBuffer}; VkDeviceSize vos[] = {0, 0};
+        vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, vbs, vos);
+        vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->platonicIndexCounts[i], r->platonicDrawCalls[i].count, 0, 0, r->platonicDrawCalls[i].firstInstance);
+    }
     
     if(r->showLabels && r->labelCharCount > 0) {
         vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
@@ -287,7 +314,6 @@ void renderer_draw_frame(Renderer* r) {
         vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, lbs, los);
         vkCmdDraw(r->commandBuffers[r->currentFrame], 4, r->labelCharCount, 0, 0);
     }
-
     vkCmdEndRenderPass(r->commandBuffers[r->currentFrame]); vkEndCommandBuffer(r->commandBuffers[r->currentFrame]);
     VkPipelineStageFlags ws = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo si = {VK_STRUCTURE_TYPE_SUBMIT_INFO,NULL,1,&r->imageAvailableSemaphores[r->currentFrame],&ws,1,&r->commandBuffers[r->currentFrame],1,&r->renderFinishedSemaphores[r->currentFrame]};
@@ -304,10 +330,9 @@ void renderer_cleanup(Renderer* r) {
     vkDestroyBuffer(r->device, r->labelVertexBuffer, NULL); vkFreeMemory(r->device, r->labelVertexBufferMemory, NULL);
     vkDestroyBuffer(r->device, r->edgeVertexBuffer, NULL); vkFreeMemory(r->device, r->edgeVertexBufferMemory, NULL);
     vkDestroyBuffer(r->device, r->instanceBuffer, NULL); vkFreeMemory(r->device, r->instanceBufferMemory, NULL);
+    for (int i = 0; i < PLATONIC_COUNT; i++) { vkDestroyBuffer(r->device, r->vertexBuffers[i], NULL); vkFreeMemory(r->device, r->vertexBufferMemories[i], NULL); vkDestroyBuffer(r->device, r->indexBuffers[i], NULL); vkFreeMemory(r->device, r->indexBufferMemories[i], NULL); }
     vkDestroyCommandPool(r->device, r->commandPool, NULL); vkDestroyDescriptorPool(r->device, r->descriptorPool, NULL);
     vkDestroySampler(r->device, r->textureSampler, NULL); vkDestroyImageView(r->device, r->textureImageView, NULL); vkDestroyImage(r->device, r->textureImage, NULL); vkFreeMemory(r->device, r->textureImageMemory, NULL);
-    vkDestroyBuffer(r->device, r->indexBuffer, NULL); vkFreeMemory(r->device, r->indexBufferMemory, NULL);
-    vkDestroyBuffer(r->device, r->vertexBuffer, NULL); vkFreeMemory(r->device, r->vertexBufferMemory, NULL);
     for(uint32_t i=0; i<r->swapchainImageCount; i++) { vkDestroyFramebuffer(r->device, r->framebuffers[i], NULL); vkDestroyImageView(r->device, r->swapchainImageViews[i], NULL); }
     vkDestroyPipeline(r->device, r->labelPipeline, NULL); vkDestroyPipeline(r->device, r->edgePipeline, NULL); vkDestroyPipeline(r->device, r->graphicsPipeline, NULL);
     vkDestroyPipelineLayout(r->device, r->pipelineLayout, NULL); vkDestroyDescriptorSetLayout(r->device, r->descriptorSetLayout, NULL);

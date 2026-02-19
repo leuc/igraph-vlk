@@ -36,7 +36,7 @@ endforeach()
 add_executable(graph-sphere 
     src/main.c 
     src/renderer.c 
-    src/sphere.c 
+    src/polyhedron.c 
     src/text.c
     src/graph_loader.c
     ${SPIRV_SHADERS}

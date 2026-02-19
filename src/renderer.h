@@ -6,6 +6,7 @@
 #include <cglm/cglm.h>
 
 #include "graph_loader.h"
+#include "polyhedron.h"
 
 typedef struct {
     mat4 model;
@@ -39,15 +40,22 @@ typedef struct {
     VkSemaphore* renderFinishedSemaphores;
     VkFence* inFlightFences;
     uint32_t currentFrame;
-    VkBuffer vertexBuffer;
-    VkDeviceMemory vertexBufferMemory;
-    VkBuffer indexBuffer;
-    VkDeviceMemory indexBufferMemory;
+    VkBuffer vertexBuffers[PLATONIC_COUNT];
+    VkDeviceMemory vertexBufferMemories[PLATONIC_COUNT];
+    VkBuffer indexBuffers[PLATONIC_COUNT];
+    VkDeviceMemory indexBufferMemories[PLATONIC_COUNT];
+    uint32_t platonicIndexCounts[PLATONIC_COUNT];
+    
+    struct {
+        uint32_t count;
+        uint32_t firstInstance;
+    } platonicDrawCalls[PLATONIC_COUNT];
+
     VkBuffer* uniformBuffers;
     VkDeviceMemory* uniformBuffersMemory;
     VkDescriptorPool descriptorPool;
     VkDescriptorSet* descriptorSets;
-    uint32_t sphereIndexCount;
+    uint32_t polyhedronIndexCount;
     UniformBufferObject ubo;
     VkImage textureImage;
     VkDeviceMemory textureImageMemory;

@@ -98,6 +98,12 @@ int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_
         data->nodes[i].color[2] = (float)rand() / RAND_MAX;
         data->nodes[i].size = (has_node_attr && max_n_val > 0) ? (float)VAN(&g, n_attr, i) / max_n_val : 1.0f;
         data->nodes[i].label = has_label ? strdup(VAS(&g, "label", i)) : NULL;
+        
+        igraph_vector_int_t neighbors;
+        igraph_vector_int_init(&neighbors, 0);
+        igraph_neighbors(&g, &neighbors, i, IGRAPH_ALL);
+        data->nodes[i].degree = igraph_vector_int_size(&neighbors);
+        igraph_vector_int_destroy(&neighbors);
     }
 
     // Edge attribute (default "betweenness")

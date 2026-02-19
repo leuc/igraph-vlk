@@ -18,10 +18,12 @@ layout(location = 1) out vec2 fragTexCoord;
 layout(location = 2) out vec3 fragColor;
 
 void main() {
-    // Scale node by instanceSize. Base scale is 0.5.
     float finalSize = 0.5 * instanceSize;
     vec3 worldPos = (inPosition * finalSize) + instancePos;
     gl_Position = ubo.proj * ubo.view * ubo.model * vec4(worldPos, 1.0);
+    
+    // Normal needs to be rotated if we were rotating the model, 
+    // but here we just use it for simple shading.
     fragNormal = inNormal;
     fragTexCoord = inTexCoord;
     fragColor = instanceColor;

@@ -19,6 +19,7 @@ typedef struct {
     vec3 color;
     float size;
     char* label;
+    int degree;
 } Node;
 
 typedef struct {
