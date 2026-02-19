@@ -56,11 +56,17 @@ typedef struct {
     uint32_t node_count;
     Edge* edges;
     uint32_t edge_count;
+    
+    // Persistent graph state for iterations
+    igraph_t g;
+    igraph_matrix_t current_layout;
+    bool graph_initialized;
 } GraphData;
 
 int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_type, int node_limit, const char* node_attr, const char* edge_attr);
-void graph_cluster(const char* filename, GraphData* data, ClusterType type, int node_limit);
-void graph_calculate_centrality(const char* filename, GraphData* data, CentralityType type, int node_limit);
+void graph_cluster(GraphData* data, ClusterType type);
+void graph_calculate_centrality(GraphData* data, CentralityType type);
+void graph_layout_step(GraphData* data, LayoutType type, int iterations);
 void graph_free_data(GraphData* data);
 
 #endif

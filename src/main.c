@@ -35,7 +35,7 @@ const char* centrality_names[] = { "PageRank", "Hub", "Auth", "Betweenness", "De
 void update_ui_text(float fps) {
     char buf[512];
     snprintf(buf, sizeof(buf), 
-        "[L]ayout: %s | [G]roup: %s | [C]entrality: %s | [T]ext: %s | FPS: %.1f",
+        "[L]ayout: %s | [G]roup: %s | [C]entrality: %s | [T]ext: %s | [I]terate | FPS: %.1f",
         layout_names[currentLayout],
         cluster_names[currentCluster],
         centrality_names[currentCentrality],
@@ -46,19 +46,26 @@ void update_ui_text(float fps) {
 }
 
 void update_layout() {
-    graph_free_data(&currentGraph);
-    if (graph_load_graphml(currentFilename, &currentGraph, currentLayout, currentNodeLimit, currentNodeAttr, currentEdgeAttr) == 0) {
-        renderer_update_graph(&renderer, &currentGraph);
-    }
+    printf("Switching to layout: %s\n", layout_names[currentLayout]);
+    graph_layout_step(&currentGraph, currentLayout, 50);
+    renderer_update_graph(&renderer, &currentGraph);
 }
 
 void run_clustering() {
-    graph_cluster(currentFilename, &currentGraph, currentCluster, currentNodeLimit);
+    printf("Running clustering: %s\n", cluster_names[currentCluster]);
+    graph_cluster(&currentGraph, currentCluster);
     renderer_update_graph(&renderer, &currentGraph);
 }
 
 void run_centrality() {
-    graph_calculate_centrality(currentFilename, &currentGraph, currentCentrality, currentNodeLimit);
+    printf("Calculating centrality: %s\n", centrality_names[currentCentrality]);
+    graph_calculate_centrality(&currentGraph, currentCentrality);
+    renderer_update_graph(&renderer, &currentGraph);
+}
+
+void run_iteration() {
+    printf("Performing 1 iteration of %s...\n", layout_names[currentLayout]);
+    graph_layout_step(&currentGraph, currentLayout, 1);
     renderer_update_graph(&renderer, &currentGraph);
 }
 
@@ -102,6 +109,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         case GLFW_KEY_L: currentLayout = (currentLayout + 1) % 7; update_layout(); break;
         case GLFW_KEY_G: currentCluster = (currentCluster + 1) % CLUSTER_COUNT; run_clustering(); break;
         case GLFW_KEY_C: currentCentrality = (currentCentrality + 1) % CENTRALITY_COUNT; run_centrality(); break;
+        case GLFW_KEY_I: run_iteration(); break;
         case GLFW_KEY_KP_ADD:
         case GLFW_KEY_EQUAL: renderer.layoutScale *= 1.2f; renderer_update_graph(&renderer, &currentGraph); break;
         case GLFW_KEY_KP_SUBTRACT:
@@ -151,6 +159,7 @@ int main(int argc, char** argv) {
     }
     if (optind >= argc) return EXIT_FAILURE;
     currentFilename = argv[optind];
+    currentGraph.graph_initialized = false;
     if (graph_load_graphml(currentFilename, &currentGraph, currentLayout, currentNodeLimit, currentNodeAttr, currentEdgeAttr) != 0) return EXIT_FAILURE;
     if (!glfwInit()) return EXIT_FAILURE;
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
