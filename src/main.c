@@ -34,13 +34,14 @@ const char* centrality_names[] = { "PR", "Hub", "Auth", "Btw", "Deg", "Clos", "H
 void update_ui_text(float fps) {
     char buf[1024];
     snprintf(buf, sizeof(buf), 
-        "[L]ayout:%s [I]terate [G]roup:%s [C]luster:%s [O]verlap [T]ext:%s [N]ode:%d [E]dge:%d Filter:1-9 [R]eset [H]ide FPS:%.1f",
+        "[L]ayout:%s [I]terate [G]roup:%s [C]luster:%s [O]verlap [B]ridge [T]ext:%s [N]ode:%d [E]dge:%d Filter:1-9 [K]Core:%d [R]eset [H]ide FPS:%.1f",
         layout_names[currentLayout],
         cluster_names[currentCluster],
         centrality_names[currentCentrality],
         renderer.showLabels ? "ON" : "OFF",
         currentGraph.props.node_count,
         currentGraph.props.edge_count,
+        currentGraph.props.coreness_filter,
         fps
     );
     renderer_update_ui(&renderer, buf);
@@ -51,11 +52,14 @@ void run_clustering() { graph_cluster(&currentGraph, currentCluster); renderer_u
 void run_centrality() { graph_calculate_centrality(&currentGraph, currentCentrality); renderer_update_graph(&renderer, &currentGraph); }
 void run_iteration() { graph_layout_step(&currentGraph, currentLayout, 1); renderer_update_graph(&renderer, &currentGraph); }
 void run_filter(int min_deg) { graph_filter_degree(&currentGraph, min_deg); renderer_update_graph(&renderer, &currentGraph); }
+void run_coreness_filter(int min_core) { graph_filter_coreness(&currentGraph, min_core); renderer_update_graph(&renderer, &currentGraph); }
+void run_infrastructure() { graph_highlight_infrastructure(&currentGraph); renderer_update_graph(&renderer, &currentGraph); }
 
 void run_reset() {
     graph_free_data(&currentGraph);
     currentLayout = LAYOUT_GRID_3D;
     renderer.layoutScale = 1.0f;
+    currentGraph.props.coreness_filter = 0;
     if (graph_load_graphml(currentFilename, &currentGraph, currentLayout, currentNodeAttr, currentEdgeAttr) == 0) {
         renderer_update_graph(&renderer, &currentGraph);
     }
@@ -85,6 +89,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         case GLFW_KEY_N: renderer.showNodes = !renderer.showNodes; break;
         case GLFW_KEY_E: renderer.showEdges = !renderer.showEdges; break;
         case GLFW_KEY_H: renderer.showUI = !renderer.showUI; break;
+        case GLFW_KEY_B: run_infrastructure(); break;
+        case GLFW_KEY_K: run_coreness_filter(currentGraph.props.coreness_filter + 1); break;
         case GLFW_KEY_L: currentLayout = (currentLayout + 1) % 7; update_layout(); break;
         case GLFW_KEY_G: currentCluster = (currentCluster + 1) % CLUSTER_COUNT; run_clustering(); break;
         case GLFW_KEY_C: currentCentrality = (currentCentrality + 1) % CENTRALITY_COUNT; run_centrality(); break;

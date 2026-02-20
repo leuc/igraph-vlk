@@ -12,10 +12,12 @@ layout(location = 2) in vec2 inTexCoord;
 layout(location = 3) in vec3 instancePos;
 layout(location = 4) in vec3 instanceColor;
 layout(location = 5) in float instanceSize;
+layout(location = 6) in float instanceGlow;
 
 layout(location = 0) out vec3 fragNormal;
 layout(location = 1) out vec2 fragTexCoord;
 layout(location = 2) out vec3 fragColor;
+layout(location = 3) out float fragGlow;
 
 void main() {
     float finalSize = 0.5 * instanceSize;
@@ -27,4 +29,5 @@ void main() {
     fragNormal = inNormal;
     fragTexCoord = inTexCoord;
     fragColor = instanceColor;
+    fragGlow = instanceGlow;
 }

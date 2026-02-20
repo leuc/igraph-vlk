@@ -34,13 +34,19 @@ static void refresh_graph_data(GraphData* data) {
     float max_n_val = 0.0f;
     if (has_node_attr) { for (int i = 0; i < data->node_count; i++) { float val = (float)VAN(&data->g, data->node_attr_name, i); if (val > max_n_val) max_n_val = val; } }
 
+    igraph_vector_int_t coreness; igraph_vector_int_init(&coreness, data->node_count);
+    igraph_coreness(&data->g, &coreness, IGRAPH_ALL);
+
     for (int i = 0; i < data->node_count; i++) {
         data->nodes[i].color[0] = (float)rand()/RAND_MAX; data->nodes[i].color[1] = (float)rand()/RAND_MAX; data->nodes[i].color[2] = (float)rand()/RAND_MAX;
         data->nodes[i].size = (has_node_attr && max_n_val > 0) ? (float)VAN(&data->g, data->node_attr_name, i)/max_n_val : 1.0f;
         data->nodes[i].label = has_label ? strdup(VAS(&data->g, "label", i)) : NULL;
         igraph_vector_int_t neighbors; igraph_vector_int_init(&neighbors, 0); igraph_neighbors(&data->g, &neighbors, i, IGRAPH_ALL);
         data->nodes[i].degree = igraph_vector_int_size(&neighbors); igraph_vector_int_destroy(&neighbors);
+        data->nodes[i].coreness = VECTOR(coreness)[i];
+        data->nodes[i].glow = 0.0f;
     }
+    igraph_vector_int_destroy(&coreness);
     sync_node_positions(data);
 
     bool has_edge_attr = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_EDGE, data->edge_attr_name);
@@ -100,6 +106,42 @@ void graph_filter_degree(GraphData* data, int min_degree) {
         refresh_graph_data(data);
     }
     igraph_vector_int_destroy(&vids); igraph_vector_int_destroy(&degrees);
+}
+
+void graph_filter_coreness(GraphData* data, int min_coreness) {
+    if (!data->graph_initialized) return;
+    igraph_vector_int_t vids; igraph_vector_int_init(&vids, 0);
+    igraph_vector_int_t coreness; igraph_vector_int_init(&coreness, 0);
+    igraph_coreness(&data->g, &coreness, IGRAPH_ALL);
+    
+    for (int i = 0; i < igraph_vector_int_size(&coreness); i++) {
+        if (VECTOR(coreness)[i] < min_coreness) {
+            igraph_vector_int_push_back(&vids, i);
+        }
+    }
+    
+    if (igraph_vector_int_size(&vids) > 0) {
+        printf("Filtering nodes with coreness < %d. Removing %d nodes...\n", min_coreness, (int)igraph_vector_int_size(&vids));
+        igraph_delete_vertices(&data->g, igraph_vss_vector(&vids));
+        igraph_simplify(&data->g, 1, 1, NULL);
+        data->props.coreness_filter = min_coreness;
+
+        // Reset layout for new graph size
+        igraph_matrix_destroy(&data->current_layout);
+        igraph_matrix_init(&data->current_layout, 0, 0);
+        int side = (int)ceil(pow(igraph_vcount(&data->g), 1.0/3.0));
+        igraph_layout_grid_3d(&data->g, &data->current_layout, side, side);
+        refresh_graph_data(data);
+
+        // Set glow based on coreness
+        int max_core = 0;
+        for (int i = 0; i < data->node_count; i++) if (data->nodes[i].coreness > max_core) max_core = data->nodes[i].coreness;
+        for (int i = 0; i < data->node_count; i++) {
+            if (max_core > 0) data->nodes[i].glow = (float)data->nodes[i].coreness / (float)max_core;
+            else data->nodes[i].glow = 0.5f;
+        }
+    }
+    igraph_vector_int_destroy(&vids); igraph_vector_int_destroy(&coreness);
 }
 
 void graph_layout_step(GraphData* data, LayoutType type, int iterations) {
@@ -166,10 +208,20 @@ void graph_cluster(GraphData* data, ClusterType type) {
         default: break;
     }
     int cluster_count = 0; for(int i=0; i<igraph_vector_int_size(&membership); i++) if(VECTOR(membership)[i] > cluster_count) cluster_count = VECTOR(membership)[i];
-    cluster_count++; vec3* colors = malloc(sizeof(vec3) * cluster_count);
+    cluster_count++; 
+    int* cluster_sizes = calloc(cluster_count, sizeof(int));
+    for(int i=0; i<data->node_count; i++) cluster_sizes[VECTOR(membership)[i]]++;
+    int max_cluster_size = 0;
+    for(int i=0; i<cluster_count; i++) if(cluster_sizes[i] > max_cluster_size) max_cluster_size = cluster_sizes[i];
+
+    vec3* colors = malloc(sizeof(vec3) * cluster_count);
     for(int i=0; i<cluster_count; i++) { colors[i][0] = (float)rand()/RAND_MAX; colors[i][1] = (float)rand()/RAND_MAX; colors[i][2] = (float)rand()/RAND_MAX; }
-    for(int i=0; i<data->node_count; i++) memcpy(data->nodes[i].color, colors[VECTOR(membership)[i]], 12);
-    free(colors); igraph_vector_int_destroy(&membership);
+    for(int i=0; i<data->node_count; i++) {
+        int c_idx = VECTOR(membership)[i];
+        memcpy(data->nodes[i].color, colors[c_idx], 12);
+        data->nodes[i].glow = (max_cluster_size > 0) ? (float)cluster_sizes[c_idx] / (float)max_cluster_size : 0.0f;
+    }
+    free(colors); free(cluster_sizes); igraph_vector_int_destroy(&membership);
 }
 
 void graph_calculate_centrality(GraphData* data, CentralityType type) {
@@ -188,8 +240,44 @@ void graph_calculate_centrality(GraphData* data, CentralityType type) {
         default: break;
     }
     igraph_real_t min_v, max_v; igraph_vector_minmax(&result, &min_v, &max_v);
-    for(int i=0; i<data->node_count; i++) { float val = (float)VECTOR(result)[i]; data->nodes[i].size = (max_v > 0) ? (val / (float)max_v) : 1.0f; data->nodes[i].degree = (int)(data->nodes[i].size * 20.0f); }
+    for(int i=0; i<data->node_count; i++) { 
+        float val = (float)VECTOR(result)[i]; 
+        data->nodes[i].size = (max_v > 0) ? (val / (float)max_v) : 1.0f; 
+        data->nodes[i].degree = (int)(data->nodes[i].size * 20.0f);
+        data->nodes[i].glow = (max_v > 0) ? (val / (float)max_v) : 0.0f;
+    }
     igraph_vector_destroy(&result);
+}
+
+void graph_highlight_infrastructure(GraphData* data) {
+    if (!data->graph_initialized) return;
+    
+    // Reset glow
+    for (int i = 0; i < data->node_count; i++) data->nodes[i].glow = 0.0f;
+
+    // Articulation points
+    igraph_vector_int_t ap; igraph_vector_int_init(&ap, 0);
+    igraph_articulation_points(&data->g, &ap);
+    for (int i = 0; i < igraph_vector_int_size(&ap); i++) {
+        int v_idx = VECTOR(ap)[i];
+        data->nodes[v_idx].glow = 1.0f;
+        data->nodes[v_idx].color[0] = 1.0f; data->nodes[v_idx].color[1] = 0.2f; data->nodes[v_idx].color[2] = 0.2f;
+    }
+    igraph_vector_int_destroy(&ap);
+
+    // Bridges
+    igraph_vector_int_t bridges; igraph_vector_int_init(&bridges, 0);
+    igraph_bridges(&data->g, &bridges);
+    for (int i = 0; i < igraph_vector_int_size(&bridges); i++) {
+        igraph_integer_t from, to;
+        igraph_edge(&data->g, VECTOR(bridges)[i], &from, &to);
+        data->nodes[from].glow = 1.0f;
+        data->nodes[to].glow = 1.0f;
+        // Optionally color nodes connected to bridges differently
+        data->nodes[from].color[0] = 1.0f; data->nodes[from].color[1] = 0.5f; data->nodes[from].color[2] = 0.0f;
+        data->nodes[to].color[0] = 1.0f; data->nodes[to].color[1] = 0.5f; data->nodes[to].color[2] = 0.0f;
+    }
+    igraph_vector_int_destroy(&bridges);
 }
 
 void graph_free_data(GraphData* data) {

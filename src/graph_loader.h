@@ -43,6 +43,8 @@ typedef struct {
     float size;
     char* label;
     int degree;
+    int coreness;
+    float glow;
 } Node;
 
 typedef struct {
@@ -54,6 +56,7 @@ typedef struct {
 typedef struct {
     int node_count;
     int edge_count;
+    int coreness_filter;
 } GraphProperties;
 
 typedef struct {
@@ -76,6 +79,8 @@ void graph_calculate_centrality(GraphData* data, CentralityType type);
 void graph_layout_step(GraphData* data, LayoutType type, int iterations);
 void graph_remove_overlaps(GraphData* data, float layoutScale);
 void graph_filter_degree(GraphData* data, int min_degree);
+void graph_filter_coreness(GraphData* data, int min_coreness);
+void graph_highlight_infrastructure(GraphData* data);
 void graph_free_data(GraphData* data);
 
 #endif
