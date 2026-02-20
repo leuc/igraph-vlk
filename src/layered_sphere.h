@@ -22,11 +22,14 @@ typedef struct LayeredSphereContext {
     int total_iters;
     
     // Graph properties
-    igraph_vector_int_t degrees;
+    igraph_vector_int_t degrees;        // Now storing K-Coreness
     
     // For inside-out processing
     igraph_vector_int_t unique_degrees; // Sorted highest to lowest
     int current_degree_idx;             // Which sphere are we currently optimizing?
+    
+    // Edge cutting based on Jaccard Similarity
+    bool* cut_edges;                    // Flat array tracking weak ties
 } LayeredSphereContext;
 
 void layered_sphere_init(LayeredSphereContext* ctx, int node_count);

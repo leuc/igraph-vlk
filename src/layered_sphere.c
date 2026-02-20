@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdio.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -64,8 +65,8 @@ double dist3d(double x1, double y1, double z1, double x2, double y2, double z2) 
 
 // Calculates the change in energy if u and v were to swap places.
 double calculate_swap_delta(const igraph_t *ig, const igraph_matrix_t *layout, 
-                            const igraph_vector_int_t *degrees, int u, int v, 
-                            bool intra_only) {
+                            const igraph_vector_int_t *degrees, const bool* cut_edges,
+                            int u, int v, bool intra_only, bool respect_cuts) {
     double old_energy = 0.0;
     double new_energy = 0.0;
     
@@ -84,6 +85,9 @@ double calculate_swap_delta(const igraph_t *ig, const igraph_matrix_t *layout,
     // Calculate for U's neighbors
     for (int i = 0; i < igraph_vector_int_size(&u_edges); i++) {
         igraph_integer_t edge_id = VECTOR(u_edges)[i];
+        
+        if (respect_cuts && cut_edges && cut_edges[edge_id]) continue;
+        
         igraph_integer_t from, to;
         igraph_edge(ig, edge_id, &from, &to);
         igraph_integer_t neighbor = (from == u) ? to : from;
@@ -99,6 +103,9 @@ double calculate_swap_delta(const igraph_t *ig, const igraph_matrix_t *layout,
     // Calculate for V's neighbors
     for (int i = 0; i < igraph_vector_int_size(&v_edges); i++) {
         igraph_integer_t edge_id = VECTOR(v_edges)[i];
+        
+        if (respect_cuts && cut_edges && cut_edges[edge_id]) continue;
+        
         igraph_integer_t from, to;
         igraph_edge(ig, edge_id, &from, &to);
         igraph_integer_t neighbor = (from == v) ? to : from;
@@ -123,6 +130,7 @@ void layered_sphere_init(LayeredSphereContext* ctx, int node_count) {
     memset(ctx, 0, sizeof(LayeredSphereContext));
     ctx->initialized = true;
     ctx->phase = PHASE_INIT;
+    ctx->cut_edges = NULL;
     igraph_vector_int_init(&ctx->degrees, node_count);
     igraph_vector_int_init(&ctx->unique_degrees, 0);
 }
@@ -131,6 +139,10 @@ void layered_sphere_cleanup(LayeredSphereContext* ctx) {
     if (ctx->initialized) {
         igraph_vector_int_destroy(&ctx->degrees);
         igraph_vector_int_destroy(&ctx->unique_degrees);
+        if (ctx->cut_edges != NULL) {
+            free(ctx->cut_edges);
+            ctx->cut_edges = NULL;
+        }
     }
     ctx->initialized = false;
 }
@@ -147,9 +159,9 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
     // PHASE 0: Init & Hilbert Placement
     // ---------------------------------------------------------
     if (ctx->phase == PHASE_INIT) {
-        igraph_degree(ig, &ctx->degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS);
+        // Upgrade: Using K-Coreness instead of raw degree for better internal spheres
+        igraph_coreness(ig, &ctx->degrees, IGRAPH_ALL);
         
-        // Extract unique degrees to process spheres one by one
         for (int i = 0; i < vcount; i++) {
             igraph_integer_t deg = VECTOR(ctx->degrees)[i];
             if (!igraph_vector_int_contains(&ctx->unique_degrees, deg)) {
@@ -157,11 +169,44 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
             }
         }
         
-        // Sort descending (highest degree = innermost sphere)
         qsort(VECTOR(ctx->unique_degrees), igraph_vector_int_size(&ctx->unique_degrees), 
               sizeof(igraph_integer_t), compare_ints_desc);
 
-        // Calculate Transitivity for local density
+        // --- Edge Cutting (Jaccard Similarity) ---
+        int ecount = igraph_ecount(ig);
+        ctx->cut_edges = calloc(ecount, sizeof(bool));
+
+        igraph_vector_int_t edge_pairs;
+        igraph_vector_int_init(&edge_pairs, ecount * 2);
+        for (int i = 0; i < ecount; i++) {
+            igraph_integer_t u, v;
+            igraph_edge(ig, i, &u, &v);
+            VECTOR(edge_pairs)[i * 2] = u;
+            VECTOR(edge_pairs)[i * 2 + 1] = v;
+        }
+
+        igraph_vector_t jaccard_sim;
+        igraph_vector_init(&jaccard_sim, ecount);
+        
+        // Pass 0 (false) as the 5th argument to ignore self-loops
+        igraph_similarity_jaccard_pairs(ig, &jaccard_sim, &edge_pairs, IGRAPH_ALL, 0); 
+
+        for (int i = 0; i < ecount; i++) {
+            igraph_integer_t u = VECTOR(edge_pairs)[i * 2];
+            igraph_integer_t v = VECTOR(edge_pairs)[i * 2 + 1];
+
+            // Flag intra-sphere weak ties for cutting
+            if (VECTOR(ctx->degrees)[u] == VECTOR(ctx->degrees)[v]) {
+                if (VECTOR(jaccard_sim)[i] < 0.05) { 
+                    ctx->cut_edges[i] = true;
+                }
+            }
+        }
+        igraph_vector_int_destroy(&edge_pairs);
+        igraph_vector_destroy(&jaccard_sim);
+        // -----------------------------------------
+
+        // Local Transitivity for Hilbert density sorting
         igraph_vector_t transitivity;
         igraph_vector_init(&transitivity, vcount);
         igraph_transitivity_local_undirected(ig, &transitivity, igraph_vss_all(), IGRAPH_TRANSITIVITY_ZERO);
@@ -219,7 +264,6 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
                 MATRIX(graph->current_layout, node_id, 1) = group_points[i].y;
                 MATRIX(graph->current_layout, node_id, 2) = group_points[i].z;
                 
-                // Sync to render nodes
                 graph->nodes[node_id].position[0] = group_points[i].x;
                 graph->nodes[node_id].position[1] = group_points[i].y;
                 graph->nodes[node_id].position[2] = group_points[i].z;
@@ -242,15 +286,14 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
     if (ctx->phase == PHASE_INTRA_SPHERE) {
         igraph_integer_t target_deg = VECTOR(ctx->unique_degrees)[ctx->current_degree_idx];
         
-        // Loop over nodes belonging to the currently targeted sphere
         for (int u = 0; u < vcount; u++) {
             if (VECTOR(ctx->degrees)[u] != target_deg) continue;
             
             for (int v = u + 1; v < vcount; v++) {
                 if (VECTOR(ctx->degrees)[v] != target_deg) continue;
                 
-                // intra_only = true. Only calculate edges within this sphere.
-                double delta = calculate_swap_delta(ig, &graph->current_layout, &ctx->degrees, u, v, true);
+                // intra_only = true, respect_cuts = true
+                double delta = calculate_swap_delta(ig, &graph->current_layout, &ctx->degrees, ctx->cut_edges, u, v, true, true);
                 
                 if (delta < -0.001) {
                     for (int dim = 0; dim < 3; dim++) {
@@ -266,7 +309,6 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
             }
         }
 
-        // If no improvements were made on this layer, progress outward
         if (!swapped_this_frame) {
             ctx->current_degree_idx++;
             if (ctx->current_degree_idx >= igraph_vector_int_size(&ctx->unique_degrees)) {
@@ -284,12 +326,10 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
     if (ctx->phase == PHASE_INTER_SPHERE) {
         for (int u = 0; u < vcount; u++) {
             for (int v = u + 1; v < vcount; v++) {
-                
-                // Swap rule remains: nodes must be on the same degree-sphere to trade places
                 if (VECTOR(ctx->degrees)[u] == VECTOR(ctx->degrees)[v]) {
                     
-                    // intra_only = false. Calculate total edge length, globally aligning the shells
-                    double delta = calculate_swap_delta(ig, &graph->current_layout, &ctx->degrees, u, v, false);
+                    // intra_only = false, respect_cuts = false ("un-cutting" ties)
+                    double delta = calculate_swap_delta(ig, &graph->current_layout, &ctx->degrees, ctx->cut_edges, u, v, false, false);
                     
                     if (delta < -0.001) {
                         for (int dim = 0; dim < 3; dim++) {
@@ -308,7 +348,6 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
 
         ctx->current_iter++;
         
-        // If a full global sweep yields no improvements, the optimization is perfectly settled.
         if (!swapped_this_frame) {
             ctx->phase = PHASE_DONE;
             return false; 
@@ -320,7 +359,6 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
     return false;
 }
 
-// We use a static buffer so the pointer remains valid after the function returns
 const char* layered_sphere_get_stage_name(LayeredSphereContext* ctx) {
     static char stage_name[128];
     
@@ -333,11 +371,10 @@ const char* layered_sphere_get_stage_name(LayeredSphereContext* ctx) {
             return "Layered Sphere - Phase 0: Hilbert Grid Placement";
             
         case PHASE_INTRA_SPHERE:
-            // Dynamically show which sphere (degree) is being optimized
             if (ctx->unique_degrees.stor_begin != NULL) {
                 int current_deg = VECTOR(ctx->unique_degrees)[ctx->current_degree_idx];
                 snprintf(stage_name, sizeof(stage_name), 
-                         "Layered Sphere - Phase 1: Intra-Sphere (Degree %d)", current_deg);
+                         "Layered Sphere - Phase 1: Intra-Sphere (K-Core %d)", current_deg);
                 return stage_name;
             }
             return "Layered Sphere - Phase 1: Intra-Sphere Optimization";
