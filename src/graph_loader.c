@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "graph_loader.h"
 #include "layout_openord.h"
+#include "layered_sphere.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -170,6 +171,16 @@ void graph_layout_step(GraphData* data, LayoutType type, int iterations) {
             }
             break;
         }
+        case LAYOUT_LAYERED_SPHERE: {
+            if (!data->layered_sphere) {
+                data->layered_sphere = malloc(sizeof(LayeredSphereContext));
+                layered_sphere_init(data->layered_sphere, data->node_count);
+            }
+            for (int i = 0; i < iterations; i++) {
+                if (!layered_sphere_step(data->layered_sphere, data)) break;
+            }
+            break;
+        }
     }
     sync_node_positions(data);
 }
@@ -324,6 +335,7 @@ void graph_highlight_infrastructure(GraphData* data) {
 void graph_free_data(GraphData* data) {
     if (data->graph_initialized) { igraph_destroy(&data->g); igraph_matrix_destroy(&data->current_layout); data->graph_initialized = false; }
     if (data->openord) { openord_cleanup(data->openord); free(data->openord); data->openord = NULL; }
+    if (data->layered_sphere) { layered_sphere_cleanup(data->layered_sphere); free(data->layered_sphere); data->layered_sphere = NULL; }
     if (data->node_attr_name) free(data->node_attr_name); if (data->edge_attr_name) free(data->edge_attr_name);
     for (uint32_t i = 0; i < data->node_count; i++) if (data->nodes[i].label) free(data->nodes[i].label);
     free(data->nodes); free(data->edges);

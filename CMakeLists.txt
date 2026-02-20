@@ -44,6 +44,7 @@ add_executable(igraph-vlk
     src/text.c
     src/graph_loader.c
     src/layout_openord.c
+    src/layered_sphere.c
     ${SPIRV_SHADERS}
 )
 

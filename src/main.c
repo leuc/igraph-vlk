@@ -1,6 +1,7 @@
 #include "renderer.h"
 #include "graph_loader.h"
 #include "layout_openord.h"
+#include "layered_sphere.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -28,7 +29,7 @@ CentralityType currentCentrality = CENTRALITY_PAGERANK;
 char* currentNodeAttr;
 char* currentEdgeAttr;
 
-const char* layout_names[] = { "Fruchterman-Reingold", "Kamada-Kawai", "Random", "Sphere", "Grid", "UMAP", "DrL", "OpenOrd" };
+const char* layout_names[] = { "Fruchterman-Reingold", "Kamada-Kawai", "Random", "Sphere", "Grid", "UMAP", "DrL", "OpenOrd", "Layered Sphere" };
 const char* cluster_names[] = { "Fast Greedy", "Walktrap", "Label Propagation", "Multilevel", "Leiden" };
 const char* centrality_names[] = { "PageRank", "Hubs", "Authorities", "Betweenness", "Degree", "Closeness", "Harmonic", "Eigenvector", "Strength", "Constraint" };
 
@@ -38,6 +39,10 @@ void update_ui_text(float fps) {
         snprintf(stage_info, sizeof(stage_info), " [%s:%d]", 
             openord_get_stage_name(currentGraph.openord->stage_id),
             currentGraph.openord->current_iter);
+    } else if (currentLayout == LAYOUT_LAYERED_SPHERE && currentGraph.layered_sphere) {
+        snprintf(stage_info, sizeof(stage_info), " [%s:%d]", 
+            layered_sphere_get_stage_name(0),
+            currentGraph.layered_sphere->current_iter);
     }
 
     char buf[1024];
@@ -161,6 +166,9 @@ int main(int argc, char** argv) {
         glfwPollEvents(); processInput(window, deltaTime); update_ui_text(currentFps);
 
         if (currentLayout == LAYOUT_OPENORD_3D && currentGraph.openord && currentGraph.openord->stage_id < 5) {
+            graph_layout_step(&currentGraph, currentLayout, 1);
+            renderer_update_graph(&renderer, &currentGraph);
+        } else if (currentLayout == LAYOUT_LAYERED_SPHERE && currentGraph.layered_sphere) {
             graph_layout_step(&currentGraph, currentLayout, 1);
             renderer_update_graph(&renderer, &currentGraph);
         }

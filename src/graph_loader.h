@@ -13,10 +13,12 @@ typedef enum {
     LAYOUT_UMAP_3D,
     LAYOUT_DRL_3D,
     LAYOUT_OPENORD_3D,
+    LAYOUT_LAYERED_SPHERE,
     LAYOUT_COUNT
 } LayoutType;
 
 typedef struct OpenOrdContext OpenOrdContext; // Fixed typedef
+typedef struct LayeredSphereContext LayeredSphereContext;
 
 typedef enum {
     CLUSTER_FASTGREEDY,
@@ -76,6 +78,7 @@ typedef struct {
     char* edge_attr_name;
     GraphProperties props;
     struct OpenOrdContext* openord;
+    struct LayeredSphereContext* layered_sphere;
 } GraphData;
 
 int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_type, const char* node_attr, const char* edge_attr);
