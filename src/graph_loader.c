@@ -72,9 +72,13 @@ int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_
     data->nodes = NULL; data->edges = NULL;
 
     igraph_matrix_init(&data->current_layout, 0, 0);
-    // Use grid layout first as requested for large graphs
-    int side = (int)ceil(pow(igraph_vcount(&data->g), 1.0/3.0));
-    igraph_layout_grid_3d(&data->g, &data->current_layout, side, side);
+    if (layout_type == LAYOUT_OPENORD_3D || layout_type == LAYOUT_RANDOM_3D) {
+        igraph_layout_random_3d(&data->g, &data->current_layout);
+    } else {
+        // Use grid layout as default
+        int side = (int)ceil(pow(igraph_vcount(&data->g), 1.0/3.0));
+        igraph_layout_grid_3d(&data->g, &data->current_layout, side, side);
+    }
 
     refresh_graph_data(data);
     return 0;
@@ -159,6 +163,7 @@ void graph_layout_step(GraphData* data, LayoutType type, int iterations) {
             if (!data->openord) {
                 data->openord = malloc(sizeof(OpenOrdContext));
                 openord_init(data->openord, data->node_count, 128);
+                igraph_layout_random_3d(&data->g, &data->current_layout);
             }
             for (int i = 0; i < iterations; i++) {
                 if (!openord_step(data->openord, data)) break;
