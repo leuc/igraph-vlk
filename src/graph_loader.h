@@ -11,8 +11,11 @@ typedef enum {
     LAYOUT_SPHERE,
     LAYOUT_GRID_3D,
     LAYOUT_UMAP_3D,
-    LAYOUT_DRL_3D
+    LAYOUT_DRL_3D,
+    LAYOUT_OPENORD_3D
 } LayoutType;
+
+typedef struct OpenOrdContext OpenOrdContext; // Fixed typedef
 
 typedef enum {
     CLUSTER_FASTGREEDY,
@@ -71,6 +74,7 @@ typedef struct {
     char* node_attr_name;
     char* edge_attr_name;
     GraphProperties props;
+    struct OpenOrdContext* openord;
 } GraphData;
 
 int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_type, const char* node_attr, const char* edge_attr);

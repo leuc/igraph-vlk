@@ -35,12 +35,15 @@ foreach(SHADER ${SHADERS})
     list(APPEND SPIRV_SHADERS ${SPIRV})
 endforeach()
 
+find_package(OpenMP REQUIRED)
+
 add_executable(graph-sphere 
     src/main.c 
     src/renderer.c 
     src/polyhedron.c 
     src/text.c
     src/graph_loader.c
+    src/layout_openord.c
     ${SPIRV_SHADERS}
 )
 
@@ -56,6 +59,7 @@ target_link_libraries(graph-sphere PRIVATE
     glfw
     ${IGRAPH_LIBRARIES}
     m
+    OpenMP::OpenMP_C
 )
 
 target_compile_definitions(graph-sphere PRIVATE 

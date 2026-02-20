@@ -1,5 +1,6 @@
 #include "renderer.h"
 #include "graph_loader.h"
+#include "layout_openord.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -21,21 +22,29 @@ int windowedX, windowedY, windowedWidth, windowedHeight;
 Renderer renderer;
 GraphData currentGraph;
 char* currentFilename;
-LayoutType currentLayout = LAYOUT_GRID_3D;
+LayoutType currentLayout = LAYOUT_OPENORD_3D;
 ClusterType currentCluster = CLUSTER_FASTGREEDY;
 CentralityType currentCentrality = CENTRALITY_PAGERANK;
 char* currentNodeAttr;
 char* currentEdgeAttr;
 
-const char* layout_names[] = { "FR", "KK", "Rand", "Sph", "Grid", "UMAP", "DrL" };
+const char* layout_names[] = { "FR", "KK", "Rand", "Sph", "Grid", "UMAP", "DrL", "OpenOrd" };
 const char* cluster_names[] = { "FastGr", "Walk", "LabProp", "Multi", "Leid" };
 const char* centrality_names[] = { "PR", "Hub", "Auth", "Btw", "Deg", "Clos", "Harm", "Eig", "Str", "Con" };
 
 void update_ui_text(float fps) {
+    char stage_info[64] = "";
+    if (currentLayout == LAYOUT_OPENORD_3D && currentGraph.openord) {
+        snprintf(stage_info, sizeof(stage_info), " [%s:%d]", 
+            openord_get_stage_name(currentGraph.openord->stage_id),
+            currentGraph.openord->current_iter);
+    }
+
     char buf[1024];
     snprintf(buf, sizeof(buf), 
-        "[L]ayout:%s [I]terate [G]roup:%s [C]luster:%s [O]verlap [B]ridge [T]ext:%s [N]ode:%d [E]dge:%d Filter:1-9 [K]Core:%d [R]eset [H]ide FPS:%.1f",
+        "[L]ayout:%s%s [I]terate [G]roup:%s [C]luster:%s [O]verlap [B]ridge [T]ext:%s [N]ode:%d [E]dge:%d Filter:1-9 [K]Core:%d [R]eset [H]ide FPS:%.1f",
         layout_names[currentLayout],
+        stage_info,
         cluster_names[currentCluster],
         centrality_names[currentCentrality],
         renderer.showLabels ? "ON" : "OFF",
@@ -57,7 +66,7 @@ void run_infrastructure() { graph_highlight_infrastructure(&currentGraph); rende
 
 void run_reset() {
     graph_free_data(&currentGraph);
-    currentLayout = LAYOUT_GRID_3D;
+    currentLayout = LAYOUT_OPENORD_3D;
     renderer.layoutScale = 1.0f;
     currentGraph.props.coreness_filter = 0;
     if (graph_load_graphml(currentFilename, &currentGraph, currentLayout, currentNodeAttr, currentEdgeAttr) == 0) {
@@ -91,7 +100,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         case GLFW_KEY_H: renderer.showUI = !renderer.showUI; break;
         case GLFW_KEY_B: run_infrastructure(); break;
         case GLFW_KEY_K: run_coreness_filter(currentGraph.props.coreness_filter + 1); break;
-        case GLFW_KEY_L: currentLayout = (currentLayout + 1) % 7; update_layout(); break;
+        case GLFW_KEY_L: currentLayout = (currentLayout + 1) % 8; update_layout(); break;
         case GLFW_KEY_G: currentCluster = (currentCluster + 1) % CLUSTER_COUNT; run_clustering(); break;
         case GLFW_KEY_C: currentCentrality = (currentCentrality + 1) % CENTRALITY_COUNT; run_centrality(); break;
         case GLFW_KEY_I: run_iteration(); break;
@@ -150,6 +159,12 @@ int main(int argc, char** argv) {
         fpsTimer += deltaTime; frameCount++;
         if (fpsTimer >= 1.0f) { currentFps = frameCount / fpsTimer; frameCount = 0; fpsTimer = 0.0f; }
         glfwPollEvents(); processInput(window, deltaTime); update_ui_text(currentFps);
+
+        if (currentLayout == LAYOUT_OPENORD_3D && currentGraph.openord && currentGraph.openord->stage_id < 5) {
+            graph_layout_step(&currentGraph, currentLayout, 1);
+            renderer_update_graph(&renderer, &currentGraph);
+        }
+
         renderer_update_view(&renderer, cameraPos, cameraFront, cameraUp); renderer_draw_frame(&renderer);
     }
     graph_free_data(&currentGraph); renderer_cleanup(&renderer); glfwDestroyWindow(window); glfwTerminate();

@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "graph_loader.h"
+#include "layout_openord.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -154,6 +155,16 @@ void graph_layout_step(GraphData* data, LayoutType type, int iterations) {
         case LAYOUT_GRID_3D: { int side = (int)ceil(pow(data->node_count, 1.0/3.0)); igraph_layout_grid_3d(&data->g, &data->current_layout, side, side); break; }
         case LAYOUT_UMAP_3D: igraph_layout_umap_3d(&data->g, &data->current_layout, 1, NULL, 0.1, iterations, 0); break;
         case LAYOUT_DRL_3D: { igraph_layout_drl_options_t options; igraph_layout_drl_options_init(&options, IGRAPH_LAYOUT_DRL_DEFAULT); igraph_layout_drl_3d(&data->g, &data->current_layout, 0, &options, NULL); break; }
+        case LAYOUT_OPENORD_3D: {
+            if (!data->openord) {
+                data->openord = malloc(sizeof(OpenOrdContext));
+                openord_init(data->openord, data->node_count, 128);
+            }
+            for (int i = 0; i < iterations; i++) {
+                if (!openord_step(data->openord, data)) break;
+            }
+            break;
+        }
     }
     sync_node_positions(data);
 }
@@ -282,6 +293,7 @@ void graph_highlight_infrastructure(GraphData* data) {
 
 void graph_free_data(GraphData* data) {
     if (data->graph_initialized) { igraph_destroy(&data->g); igraph_matrix_destroy(&data->current_layout); data->graph_initialized = false; }
+    if (data->openord) { openord_cleanup(data->openord); free(data->openord); data->openord = NULL; }
     if (data->node_attr_name) free(data->node_attr_name); if (data->edge_attr_name) free(data->edge_attr_name);
     for (uint32_t i = 0; i < data->node_count; i++) if (data->nodes[i].label) free(data->nodes[i].label);
     free(data->nodes); free(data->edges);
