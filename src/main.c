@@ -41,7 +41,7 @@ void update_ui_text(float fps) {
             currentGraph.openord->current_iter);
     } else if (currentLayout == LAYOUT_LAYERED_SPHERE && currentGraph.layered_sphere) {
         snprintf(stage_info, sizeof(stage_info), " [%s:%d]", 
-            layered_sphere_get_stage_name(0),
+            layered_sphere_get_stage_name(currentGraph.layered_sphere),
             currentGraph.layered_sphere->current_iter);
     }
 

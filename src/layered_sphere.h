@@ -32,6 +32,6 @@ typedef struct LayeredSphereContext {
 void layered_sphere_init(LayeredSphereContext* ctx, int node_count);
 void layered_sphere_cleanup(LayeredSphereContext* ctx);
 bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph);
-const char* layered_sphere_get_stage_name(int stage_id);
+const char* layered_sphere_get_stage_name(LayeredSphereContext* ctx);
 
 #endif // LAYERED_SPHERE_H

@@ -320,6 +320,35 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
     return false;
 }
 
-const char* layered_sphere_get_stage_name(int stage_id) {
-    return "Layered Sphere - 2 Phase Hilbert Optimization";
+// We use a static buffer so the pointer remains valid after the function returns
+const char* layered_sphere_get_stage_name(LayeredSphereContext* ctx) {
+    static char stage_name[128];
+    
+    if (!ctx || !ctx->initialized) {
+        return "Layered Sphere - Uninitialized";
+    }
+
+    switch (ctx->phase) {
+        case PHASE_INIT:
+            return "Layered Sphere - Phase 0: Hilbert Grid Placement";
+            
+        case PHASE_INTRA_SPHERE:
+            // Dynamically show which sphere (degree) is being optimized
+            if (ctx->unique_degrees.stor_begin != NULL) {
+                int current_deg = VECTOR(ctx->unique_degrees)[ctx->current_degree_idx];
+                snprintf(stage_name, sizeof(stage_name), 
+                         "Layered Sphere - Phase 1: Intra-Sphere (Degree %d)", current_deg);
+                return stage_name;
+            }
+            return "Layered Sphere - Phase 1: Intra-Sphere Optimization";
+            
+        case PHASE_INTER_SPHERE:
+            return "Layered Sphere - Phase 2: Global Inter-Sphere Alignment";
+            
+        case PHASE_DONE:
+            return "Layered Sphere - Optimization Complete";
+            
+        default:
+            return "Layered Sphere - Unknown Phase";
+    }
 }
