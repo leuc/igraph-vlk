@@ -268,7 +268,7 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
         for (uint32_t i = 0; i < graph->node_count; i++) {
             int deg = graph->nodes[i].degree; PlatonicType pt;
             if (deg < 4) pt = PLATONIC_TETRAHEDRON; else if (deg < 6) pt = PLATONIC_CUBE; else if (deg < 8) pt = PLATONIC_OCTAHEDRON; else if (deg < 12) pt = PLATONIC_DODECAHEDRON; else pt = PLATONIC_ICOSAHEDRON;
-            if (pt == (PlatonicType)t) { sorted[currentOffset + count] = graph->nodes[i]; glm_vec3_scale(sorted[currentOffset + count].position, r->layoutScale, sorted[currentOffset + count].position); count++; }
+            if (pt == (PlatonicType)t) { sorted[currentOffset + count] = graph->nodes[i]; glm_vec3_scale(sorted[currentOffset + count].position, r->layoutScale, sorted[currentOffset + count].position); if (sorted[currentOffset + count].size < 0.1f) sorted[currentOffset + count].size = 0.1f; count++; }
         }
         r->platonicDrawCalls[t].count = count; currentOffset += count;
     }
