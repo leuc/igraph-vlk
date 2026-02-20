@@ -28,9 +28,9 @@ CentralityType currentCentrality = CENTRALITY_PAGERANK;
 char* currentNodeAttr;
 char* currentEdgeAttr;
 
-const char* layout_names[] = { "FR", "KK", "Rand", "Sph", "Grid", "UMAP", "DrL", "OpenOrd" };
-const char* cluster_names[] = { "FastGr", "Walk", "LabProp", "Multi", "Leid" };
-const char* centrality_names[] = { "PR", "Hub", "Auth", "Btw", "Deg", "Clos", "Harm", "Eig", "Str", "Con" };
+const char* layout_names[] = { "Fruchterman-Reingold", "Kamada-Kawai", "Random", "Sphere", "Grid", "UMAP", "DrL", "OpenOrd" };
+const char* cluster_names[] = { "Fast Greedy", "Walktrap", "Label Propagation", "Multilevel", "Leiden" };
+const char* centrality_names[] = { "PageRank", "Hubs", "Authorities", "Betweenness", "Degree", "Closeness", "Harmonic", "Eigenvector", "Strength", "Constraint" };
 
 void update_ui_text(float fps) {
     char stage_info[64] = "";

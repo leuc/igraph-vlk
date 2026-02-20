@@ -265,15 +265,16 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
 void renderer_update_ui(Renderer* r, const char* text) {
     int len = strlen(text); if (len > 1024) len = 1024;
     UIInstance instances[1024]; 
-    float charWidth = 1.96f / (float)len; if (charWidth > 0.012f) charWidth = 0.012f;
     float xoff = -0.98f;
+    float scale = 0.65f;
     for (int i = 0; i < len; i++) {
         unsigned char c = text[i]; CharInfo* ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
         instances[i].screenPos[0] = xoff; instances[i].screenPos[1] = 0.95f;
-        instances[i].charRect[0] = ci->x0; instances[i].charRect[1] = ci->y0; instances[i].charRect[2] = ci->x1; instances[i].charRect[3] = ci->y1;
+        instances[i].charRect[0] = ci->x0 * scale; instances[i].charRect[1] = ci->y0 * scale; 
+        instances[i].charRect[2] = ci->x1 * scale; instances[i].charRect[3] = ci->y1 * scale;
         instances[i].charUV[0] = ci->u0; instances[i].charUV[1] = ci->v0; instances[i].charUV[2] = ci->u1; instances[i].charUV[3] = ci->v1;
         instances[i].color[0] = 1; instances[i].color[1] = 1; instances[i].color[2] = 1; instances[i].color[3] = 1;
-        xoff += charWidth; 
+        xoff += (ci->xadvance * scale) / 1720.0f; 
     }
     r->uiTextCharCount = len;
     updateBuffer(r->device, r->uiTextInstanceBufferMemory, sizeof(UIInstance)*len, instances);
