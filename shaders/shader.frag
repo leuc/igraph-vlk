@@ -1,5 +1,9 @@
 #version 450
 
+layout(push_constant) uniform Constants {
+    float alpha;
+} pc;
+
 layout(binding = 1) uniform sampler2D texSampler;
 
 layout(location = 0) in vec3 fragNormal;
@@ -16,5 +20,5 @@ void main() {
     vec3 baseColor = fragColor * diff;
     vec3 glowColor = fragColor * fragGlow * 1.5; // Emissive boost
     
-    outColor = vec4(baseColor + glowColor, 1.0);
+    outColor = vec4(baseColor + glowColor, pc.alpha);
 }

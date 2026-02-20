@@ -31,6 +31,7 @@ typedef struct {
     VkDescriptorSetLayout descriptorSetLayout;
     VkPipelineLayout pipelineLayout;
     VkPipeline graphicsPipeline;
+    VkPipeline nodeEdgePipeline; // New pipeline for node edges
     VkPipeline edgePipeline;
     VkPipeline labelPipeline;
     VkPipeline uiPipeline;

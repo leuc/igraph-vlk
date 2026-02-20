@@ -111,7 +111,14 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
     VkDescriptorSetLayoutBinding dslb[] = { { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL }, { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL } };
     VkDescriptorSetLayoutCreateInfo layInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 2, .pBindings = dslb };
     vkCreateDescriptorSetLayout(r->device, &layInfo, NULL, &r->descriptorSetLayout);
-    VkPipelineLayoutCreateInfo plyLayInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->descriptorSetLayout };
+
+    VkPushConstantRange pushConstantRange = {
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+        .offset = 0,
+        .size = sizeof(float) // For alpha value
+    };
+
+    VkPipelineLayoutCreateInfo plyLayInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->descriptorSetLayout, .pushConstantRangeCount = 1, .pPushConstantRanges = &pushConstantRange };
     vkCreatePipelineLayout(r->device, &plyLayInfo, NULL, &r->pipelineLayout);
     VkAttachmentDescription cAtt = { .format = r->swapchainFormat, .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE, .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR };
     VkAttachmentReference cAttRef = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
@@ -153,7 +160,16 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
     VkPipelineViewportStateCreateInfo vpS = { .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, .viewportCount = 1, .pViewports = &vp, .scissorCount = 1, .pScissors = &sc };
     VkPipelineRasterizationStateCreateInfo ras = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO, .polygonMode = VK_POLYGON_MODE_FILL, .lineWidth = 1.0f, .cullMode = VK_CULL_MODE_NONE, .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE };
     VkPipelineMultisampleStateCreateInfo mul = { .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT };
-    VkPipelineColorBlendAttachmentState colB = { .colorWriteMask = 0xF, .blendEnable = VK_FALSE };
+    VkPipelineColorBlendAttachmentState colB = {
+        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+        .blendEnable = VK_TRUE,
+        .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+        .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        .colorBlendOp = VK_BLEND_OP_ADD,
+        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+        .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+        .alphaBlendOp = VK_BLEND_OP_ADD,
+    };
     VkPipelineColorBlendStateCreateInfo colS = { .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO, .attachmentCount = 1, .pAttachments = &colB };
 
     VkPipelineShaderStageCreateInfo nstages[] = { {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,VK_SHADER_STAGE_VERTEX_BIT,vMod,"main",NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,VK_SHADER_STAGE_FRAGMENT_BIT,fMod,"main",NULL} };
@@ -163,6 +179,13 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
     VkPipelineInputAssemblyStateCreateInfo niAs = { .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST };
     VkGraphicsPipelineCreateInfo pInfo = { .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = nstages, .pVertexInputState = &nvi, .pInputAssemblyState = &niAs, .pViewportState = &vpS, .pRasterizationState = &ras, .pMultisampleState = &mul, .pColorBlendState = &colS, .layout = r->pipelineLayout, .renderPass = r->renderPass };
     vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &pInfo, NULL, &r->graphicsPipeline);
+
+    // Create pipeline for node edges (wireframe)
+    VkPipelineRasterizationStateCreateInfo rasLine = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO, .polygonMode = VK_POLYGON_MODE_LINE, .lineWidth = 2.0f, .cullMode = VK_CULL_MODE_NONE, .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE };
+    VkPipelineColorBlendAttachmentState colB_no_blend = { .colorWriteMask = 0xF, .blendEnable = VK_FALSE };
+    VkPipelineColorBlendStateCreateInfo colS_no_blend = { .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO, .attachmentCount = 1, .pAttachments = &colB_no_blend };
+    VkGraphicsPipelineCreateInfo linePInfo = { .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = nstages, .pVertexInputState = &nvi, .pInputAssemblyState = &niAs, .pViewportState = &vpS, .pRasterizationState = &rasLine, .pMultisampleState = &mul, .pColorBlendState = &colS_no_blend, .layout = r->pipelineLayout, .renderPass = r->renderPass };
+    vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &linePInfo, NULL, &r->nodeEdgePipeline);
 
     VkPipelineShaderStageCreateInfo estages[] = { {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,VK_SHADER_STAGE_VERTEX_BIT,eVMod,"main",NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,VK_SHADER_STAGE_FRAGMENT_BIT,efMod,"main",NULL} };
     VkVertexInputBindingDescription eb[] = { {0, sizeof(EdgeVertex), VK_VERTEX_INPUT_RATE_VERTEX} };
@@ -319,7 +342,20 @@ void renderer_draw_frame(Renderer* r) {
         VkDeviceSize off = 0; vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1, &r->edgeVertexBuffer, &off); vkCmdDraw(r->commandBuffers[r->currentFrame], r->edgeCount*2, 1, 0, 0);
     }
     if(r->showNodes && r->nodeCount > 0) {
+        float alpha_face = 0.5f;
+        vkCmdPushConstants(r->commandBuffers[r->currentFrame], r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_face);
         vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->graphicsPipeline);
+        for (int i = 0; i < PLATONIC_COUNT; i++) {
+            if (r->platonicDrawCalls[i].count == 0) continue;
+            VkBuffer vbs[] = {r->vertexBuffers[i], r->instanceBuffer}; VkDeviceSize vos[] = {0, 0};
+            vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, vbs, vos);
+            vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
+            vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->platonicIndexCounts[i], r->platonicDrawCalls[i].count, 0, 0, r->platonicDrawCalls[i].firstInstance);
+        }
+
+        float alpha_edge = 1.0f;
+        vkCmdPushConstants(r->commandBuffers[r->currentFrame], r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_edge);
+        vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->nodeEdgePipeline);
         for (int i = 0; i < PLATONIC_COUNT; i++) {
             if (r->platonicDrawCalls[i].count == 0) continue;
             VkBuffer vbs[] = {r->vertexBuffers[i], r->instanceBuffer}; VkDeviceSize vos[] = {0, 0};
@@ -367,7 +403,7 @@ void renderer_cleanup(Renderer* r) {
     vkDestroyCommandPool(r->device, r->commandPool, NULL); vkDestroyDescriptorPool(r->device, r->descriptorPool, NULL);
     vkDestroySampler(r->device, r->textureSampler, NULL); vkDestroyImageView(r->device, r->textureImageView, NULL); vkDestroyImage(r->device, r->textureImage, NULL); vkFreeMemory(r->device, r->textureImageMemory, NULL);
     for(uint32_t i=0; i<r->swapchainImageCount; i++) { vkDestroyFramebuffer(r->device, r->framebuffers[i], NULL); vkDestroyImageView(r->device, r->swapchainImageViews[i], NULL); }
-    vkDestroyPipeline(r->device, r->uiPipeline, NULL); vkDestroyPipeline(r->device, r->labelPipeline, NULL); vkDestroyPipeline(r->device, r->edgePipeline, NULL); vkDestroyPipeline(r->device, r->graphicsPipeline, NULL);
+    vkDestroyPipeline(r->device, r->uiPipeline, NULL); vkDestroyPipeline(r->device, r->labelPipeline, NULL); vkDestroyPipeline(r->device, r->edgePipeline, NULL); vkDestroyPipeline(r->device, r->nodeEdgePipeline, NULL); vkDestroyPipeline(r->device, r->graphicsPipeline, NULL);
     vkDestroyPipelineLayout(r->device, r->pipelineLayout, NULL); vkDestroyDescriptorSetLayout(r->device, r->descriptorSetLayout, NULL);
     vkDestroyRenderPass(r->device, r->renderPass, NULL); vkDestroySwapchainKHR(r->device, r->swapchain, NULL);
     vkDestroyDevice(r->device, NULL); vkDestroyInstance(r->instance, NULL);
