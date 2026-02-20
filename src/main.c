@@ -42,7 +42,7 @@ void update_ui_text(float fps) {
 
     char buf[1024];
     snprintf(buf, sizeof(buf), 
-        "[L]ayout:%s%s [I]terate [G]roup:%s [C]luster:%s [O]verlap [B]ridge [T]ext:%s [N]ode:%d [E]dge:%d Filter:1-9 [K]Core:%d [R]eset [H]ide FPS:%.1f",
+        "[L]ayout:%s%s [I]terate [C]ommunity:%s Str[u]cture:%s [O]verlap [B]ridge [T]ext:%s [N]ode:%d [E]dge:%d Filter:1-9 [K]Core:%d [R]eset [H]ide FPS:%.1f",
         layout_names[currentLayout],
         stage_info,
         cluster_names[currentCluster],
@@ -101,8 +101,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         case GLFW_KEY_B: run_infrastructure(); break;
         case GLFW_KEY_K: run_coreness_filter(currentGraph.props.coreness_filter + 1); break;
         case GLFW_KEY_L: currentLayout = (currentLayout + 1) % LAYOUT_COUNT; update_layout(); break;
-        case GLFW_KEY_G: currentCluster = (currentCluster + 1) % CLUSTER_COUNT; run_clustering(); break;
-        case GLFW_KEY_C: currentCentrality = (currentCentrality + 1) % CENTRALITY_COUNT; run_centrality(); break;
+        case GLFW_KEY_C: currentCluster = (currentCluster + 1) % CLUSTER_COUNT; run_clustering(); break;
+        case GLFW_KEY_U: currentCentrality = (currentCentrality + 1) % CENTRALITY_COUNT; run_centrality(); break;
         case GLFW_KEY_I: run_iteration(); break;
         case GLFW_KEY_O: graph_remove_overlaps(&currentGraph, renderer.layoutScale); renderer_update_graph(&renderer, &currentGraph); break;
         case GLFW_KEY_R: run_reset(); break;
