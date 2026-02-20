@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(graph-sphere C)
+project(igraph-vlk C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -37,7 +37,7 @@ endforeach()
 
 find_package(OpenMP REQUIRED)
 
-add_executable(graph-sphere 
+add_executable(igraph-vlk 
     src/main.c 
     src/renderer.c 
     src/polyhedron.c 
@@ -47,14 +47,14 @@ add_executable(graph-sphere
     ${SPIRV_SHADERS}
 )
 
-target_include_directories(graph-sphere PRIVATE 
+target_include_directories(igraph-vlk PRIVATE 
     ${Vulkan_INCLUDE_DIRS}
     ${CGLM_INCLUDE_DIR}
     ${IGRAPH_INCLUDE_DIRS}
     ${CMAKE_BINARY_DIR}
 )
 
-target_link_libraries(graph-sphere PRIVATE 
+target_link_libraries(igraph-vlk PRIVATE 
     Vulkan::Vulkan
     glfw
     ${IGRAPH_LIBRARIES}
@@ -62,7 +62,7 @@ target_link_libraries(graph-sphere PRIVATE
     OpenMP::OpenMP_C
 )
 
-target_compile_definitions(graph-sphere PRIVATE 
+target_compile_definitions(igraph-vlk PRIVATE 
     VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/shader.vert.spv"
     FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/shader.frag.spv"
     EDGE_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/edge.vert.spv"

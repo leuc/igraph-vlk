@@ -76,7 +76,7 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
     r->window = window; r->currentFrame = 0; r->nodeCount = graph->node_count; r->edgeCount = graph->edge_count;
     r->showLabels = true; r->showNodes = true; r->showEdges = true; r->showUI = true; r->layoutScale = 1.0f;
     
-    glfwSetWindowTitle(window, "Graph Sphere - High Performance Network Visualizer");
+    glfwSetWindowTitle(window, "igraph-vlk");
     
     // Application Icon
     unsigned char icon_pixels[16 * 16 * 4];
