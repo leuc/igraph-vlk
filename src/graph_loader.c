@@ -210,12 +210,33 @@ void graph_remove_overlaps(GraphData* data, float layoutScale) {
 
 void graph_cluster(GraphData* data, ClusterType type) {
     igraph_vector_int_t membership; igraph_vector_int_init(&membership, igraph_vcount(&data->g));
+    igraph_vector_t weights_vec;
+    igraph_vector_t node_weights_vec;
+    bool use_weights = (data->edges != NULL && data->edge_attr_name != NULL && strcmp(data->edge_attr_name, "") != 0);
+    if (use_weights) {
+        igraph_vector_init(&weights_vec, data->edge_count);
+        for (int i = 0; i < data->edge_count; i++) {
+            VECTOR(weights_vec)[i] = data->edges[i].size;
+        }
+
+        igraph_vector_init(&node_weights_vec, data->node_count);
+        igraph_vector_int_t degrees;
+        igraph_vector_int_init(&degrees, data->node_count);
+        igraph_degree(&data->g, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS);
+        for (int i = 0; i < data->node_count; i++) {
+            VECTOR(node_weights_vec)[i] = (igraph_real_t)VECTOR(degrees)[i];
+        }
+        igraph_vector_int_destroy(&degrees);
+    }
+    const igraph_vector_t* weights_ptr = use_weights ? &weights_vec : NULL;
+    const igraph_vector_t* node_weights_ptr = use_weights ? &node_weights_vec : NULL;
+
     switch(type) {
-        case CLUSTER_FASTGREEDY: { igraph_matrix_int_t m; igraph_vector_t mo; igraph_matrix_int_init(&m, 0, 0); igraph_vector_init(&mo, 0); igraph_community_fastgreedy(&data->g, NULL, &m, &mo, &membership); igraph_matrix_int_destroy(&m); igraph_vector_destroy(&mo); break; }
-        case CLUSTER_WALKTRAP: { igraph_matrix_int_t m; igraph_vector_t mo; igraph_matrix_int_init(&m, 0, 0); igraph_vector_init(&mo, 0); igraph_community_walktrap(&data->g, NULL, 4, &m, &mo, &membership); igraph_matrix_int_destroy(&m); igraph_vector_destroy(&mo); break; }
-        case CLUSTER_LABEL_PROP: igraph_community_label_propagation(&data->g, &membership, IGRAPH_ALL, NULL, NULL, NULL); break;
-        case CLUSTER_MULTILEVEL: { igraph_vector_t mo; igraph_vector_init(&mo, 0); igraph_community_multilevel(&data->g, NULL, 1.0, &membership, NULL, &mo); igraph_vector_destroy(&mo); break; }
-        case CLUSTER_LEIDEN: igraph_community_leiden(&data->g, NULL, NULL, 1.0, 0.01, false, 2, &membership, NULL, NULL); break;
+        case CLUSTER_FASTGREEDY: { igraph_matrix_int_t m; igraph_vector_t mo; igraph_matrix_int_init(&m, 0, 0); igraph_vector_init(&mo, 0); igraph_community_fastgreedy(&data->g, weights_ptr, &m, &mo, &membership); igraph_matrix_int_destroy(&m); igraph_vector_destroy(&mo); break; }
+        case CLUSTER_WALKTRAP: { igraph_matrix_int_t m; igraph_vector_t mo; igraph_matrix_int_init(&m, 0, 0); igraph_vector_init(&mo, 0); igraph_community_walktrap(&data->g, weights_ptr, 4, &m, &mo, &membership); igraph_matrix_int_destroy(&m); igraph_vector_destroy(&mo); break; }
+        case CLUSTER_LABEL_PROP: igraph_community_label_propagation(&data->g, &membership, IGRAPH_ALL, weights_ptr, NULL, NULL); break;
+        case CLUSTER_MULTILEVEL: { igraph_vector_t mo; igraph_vector_init(&mo, 0); igraph_community_multilevel(&data->g, weights_ptr, 1.0, &membership, NULL, &mo); igraph_vector_destroy(&mo); break; }
+        case CLUSTER_LEIDEN: igraph_community_leiden(&data->g, weights_ptr, node_weights_ptr, 1.0 / (2.0 * data->edge_count), 0.01, false, 100, &membership, NULL, NULL); break;
         default: break;
     }
     int cluster_count = 0; for(int i=0; i<igraph_vector_int_size(&membership); i++) if(VECTOR(membership)[i] > cluster_count) cluster_count = VECTOR(membership)[i];
@@ -231,6 +252,10 @@ void graph_cluster(GraphData* data, ClusterType type) {
         int c_idx = VECTOR(membership)[i];
         memcpy(data->nodes[i].color, colors[c_idx], 12);
         data->nodes[i].glow = (max_cluster_size > 0) ? (float)cluster_sizes[c_idx] / (float)max_cluster_size : 0.0f;
+    }
+    if (use_weights) {
+        igraph_vector_destroy(&node_weights_vec);
+        igraph_vector_destroy(&weights_vec);
     }
     free(colors); free(cluster_sizes); igraph_vector_int_destroy(&membership);
 }
