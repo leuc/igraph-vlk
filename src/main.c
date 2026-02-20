@@ -100,7 +100,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         case GLFW_KEY_H: renderer.showUI = !renderer.showUI; break;
         case GLFW_KEY_B: run_infrastructure(); break;
         case GLFW_KEY_K: run_coreness_filter(currentGraph.props.coreness_filter + 1); break;
-        case GLFW_KEY_L: currentLayout = (currentLayout + 1) % 8; update_layout(); break;
+        case GLFW_KEY_L: currentLayout = (currentLayout + 1) % LAYOUT_COUNT; update_layout(); break;
         case GLFW_KEY_G: currentCluster = (currentCluster + 1) % CLUSTER_COUNT; run_clustering(); break;
         case GLFW_KEY_C: currentCentrality = (currentCentrality + 1) % CENTRALITY_COUNT; run_centrality(); break;
         case GLFW_KEY_I: run_iteration(); break;

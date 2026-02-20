@@ -149,7 +149,7 @@ void graph_layout_step(GraphData* data, LayoutType type, int iterations) {
     if (!data->graph_initialized) return;
     switch (type) {
         case LAYOUT_FR_3D: igraph_layout_fruchterman_reingold_3d(&data->g, &data->current_layout, 1, iterations, (igraph_real_t)data->node_count, NULL, NULL, NULL, NULL, NULL, NULL, NULL); break;
-        case LAYOUT_KK_3D: igraph_layout_kamada_kawai_3d(&data->g, &data->current_layout, 1, iterations, 0.0, 1.0, NULL, NULL, NULL, NULL, NULL, NULL, NULL); break;
+        case LAYOUT_KK_3D: igraph_layout_kamada_kawai_3d(&data->g, &data->current_layout, 1, data->node_count * 10, 0.0, (igraph_real_t)data->node_count, NULL, NULL, NULL, NULL, NULL, NULL, NULL); break;
         case LAYOUT_RANDOM_3D: igraph_layout_random_3d(&data->g, &data->current_layout); break;
         case LAYOUT_SPHERE: igraph_layout_sphere(&data->g, &data->current_layout); break;
         case LAYOUT_GRID_3D: { int side = (int)ceil(pow(data->node_count, 1.0/3.0)); igraph_layout_grid_3d(&data->g, &data->current_layout, side, side); break; }

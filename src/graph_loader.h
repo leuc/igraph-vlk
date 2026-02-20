@@ -12,7 +12,8 @@ typedef enum {
     LAYOUT_GRID_3D,
     LAYOUT_UMAP_3D,
     LAYOUT_DRL_3D,
-    LAYOUT_OPENORD_3D
+    LAYOUT_OPENORD_3D,
+    LAYOUT_COUNT
 } LayoutType;
 
 typedef struct OpenOrdContext OpenOrdContext; // Fixed typedef
