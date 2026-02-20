@@ -8,6 +8,7 @@
 #define MAX_FRAMES_IN_FLIGHT 2
 #define FONT_PATH "/usr/share/fonts/truetype/inconsolata/Inconsolata.otf"
 
+typedef struct { vec3 pos; vec3 color; float size; } EdgeVertex;
 typedef struct { vec3 pos; vec2 tex; } LabelVertex;
 typedef struct { vec3 nodePos; vec4 charRect; vec4 charUV; } LabelInstance;
 typedef struct { vec3 pos; vec2 tex; } UIVertex;
@@ -73,7 +74,18 @@ static VkResult create_shader_module(VkDevice device, const char* path, VkShader
 
 int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
     r->window = window; r->currentFrame = 0; r->nodeCount = graph->node_count; r->edgeCount = graph->edge_count;
-    r->showLabels = true; r->layoutScale = 1.0f;
+    r->showLabels = true; r->showNodes = true; r->showEdges = true; r->showUI = true; r->layoutScale = 1.0f;
+    
+    glfwSetWindowTitle(window, "Graph Sphere - High Performance Network Visualizer");
+    
+    // Application Icon
+    unsigned char icon_pixels[16 * 16 * 4];
+    for (int i = 0; i < 16 * 16; i++) {
+        icon_pixels[i*4+0] = 50; icon_pixels[i*4+1] = 100; icon_pixels[i*4+2] = 255; icon_pixels[i*4+3] = 255;
+    }
+    GLFWimage icon = { 16, 16, icon_pixels };
+    glfwSetWindowIcon(window, 1, &icon);
+
     uint32_t glfwExtCount = 0; const char** glfwExts = glfwGetRequiredInstanceExtensions(&glfwExtCount);
     VkInstanceCreateInfo instInfo = { .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .ppEnabledExtensionNames = glfwExts, .enabledExtensionCount = glfwExtCount };
     vkCreateInstance(&instInfo, NULL, &r->instance);
@@ -119,8 +131,8 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
     VkCommandBuffer cB; vkAllocateCommandBuffers(r->device, &aI, &cB);
     VkCommandBufferBeginInfo bI = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
     vkBeginCommandBuffer(cB, &bI);
-    VkBufferImageCopy reg = { .bufferOffset = 0, .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .imageExtent = {(uint32_t)globalAtlas.width, (uint32_t)globalAtlas.height, 1} };
-    vkCmdCopyBufferToImage(cB, sBuf, r->textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &reg);
+    VkBufferImageCopy bReg = { .bufferOffset = 0, .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .imageExtent = {(uint32_t)globalAtlas.width, (uint32_t)globalAtlas.height, 1} };
+    vkCmdCopyBufferToImage(cB, sBuf, r->textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bReg);
     vkEndCommandBuffer(cB);
     VkSubmitInfo sI = { .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cB };
     vkQueueSubmit(r->graphicsQueue, 1, &sI, VK_NULL_HANDLE); vkQueueWaitIdle(r->graphicsQueue);
@@ -153,7 +165,6 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
     vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &pInfo, NULL, &r->graphicsPipeline);
 
     VkPipelineShaderStageCreateInfo estages[] = { {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,VK_SHADER_STAGE_VERTEX_BIT,eVMod,"main",NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,VK_SHADER_STAGE_FRAGMENT_BIT,efMod,"main",NULL} };
-    typedef struct { vec3 pos; vec3 color; float size; } EdgeVertex;
     VkVertexInputBindingDescription eb[] = { {0, sizeof(EdgeVertex), VK_VERTEX_INPUT_RATE_VERTEX} };
     VkVertexInputAttributeDescription ea[] = { {0,0,VK_FORMAT_R32G32B32_SFLOAT,0}, {1,0,VK_FORMAT_R32G32B32_SFLOAT,12}, {2,0,VK_FORMAT_R32_SFLOAT,24} };
     VkPipelineVertexInputStateCreateInfo evi = { .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 1, .pVertexBindingDescriptions = eb, .vertexAttributeDescriptionCount = 3, .pVertexAttributeDescriptions = ea };
@@ -192,21 +203,16 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
         free(v); free(idx);
     }
 
-    createBuffer(r->device, r->physicalDevice, sizeof(Node)*r->nodeCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->instanceBuffer, &r->instanceBufferMemory);
-    createBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex)*r->edgeCount*2, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
     LabelVertex lvs[] = { {{0,0,0},{0,0}}, {{1,0,0},{1,0}}, {{0,1,0},{0,1}}, {{1,1,0},{1,1}} };
     createBuffer(r->device, r->physicalDevice, sizeof(lvs), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->labelVertexBuffer, &r->labelVertexBufferMemory);
     updateBuffer(r->device, r->labelVertexBufferMemory, sizeof(lvs), lvs);
 
-    uint32_t tc = 0; for(uint32_t i=0; i<r->nodeCount; i++) if(graph->nodes[i].label) tc += strlen(graph->nodes[i].label);
-    r->labelCharCount = tc;
-    if(tc > 0) createBuffer(r->device, r->physicalDevice, sizeof(LabelInstance)*tc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->labelInstanceBuffer, &r->labelInstanceBufferMemory);
-
     UIVertex uiBg[] = { {{-1, -0.9, 0}, {0,0}}, {{1, -0.9, 0}, {1,0}}, {{-1, -1, 0}, {0,1}}, {{1, -1, 0}, {1,1}} };
     createBuffer(r->device, r->physicalDevice, sizeof(uiBg), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uiBgVertexBuffer, &r->uiBgVertexBufferMemory);
     updateBuffer(r->device, r->uiBgVertexBufferMemory, sizeof(uiBg), uiBg);
-    createBuffer(r->device, r->physicalDevice, sizeof(UIInstance)*512, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uiTextInstanceBuffer, &r->uiTextInstanceBufferMemory);
+    createBuffer(r->device, r->physicalDevice, sizeof(UIInstance)*1024, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uiTextInstanceBuffer, &r->uiTextInstanceBufferMemory);
 
+    r->instanceBuffer = VK_NULL_HANDLE; r->edgeVertexBuffer = VK_NULL_HANDLE; r->labelInstanceBuffer = VK_NULL_HANDLE;
     renderer_update_graph(r, graph);
 
     r->uniformBuffers = malloc(sizeof(VkBuffer)*MAX_FRAMES_IN_FLIGHT); r->uniformBuffersMemory = malloc(sizeof(VkDeviceMemory)*MAX_FRAMES_IN_FLIGHT);
@@ -234,16 +240,17 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
 }
 
 void renderer_update_ui(Renderer* r, const char* text) {
-    int len = strlen(text); if (len > 512) len = 512;
-        UIInstance instances[512]; float xoff = -0.98f;
-        for (int i = 0; i < len; i++) {
-            unsigned char c = text[i]; CharInfo* ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
-            instances[i].screenPos[0] = xoff; instances[i].screenPos[1] = 0.95f;
-            instances[i].charRect[0] = ci->x0; instances[i].charRect[1] = ci->y0;
-     instances[i].charRect[2] = ci->x1; instances[i].charRect[3] = ci->y1;
+    int len = strlen(text); if (len > 1024) len = 1024;
+    UIInstance instances[1024]; 
+    float charWidth = 1.96f / (float)len; if (charWidth > 0.012f) charWidth = 0.012f;
+    float xoff = -0.98f;
+    for (int i = 0; i < len; i++) {
+        unsigned char c = text[i]; CharInfo* ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
+        instances[i].screenPos[0] = xoff; instances[i].screenPos[1] = 0.95f;
+        instances[i].charRect[0] = ci->x0; instances[i].charRect[1] = ci->y0; instances[i].charRect[2] = ci->x1; instances[i].charRect[3] = ci->y1;
         instances[i].charUV[0] = ci->u0; instances[i].charUV[1] = ci->v0; instances[i].charUV[2] = ci->u1; instances[i].charUV[3] = ci->v1;
         instances[i].color[0] = 1; instances[i].color[1] = 1; instances[i].color[2] = 1; instances[i].color[3] = 1;
-        xoff += 0.012f; 
+        xoff += charWidth; 
     }
     r->uiTextCharCount = len;
     updateBuffer(r->device, r->uiTextInstanceBufferMemory, sizeof(UIInstance)*len, instances);
@@ -251,6 +258,10 @@ void renderer_update_ui(Renderer* r, const char* text) {
 
 void renderer_update_graph(Renderer* r, GraphData* graph) {
     vkDeviceWaitIdle(r->device);
+    r->nodeCount = graph->node_count; r->edgeCount = graph->edge_count;
+    if (r->instanceBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(r->device, r->instanceBuffer, NULL); vkFreeMemory(r->device, r->instanceBufferMemory, NULL); vkDestroyBuffer(r->device, r->edgeVertexBuffer, NULL); vkFreeMemory(r->device, r->edgeVertexBufferMemory, NULL); if (r->labelInstanceBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(r->device, r->labelInstanceBuffer, NULL); vkFreeMemory(r->device, r->labelInstanceBufferMemory, NULL); } }
+    createBuffer(r->device, r->physicalDevice, sizeof(Node)*r->nodeCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->instanceBuffer, &r->instanceBufferMemory);
+    createBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex)*r->edgeCount*2, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
     Node* sorted = malloc(sizeof(Node) * graph->node_count); uint32_t currentOffset = 0;
     for (int t = 0; t < PLATONIC_COUNT; t++) {
         r->platonicDrawCalls[t].firstInstance = currentOffset; uint32_t count = 0;
@@ -262,7 +273,6 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
         r->platonicDrawCalls[t].count = count; currentOffset += count;
     }
     updateBuffer(r->device, r->instanceBufferMemory, sizeof(Node)*graph->node_count, sorted);
-    typedef struct { vec3 pos; vec3 color; float size; } EdgeVertex;
     EdgeVertex* evs = malloc(sizeof(EdgeVertex)*graph->edge_count*2);
     for(uint32_t i=0; i<graph->edge_count; i++) {
         vec3 p1, p2; glm_vec3_scale(graph->nodes[graph->edges[i].from].position, r->layoutScale, p1); glm_vec3_scale(graph->nodes[graph->edges[i].to].position, r->layoutScale, p2);
@@ -270,7 +280,10 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
         memcpy(evs[i*2+1].pos, p2, 12); memcpy(evs[i*2+1].color, graph->nodes[graph->edges[i].to].color, 12); evs[i*2+1].size = graph->edges[i].size;
     }
     updateBuffer(r->device, r->edgeVertexBufferMemory, sizeof(EdgeVertex)*graph->edge_count*2, evs); free(evs);
-    if(r->labelCharCount > 0) {
+    uint32_t tc = 0; for(uint32_t i=0; i<r->nodeCount; i++) if(graph->nodes[i].label) tc += strlen(graph->nodes[i].label);
+    r->labelCharCount = tc;
+    if(tc > 0) {
+        createBuffer(r->device, r->physicalDevice, sizeof(LabelInstance)*tc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->labelInstanceBuffer, &r->labelInstanceBufferMemory);
         LabelInstance* li = malloc(sizeof(LabelInstance)*r->labelCharCount); uint32_t k = 0;
         for(uint32_t i=0; i<graph->node_count; i++) {
             if(!graph->nodes[i].label) continue;
@@ -284,7 +297,7 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
             }
         }
         updateBuffer(r->device, r->labelInstanceBufferMemory, sizeof(LabelInstance)*r->labelCharCount, li); free(li);
-    }
+    } else { r->labelInstanceBuffer = VK_NULL_HANDLE; }
     free(sorted);
 }
 
@@ -301,38 +314,37 @@ void renderer_draw_frame(Renderer* r) {
     VkRenderPassBeginInfo rpi = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,NULL,r->renderPass,r->framebuffers[ii],{{0,0},{3440,1440}},1,&cv};
     vkCmdBeginRenderPass(r->commandBuffers[r->currentFrame], &rpi, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindDescriptorSets(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[r->currentFrame], 0, NULL);
-    
-    vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->edgePipeline);
-    VkDeviceSize off = 0; vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1, &r->edgeVertexBuffer, &off); vkCmdDraw(r->commandBuffers[r->currentFrame], r->edgeCount*2, 1, 0, 0);
-    
-    vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->graphicsPipeline);
-    for (int i = 0; i < PLATONIC_COUNT; i++) {
-        if (r->platonicDrawCalls[i].count == 0) continue;
-        VkBuffer vbs[] = {r->vertexBuffers[i], r->instanceBuffer}; VkDeviceSize vos[] = {0, 0};
-        vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, vbs, vos);
-        vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->platonicIndexCounts[i], r->platonicDrawCalls[i].count, 0, 0, r->platonicDrawCalls[i].firstInstance);
+    if(r->showEdges && r->edgeCount > 0) {
+        vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->edgePipeline);
+        VkDeviceSize off = 0; vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1, &r->edgeVertexBuffer, &off); vkCmdDraw(r->commandBuffers[r->currentFrame], r->edgeCount*2, 1, 0, 0);
     }
-    
-    if(r->showLabels && r->labelCharCount > 0) {
+    if(r->showNodes && r->nodeCount > 0) {
+        vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->graphicsPipeline);
+        for (int i = 0; i < PLATONIC_COUNT; i++) {
+            if (r->platonicDrawCalls[i].count == 0) continue;
+            VkBuffer vbs[] = {r->vertexBuffers[i], r->instanceBuffer}; VkDeviceSize vos[] = {0, 0};
+            vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, vbs, vos);
+            vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
+            vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->platonicIndexCounts[i], r->platonicDrawCalls[i].count, 0, 0, r->platonicDrawCalls[i].firstInstance);
+        }
+    }
+    if(r->showLabels && r->labelCharCount > 0 && r->labelInstanceBuffer != VK_NULL_HANDLE) {
         vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
         VkBuffer lbs[] = {r->labelVertexBuffer, r->labelInstanceBuffer}; VkDeviceSize los[] = {0, 0};
         vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, lbs, los);
         vkCmdDraw(r->commandBuffers[r->currentFrame], 4, r->labelCharCount, 0, 0);
     }
-
+    if(r->showUI) {
         vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->uiPipeline);
         VkDeviceSize zero = 0; vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1, &r->uiBgVertexBuffer, &zero);
-        UIInstance bgInst = { .color = {0,0,0,-1.0f} }; // Alpha -1 indicates background quad
-        updateBuffer(r->device, r->uiTextInstanceBufferMemory, sizeof(UIInstance), &bgInst);
-     // Reuse start of buffer
-    vkCmdDraw(r->commandBuffers[r->currentFrame], 4, 1, 0, 0);
-    if(r->uiTextCharCount > 0) {
-        VkBuffer ubs[] = {r->labelVertexBuffer, r->uiTextInstanceBuffer}; VkDeviceSize uos[] = {0, 0};
-        vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, ubs, uos);
-        vkCmdDraw(r->commandBuffers[r->currentFrame], 4, r->uiTextCharCount, 0, 0);
+        UIInstance bgInst = { .color = {0,0,0,-1.0f} }; updateBuffer(r->device, r->uiTextInstanceBufferMemory, sizeof(UIInstance), &bgInst);
+        vkCmdDraw(r->commandBuffers[r->currentFrame], 4, 1, 0, 0);
+        if(r->uiTextCharCount > 0) {
+            VkBuffer ubs[] = {r->labelVertexBuffer, r->uiTextInstanceBuffer}; VkDeviceSize uos[] = {0, 0};
+            vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, ubs, uos);
+            vkCmdDraw(r->commandBuffers[r->currentFrame], 4, r->uiTextCharCount, 0, 0);
+        }
     }
-
     vkCmdEndRenderPass(r->commandBuffers[r->currentFrame]); vkEndCommandBuffer(r->commandBuffers[r->currentFrame]);
     VkPipelineStageFlags ws = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo si = {VK_STRUCTURE_TYPE_SUBMIT_INFO,NULL,1,&r->imageAvailableSemaphores[r->currentFrame],&ws,1,&r->commandBuffers[r->currentFrame],1,&r->renderFinishedSemaphores[r->currentFrame]};
@@ -345,7 +357,7 @@ void renderer_draw_frame(Renderer* r) {
 void renderer_cleanup(Renderer* r) {
     vkDeviceWaitIdle(r->device);
     for(int i=0; i<MAX_FRAMES_IN_FLIGHT; i++) { vkDestroySemaphore(r->device, r->renderFinishedSemaphores[i], NULL); vkDestroySemaphore(r->device, r->imageAvailableSemaphores[i], NULL); vkDestroyFence(r->device, r->inFlightFences[i], NULL); vkDestroyBuffer(r->device, r->uniformBuffers[i], NULL); vkFreeMemory(r->device, r->uniformBuffersMemory[i], NULL); }
-    if(r->labelCharCount > 0) { vkDestroyBuffer(r->device, r->labelInstanceBuffer, NULL); vkFreeMemory(r->device, r->labelInstanceBufferMemory, NULL); }
+    if(r->labelInstanceBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(r->device, r->labelInstanceBuffer, NULL); vkFreeMemory(r->device, r->labelInstanceBufferMemory, NULL); }
     vkDestroyBuffer(r->device, r->labelVertexBuffer, NULL); vkFreeMemory(r->device, r->labelVertexBufferMemory, NULL);
     vkDestroyBuffer(r->device, r->edgeVertexBuffer, NULL); vkFreeMemory(r->device, r->edgeVertexBufferMemory, NULL);
     vkDestroyBuffer(r->device, r->instanceBuffer, NULL); vkFreeMemory(r->device, r->instanceBufferMemory, NULL);

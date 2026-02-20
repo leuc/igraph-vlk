@@ -52,6 +52,11 @@ typedef struct {
 } Edge;
 
 typedef struct {
+    int node_count;
+    int edge_count;
+} GraphProperties;
+
+typedef struct {
     Node* nodes;
     uint32_t node_count;
     Edge* edges;
@@ -60,13 +65,17 @@ typedef struct {
     igraph_t g;
     igraph_matrix_t current_layout;
     bool graph_initialized;
+    char* node_attr_name;
+    char* edge_attr_name;
+    GraphProperties props;
 } GraphData;
 
-int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_type, int node_limit, const char* node_attr, const char* edge_attr);
+int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_type, const char* node_attr, const char* edge_attr);
 void graph_cluster(GraphData* data, ClusterType type);
 void graph_calculate_centrality(GraphData* data, CentralityType type);
 void graph_layout_step(GraphData* data, LayoutType type, int iterations);
 void graph_remove_overlaps(GraphData* data, float layoutScale);
+void graph_filter_degree(GraphData* data, int min_degree);
 void graph_free_data(GraphData* data);
 
 #endif

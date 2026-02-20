@@ -63,7 +63,6 @@ typedef struct {
     VkImageView textureImageView;
     VkSampler textureSampler;
 
-    // Graph data
     VkBuffer instanceBuffer;
     VkDeviceMemory instanceBufferMemory;
     uint32_t nodeCount;
@@ -72,13 +71,17 @@ typedef struct {
     VkDeviceMemory edgeVertexBufferMemory;
     uint32_t edgeCount;
 
-    // Labels
     VkBuffer labelVertexBuffer;
     VkDeviceMemory labelVertexBufferMemory;
     VkBuffer labelInstanceBuffer;
     VkDeviceMemory labelInstanceBufferMemory;
     uint32_t labelCharCount;
+    
+    // Visibility toggles
     bool showLabels;
+    bool showNodes;
+    bool showEdges;
+    bool showUI;
     float layoutScale;
 
     // UI

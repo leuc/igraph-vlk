@@ -14,64 +14,92 @@ static void sync_node_positions(GraphData* data) {
     }
 }
 
-int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_type, int node_limit, const char* node_attr, const char* edge_attr) {
-    igraph_set_attribute_table(&igraph_cattribute_table);
-    
-    igraph_t g_full; FILE* fp = fopen(filename, "r"); if (!fp) { perror("Error opening file"); return -1; }
-    if (igraph_read_graph_graphml(&g_full, fp, 0) != IGRAPH_SUCCESS) { fprintf(stderr, "Error reading GraphML\n"); fclose(fp); return -1; }
-    fclose(fp);
-
-    if (node_limit > 0 && igraph_vcount(&g_full) > node_limit) {
-        igraph_vs_t vs; igraph_vector_int_t vids; igraph_vector_int_init(&vids, node_limit);
-        for(int i=0; i<node_limit; i++) VECTOR(vids)[i] = i;
-        igraph_vs_vector(&vs, &vids);
-        igraph_induced_subgraph(&g_full, &data->g, vs, IGRAPH_SUBGRAPH_CREATE_FROM_SCRATCH);
-        igraph_vs_destroy(&vs); igraph_vector_int_destroy(&vids); igraph_destroy(&g_full);
-    } else {
-        data->g = g_full;
-    }
-    igraph_simplify(&data->g, 1, 1, NULL);
-    data->graph_initialized = true;
-
+static void refresh_graph_data(GraphData* data) {
     data->node_count = igraph_vcount(&data->g);
     data->edge_count = igraph_ecount(&data->g);
+    
+    data->props.node_count = (int)data->node_count;
+    data->props.edge_count = (int)data->edge_count;
 
-    igraph_matrix_init(&data->current_layout, 0, 0);
-    igraph_layout_random_3d(&data->g, &data->current_layout);
-
-    const char* n_attr = node_attr ? node_attr : "pagerank";
-    bool has_node_attr = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, n_attr);
-    bool has_label = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, "label");
-    float max_n_val = 0.0f;
-    if (has_node_attr) { for (int i = 0; i < data->node_count; i++) { float val = (float)VAN(&data->g, n_attr, i); if (val > max_n_val) max_n_val = val; } }
+    // Re-calculate basic node properties
+    if (data->nodes) {
+        for(uint32_t i=0; i<data->node_count; i++) if(data->nodes[i].label) free(data->nodes[i].label);
+        free(data->nodes);
+    }
+    if (data->edges) free(data->edges);
 
     data->nodes = malloc(sizeof(Node) * data->node_count);
+    bool has_node_attr = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, data->node_attr_name);
+    bool has_label = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, "label");
+    float max_n_val = 0.0f;
+    if (has_node_attr) { for (int i = 0; i < data->node_count; i++) { float val = (float)VAN(&data->g, data->node_attr_name, i); if (val > max_n_val) max_n_val = val; } }
+
     for (int i = 0; i < data->node_count; i++) {
-        data->nodes[i].color[0] = (float)rand() / RAND_MAX;
-        data->nodes[i].color[1] = (float)rand() / RAND_MAX;
-        data->nodes[i].color[2] = (float)rand() / RAND_MAX;
-        data->nodes[i].size = (has_node_attr && max_n_val > 0) ? (float)VAN(&data->g, n_attr, i) / max_n_val : 1.0f;
+        data->nodes[i].color[0] = (float)rand()/RAND_MAX; data->nodes[i].color[1] = (float)rand()/RAND_MAX; data->nodes[i].color[2] = (float)rand()/RAND_MAX;
+        data->nodes[i].size = (has_node_attr && max_n_val > 0) ? (float)VAN(&data->g, data->node_attr_name, i)/max_n_val : 1.0f;
         data->nodes[i].label = has_label ? strdup(VAS(&data->g, "label", i)) : NULL;
         igraph_vector_int_t neighbors; igraph_vector_int_init(&neighbors, 0); igraph_neighbors(&data->g, &neighbors, i, IGRAPH_ALL);
         data->nodes[i].degree = igraph_vector_int_size(&neighbors); igraph_vector_int_destroy(&neighbors);
     }
+    sync_node_positions(data);
 
-    // Now safe to run layout and sync
-    graph_layout_step(data, layout_type, 50);
-
-    const char* e_attr = edge_attr ? edge_attr : "betweenness";
-    bool has_edge_attr = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_EDGE, e_attr);
-    float max_e_val = 0.0f;
-    if (has_edge_attr) { for (int i = 0; i < data->edge_count; i++) { float val = (float)EAN(&data->g, e_attr, i); if (val > max_e_val) max_e_val = val; } }
-
+    bool has_edge_attr = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_EDGE, data->edge_attr_name);
+    float max_e_val = 0.0f; if (has_edge_attr) { for (int i = 0; i < data->edge_count; i++) { float val = (float)EAN(&data->g, data->edge_attr_name, i); if (val > max_e_val) max_e_val = val; } }
     data->edges = malloc(sizeof(Edge) * data->edge_count);
     for (int i = 0; i < data->edge_count; i++) {
         igraph_integer_t from, to; igraph_edge(&data->g, i, &from, &to);
         data->edges[i].from = (uint32_t)from; data->edges[i].to = (uint32_t)to;
-        data->edges[i].size = (has_edge_attr && max_e_val > 0) ? (float)EAN(&data->g, e_attr, i) / max_e_val : 1.0f;
+        data->edges[i].size = (has_edge_attr && max_e_val > 0) ? (float)EAN(&data->g, data->edge_attr_name, i)/max_e_val : 1.0f;
     }
+}
 
+int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_type, const char* node_attr, const char* edge_attr) {
+    igraph_set_attribute_table(&igraph_cattribute_table);
+    FILE* fp = fopen(filename, "r"); if (!fp) return -1;
+    if (igraph_read_graph_graphml(&data->g, fp, 0) != IGRAPH_SUCCESS) { fclose(fp); return -1; }
+    fclose(fp);
+    igraph_simplify(&data->g, 1, 1, NULL);
+    data->graph_initialized = true;
+    data->node_attr_name = node_attr ? strdup(node_attr) : strdup("pagerank");
+    data->edge_attr_name = edge_attr ? strdup(edge_attr) : strdup("betweenness");
+    data->nodes = NULL; data->edges = NULL;
+
+    igraph_matrix_init(&data->current_layout, 0, 0);
+    // Use grid layout first as requested for large graphs
+    int side = (int)ceil(pow(igraph_vcount(&data->g), 1.0/3.0));
+    igraph_layout_grid_3d(&data->g, &data->current_layout, side, side);
+
+    refresh_graph_data(data);
     return 0;
+}
+
+void graph_filter_degree(GraphData* data, int min_degree) {
+    if (!data->graph_initialized) return;
+    igraph_vector_int_t vids; igraph_vector_int_init(&vids, 0);
+    igraph_vector_int_t degrees; igraph_vector_int_init(&degrees, 0);
+    igraph_degree(&data->g, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS);
+    
+    for (int i = 0; i < igraph_vector_int_size(&degrees); i++) {
+        if (VECTOR(degrees)[i] < min_degree) {
+            igraph_vector_int_push_back(&vids, i);
+        }
+    }
+    
+    if (igraph_vector_int_size(&vids) > 0) {
+        printf("Filtering nodes with degree < %d. Removing %d nodes...\n", min_degree, (int)igraph_vector_int_size(&vids));
+        igraph_delete_vertices(&data->g, igraph_vss_vector(&vids));
+        
+        // Cleanup graph
+        igraph_simplify(&data->g, 1, 1, NULL);
+
+        // Reset layout for new graph size
+        igraph_matrix_destroy(&data->current_layout);
+        igraph_matrix_init(&data->current_layout, 0, 0);
+        int side = (int)ceil(pow(igraph_vcount(&data->g), 1.0/3.0));
+        igraph_layout_grid_3d(&data->g, &data->current_layout, side, side);
+        refresh_graph_data(data);
+    }
+    igraph_vector_int_destroy(&vids); igraph_vector_int_destroy(&degrees);
 }
 
 void graph_layout_step(GraphData* data, LayoutType type, int iterations) {
@@ -90,91 +118,41 @@ void graph_layout_step(GraphData* data, LayoutType type, int iterations) {
 
 void graph_remove_overlaps(GraphData* data, float layoutScale) {
     if (!data->graph_initialized || data->node_count == 0) return;
-
-    // Use a uniform grid for collision detection O(N)
-    float max_radius = 0.0f;
-    vec3 min_p = {1e10, 1e10, 1e10}, max_p = {-1e10, -1e10, -1e10};
-    
+    float max_radius = 0.0f; vec3 min_p = {1e10, 1e10, 1e10}, max_p = {-1e10, -1e10, -1e10};
     for (int i = 0; i < data->node_count; i++) {
-        float r = 0.5f * data->nodes[i].size;
-        if (r > max_radius) max_radius = r;
-        for(int j=0; j<3; j++) {
-            if(data->nodes[i].position[j] < min_p[j]) min_p[j] = data->nodes[i].position[j];
-            if(data->nodes[i].position[j] > max_p[j]) max_p[j] = data->nodes[i].position[j];
-        }
+        float r = 0.5f * data->nodes[i].size; if (r > max_radius) max_radius = r;
+        for(int j=0; j<3; j++) { if(data->nodes[i].position[j] < min_p[j]) min_p[j] = data->nodes[i].position[j]; if(data->nodes[i].position[j] > max_p[j]) max_p[j] = data->nodes[i].position[j]; }
     }
-
-    // Cell size should be at least the diameter of the largest node
     float cellSize = (max_radius * 2.0f) + 0.1f;
-    int dimX = (int)((max_p[0] - min_p[0]) / cellSize) + 1;
-    int dimY = (int)((max_p[1] - min_p[1]) / cellSize) + 1;
-    int dimZ = (int)((max_p[2] - min_p[2]) / cellSize) + 1;
-    
-    // Safety check for massive grids
+    int dimX = (int)((max_p[0] - min_p[0]) / cellSize) + 1; int dimY = (int)((max_p[1] - min_p[1]) / cellSize) + 1; int dimZ = (int)((max_p[2] - min_p[2]) / cellSize) + 1;
     if (dimX * dimY * dimZ > 1000000) cellSize *= 2.0f; 
-
     int totalCells = dimX * dimY * dimZ;
-    int* head = malloc(sizeof(int) * totalCells);
-    int* next = malloc(sizeof(int) * data->node_count);
+    int* head = malloc(sizeof(int) * totalCells); int* next = malloc(sizeof(int) * data->node_count);
     memset(head, -1, sizeof(int) * totalCells);
-
     for (int i = 0; i < data->node_count; i++) {
-        int cx = (int)((data->nodes[i].position[0] - min_p[0]) / cellSize);
-        int cy = (int)((data->nodes[i].position[1] - min_p[1]) / cellSize);
-        int cz = (int)((data->nodes[i].position[2] - min_p[2]) / cellSize);
-        int cellIdx = cx + cy * dimX + cz * dimX * dimY;
-        if (cellIdx >= 0 && cellIdx < totalCells) {
-            next[i] = head[cellIdx];
-            head[cellIdx] = i;
-        }
+        int cx = (int)((data->nodes[i].position[0] - min_p[0]) / cellSize); int cy = (int)((data->nodes[i].position[1] - min_p[1]) / cellSize); int cz = (int)((data->nodes[i].position[2] - min_p[2]) / cellSize);
+        int cellIdx = cx + cy * dimX + cz * dimX * dimY; if (cellIdx >= 0 && cellIdx < totalCells) { next[i] = head[cellIdx]; head[cellIdx] = i; }
     }
-
-    // Resolve overlaps
     for (int i = 0; i < data->node_count; i++) {
-        int cx = (int)((data->nodes[i].position[0] - min_p[0]) / cellSize);
-        int cy = (int)((data->nodes[i].position[1] - min_p[1]) / cellSize);
-        int cz = (int)((data->nodes[i].position[2] - min_p[2]) / cellSize);
-
-        for (int nx = cx - 1; nx <= cx + 1; nx++) {
-            for (int ny = cy - 1; ny <= cy + 1; ny++) {
-                for (int nz = cz - 1; nz <= cz + 1; nz++) {
-                    if (nx < 0 || nx >= dimX || ny < 0 || ny >= dimY || nz < 0 || nz >= dimZ) continue;
-                    int cellIdx = nx + ny * dimX + nz * dimX * dimY;
-                    int other = head[cellIdx];
-                    while (other != -1) {
-                        if (i != other) {
-                            vec3 diff;
-                            glm_vec3_sub(data->nodes[i].position, data->nodes[other].position, diff);
-                            float distSq = glm_vec3_norm2(diff);
-                            float r1 = 0.5f * data->nodes[i].size;
-                            float r2 = 0.5f * data->nodes[other].size;
-                            float minDist = (r1 + r2);
-                            if (distSq < minDist * minDist && distSq > 0.0001f) {
-                                float dist = sqrtf(distSq);
-                                float overlap = minDist - dist;
-                                vec3 move;
-                                glm_vec3_scale(diff, 0.5f * overlap / dist, move);
-                                glm_vec3_add(data->nodes[i].position, move, data->nodes[i].position);
-                                glm_vec3_sub(data->nodes[other].position, move, data->nodes[other].position);
-                            }
-                        }
-                        other = next[other];
+        int cx = (int)((data->nodes[i].position[0] - min_p[0]) / cellSize); int cy = (int)((data->nodes[i].position[1] - min_p[1]) / cellSize); int cz = (int)((data->nodes[i].position[2] - min_p[2]) / cellSize);
+        for (int nx = cx - 1; nx <= cx + 1; nx++) { for (int ny = cy - 1; ny <= cy + 1; ny++) { for (int nz = cz - 1; nz <= cz + 1; nz++) {
+            if (nx < 0 || nx >= dimX || ny < 0 || ny >= dimY || nz < 0 || nz >= dimZ) continue;
+            int cellIdx = nx + ny * dimX + nz * dimX * dimY; int other = head[cellIdx];
+            while (other != -1) {
+                if (i != other) {
+                    vec3 diff; glm_vec3_sub(data->nodes[i].position, data->nodes[other].position, diff);
+                    float distSq = glm_vec3_norm2(diff); float r1 = 0.5f * data->nodes[i].size; float r2 = 0.5f * data->nodes[other].size; float minDist = (r1 + r2);
+                    if (distSq < minDist * minDist && distSq > 0.0001f) {
+                        float dist = sqrtf(distSq); float overlap = minDist - dist; vec3 move; glm_vec3_scale(diff, 0.5f * overlap / dist, move);
+                        glm_vec3_add(data->nodes[i].position, move, data->nodes[i].position); glm_vec3_sub(data->nodes[other].position, move, data->nodes[other].position);
                     }
                 }
+                other = next[other];
             }
-        }
+        }}}
     }
-
-    free(head);
-    free(next);
-    
-    // Write back to current_layout matrix
-    for (int i = 0; i < data->node_count; i++) {
-        MATRIX(data->current_layout, i, 0) = (igraph_real_t)data->nodes[i].position[0];
-        MATRIX(data->current_layout, i, 1) = (igraph_real_t)data->nodes[i].position[1];
-        if (igraph_matrix_ncol(&data->current_layout) > 2)
-            MATRIX(data->current_layout, i, 2) = (igraph_real_t)data->nodes[i].position[2];
-    }
+    free(head); free(next);
+    for (int i = 0; i < data->node_count; i++) { MATRIX(data->current_layout, i, 0) = (igraph_real_t)data->nodes[i].position[0]; MATRIX(data->current_layout, i, 1) = (igraph_real_t)data->nodes[i].position[1]; if (igraph_matrix_ncol(&data->current_layout) > 2) MATRIX(data->current_layout, i, 2) = (igraph_real_t)data->nodes[i].position[2]; }
 }
 
 void graph_cluster(GraphData* data, ClusterType type) {
@@ -210,20 +188,13 @@ void graph_calculate_centrality(GraphData* data, CentralityType type) {
         default: break;
     }
     igraph_real_t min_v, max_v; igraph_vector_minmax(&result, &min_v, &max_v);
-    for(int i=0; i<data->node_count; i++) {
-        float val = (float)VECTOR(result)[i];
-        data->nodes[i].size = (max_v > 0) ? (val / (float)max_v) : 1.0f;
-        data->nodes[i].degree = (int)(data->nodes[i].size * 20.0f);
-    }
+    for(int i=0; i<data->node_count; i++) { float val = (float)VECTOR(result)[i]; data->nodes[i].size = (max_v > 0) ? (val / (float)max_v) : 1.0f; data->nodes[i].degree = (int)(data->nodes[i].size * 20.0f); }
     igraph_vector_destroy(&result);
 }
 
 void graph_free_data(GraphData* data) {
-    if (data->graph_initialized) {
-        igraph_destroy(&data->g);
-        igraph_matrix_destroy(&data->current_layout);
-        data->graph_initialized = false;
-    }
+    if (data->graph_initialized) { igraph_destroy(&data->g); igraph_matrix_destroy(&data->current_layout); data->graph_initialized = false; }
+    if (data->node_attr_name) free(data->node_attr_name); if (data->edge_attr_name) free(data->edge_attr_name);
     for (uint32_t i = 0; i < data->node_count; i++) if (data->nodes[i].label) free(data->nodes[i].label);
     free(data->nodes); free(data->edges);
 }
