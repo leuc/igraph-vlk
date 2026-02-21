@@ -38,6 +38,19 @@ int xy2d(int n, int x, int y) {
 }
 
 // --- STRUCTS & COMPARATORS ---
+typedef struct {
+    int comm_id;
+    double avg_kcore;
+    int node_count;
+} CommData;
+
+// Sort communities by Average K-Core descending
+int compare_communities_kcore(const void *a, const void *b) {
+    CommData* commA = (CommData*)a;
+    CommData* commB = (CommData*)b;
+    double diff = commB->avg_kcore - commA->avg_kcore;
+    return (diff > 0) - (diff < 0);
+}
 
 typedef struct { 
     int id; 
@@ -123,7 +136,7 @@ double calculate_move_delta(const igraph_t *ig, const igraph_matrix_t *layout,
     // Calculate delta for U's edges
     for (int i = 0; i < igraph_vector_int_size(&u_edges); i++) {
         igraph_integer_t edge_id = VECTOR(u_edges)[i];
-        if (respect_cuts && ctx->cut_edges && ctx->cut_edges[edge_id]) continue;
+        //if (respect_cuts && ctx->cut_edges && ctx->cut_edges[edge_id]) continue;
         
         igraph_integer_t from, to;
         igraph_edge(ig, edge_id, &from, &to);
@@ -146,7 +159,7 @@ double calculate_move_delta(const igraph_t *ig, const igraph_matrix_t *layout,
         double vx = target_x, vy = target_y, vz = target_z;
         for (int i = 0; i < igraph_vector_int_size(&v_edges); i++) {
             igraph_integer_t edge_id = VECTOR(v_edges)[i];
-            if (respect_cuts && ctx->cut_edges && ctx->cut_edges[edge_id]) continue;
+            //if (respect_cuts && ctx->cut_edges && ctx->cut_edges[edge_id]) continue;
             
             igraph_integer_t from, to;
             igraph_edge(ig, edge_id, &from, &to);
@@ -217,60 +230,85 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         ctx->node_to_sphere_id = malloc(vcount * sizeof(int));
         ctx->node_to_slot_idx = malloc(vcount * sizeof(int));
 
-        igraph_vector_int_t coreness; igraph_vector_int_init(&coreness, vcount);
+
+// ---------------------------------------------------------
+        // 1. Metrics & Community Detection
+        // ---------------------------------------------------------
+        igraph_vector_int_t coreness; 
+        igraph_vector_int_init(&coreness, vcount);
         igraph_coreness(ig, &coreness, IGRAPH_ALL);
 
-        igraph_vector_t betweenness; igraph_vector_init(&betweenness, vcount);
-        igraph_betweenness(ig, &betweenness, igraph_vss_all(), IGRAPH_UNDIRECTED, NULL);
 
-        igraph_vector_t eccentricity; igraph_vector_init(&eccentricity, vcount);
-        igraph_eccentricity(ig, &eccentricity, igraph_vss_all(), IGRAPH_ALL);
-
-        double max_c = get_vector_int_max(&coreness);
-        double max_b = get_vector_max(&betweenness);
-        double max_e = get_vector_max(&eccentricity);
-
-
-
-	// ---------------------------------------------------------
-        // Calculate Communities (Leiden) with Dynamic Resolution
-        // ---------------------------------------------------------
-        igraph_vector_int_t membership;
+	// 3. Community Detection (Leiden using CPM)
+        igraph_vector_int_t membership; 
         igraph_vector_int_init(&membership, vcount);
         
-        // Calculate Average Degree
-        double avg_degree = (vcount > 0) ? (double)(2 * ecount) / vcount : 0.0;
+        // Calculate the actual global density of the graph (Edges / Possible Edges)
+        double graph_density = (vcount > 1) ? (2.0 * ecount) / ((double)vcount * (vcount - 1)) : 0.0;
         
-        // Dynamic Resolution Formula:
-        // We floor it at 1.0 (standard modularity) so sparse graphs don't shatter.
-        // For dense graphs, we increase the resolution to force smaller, localized clusters.
-        // Dividing by 5.0 is a highly effective heuristic for 3D spatial chunking.
-        double dynamic_resolution = fmax(1.0, avg_degree / 5.0);
+        // CPM Resolution: We want to find communities that are ~3x denser than the background.
+        // We floor it at 0.001 to prevent it from lumping everything into one giant blob.
+        double cpm_resolution = fmax(graph_density * 3.0, 0.001);
         
-        // Pass the dynamic_resolution into the Leiden algorithm
-        igraph_community_leiden(ig, NULL, NULL, dynamic_resolution, 0.01, false, 2, &membership, NULL, NULL);
-        
-        printf("[DEBUG] Leiden Resolution set to %.2f (Avg Deg: %.2f). Found %d communities.\n", 
-               dynamic_resolution, avg_degree, get_vector_int_max(&membership) + 1);
+        // VERY IMPORTANT: Arg 6 must be 'true' so Leiden starts from singletons and merges them!
+        igraph_community_leiden(ig, NULL, NULL, cpm_resolution, 0.01, true, 2, &membership, NULL, NULL);
 
-        NodeComposite *composite_nodes = malloc(vcount * sizeof(NodeComposite));
+        int num_communities = get_vector_int_max(&membership) + 1;
+        printf("[DEBUG] Leiden Resolution %.2f. Found %d communities.\n", cpm_resolution, num_communities);
+
+        // ---------------------------------------------------------
+        // 2. Aggregate Community K-Cores
+        // ---------------------------------------------------------
+        CommData* comms = calloc(num_communities, sizeof(CommData));
         for (int i = 0; i < vcount; i++) {
-            double c_norm = VECTOR(coreness)[i] / max_c;
-            double b_norm = VECTOR(betweenness)[i] / max_b;
-            double e_norm = isinf(VECTOR(eccentricity)[i]) ? 1.0 : (VECTOR(eccentricity)[i] / max_e);
-            composite_nodes[i].id = i;
-            composite_nodes[i].composite_score = c_norm + (b_norm * 0.5) - e_norm;
+            int c = VECTOR(membership)[i];
+            comms[c].comm_id = c;
+            comms[c].avg_kcore += VECTOR(coreness)[i];
+            comms[c].node_count++;
+        }
+        
+        // Calculate the actual average
+        for (int i = 0; i < num_communities; i++) {
+            if (comms[i].node_count > 0) {
+                comms[i].avg_kcore /= comms[i].node_count;
+            }
         }
 
-        qsort(composite_nodes, vcount, sizeof(NodeComposite), compare_composite_desc);
+        // Sort communities from Densest (Center) to Weakest (Outer)
+        qsort(comms, num_communities, sizeof(CommData), compare_communities_kcore);
 
-        int nodes_per_sphere = (int)ceil((double)vcount / ctx->num_spheres);
-        for (int i = 0; i < vcount; i++) {
-            int assigned_sphere = i / nodes_per_sphere;
-            if (assigned_sphere >= ctx->num_spheres) assigned_sphere = ctx->num_spheres - 1;
-            ctx->node_to_sphere_id[composite_nodes[i].id] = assigned_sphere;
+        // ---------------------------------------------------------
+        // 3. Bin-Pack Entire Communities onto Spheres
+        // ---------------------------------------------------------
+        ctx->num_spheres = (int)fmax(3.0, sqrt(vcount) * 0.5);
+        int target_load_per_sphere = (int)ceil((double)vcount / ctx->num_spheres);
+        
+        int* comm_to_sphere = malloc(num_communities * sizeof(int));
+        int current_sphere = 0;
+        int current_load = 0;
+
+        for (int i = 0; i < num_communities; i++) {
+            if (comms[i].node_count == 0) continue;
+            
+            int cid = comms[i].comm_id;
+            comm_to_sphere[cid] = current_sphere;
+            current_load += comms[i].node_count;
+
+            // If this sphere is full (and we aren't on the last sphere), move to the next shell
+            if (current_load >= target_load_per_sphere && current_sphere < ctx->num_spheres - 1) {
+                current_sphere++;
+                current_load = 0; 
+            }
         }
-        free(composite_nodes);
+
+        // Map the assignment back to the individual nodes
+        for (int i = 0; i < vcount; i++) {
+            ctx->node_to_sphere_id[i] = comm_to_sphere[VECTOR(membership)[i]];
+        }
+
+        free(comms);
+        free(comm_to_sphere);
+        igraph_vector_int_destroy(&coreness);
 
         // Edge Cutting
         ctx->cut_edges = calloc(ecount, sizeof(bool));
@@ -401,9 +439,11 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
             graph->nodes[i].position[2] = MATRIX(graph->current_layout, i, 2);
         }
 
-        igraph_vector_int_destroy(&coreness); igraph_vector_destroy(&betweenness); 
-        igraph_vector_destroy(&eccentricity); igraph_vector_destroy(&transitivity);
+       
+        // Cleanup remaining vectors used for density and sorting
+        igraph_vector_destroy(&transitivity);
         igraph_vector_int_destroy(&membership);
+        
         
         ctx->phase = PHASE_INTRA_SPHERE;
         ctx->phase_iter = 0;
