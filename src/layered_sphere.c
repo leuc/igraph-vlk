@@ -294,8 +294,35 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         igraph_vector_t transitivity; igraph_vector_init(&transitivity, vcount);
         igraph_transitivity_local_undirected(ig, &transitivity, igraph_vss_all(), IGRAPH_TRANSITIVITY_ZERO);
 
-        double base_radius = 5.0; 
-        double layer_spacing = 15.0; 
+       
+	// ---------------------------------------------------------
+        // Dynamic Radius Calculation (Graph Property + Log Scale)
+        // ---------------------------------------------------------
+        double* sphere_radii = malloc(ctx->num_spheres * sizeof(double));
+        double current_radius = 5.0; // Base radius for innermost sphere
+
+        for (int s = 0; s < ctx->num_spheres; s++) {
+            // 1. Check graph properties: How many nodes are on this sphere?
+            int n_in_group = 0;
+            for (int i = 0; i < vcount; i++) {
+                if (ctx->node_to_sphere_id[i] == s) n_in_group++;
+            }
+            
+            // 2. Mathematically, how much radius do we need to fit these nodes?
+            // Assuming we want ~40 units of physical surface area per node
+            double required_area = n_in_group * 40.0; 
+            double needed_radius = sqrt(required_area / (4.0 * M_PI));
+
+            // 3. Logarithmic Gap: Inner spheres have wide gaps, outer spheres pack tightly
+            // e.g., s=0 gap is ~28.0. s=50 gap is ~11.0.
+            double log_gap = 8.0 + (20.0 / log2(s + 2.0));
+            
+            // The radius must be large enough to clear the previous sphere + gap,
+            // AND large enough to comfortably fit all of its own nodes!
+            current_radius = fmax(current_radius + log_gap, needed_radius);
+            sphere_radii[s] = current_radius;
+        }
+
         int hilbert_res = 32768;
 
         #pragma omp parallel for schedule(dynamic)
@@ -304,7 +331,8 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
             for (int i = 0; i < vcount; i++) if (ctx->node_to_sphere_id[i] == s) n_in_group++;
             if (n_in_group == 0) continue;
 
-            double radius = base_radius + (s * layer_spacing);
+            // Apply our dynamically calculated, log-scaled radius!
+            double radius = sphere_radii[s];
             
             // MATH: Surface Area Proportional Grid Scaling
             // We guarantee at least 3x empty space, scaling up quadratically for outer spheres
