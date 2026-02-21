@@ -100,6 +100,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             else { glfwSetWindowMonitor(window, NULL, windowedX, windowedY, windowedWidth, windowedHeight, 0); }
             isFullscreen = !isFullscreen; break;
         case GLFW_KEY_T: renderer.showLabels = !renderer.showLabels; break;
+        case GLFW_KEY_P: renderer.showSpheres = !renderer.showSpheres; break;
         case GLFW_KEY_N: renderer.showNodes = !renderer.showNodes; break;
         case GLFW_KEY_E: renderer.showEdges = !renderer.showEdges; break;
         case GLFW_KEY_H: renderer.showUI = !renderer.showUI; break;
