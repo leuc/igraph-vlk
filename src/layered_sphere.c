@@ -256,9 +256,17 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         }
         qsort(comms, num_communities, sizeof(CommData), compare_communities_kcore);
 
-        // 3. Dynamic Sphere Generation
-        // We guarantee a healthy core (e.g. at least 2% of total nodes or 30 nodes minimum)
-        int base_capacity = (int)fmax(30.0, vcount * 0.02);
+       
+       
+       // 3. Dynamic Sphere Generation (With Strict Nucleus)
+
+        // The "Nucleus" (Sphere 0) is sized exactly to fit the single densest community.
+        int nucleus_capacity = comms[0].node_count; 
+        
+        // The outer shells grow quadratically, based on the remaining population
+        int remaining_nodes = vcount - nucleus_capacity;
+        int base_capacity = (int)fmax(15.0, remaining_nodes * 0.015);   
+
         int current_sphere = 0;
         int current_load = 0;
         int* comm_to_sphere = malloc(num_communities * sizeof(int));
@@ -267,13 +275,19 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
             int c_size = comms[i].node_count;
             if (c_size == 0) continue;
             
-            // Sphere capacity grows quadratically: C = Base * (s+1)^2
-            int sphere_capacity = base_capacity * (current_sphere + 1) * (current_sphere + 1);
+            // Evaluate how much room the current sphere has
+            int sphere_capacity;
+            if (current_sphere == 0) {
+                sphere_capacity = nucleus_capacity; // Strictly locked to Comm 0
+            } else {
+                // Outer spheres grow quadratically: C = Base * s^2
+                sphere_capacity = base_capacity * current_sphere * current_sphere;
+            }
             
-            // Move to the next sphere if we exceed capacity (unless the sphere is totally empty)
+            // If adding this community overflows the sphere (and it's not the first one added to it)
             if (current_load > 0 && current_load + c_size > sphere_capacity) {
                 current_sphere++;
-                current_load = 0;
+                current_load = 0; // Reset load for the new sphere
             }
             
             comm_to_sphere[comms[i].comm_id] = current_sphere;
@@ -281,19 +295,21 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         }
         
         ctx->num_spheres = current_sphere + 1;
-        printf("[DEBUG] Dynamically generated %d growing spheres.\n", ctx->num_spheres);
+        printf("[DEBUG] Generated %d spheres. Nucleus is strictly %d nodes. Shell base: %d\n", 
+               ctx->num_spheres, nucleus_capacity, base_capacity);
 
         for (int i = 0; i < vcount; i++) ctx->node_to_sphere_id[i] = comm_to_sphere[VECTOR(membership)[i]];
 
         free(comms); free(comm_to_sphere);
         igraph_vector_int_destroy(&coreness);
+       
 
         // 4. Build Sparse Grids & Assign Hilbert
         igraph_vector_t transitivity; igraph_vector_init(&transitivity, vcount);
         igraph_transitivity_local_undirected(ig, &transitivity, igraph_vss_all(), IGRAPH_TRANSITIVITY_ZERO);
 
         ctx->grids = calloc(ctx->num_spheres, sizeof(SphereGrid));
-        double current_radius = 5.0;
+        double current_radius = 0.0; // Start at the absolute center
 
         for (int s = 0; s < ctx->num_spheres; s++) {
             int n_in_group = 0;
@@ -302,16 +318,29 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
 
             double required_area = n_in_group * 40.0; 
             double needed_r = sqrt(required_area / (4.0 * M_PI));
-            double log_gap = 8.0 + (20.0 / log2(s + 2.0));
-            current_radius = fmax(current_radius + log_gap, needed_r);
+            
+            if (s == 0) {
+                // THE NUCLEUS: No gap. It sits exactly at its mathematically needed radius
+                // We floor it at 5.0 so a tiny 3-node community doesn't collapse into a singularity
+                current_radius = fmax(5.0, needed_r);
+            } else {
+                // THE SHELLS: Add a logarithmic structural gap from the previous sphere
+                double log_gap = 8.0 + (20.0 / log2(s + 2.0));
+                
+                // Radius must clear the previous sphere + gap, OR fit its own nodes (whichever is bigger)
+                current_radius = fmax(current_radius + log_gap, needed_r);
+            }
             
             ctx->grids[s].radius = current_radius;
+            
+            // MATH: Surface Area Proportional Grid Scaling
             int M_s = (int)fmin(100000, fmax(n_in_group * 3.0, (4.0 * M_PI * current_radius * current_radius) / 20.0));
             ctx->grids[s].max_slots = M_s;
             ctx->grids[s].slot_occupant = malloc(M_s * sizeof(int));
             ctx->grids[s].slots = malloc(M_s * sizeof(SpherePoint));
             for(int k=0; k<M_s; k++) ctx->grids[s].slot_occupant[k] = -1;
 
+            // Generate dense Fibonacci grid
             for (int i = 0; i < M_s; i++) {
                 double phi = acos(1.0 - 2.0 * (i + 0.5) / M_s);
                 double theta = M_PI * (1.0 + sqrt(5.0)) * i;
