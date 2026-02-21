@@ -108,7 +108,6 @@ double calculate_move_delta_intra(const igraph_t *ig, const igraph_matrix_t *lay
         igraph_integer_t from, to; igraph_edge(ig, VECTOR(neis)[i], &from, &to);
         int neighbor = (from == u) ? to : from;
         
-        // ONLY consider neighbors on the exact same sphere
         if (neighbor == v || ctx->node_to_sphere_id[neighbor] != target_sphere_s) continue;
         
         double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
@@ -225,7 +224,7 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
     int hilbert_res = 32768;
 
     // ---------------------------------------------------------
-    // PHASE 0: Capacity Scaling, Community Packing, & Grids
+    // PHASE 0: Dynamic Growing Spheres & Community Packing
     // ---------------------------------------------------------
     if (ctx->phase == PHASE_INIT) {
         ctx->node_to_sphere_id = malloc(vcount * sizeof(int));
@@ -257,38 +256,39 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         }
         qsort(comms, num_communities, sizeof(CommData), compare_communities_kcore);
 
-        // 3. Mathematical Capacity Scaling (Outer Spheres hold exponentially more)
-        ctx->num_spheres = (int)fmax(3.0, sqrt(vcount) * 0.5);
-        double sum_squares = 0.0;
-        for (int s = 0; s < ctx->num_spheres; s++) sum_squares += (s + 1.0) * (s + 1.0);
-        
-        int* sphere_capacities = malloc(ctx->num_spheres * sizeof(int));
-        for (int s = 0; s < ctx->num_spheres; s++) {
-            sphere_capacities[s] = (int)ceil(vcount * (((s + 1.0) * (s + 1.0)) / sum_squares));
-        }
-
-        // 4. Bin-Pack Communities into Scaled Spheres
-        int* comm_to_sphere = malloc(num_communities * sizeof(int));
+        // 3. Dynamic Sphere Generation
+        // We guarantee a healthy core (e.g. at least 2% of total nodes or 30 nodes minimum)
+        int base_capacity = (int)fmax(30.0, vcount * 0.02);
         int current_sphere = 0;
         int current_load = 0;
+        int* comm_to_sphere = malloc(num_communities * sizeof(int));
 
         for (int i = 0; i < num_communities; i++) {
-            if (comms[i].node_count == 0) continue;
+            int c_size = comms[i].node_count;
+            if (c_size == 0) continue;
+            
+            // Sphere capacity grows quadratically: C = Base * (s+1)^2
+            int sphere_capacity = base_capacity * (current_sphere + 1) * (current_sphere + 1);
+            
+            // Move to the next sphere if we exceed capacity (unless the sphere is totally empty)
+            if (current_load > 0 && current_load + c_size > sphere_capacity) {
+                current_sphere++;
+                current_load = 0;
+            }
             
             comm_to_sphere[comms[i].comm_id] = current_sphere;
-            current_load += comms[i].node_count;
-
-            if (current_load >= sphere_capacities[current_sphere] && current_sphere < ctx->num_spheres - 1) {
-                current_sphere++;
-                current_load = 0; 
-            }
+            current_load += c_size;
         }
+        
+        ctx->num_spheres = current_sphere + 1;
+        printf("[DEBUG] Dynamically generated %d growing spheres.\n", ctx->num_spheres);
+
         for (int i = 0; i < vcount; i++) ctx->node_to_sphere_id[i] = comm_to_sphere[VECTOR(membership)[i]];
 
-        free(comms); free(comm_to_sphere); free(sphere_capacities);
+        free(comms); free(comm_to_sphere);
         igraph_vector_int_destroy(&coreness);
 
-        // 5. Build Sparse Grids & Assign Hilbert
+        // 4. Build Sparse Grids & Assign Hilbert
         igraph_vector_t transitivity; igraph_vector_init(&transitivity, vcount);
         igraph_transitivity_local_undirected(ig, &transitivity, igraph_vss_all(), IGRAPH_TRANSITIVITY_ZERO);
 
@@ -363,12 +363,15 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
     }
 
     // ---------------------------------------------------------
-    // BARYCENTER ENGINE (Deterministic Coordinate Descent)
+    // BARYCENTER ENGINE (With Hilbert Damping)
     // ---------------------------------------------------------
     int local_moves = 0;
     bool is_intra = (ctx->phase == PHASE_INTRA_SPHERE);
     int start_s = is_intra ? 0 : (ctx->inter_sphere_pass % 2);
     int step_s  = is_intra ? 1 : 2;
+    
+    // Decrease step size as iterations progress to guarantee convergence
+    double damping_factor = fmax(0.05, 0.4 * pow(0.95, ctx->phase_iter));
 
     #pragma omp parallel for schedule(dynamic) reduction(+:local_moves)
     for (int s = start_s; s < ctx->num_spheres; s += step_s) {
@@ -390,13 +393,11 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
                 int n_sphere = ctx->node_to_sphere_id[neighbor];
                 
                 if (is_intra) {
-                    // INTRA: Euclidean Barycenter (Only same sphere)
                     if (n_sphere != s) continue;
                     bx += MATRIX(graph->current_layout, neighbor, 0);
                     by += MATRIX(graph->current_layout, neighbor, 1);
                     bz += MATRIX(graph->current_layout, neighbor, 2);
                 } else {
-                    // INTER: Angular Barycenter (All spheres)
                     double nx = MATRIX(graph->current_layout, neighbor, 0);
                     double ny = MATRIX(graph->current_layout, neighbor, 1);
                     double nz = MATRIX(graph->current_layout, neighbor, 2);
@@ -427,14 +428,25 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
                                 (int)((theta / (2 * M_PI)) * (hilbert_res - 1)), 
                                 (int)((phi / M_PI) * (hilbert_res - 1)));
                                 
-            int target_slot = find_closest_slot_by_hilbert(&ctx->grids[s], target_h);
+            // Apply Damping to prevent thrashing
+            int current_h = ctx->grids[s].slots[current_slot].hilbert_dist;
+            int total_h = hilbert_res * hilbert_res;
+            int h_delta = target_h - current_h;
+            
+            if (h_delta > total_h / 2) h_delta -= total_h;
+            if (h_delta < -total_h / 2) h_delta += total_h;
+
+            int damped_h = current_h + (int)(h_delta * damping_factor);
+            if (damped_h < 0) damped_h += total_h;
+            if (damped_h >= total_h) damped_h -= total_h;
+                                
+            int target_slot = find_closest_slot_by_hilbert(&ctx->grids[s], damped_h);
             if (target_slot == current_slot) continue;
             
             double delta;
             if (is_intra) delta = calculate_move_delta_intra(ig, &graph->current_layout, ctx, u, s, target_slot);
             else          delta = calculate_move_delta_inter(ig, &graph->current_layout, ctx, u, s, target_slot);
             
-            // Deterministic descent: Only move if it strictly improves the chosen metric
             if (delta < -0.001) {
                 int v = ctx->grids[s].slot_occupant[target_slot];
                 
@@ -468,7 +480,8 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
     }
 
     if (ctx->phase == PHASE_INTRA_SPHERE) {
-        printf("[DEBUG] Phase 1 (Intra) Iter %d: %d Barycenter Moves\n", ctx->phase_iter, local_moves);
+        printf("[DEBUG] Phase 1 (Intra) Iter %d: %d Barycenter Moves (Damping: %.2f)\n", 
+               ctx->phase_iter, local_moves, damping_factor);
         if (local_moves == 0 || ctx->phase_iter > 50) {
             ctx->phase = PHASE_INTER_SPHERE;
             ctx->phase_iter = 0; 
@@ -476,8 +489,8 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
             ctx->phase_iter++;
         }
     } else if (ctx->phase == PHASE_INTER_SPHERE) {
-        printf("[DEBUG] Phase 2 (Inter) Iter %d (%s): %d Barycenter Moves\n", 
-               ctx->phase_iter, (ctx->inter_sphere_pass % 2 == 0) ? "Even" : "Odd", local_moves);
+        printf("[DEBUG] Phase 2 (Inter) Iter %d (%s): %d Barycenter Moves (Damping: %.2f)\n", 
+               ctx->phase_iter, (ctx->inter_sphere_pass % 2 == 0) ? "Even" : "Odd", local_moves, damping_factor);
         
         ctx->inter_sphere_pass++;
         if ((local_moves == 0 && (ctx->inter_sphere_pass % 2 == 0)) || ctx->phase_iter > 100) {
@@ -496,12 +509,12 @@ const char* layered_sphere_get_stage_name(LayeredSphereContext* ctx) {
     if (!ctx || !ctx->initialized) return "Layered Sphere - Uninitialized";
 
     switch (ctx->phase) {
-        case PHASE_INIT: return "Phase 0: Mathematical Capacity Assignment";
+        case PHASE_INIT: return "Phase 0: Dynamic Capacity Generation";
         case PHASE_INTRA_SPHERE: 
-            snprintf(stage_name, sizeof(stage_name), "Phase 1: Intra-Sphere Barycenter (%d Spheres)", ctx->num_spheres);
+            snprintf(stage_name, sizeof(stage_name), "Phase 1: Intra-Sphere Damped Descent (%d Spheres)", ctx->num_spheres);
             return stage_name;
         case PHASE_INTER_SPHERE:
-            snprintf(stage_name, sizeof(stage_name), "Phase 2: Inter-Sphere Barycenter (%s Pairs)", 
+            snprintf(stage_name, sizeof(stage_name), "Phase 2: Inter-Sphere Damped Alignment (%s Pairs)", 
                     (ctx->inter_sphere_pass % 2 == 0) ? "Even" : "Odd");
             return stage_name;
         case PHASE_DONE: return "Optimization Complete";
