@@ -3,11 +3,25 @@
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
-#include <omp.h> // REQUIRED for parallelization
+#include <omp.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+// --- FAST THREAD-SAFE PRNG FOR OPENMP ---
+// Standard rand() causes lock contention in OpenMP. This lock-free hash 
+// generates a clean float between 0.0 and 1.0 based on node IDs and the iteration.
+static inline double fast_rand_float(unsigned int u, unsigned int v, unsigned int iter) {
+    unsigned int hash = u;
+    hash = ((hash << 16) ^ hash) * 0x45d9f3b;
+    hash = ((hash >> 16) ^ hash) ^ v;
+    hash = ((hash << 16) ^ hash) * 0x45d9f3b;
+    hash = ((hash >> 16) ^ hash) ^ iter;
+    hash = ((hash << 16) ^ hash) * 0x45d9f3b;
+    hash = (hash >> 16) ^ hash;
+    return (double)(hash % 10000) / 10000.0;
+}
 
 // --- HILBERT CURVE LOGIC ---
 void rot(int n, int *x, int *y, int rx, int ry) {
@@ -28,30 +42,18 @@ int xy2d(int n, int x, int y) {
 }
 
 // --- STRUCTS & COMPARATORS ---
-typedef struct { 
-    int id; 
-    double density; 
-} NodeDensity;
-
+typedef struct { int id; double density; } NodeDensity;
 int compare_nodes_density(const void *a, const void *b) {
     double diff = ((NodeDensity*)a)->density - ((NodeDensity*)b)->density;
     return (diff > 0) - (diff < 0);
 }
 
-typedef struct { 
-    double x, y, z; 
-    int hilbert_dist; 
-} SpherePoint;
-
+typedef struct { double x, y, z; int hilbert_dist; } SpherePoint;
 int compare_points(const void *a, const void *b) {
     return ((SpherePoint*)a)->hilbert_dist - ((SpherePoint*)b)->hilbert_dist;
 }
 
-typedef struct {
-    int id;
-    double composite_score;
-} NodeComposite;
-
+typedef struct { int id; double composite_score; } NodeComposite;
 int compare_composite_desc(const void *a, const void *b) {
     double diff = ((NodeComposite*)b)->composite_score - ((NodeComposite*)a)->composite_score;
     return (diff > 0) - (diff < 0);
@@ -78,7 +80,7 @@ double get_vector_int_max(const igraph_vector_int_t* v) {
     return max_val == 0 ? 1.0 : max_val;
 }
 
-// Swap calculation
+// target_sphere_1 == -1 means evaluate ALL connections globally
 double calculate_swap_delta(const igraph_t *ig, const igraph_matrix_t *layout, 
                             const igraph_vector_int_t *sphere_ids, const bool* cut_edges,
                             int u, int v, int target_sphere_1, int target_sphere_2) {
@@ -103,9 +105,10 @@ double calculate_swap_delta(const igraph_t *ig, const igraph_matrix_t *layout,
         
         if (neighbor == v) continue;
         
-        // Only evaluate edges connecting to the targeted spheres
-        int n_sphere = VECTOR(*sphere_ids)[neighbor];
-        if (n_sphere != target_sphere_1 && n_sphere != target_sphere_2) continue;
+        if (target_sphere_1 != -1) {
+            int n_sphere = VECTOR(*sphere_ids)[neighbor];
+            if (n_sphere != target_sphere_1 && n_sphere != target_sphere_2) continue;
+        }
         
         double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
         old_energy += dist3d(ux, uy, uz, nx, ny, nz);
@@ -121,8 +124,11 @@ double calculate_swap_delta(const igraph_t *ig, const igraph_matrix_t *layout,
         igraph_integer_t neighbor = (from == v) ? to : from;
         
         if (neighbor == u) continue;
-        int n_sphere = VECTOR(*sphere_ids)[neighbor];
-        if (n_sphere != target_sphere_1 && n_sphere != target_sphere_2) continue;
+        
+        if (target_sphere_1 != -1) {
+            int n_sphere = VECTOR(*sphere_ids)[neighbor];
+            if (n_sphere != target_sphere_1 && n_sphere != target_sphere_2) continue;
+        }
         
         double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
         old_energy += dist3d(vx, vy, vz, nx, ny, nz);
@@ -158,16 +164,16 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
     igraph_t* ig = &graph->g; 
     int vcount = graph->node_count;
     int ecount = igraph_ecount(ig);
-    bool swapped_this_frame = false;
 
     // ---------------------------------------------------------
-    // PHASE 0: Dynamic Scaling, Metric Blending & Placement
+    // PHASE 0: Init
     // ---------------------------------------------------------
     if (ctx->phase == PHASE_INIT) {
-        // 1. Dynamic Sphere Count (e.g. 10,000 nodes -> ~50 spheres)
+        printf("[DEBUG] PHASE 0: Starting initialization for %d nodes and %d edges...\n", vcount, ecount);
+        
         ctx->num_spheres = (int)fmax(3.0, sqrt(vcount) * 0.5);
+        printf("[DEBUG] Dynamically calculated target spheres: %d\n", ctx->num_spheres);
 
-        // 2. Compute Metrics (Assuming they aren't pre-cached in GraphData)
         igraph_vector_int_t coreness; igraph_vector_int_init(&coreness, vcount);
         igraph_coreness(ig, &coreness, IGRAPH_ALL);
 
@@ -177,7 +183,6 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         igraph_vector_t eccentricity; igraph_vector_init(&eccentricity, vcount);
         igraph_eccentricity(ig, &eccentricity, igraph_vss_all(), IGRAPH_ALL);
 
-        // Normalize metrics to calculate Composite Score
         double max_c = get_vector_int_max(&coreness);
         double max_b = get_vector_max(&betweenness);
         double max_e = get_vector_max(&eccentricity);
@@ -187,16 +192,12 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
             double c_norm = VECTOR(coreness)[i] / max_c;
             double b_norm = VECTOR(betweenness)[i] / max_b;
             double e_norm = isinf(VECTOR(eccentricity)[i]) ? 1.0 : (VECTOR(eccentricity)[i] / max_e);
-            
-            // Coreness pulls in (+), Betweenness centers (+0.5), Eccentricity pushes out (-)
             composite_nodes[i].id = i;
             composite_nodes[i].composite_score = c_norm + (b_norm * 0.5) - e_norm;
         }
 
-        // Sort Highest Score (Center) to Lowest Score (Outer)
         qsort(composite_nodes, vcount, sizeof(NodeComposite), compare_composite_desc);
 
-        // 3. Assign nodes smoothly across the dynamic spheres
         int nodes_per_sphere = (int)ceil((double)vcount / ctx->num_spheres);
         for (int i = 0; i < vcount; i++) {
             int assigned_sphere = i / nodes_per_sphere;
@@ -205,7 +206,6 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         }
         free(composite_nodes);
 
-        // 4. Edge Cutting (Jaccard)
         ctx->cut_edges = calloc(ecount, sizeof(bool));
         igraph_vector_int_t edge_pairs; igraph_vector_int_init(&edge_pairs, ecount * 2);
         for (int i = 0; i < ecount; i++) {
@@ -215,20 +215,25 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         igraph_vector_t jaccard_sim; igraph_vector_init(&jaccard_sim, ecount);
         igraph_similarity_jaccard_pairs(ig, &jaccard_sim, &edge_pairs, IGRAPH_ALL, 0); 
 
+        int cut_count = 0;
         for (int i = 0; i < ecount; i++) {
             igraph_integer_t u = VECTOR(edge_pairs)[i*2], v = VECTOR(edge_pairs)[i*2+1];
             if (VECTOR(ctx->sphere_ids)[u] == VECTOR(ctx->sphere_ids)[v]) {
-                if (VECTOR(jaccard_sim)[i] < 0.05) ctx->cut_edges[i] = true;
+                if (VECTOR(jaccard_sim)[i] < 0.05) {
+                    ctx->cut_edges[i] = true;
+                    cut_count++;
+                }
             }
         }
+        printf("[DEBUG] Cut %d weak intra-sphere ties based on Jaccard similarity.\n", cut_count);
+        
         igraph_vector_int_destroy(&edge_pairs); igraph_vector_destroy(&jaccard_sim);
 
-        // 5. Parallel Hilbert Sphere Placement
         igraph_vector_t transitivity; igraph_vector_init(&transitivity, vcount);
         igraph_transitivity_local_undirected(ig, &transitivity, igraph_vss_all(), IGRAPH_TRANSITIVITY_ZERO);
 
         double base_radius = 5.0; 
-        double layer_spacing = 15.0; // Scaled up slightly for dynamic sphere density
+        double layer_spacing = 15.0; 
         int hilbert_res = 32768;
 
         #pragma omp parallel for schedule(dynamic)
@@ -273,7 +278,6 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
             free(group_nodes); free(group_pts);
         }
 
-        // Sync initial layout
         for (int i=0; i<vcount; i++) {
             graph->nodes[i].position[0] = MATRIX(graph->current_layout, i, 0);
             graph->nodes[i].position[1] = MATRIX(graph->current_layout, i, 1);
@@ -284,28 +288,43 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         igraph_vector_destroy(&eccentricity); igraph_vector_destroy(&transitivity);
         
         ctx->phase = PHASE_INTRA_SPHERE;
+        ctx->phase_iter = 0;
+        printf("[DEBUG] PHASE 0 COMPLETE. Moving to Phase 1.\n");
         return true; 
     }
 
     // ---------------------------------------------------------
-    // PHASE 1: Parallel Intra-Sphere (All Spheres Simultaneously)
+    // PHASE 1: Parallel Intra-Sphere (With Simulated Annealing)
     // ---------------------------------------------------------
     if (ctx->phase == PHASE_INTRA_SPHERE) {
         int local_swaps = 0;
+        int evaluated_pairs = 0;
         
-        // OpenMP perfectly parallelizes this because Sphere A never writes to Sphere B's nodes
-        #pragma omp parallel for schedule(dynamic) reduction(+:local_swaps)
+        // Dynamic Temperature: Starts hot, cools down by 5% every frame
+        double temperature = 50.0 * pow(0.95, ctx->phase_iter);
+        
+        #pragma omp parallel for schedule(dynamic) reduction(+:local_swaps, evaluated_pairs)
         for (int s = 0; s < ctx->num_spheres; s++) {
             for (int u = 0; u < vcount; u++) {
                 if (VECTOR(ctx->sphere_ids)[u] != s) continue;
-                
                 for (int v = u + 1; v < vcount; v++) {
                     if (VECTOR(ctx->sphere_ids)[v] != s) continue;
                     
-                    // Evaluate delta strictly within sphere 's'
+                    evaluated_pairs++;
                     double delta = calculate_swap_delta(ig, &graph->current_layout, &ctx->sphere_ids, ctx->cut_edges, u, v, s, s);
+                    bool accept_swap = false;
                     
                     if (delta < -0.001) {
+                        accept_swap = true; // Pure improvement
+                    } else if (temperature > 0.01) {
+                        // Accept worse layouts probabilistically to escape local minima
+                        double prob = exp(-delta / temperature);
+                        if (fast_rand_float(u, v, ctx->phase_iter) < prob) {
+                            accept_swap = true;
+                        }
+                    }
+                    
+                    if (accept_swap) {
                         for (int dim = 0; dim < 3; dim++) {
                             double temp = MATRIX(graph->current_layout, u, dim);
                             MATRIX(graph->current_layout, u, dim) = MATRIX(graph->current_layout, v, dim);
@@ -320,34 +339,54 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
             }
         }
 
-        if (local_swaps == 0) ctx->phase = PHASE_INTER_SPHERE;
+        printf("[DEBUG] P1 (Iter %d) Temp: %.2f | Evaluated: %d | Swaps: %d\n", ctx->phase_iter, temperature, evaluated_pairs, local_swaps);
+
+        // Only move to Phase 2 when it has fully cooled AND no strict improvements can be made
+        if (temperature <= 0.01 && local_swaps == 0) {
+            printf("[DEBUG] Phase 1 Settled. Moving to Phase 2.\n");
+            ctx->phase = PHASE_INTER_SPHERE;
+            ctx->phase_iter = 0; // Reset iterator for Phase 2
+        } else {
+            ctx->phase_iter++;
+        }
         ctx->current_iter++;
         return true;
     }
 
     // ---------------------------------------------------------
-    // PHASE 2: Parallel Inter-Sphere (Odd/Even Pairs)
+    // PHASE 2: Parallel Inter-Sphere (With Simulated Annealing)
     // ---------------------------------------------------------
     if (ctx->phase == PHASE_INTER_SPHERE) {
         int local_swaps = 0;
+        int evaluated_pairs = 0;
         
-        // Odd/Even Domain Decomposition. 
-        // Pass 0 evaluates pairs (0,1), (2,3). Pass 1 evaluates pairs (1,2), (3,4).
+        // Start slightly cooler since Phase 1 already built a solid foundation
+        double temperature = 20.0 * pow(0.95, ctx->phase_iter); 
         int start_s = ctx->inter_sphere_pass % 2;
         
-        #pragma omp parallel for schedule(dynamic) reduction(+:local_swaps)
+        #pragma omp parallel for schedule(dynamic) reduction(+:local_swaps, evaluated_pairs)
         for (int s = start_s; s < ctx->num_spheres - 1; s += 2) {
-            int neighbor_s = s + 1;
-            
-            // Try swapping nodes strictly within sphere 's', optimizing connections to 'neighbor_s'
             for (int u = 0; u < vcount; u++) {
                 if (VECTOR(ctx->sphere_ids)[u] != s) continue;
                 for (int v = u + 1; v < vcount; v++) {
                     if (VECTOR(ctx->sphere_ids)[v] != s) continue;
                     
-                    // cut_edges = NULL (Reactiving weak ties)
-                    double delta = calculate_swap_delta(ig, &graph->current_layout, &ctx->sphere_ids, NULL, u, v, s, neighbor_s);
+                    evaluated_pairs++;
+                    
+                    // target_1 = -1 means we calculate distance to ALL connected spheres to ensure true global alignment
+                    double delta = calculate_swap_delta(ig, &graph->current_layout, &ctx->sphere_ids, NULL, u, v, -1, -1);
+                    bool accept_swap = false;
+                    
                     if (delta < -0.001) {
+                        accept_swap = true;
+                    } else if (temperature > 0.01) {
+                        double prob = exp(-delta / temperature);
+                        if (fast_rand_float(u, v, ctx->phase_iter) < prob) {
+                            accept_swap = true;
+                        }
+                    }
+
+                    if (accept_swap) {
                         for (int dim=0; dim<3; dim++) {
                             double t = MATRIX(graph->current_layout, u, dim);
                             MATRIX(graph->current_layout, u, dim) = MATRIX(graph->current_layout, v, dim);
@@ -361,15 +400,19 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
             }
         }
 
+        printf("[DEBUG] P2 (Iter %d) %s Pass | Temp: %.2f | Evaluated: %d | Swaps: %d\n", 
+               ctx->phase_iter, (ctx->inter_sphere_pass % 2 == 0) ? "Even" : "Odd", temperature, evaluated_pairs, local_swaps);
+
         ctx->inter_sphere_pass++;
-        ctx->current_iter++;
         
-        // If two full passes (one Even, one Odd) yield zero improvements, we are done
-        if (local_swaps == 0 && (ctx->inter_sphere_pass % 2 == 0)) {
+        if (temperature <= 0.01 && local_swaps == 0 && (ctx->inter_sphere_pass % 2 == 0)) {
+            printf("[DEBUG] Phase 2 Settled. Layout Complete!\n");
             ctx->phase = PHASE_DONE;
             return false; 
         }
         
+        ctx->phase_iter++;
+        ctx->current_iter++;
         return true;
     }
 

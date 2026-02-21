@@ -3,8 +3,6 @@
 
 #include <stdbool.h>
 #include <igraph.h>
-
-// Assuming your GraphData struct is defined here
 #include "graph_loader.h" 
 
 typedef enum {
@@ -20,16 +18,12 @@ typedef struct LayeredSphereContext {
     int current_iter;
     int total_iters;
     
-    // Dynamic Scaling Parameters
+    // Tracks iterations within a specific phase for Simulated Annealing
+    int phase_iter; 
+    
     int num_spheres;
-    
-    // Graph properties mapped to nodes
-    igraph_vector_int_t sphere_ids; // Maps node_id -> sphere_id
-    
-    // Edge cutting
+    igraph_vector_int_t sphere_ids;
     bool* cut_edges; 
-    
-    // State tracking for Inter-Sphere Odd/Even passes
     int inter_sphere_pass; 
 } LayeredSphereContext;
 
