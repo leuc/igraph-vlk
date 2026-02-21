@@ -10,17 +10,13 @@
 #endif
 
 // --- FAST THREAD-SAFE PRNG FOR OPENMP ---
-// Standard rand() causes lock contention in OpenMP. This lock-free hash 
-// generates a clean float between 0.0 and 1.0 based on node IDs and the iteration.
+// Standard rand() causes lock contention in OpenMP. 
 static inline double fast_rand_float(unsigned int u, unsigned int v, unsigned int iter) {
-    unsigned int hash = u;
-    hash = ((hash << 16) ^ hash) * 0x45d9f3b;
-    hash = ((hash >> 16) ^ hash) ^ v;
-    hash = ((hash << 16) ^ hash) * 0x45d9f3b;
-    hash = ((hash >> 16) ^ hash) ^ iter;
-    hash = ((hash << 16) ^ hash) * 0x45d9f3b;
-    hash = (hash >> 16) ^ hash;
-    return (double)(hash % 10000) / 10000.0;
+    unsigned int hash = u * 73856093 ^ v * 19349663 ^ iter * 83492791;
+    hash = (hash ^ (hash >> 16)) * 0x85ebca6b;
+    hash = (hash ^ (hash >> 13)) * 0xc2b2ae35;
+    hash = hash ^ (hash >> 16);
+    return (double)(hash % 100000) / 100000.0;
 }
 
 // --- HILBERT CURVE LOGIC ---
@@ -42,13 +38,34 @@ int xy2d(int n, int x, int y) {
 }
 
 // --- STRUCTS & COMPARATORS ---
+
+typedef struct { 
+    int id; 
+    int community_id;
+    double density; 
+} NodePlacement;
+
+// Sorts primarily by Community, secondarily by Density
+int compare_nodes_placement(const void *a, const void *b) {
+    NodePlacement* nodeA = (NodePlacement*)a;
+    NodePlacement* nodeB = (NodePlacement*)b;
+    
+    // Group by community first
+    if (nodeA->community_id != nodeB->community_id) {
+        return nodeA->community_id - nodeB->community_id;
+    }
+    
+    // If in the same community, sort by density
+    double diff = nodeA->density - nodeB->density;
+    return (diff > 0) - (diff < 0);
+}
+
 typedef struct { int id; double density; } NodeDensity;
 int compare_nodes_density(const void *a, const void *b) {
     double diff = ((NodeDensity*)a)->density - ((NodeDensity*)b)->density;
     return (diff > 0) - (diff < 0);
 }
 
-typedef struct { double x, y, z; int hilbert_dist; } SpherePoint;
 int compare_points(const void *a, const void *b) {
     return ((SpherePoint*)a)->hilbert_dist - ((SpherePoint*)b)->hilbert_dist;
 }
@@ -72,67 +89,80 @@ double get_vector_max(const igraph_vector_t* v) {
     return max_val == 0 ? 1.0 : max_val;
 }
 
-double get_vector_int_max(const igraph_vector_int_t* v) {
+int get_vector_int_max(const igraph_vector_int_t* v) {
     int max_val = 0;
     for (int i = 0; i < igraph_vector_int_size(v); i++) {
         if (VECTOR(*v)[i] > max_val) max_val = VECTOR(*v)[i];
     }
-    return max_val == 0 ? 1.0 : max_val;
+    return max_val == 0 ? 1 : max_val;
 }
 
-// target_sphere_1 == -1 means evaluate ALL connections globally
-double calculate_swap_delta(const igraph_t *ig, const igraph_matrix_t *layout, 
-                            const igraph_vector_int_t *sphere_ids, const bool* cut_edges,
-                            int u, int v, int target_sphere_1, int target_sphere_2) {
+// Evaluates the energy change if Node U moves to a new grid slot.
+// Automatically handles "Sliding" (slot is empty) vs "Swapping" (slot is occupied by V).
+double calculate_move_delta(const igraph_t *ig, const igraph_matrix_t *layout, 
+                            LayeredSphereContext* ctx,
+                            int u, int target_sphere_s, int target_slot_k, 
+                            bool respect_cuts, int eval_sphere_1, int eval_sphere_2) {
+                                
+    int v = ctx->grids[target_sphere_s].slot_occupant[target_slot_k];
+    
     double old_energy = 0.0, new_energy = 0.0;
+    
     double ux = MATRIX(*layout, u, 0), uy = MATRIX(*layout, u, 1), uz = MATRIX(*layout, u, 2);
-    double vx = MATRIX(*layout, v, 0), vy = MATRIX(*layout, v, 1), vz = MATRIX(*layout, v, 2);
+    double target_x = ctx->grids[target_sphere_s].slots[target_slot_k].x;
+    double target_y = ctx->grids[target_sphere_s].slots[target_slot_k].y;
+    double target_z = ctx->grids[target_sphere_s].slots[target_slot_k].z;
 
     igraph_vector_int_t u_edges, v_edges;
     igraph_vector_int_init(&u_edges, 0);
     igraph_vector_int_init(&v_edges, 0);
     
     igraph_incident(ig, &u_edges, u, IGRAPH_ALL);
-    igraph_incident(ig, &v_edges, v, IGRAPH_ALL);
+    if (v != -1) igraph_incident(ig, &v_edges, v, IGRAPH_ALL);
 
+    // Calculate delta for U's edges
     for (int i = 0; i < igraph_vector_int_size(&u_edges); i++) {
         igraph_integer_t edge_id = VECTOR(u_edges)[i];
-        if (cut_edges && cut_edges[edge_id]) continue;
+        if (respect_cuts && ctx->cut_edges && ctx->cut_edges[edge_id]) continue;
         
         igraph_integer_t from, to;
         igraph_edge(ig, edge_id, &from, &to);
         igraph_integer_t neighbor = (from == u) ? to : from;
         
-        if (neighbor == v) continue;
+        if (neighbor == v) continue; // Distance between U and V doesn't change when they swap
         
-        if (target_sphere_1 != -1) {
-            int n_sphere = VECTOR(*sphere_ids)[neighbor];
-            if (n_sphere != target_sphere_1 && n_sphere != target_sphere_2) continue;
+        if (eval_sphere_1 != -1) {
+            int n_sphere = ctx->node_to_sphere_id[neighbor];
+            if (n_sphere != eval_sphere_1 && n_sphere != eval_sphere_2) continue;
         }
         
         double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
         old_energy += dist3d(ux, uy, uz, nx, ny, nz);
-        new_energy += dist3d(vx, vy, vz, nx, ny, nz);
+        new_energy += dist3d(target_x, target_y, target_z, nx, ny, nz); // U takes the target slot
     }
 
-    for (int i = 0; i < igraph_vector_int_size(&v_edges); i++) {
-        igraph_integer_t edge_id = VECTOR(v_edges)[i];
-        if (cut_edges && cut_edges[edge_id]) continue;
-        
-        igraph_integer_t from, to;
-        igraph_edge(ig, edge_id, &from, &to);
-        igraph_integer_t neighbor = (from == v) ? to : from;
-        
-        if (neighbor == u) continue;
-        
-        if (target_sphere_1 != -1) {
-            int n_sphere = VECTOR(*sphere_ids)[neighbor];
-            if (n_sphere != target_sphere_1 && n_sphere != target_sphere_2) continue;
+    // Calculate delta for V's edges (if target slot was occupied)
+    if (v != -1) {
+        double vx = target_x, vy = target_y, vz = target_z;
+        for (int i = 0; i < igraph_vector_int_size(&v_edges); i++) {
+            igraph_integer_t edge_id = VECTOR(v_edges)[i];
+            if (respect_cuts && ctx->cut_edges && ctx->cut_edges[edge_id]) continue;
+            
+            igraph_integer_t from, to;
+            igraph_edge(ig, edge_id, &from, &to);
+            igraph_integer_t neighbor = (from == v) ? to : from;
+            
+            if (neighbor == u) continue;
+            
+            if (eval_sphere_1 != -1) {
+                int n_sphere = ctx->node_to_sphere_id[neighbor];
+                if (n_sphere != eval_sphere_1 && n_sphere != eval_sphere_2) continue;
+            }
+            
+            double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
+            old_energy += dist3d(vx, vy, vz, nx, ny, nz);
+            new_energy += dist3d(ux, uy, uz, nx, ny, nz); // V takes U's old slot
         }
-        
-        double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
-        old_energy += dist3d(vx, vy, vz, nx, ny, nz);
-        new_energy += dist3d(ux, uy, uz, nx, ny, nz);
     }
 
     igraph_vector_int_destroy(&u_edges);
@@ -146,14 +176,25 @@ void layered_sphere_init(LayeredSphereContext* ctx, int node_count) {
     memset(ctx, 0, sizeof(LayeredSphereContext));
     ctx->initialized = true;
     ctx->phase = PHASE_INIT;
+    ctx->grids = NULL;
+    ctx->node_to_sphere_id = NULL;
+    ctx->node_to_slot_idx = NULL;
     ctx->cut_edges = NULL;
-    igraph_vector_int_init(&ctx->sphere_ids, node_count);
 }
 
 void layered_sphere_cleanup(LayeredSphereContext* ctx) {
     if (ctx->initialized) {
-        igraph_vector_int_destroy(&ctx->sphere_ids);
-        if (ctx->cut_edges) { free(ctx->cut_edges); ctx->cut_edges = NULL; }
+        if (ctx->cut_edges) free(ctx->cut_edges);
+        if (ctx->node_to_sphere_id) free(ctx->node_to_sphere_id);
+        if (ctx->node_to_slot_idx) free(ctx->node_to_slot_idx);
+        
+        if (ctx->grids) {
+            for (int s = 0; s < ctx->num_spheres; s++) {
+                if (ctx->grids[s].slots) free(ctx->grids[s].slots);
+                if (ctx->grids[s].slot_occupant) free(ctx->grids[s].slot_occupant);
+            }
+            free(ctx->grids);
+        }
     }
     ctx->initialized = false;
 }
@@ -166,13 +207,15 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
     int ecount = igraph_ecount(ig);
 
     // ---------------------------------------------------------
-    // PHASE 0: Init
+    // PHASE 0: Dynamic Scaling & Sparse Grid Placement
     // ---------------------------------------------------------
     if (ctx->phase == PHASE_INIT) {
-        printf("[DEBUG] PHASE 0: Starting initialization for %d nodes and %d edges...\n", vcount, ecount);
+        printf("[DEBUG] PHASE 0: Initializing Sparse Grids for %d nodes...\n", vcount);
         
         ctx->num_spheres = (int)fmax(3.0, sqrt(vcount) * 0.5);
-        printf("[DEBUG] Dynamically calculated target spheres: %d\n", ctx->num_spheres);
+        ctx->grids = calloc(ctx->num_spheres, sizeof(SphereGrid));
+        ctx->node_to_sphere_id = malloc(vcount * sizeof(int));
+        ctx->node_to_slot_idx = malloc(vcount * sizeof(int));
 
         igraph_vector_int_t coreness; igraph_vector_int_init(&coreness, vcount);
         igraph_coreness(ig, &coreness, IGRAPH_ALL);
@@ -187,6 +230,18 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         double max_b = get_vector_max(&betweenness);
         double max_e = get_vector_max(&eccentricity);
 
+	// ---------------------------------------------------------
+        // Calculate Communities (Leiden)
+        // ---------------------------------------------------------
+        igraph_vector_int_t membership;
+        igraph_vector_int_init(&membership, vcount);
+        
+        // Resolution = 1.0 is standard. Increase it to get smaller, more granular communities.
+        // Beta = 0.01 is standard for randomness.
+        igraph_community_leiden(ig, NULL, NULL, 1.0, 0.01, false, 2, &membership, NULL, NULL);
+        
+        printf("[DEBUG] Leiden Community Detection found %d communities.\n", 
+               get_vector_int_max(&membership) + 1);
         NodeComposite *composite_nodes = malloc(vcount * sizeof(NodeComposite));
         for (int i = 0; i < vcount; i++) {
             double c_norm = VECTOR(coreness)[i] / max_c;
@@ -202,10 +257,11 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         for (int i = 0; i < vcount; i++) {
             int assigned_sphere = i / nodes_per_sphere;
             if (assigned_sphere >= ctx->num_spheres) assigned_sphere = ctx->num_spheres - 1;
-            VECTOR(ctx->sphere_ids)[composite_nodes[i].id] = assigned_sphere;
+            ctx->node_to_sphere_id[composite_nodes[i].id] = assigned_sphere;
         }
         free(composite_nodes);
 
+        // Edge Cutting
         ctx->cut_edges = calloc(ecount, sizeof(bool));
         igraph_vector_int_t edge_pairs; igraph_vector_int_init(&edge_pairs, ecount * 2);
         for (int i = 0; i < ecount; i++) {
@@ -215,20 +271,15 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         igraph_vector_t jaccard_sim; igraph_vector_init(&jaccard_sim, ecount);
         igraph_similarity_jaccard_pairs(ig, &jaccard_sim, &edge_pairs, IGRAPH_ALL, 0); 
 
-        int cut_count = 0;
         for (int i = 0; i < ecount; i++) {
             igraph_integer_t u = VECTOR(edge_pairs)[i*2], v = VECTOR(edge_pairs)[i*2+1];
-            if (VECTOR(ctx->sphere_ids)[u] == VECTOR(ctx->sphere_ids)[v]) {
-                if (VECTOR(jaccard_sim)[i] < 0.05) {
-                    ctx->cut_edges[i] = true;
-                    cut_count++;
-                }
+            if (ctx->node_to_sphere_id[u] == ctx->node_to_sphere_id[v]) {
+                if (VECTOR(jaccard_sim)[i] < 0.05) ctx->cut_edges[i] = true;
             }
         }
-        printf("[DEBUG] Cut %d weak intra-sphere ties based on Jaccard similarity.\n", cut_count);
-        
         igraph_vector_int_destroy(&edge_pairs); igraph_vector_destroy(&jaccard_sim);
 
+        // Density & Sparse Grid Calculation
         igraph_vector_t transitivity; igraph_vector_init(&transitivity, vcount);
         igraph_transitivity_local_undirected(ig, &transitivity, igraph_vss_all(), IGRAPH_TRANSITIVITY_ZERO);
 
@@ -239,45 +290,72 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         #pragma omp parallel for schedule(dynamic)
         for (int s = 0; s < ctx->num_spheres; s++) {
             int n_in_group = 0;
-            for (int i = 0; i < vcount; i++) if (VECTOR(ctx->sphere_ids)[i] == s) n_in_group++;
+            for (int i = 0; i < vcount; i++) if (ctx->node_to_sphere_id[i] == s) n_in_group++;
             if (n_in_group == 0) continue;
 
-            NodeDensity *group_nodes = malloc(n_in_group * sizeof(NodeDensity));
+            double radius = base_radius + (s * layer_spacing);
+            
+            // MATH: Surface Area Proportional Grid Scaling
+            // We guarantee at least 3x empty space, scaling up quadratically for outer spheres
+            int M_s = (int)fmax(n_in_group * 3.0, (4.0 * M_PI * radius * radius) / 20.0);
+            if (M_s > 100000) M_s = 100000; // Hard cap to prevent memory exhaustion on massive graphs
+            
+            ctx->grids[s].max_slots = M_s;
+            ctx->grids[s].num_occupants = n_in_group;
+            ctx->grids[s].slots = malloc(M_s * sizeof(SpherePoint));
+            ctx->grids[s].slot_occupant = malloc(M_s * sizeof(int));
+            
+            for(int k=0; k<M_s; k++) ctx->grids[s].slot_occupant[k] = -1; // -1 means empty
+
+            // Generate dense Fibonacci grid
+            for (int i = 0; i < M_s; i++) {
+                double phi = acos(1.0 - 2.0 * (i + 0.5) / M_s);
+                double theta = M_PI * (1.0 + sqrt(5.0)) * i;
+                ctx->grids[s].slots[i].x = radius * cos(theta) * sin(phi);
+                ctx->grids[s].slots[i].y = radius * sin(theta) * sin(phi);
+                ctx->grids[s].slots[i].z = radius * cos(phi);
+
+                double norm_x = fmod(theta, 2 * M_PI) / (2 * M_PI);
+                if (norm_x < 0) norm_x += 1.0;
+                ctx->grids[s].slots[i].hilbert_dist = xy2d(hilbert_res, (int)(norm_x*(hilbert_res-1)), (int)((phi/M_PI)*(hilbert_res-1)));
+            }
+            qsort(ctx->grids[s].slots, M_s, sizeof(SpherePoint), compare_points);
+
+	    // Group nodes by Community and Density
+            NodePlacement *group_nodes = malloc(n_in_group * sizeof(NodePlacement));
             int idx = 0;
             for (int i = 0; i < vcount; i++) {
-                if (VECTOR(ctx->sphere_ids)[i] == s) {
+                if (ctx->node_to_sphere_id[i] == s) {
                     group_nodes[idx].id = i;
+                    group_nodes[idx].community_id = VECTOR(membership)[i];
                     group_nodes[idx].density = VECTOR(transitivity)[i];
                     idx++;
                 }
             }
-            qsort(group_nodes, n_in_group, sizeof(NodeDensity), compare_nodes_density);
+            
+            // This is the magic step. The Hilbert curve will now draw physical
+            // boundaries around these sorted communities on the sphere surface.
+            qsort(group_nodes, n_in_group, sizeof(NodePlacement), compare_nodes_placement);
 
-            SpherePoint *group_pts = malloc(n_in_group * sizeof(SpherePoint));
-            double radius = base_radius + (s * layer_spacing);
 
-            for (int i = 0; i < n_in_group; i++) {
-                double phi = acos(1.0 - 2.0 * (i + 0.5) / n_in_group);
-                double theta = M_PI * (1.0 + sqrt(5.0)) * i;
-                group_pts[i].x = radius * cos(theta) * sin(phi);
-                group_pts[i].y = radius * sin(theta) * sin(phi);
-                group_pts[i].z = radius * cos(phi);
-
-                double norm_x = fmod(theta, 2 * M_PI) / (2 * M_PI);
-                if (norm_x < 0) norm_x += 1.0;
-                group_pts[i].hilbert_dist = xy2d(hilbert_res, (int)(norm_x*(hilbert_res-1)), (int)((phi/M_PI)*(hilbert_res-1)));
-            }
-            qsort(group_pts, n_in_group, sizeof(SpherePoint), compare_points);
-
+            // Sparse assignment across the grid
+            int step = M_s / n_in_group;
             for (int i = 0; i < n_in_group; i++) {
                 int node_id = group_nodes[i].id;
-                MATRIX(graph->current_layout, node_id, 0) = group_pts[i].x;
-                MATRIX(graph->current_layout, node_id, 1) = group_pts[i].y;
-                MATRIX(graph->current_layout, node_id, 2) = group_pts[i].z;
+                int slot_idx = i * step;
+                if (slot_idx >= M_s) slot_idx = M_s - 1; // Failsafe
+                
+                ctx->grids[s].slot_occupant[slot_idx] = node_id;
+                ctx->node_to_slot_idx[node_id] = slot_idx;
+                
+                MATRIX(graph->current_layout, node_id, 0) = ctx->grids[s].slots[slot_idx].x;
+                MATRIX(graph->current_layout, node_id, 1) = ctx->grids[s].slots[slot_idx].y;
+                MATRIX(graph->current_layout, node_id, 2) = ctx->grids[s].slots[slot_idx].z;
             }
-            free(group_nodes); free(group_pts);
+            free(group_nodes);
         }
 
+        // Sync initial layout visually
         for (int i=0; i<vcount; i++) {
             graph->nodes[i].position[0] = MATRIX(graph->current_layout, i, 0);
             graph->nodes[i].position[1] = MATRIX(graph->current_layout, i, 1);
@@ -286,66 +364,83 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
 
         igraph_vector_int_destroy(&coreness); igraph_vector_destroy(&betweenness); 
         igraph_vector_destroy(&eccentricity); igraph_vector_destroy(&transitivity);
+        igraph_vector_int_destroy(&membership);
         
         ctx->phase = PHASE_INTRA_SPHERE;
         ctx->phase_iter = 0;
-        printf("[DEBUG] PHASE 0 COMPLETE. Moving to Phase 1.\n");
         return true; 
     }
 
     // ---------------------------------------------------------
-    // PHASE 1: Parallel Intra-Sphere (With Simulated Annealing)
+    // PHASE 1: Parallel Intra-Sphere Random-Walk
     // ---------------------------------------------------------
     if (ctx->phase == PHASE_INTRA_SPHERE) {
-        int local_swaps = 0;
-        int evaluated_pairs = 0;
-        
-        // Dynamic Temperature: Starts hot, cools down by 5% every frame
+        int local_moves = 0, evaluated = 0;
         double temperature = 50.0 * pow(0.95, ctx->phase_iter);
         
-        #pragma omp parallel for schedule(dynamic) reduction(+:local_swaps, evaluated_pairs)
+        #pragma omp parallel for schedule(dynamic) reduction(+:local_moves, evaluated)
         for (int s = 0; s < ctx->num_spheres; s++) {
+            int max_slots = ctx->grids[s].max_slots;
+            
             for (int u = 0; u < vcount; u++) {
-                if (VECTOR(ctx->sphere_ids)[u] != s) continue;
-                for (int v = u + 1; v < vcount; v++) {
-                    if (VECTOR(ctx->sphere_ids)[v] != s) continue;
+                if (ctx->node_to_sphere_id[u] != s) continue;
+                int current_slot = ctx->node_to_slot_idx[u];
+                
+                // Attempt 15 random moves/slides across the fine grid per node
+                for (int attempt = 0; attempt < 15; attempt++) {
+                    evaluated++;
                     
-                    evaluated_pairs++;
-                    double delta = calculate_swap_delta(ig, &graph->current_layout, &ctx->sphere_ids, ctx->cut_edges, u, v, s, s);
-                    bool accept_swap = false;
+                    int target_slot = (int)(fast_rand_float(u, attempt, ctx->phase_iter) * max_slots);
+                    if (target_slot >= max_slots) target_slot = max_slots - 1;
+                    if (target_slot == current_slot) continue;
                     
-                    if (delta < -0.001) {
-                        accept_swap = true; // Pure improvement
-                    } else if (temperature > 0.01) {
-                        // Accept worse layouts probabilistically to escape local minima
-                        double prob = exp(-delta / temperature);
-                        if (fast_rand_float(u, v, ctx->phase_iter) < prob) {
-                            accept_swap = true;
-                        }
-                    }
+                    double delta = calculate_move_delta(ig, &graph->current_layout, ctx, u, s, target_slot, true, s, s);
+                    bool accept = false;
                     
-                    if (accept_swap) {
-                        for (int dim = 0; dim < 3; dim++) {
-                            double temp = MATRIX(graph->current_layout, u, dim);
-                            MATRIX(graph->current_layout, u, dim) = MATRIX(graph->current_layout, v, dim);
-                            MATRIX(graph->current_layout, v, dim) = temp;
+                    if (delta < -0.001) accept = true;
+                    else if (temperature > 0.01 && fast_rand_float(u, target_slot, ctx->phase_iter) < exp(-delta / temperature)) accept = true;
+                    
+                    if (accept) {
+                        int v = ctx->grids[s].slot_occupant[target_slot];
+                        
+                        // U slides to target
+                        MATRIX(graph->current_layout, u, 0) = ctx->grids[s].slots[target_slot].x;
+                        MATRIX(graph->current_layout, u, 1) = ctx->grids[s].slots[target_slot].y;
+                        MATRIX(graph->current_layout, u, 2) = ctx->grids[s].slots[target_slot].z;
+                        ctx->grids[s].slot_occupant[target_slot] = u;
+                        ctx->node_to_slot_idx[u] = target_slot;
+                        
+                        // If occupied, V slides to U's old spot
+                        if (v != -1) {
+                            MATRIX(graph->current_layout, v, 0) = ctx->grids[s].slots[current_slot].x;
+                            MATRIX(graph->current_layout, v, 1) = ctx->grids[s].slots[current_slot].y;
+                            MATRIX(graph->current_layout, v, 2) = ctx->grids[s].slots[current_slot].z;
+                            ctx->grids[s].slot_occupant[current_slot] = v;
+                            ctx->node_to_slot_idx[v] = current_slot;
                             
-                            graph->nodes[u].position[dim] = MATRIX(graph->current_layout, u, dim);
-                            graph->nodes[v].position[dim] = MATRIX(graph->current_layout, v, dim);
+                            graph->nodes[v].position[0] = MATRIX(graph->current_layout, v, 0);
+                            graph->nodes[v].position[1] = MATRIX(graph->current_layout, v, 1);
+                            graph->nodes[v].position[2] = MATRIX(graph->current_layout, v, 2);
+                        } else {
+                            ctx->grids[s].slot_occupant[current_slot] = -1; // Slot is now empty
                         }
-                        local_swaps++;
+                        
+                        graph->nodes[u].position[0] = MATRIX(graph->current_layout, u, 0);
+                        graph->nodes[u].position[1] = MATRIX(graph->current_layout, u, 1);
+                        graph->nodes[u].position[2] = MATRIX(graph->current_layout, u, 2);
+                        
+                        local_moves++;
+                        break; // Stop evaluating this node if a move was successful
                     }
                 }
             }
         }
 
-        printf("[DEBUG] P1 (Iter %d) Temp: %.2f | Evaluated: %d | Swaps: %d\n", ctx->phase_iter, temperature, evaluated_pairs, local_swaps);
+        printf("[DEBUG] P1 Temp: %.2f | Eval: %d | Moves: %d\n", temperature, evaluated, local_moves);
 
-        // Only move to Phase 2 when it has fully cooled AND no strict improvements can be made
-        if (temperature <= 0.01 && local_swaps == 0) {
-            printf("[DEBUG] Phase 1 Settled. Moving to Phase 2.\n");
+        if (temperature <= 0.01 && local_moves == 0) {
             ctx->phase = PHASE_INTER_SPHERE;
-            ctx->phase_iter = 0; // Reset iterator for Phase 2
+            ctx->phase_iter = 0; 
         } else {
             ctx->phase_iter++;
         }
@@ -354,59 +449,74 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
     }
 
     // ---------------------------------------------------------
-    // PHASE 2: Parallel Inter-Sphere (With Simulated Annealing)
+    // PHASE 2: Parallel Inter-Sphere Random-Walk
     // ---------------------------------------------------------
     if (ctx->phase == PHASE_INTER_SPHERE) {
-        int local_swaps = 0;
-        int evaluated_pairs = 0;
-        
-        // Start slightly cooler since Phase 1 already built a solid foundation
+        int local_moves = 0, evaluated = 0;
         double temperature = 20.0 * pow(0.95, ctx->phase_iter); 
         int start_s = ctx->inter_sphere_pass % 2;
         
-        #pragma omp parallel for schedule(dynamic) reduction(+:local_swaps, evaluated_pairs)
-        for (int s = start_s; s < ctx->num_spheres - 1; s += 2) {
+        // HOGWILD Approach: We accept benign read-races on neighbor coords globally 
+        // to ensure true global alignment without locking the entire matrix.
+        #pragma omp parallel for schedule(dynamic) reduction(+:local_moves, evaluated)
+        for (int s = start_s; s < ctx->num_spheres; s += 2) {
+            int max_slots = ctx->grids[s].max_slots;
+            
             for (int u = 0; u < vcount; u++) {
-                if (VECTOR(ctx->sphere_ids)[u] != s) continue;
-                for (int v = u + 1; v < vcount; v++) {
-                    if (VECTOR(ctx->sphere_ids)[v] != s) continue;
+                if (ctx->node_to_sphere_id[u] != s) continue;
+                int current_slot = ctx->node_to_slot_idx[u];
+                
+                for (int attempt = 0; attempt < 15; attempt++) {
+                    evaluated++;
+                    int target_slot = (int)(fast_rand_float(u, attempt, ctx->phase_iter) * max_slots);
+                    if (target_slot >= max_slots) target_slot = max_slots - 1;
+                    if (target_slot == current_slot) continue;
                     
-                    evaluated_pairs++;
+                    // Eval -1 ensures we check distance to ALL connected spheres
+                    double delta = calculate_move_delta(ig, &graph->current_layout, ctx, u, s, target_slot, false, -1, -1);
+                    bool accept = false;
                     
-                    // target_1 = -1 means we calculate distance to ALL connected spheres to ensure true global alignment
-                    double delta = calculate_swap_delta(ig, &graph->current_layout, &ctx->sphere_ids, NULL, u, v, -1, -1);
-                    bool accept_swap = false;
-                    
-                    if (delta < -0.001) {
-                        accept_swap = true;
-                    } else if (temperature > 0.01) {
-                        double prob = exp(-delta / temperature);
-                        if (fast_rand_float(u, v, ctx->phase_iter) < prob) {
-                            accept_swap = true;
-                        }
-                    }
+                    if (delta < -0.001) accept = true;
+                    else if (temperature > 0.01 && fast_rand_float(u, target_slot, ctx->phase_iter) < exp(-delta / temperature)) accept = true;
 
-                    if (accept_swap) {
-                        for (int dim=0; dim<3; dim++) {
-                            double t = MATRIX(graph->current_layout, u, dim);
-                            MATRIX(graph->current_layout, u, dim) = MATRIX(graph->current_layout, v, dim);
-                            MATRIX(graph->current_layout, v, dim) = t;
-                            graph->nodes[u].position[dim] = MATRIX(graph->current_layout, u, dim);
-                            graph->nodes[v].position[dim] = MATRIX(graph->current_layout, v, dim);
+                    if (accept) {
+                        int v = ctx->grids[s].slot_occupant[target_slot];
+                        
+                        MATRIX(graph->current_layout, u, 0) = ctx->grids[s].slots[target_slot].x;
+                        MATRIX(graph->current_layout, u, 1) = ctx->grids[s].slots[target_slot].y;
+                        MATRIX(graph->current_layout, u, 2) = ctx->grids[s].slots[target_slot].z;
+                        ctx->grids[s].slot_occupant[target_slot] = u;
+                        ctx->node_to_slot_idx[u] = target_slot;
+                        
+                        if (v != -1) {
+                            MATRIX(graph->current_layout, v, 0) = ctx->grids[s].slots[current_slot].x;
+                            MATRIX(graph->current_layout, v, 1) = ctx->grids[s].slots[current_slot].y;
+                            MATRIX(graph->current_layout, v, 2) = ctx->grids[s].slots[current_slot].z;
+                            ctx->grids[s].slot_occupant[current_slot] = v;
+                            ctx->node_to_slot_idx[v] = current_slot;
+                            
+                            graph->nodes[v].position[0] = MATRIX(graph->current_layout, v, 0);
+                            graph->nodes[v].position[1] = MATRIX(graph->current_layout, v, 1);
+                            graph->nodes[v].position[2] = MATRIX(graph->current_layout, v, 2);
+                        } else {
+                            ctx->grids[s].slot_occupant[current_slot] = -1;
                         }
-                        local_swaps++;
+                        
+                        graph->nodes[u].position[0] = MATRIX(graph->current_layout, u, 0);
+                        graph->nodes[u].position[1] = MATRIX(graph->current_layout, u, 1);
+                        graph->nodes[u].position[2] = MATRIX(graph->current_layout, u, 2);
+                        
+                        local_moves++;
+                        break;
                     }
                 }
             }
         }
 
-        printf("[DEBUG] P2 (Iter %d) %s Pass | Temp: %.2f | Evaluated: %d | Swaps: %d\n", 
-               ctx->phase_iter, (ctx->inter_sphere_pass % 2 == 0) ? "Even" : "Odd", temperature, evaluated_pairs, local_swaps);
+        printf("[DEBUG] P2 Temp: %.2f | Eval: %d | Moves: %d\n", temperature, evaluated, local_moves);
 
         ctx->inter_sphere_pass++;
-        
-        if (temperature <= 0.01 && local_swaps == 0 && (ctx->inter_sphere_pass % 2 == 0)) {
-            printf("[DEBUG] Phase 2 Settled. Layout Complete!\n");
+        if (temperature <= 0.01 && local_moves == 0 && (ctx->inter_sphere_pass % 2 == 0)) {
             ctx->phase = PHASE_DONE;
             return false; 
         }
@@ -424,12 +534,12 @@ const char* layered_sphere_get_stage_name(LayeredSphereContext* ctx) {
     if (!ctx || !ctx->initialized) return "Layered Sphere - Uninitialized";
 
     switch (ctx->phase) {
-        case PHASE_INIT: return "Phase 0: Metric Calculation & Grid Placement";
+        case PHASE_INIT: return "Phase 0: Sparse Grid Initialization";
         case PHASE_INTRA_SPHERE: 
-            snprintf(stage_name, sizeof(stage_name), "Phase 1: Parallel Intra-Sphere (%d Spheres)", ctx->num_spheres);
+            snprintf(stage_name, sizeof(stage_name), "Phase 1: Intra-Sphere Sliding (%d Spheres)", ctx->num_spheres);
             return stage_name;
         case PHASE_INTER_SPHERE:
-            snprintf(stage_name, sizeof(stage_name), "Phase 2: Parallel Inter-Sphere (%s Pairs)", 
+            snprintf(stage_name, sizeof(stage_name), "Phase 2: Global Align (%s Pairs)", 
                     (ctx->inter_sphere_pass % 2 == 0) ? "Even" : "Odd");
             return stage_name;
         case PHASE_DONE: return "Optimization Complete";

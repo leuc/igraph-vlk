@@ -5,6 +5,20 @@
 #include <igraph.h>
 #include "graph_loader.h" 
 
+// Define a physical grid slot on a sphere
+typedef struct {
+    double x, y, z;
+    int hilbert_dist;
+} SpherePoint;
+
+// Manages the sparse grid for a single sphere layer
+typedef struct {
+    int max_slots;
+    int num_occupants;
+    SpherePoint* slots;      // The physical coordinates of all available slots
+    int* slot_occupant;      // Array mapped to slots: -1 if empty, Node ID if occupied
+} SphereGrid;
+
 typedef enum {
     PHASE_INIT = 0,
     PHASE_INTRA_SPHERE = 1,
@@ -18,11 +32,14 @@ typedef struct LayeredSphereContext {
     int current_iter;
     int total_iters;
     
-    // Tracks iterations within a specific phase for Simulated Annealing
     int phase_iter; 
     
     int num_spheres;
-    igraph_vector_int_t sphere_ids;
+    SphereGrid* grids;            // Array of size num_spheres
+    
+    int* node_to_sphere_id;       // Fast lookup: node_id -> sphere_id
+    int* node_to_slot_idx;        // Fast lookup: node_id -> slot_idx (where is the node?)
+    
     bool* cut_edges; 
     int inter_sphere_pass; 
 } LayeredSphereContext;
