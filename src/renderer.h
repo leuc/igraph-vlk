@@ -71,6 +71,7 @@ typedef struct {
     VkBuffer edgeVertexBuffer;
     VkDeviceMemory edgeVertexBufferMemory;
     uint32_t edgeCount;
+    uint32_t edgeVertexCount;
 
     VkBuffer labelVertexBuffer;
     VkDeviceMemory labelVertexBufferMemory;

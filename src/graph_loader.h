@@ -77,6 +77,7 @@ typedef struct {
     char* node_attr_name;
     char* edge_attr_name;
     GraphProperties props;
+    LayoutType active_layout;
     struct OpenOrdContext* openord;
     struct LayeredSphereContext* layered_sphere;
 } GraphData;

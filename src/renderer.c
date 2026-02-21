@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #define MAX_FRAMES_IN_FLIGHT 2
 #define FONT_PATH "/usr/share/fonts/truetype/inconsolata/Inconsolata.otf"
@@ -73,7 +74,7 @@ static VkResult create_shader_module(VkDevice device, const char* path, VkShader
 }
 
 int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
-    r->window = window; r->currentFrame = 0; r->nodeCount = graph->node_count; r->edgeCount = graph->edge_count;
+    r->window = window; r->currentFrame = 0; r->nodeCount = graph->node_count; r->edgeCount = graph->edge_count; r->edgeVertexCount = 0;
     r->showLabels = true; r->showNodes = true; r->showEdges = true; r->showUI = true; r->layoutScale = 1.0f;
     
     glfwSetWindowTitle(window, "igraph-vlk");
@@ -285,7 +286,8 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
     r->nodeCount = graph->node_count; r->edgeCount = graph->edge_count;
     if (r->instanceBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(r->device, r->instanceBuffer, NULL); vkFreeMemory(r->device, r->instanceBufferMemory, NULL); vkDestroyBuffer(r->device, r->edgeVertexBuffer, NULL); vkFreeMemory(r->device, r->edgeVertexBufferMemory, NULL); if (r->labelInstanceBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(r->device, r->labelInstanceBuffer, NULL); vkFreeMemory(r->device, r->labelInstanceBufferMemory, NULL); } }
     createBuffer(r->device, r->physicalDevice, sizeof(Node)*r->nodeCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->instanceBuffer, &r->instanceBufferMemory);
-    createBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex)*r->edgeCount*2, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
+    int segments = (graph->active_layout == LAYOUT_LAYERED_SPHERE) ? 20 : 1; r->edgeVertexCount = r->edgeCount * segments * 2;
+    createBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex)*r->edgeVertexCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
     Node* sorted = malloc(sizeof(Node) * graph->node_count); uint32_t currentOffset = 0;
     for (int t = 0; t < PLATONIC_COUNT; t++) {
         r->platonicDrawCalls[t].firstInstance = currentOffset; uint32_t count = 0;
@@ -297,13 +299,75 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
         r->platonicDrawCalls[t].count = count; currentOffset += count;
     }
     updateBuffer(r->device, r->instanceBufferMemory, sizeof(Node)*graph->node_count, sorted);
-    EdgeVertex* evs = malloc(sizeof(EdgeVertex)*graph->edge_count*2);
+    EdgeVertex* evs = malloc(sizeof(EdgeVertex)*r->edgeVertexCount);
+    bool use_curves = (graph->active_layout == LAYOUT_LAYERED_SPHERE);
+    uint32_t idx = 0;
+
     for(uint32_t i=0; i<graph->edge_count; i++) {
-        vec3 p1, p2; glm_vec3_scale(graph->nodes[graph->edges[i].from].position, r->layoutScale, p1); glm_vec3_scale(graph->nodes[graph->edges[i].to].position, r->layoutScale, p2);
-        memcpy(evs[i*2].pos, p1, 12); memcpy(evs[i*2].color, graph->nodes[graph->edges[i].from].color, 12); evs[i*2].size = graph->edges[i].size;
-        memcpy(evs[i*2+1].pos, p2, 12); memcpy(evs[i*2+1].color, graph->nodes[graph->edges[i].to].color, 12); evs[i*2+1].size = graph->edges[i].size;
+        vec3 p1, p2; 
+        glm_vec3_scale(graph->nodes[graph->edges[i].from].position, r->layoutScale, p1); 
+        glm_vec3_scale(graph->nodes[graph->edges[i].to].position, r->layoutScale, p2);
+
+        if (use_curves) {
+            float r1 = glm_vec3_norm(p1);
+            float r2 = glm_vec3_norm(p2);
+            
+            if (r1 < 0.001f || r2 < 0.001f) {
+                for(int s=0; s<segments; s++) {
+                   float t1 = (float)s / segments; float t2 = (float)(s + 1) / segments;
+                   vec3 v1, v2; glm_vec3_lerp(p1, p2, t1, v1); glm_vec3_lerp(p1, p2, t2, v2);
+                   memcpy(evs[idx].pos, v1, 12); memcpy(evs[idx].color, graph->nodes[graph->edges[i].from].color, 12); evs[idx].size = graph->edges[i].size; idx++;
+                   memcpy(evs[idx].pos, v2, 12); memcpy(evs[idx].color, graph->nodes[graph->edges[i].to].color, 12); evs[idx].size = graph->edges[i].size; idx++;
+                }
+                continue;
+            }
+
+            vec3 n1, n2;
+            glm_vec3_divs(p1, r1, n1);
+            glm_vec3_divs(p2, r2, n2);
+            
+            float dot = glm_vec3_dot(n1, n2);
+            if (dot > 0.999f || dot < -0.999f) {
+                for(int s=0; s<segments; s++) {
+                   float t1 = (float)s / segments; float t2 = (float)(s + 1) / segments;
+                   vec3 v1, v2; glm_vec3_lerp(p1, p2, t1, v1); glm_vec3_lerp(p1, p2, t2, v2);
+                   memcpy(evs[idx].pos, v1, 12); memcpy(evs[idx].color, graph->nodes[graph->edges[i].from].color, 12); evs[idx].size = graph->edges[i].size; idx++;
+                   memcpy(evs[idx].pos, v2, 12); memcpy(evs[idx].color, graph->nodes[graph->edges[i].to].color, 12); evs[idx].size = graph->edges[i].size; idx++;
+                }
+                continue;
+            }
+            
+            float theta = acosf(dot);
+            float sin_theta = sinf(theta);
+
+            for (int s = 0; s < segments; s++) {
+                float t1 = (float)s / segments;
+                float t2 = (float)(s + 1) / segments;
+                
+                float w1_start = sinf((1.0f - t1) * theta) / sin_theta;
+                float w2_start = sinf(t1 * theta) / sin_theta;
+                vec3 dir1; glm_vec3_scale(n1, w1_start, dir1); glm_vec3_muladds(n2, w2_start, dir1);
+                
+                float w1_end = sinf((1.0f - t2) * theta) / sin_theta;
+                float w2_end = sinf(t2 * theta) / sin_theta;
+                vec3 dir2; glm_vec3_scale(n1, w1_end, dir2); glm_vec3_muladds(n2, w2_end, dir2);
+
+                float rad1 = r1 * (1.0f - t1) + r2 * t1;
+                float rad2 = r1 * (1.0f - t2) + r2 * t2;
+                
+                vec3 v1, v2;
+                glm_vec3_scale(dir1, rad1, v1);
+                glm_vec3_scale(dir2, rad2, v2);
+
+                memcpy(evs[idx].pos, v1, 12); memcpy(evs[idx].color, graph->nodes[graph->edges[i].from].color, 12); evs[idx].size = graph->edges[i].size; idx++;
+                memcpy(evs[idx].pos, v2, 12); memcpy(evs[idx].color, graph->nodes[graph->edges[i].to].color, 12); evs[idx].size = graph->edges[i].size; idx++;
+            }
+        } else {
+            memcpy(evs[idx].pos, p1, 12); memcpy(evs[idx].color, graph->nodes[graph->edges[i].from].color, 12); evs[idx].size = graph->edges[i].size; idx++;
+            memcpy(evs[idx].pos, p2, 12); memcpy(evs[idx].color, graph->nodes[graph->edges[i].to].color, 12); evs[idx].size = graph->edges[i].size; idx++;
+        }
     }
-    updateBuffer(r->device, r->edgeVertexBufferMemory, sizeof(EdgeVertex)*graph->edge_count*2, evs); free(evs);
+    updateBuffer(r->device, r->edgeVertexBufferMemory, sizeof(EdgeVertex)*r->edgeVertexCount, evs); free(evs);
     uint32_t tc = 0; for(uint32_t i=0; i<r->nodeCount; i++) if(graph->nodes[i].label) tc += strlen(graph->nodes[i].label);
     r->labelCharCount = tc;
     if(tc > 0) {
@@ -340,7 +404,7 @@ void renderer_draw_frame(Renderer* r) {
     vkCmdBindDescriptorSets(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[r->currentFrame], 0, NULL);
     if(r->showEdges && r->edgeCount > 0) {
         vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->edgePipeline);
-        VkDeviceSize off = 0; vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1, &r->edgeVertexBuffer, &off); vkCmdDraw(r->commandBuffers[r->currentFrame], r->edgeCount*2, 1, 0, 0);
+        VkDeviceSize off = 0; vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1, &r->edgeVertexBuffer, &off); vkCmdDraw(r->commandBuffers[r->currentFrame], r->edgeVertexCount, 1, 0, 0);
     }
     if(r->showNodes && r->nodeCount > 0) {
         float alpha_face = 0.5f;

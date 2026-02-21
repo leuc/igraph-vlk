@@ -80,6 +80,7 @@ int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_
         int side = (int)ceil(pow(igraph_vcount(&data->g), 1.0/3.0));
         igraph_layout_grid_3d(&data->g, &data->current_layout, side, side);
     }
+    data->active_layout = layout_type;
 
     refresh_graph_data(data);
     return 0;
@@ -152,6 +153,7 @@ void graph_filter_coreness(GraphData* data, int min_coreness) {
 
 void graph_layout_step(GraphData* data, LayoutType type, int iterations) {
     if (!data->graph_initialized) return;
+    data->active_layout = type;
     switch (type) {
         case LAYOUT_FR_3D: igraph_layout_fruchterman_reingold_3d(&data->g, &data->current_layout, 1, iterations, (igraph_real_t)data->node_count, NULL, NULL, NULL, NULL, NULL, NULL, NULL); break;
         case LAYOUT_KK_3D: igraph_layout_kamada_kawai_3d(&data->g, &data->current_layout, 1, data->node_count * 10, 0.0, (igraph_real_t)data->node_count, NULL, NULL, NULL, NULL, NULL, NULL, NULL); break;
