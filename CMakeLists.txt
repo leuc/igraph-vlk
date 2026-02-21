@@ -21,6 +21,8 @@ set(SHADERS
     shaders/label.frag
     shaders/ui.vert
     shaders/ui.frag
+    shaders/transparent_sphere.vert
+    shaders/transparent_sphere.frag
 )
 
 foreach(SHADER ${SHADERS})
@@ -72,4 +74,6 @@ target_compile_definitions(igraph-vlk PRIVATE
     LABEL_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/label.frag.spv"
     UI_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/ui.vert.spv"
     UI_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/ui.frag.spv"
+    SPHERE_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/transparent_sphere.vert.spv"
+    SPHERE_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/transparent_sphere.frag.spv"
 )

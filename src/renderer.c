@@ -1,6 +1,7 @@
 #include "renderer.h"
 #include "polyhedron.h"
 #include "text.h"
+#include "layered_sphere.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,7 +76,9 @@ static VkResult create_shader_module(VkDevice device, const char* path, VkShader
 
 int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
     r->window = window; r->currentFrame = 0; r->nodeCount = graph->node_count; r->edgeCount = graph->edge_count; r->edgeVertexCount = 0;
-    r->showLabels = true; r->showNodes = true; r->showEdges = true; r->showUI = true; r->layoutScale = 1.0f;
+    r->showLabels = true; r->showNodes = true; r->showEdges = true; r->showUI = true; r->showSpheres = true; r->layoutScale = 1.0f;
+    r->numSpheres = 0; r->sphereIndexCounts = NULL; r->sphereIndexOffsets = NULL;
+    r->sphereVertexBuffer = VK_NULL_HANDLE; r->sphereIndexBuffer = VK_NULL_HANDLE;
     
     glfwSetWindowTitle(window, "igraph-vlk");
     
@@ -188,6 +191,33 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
     VkGraphicsPipelineCreateInfo linePInfo = { .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = nstages, .pVertexInputState = &nvi, .pInputAssemblyState = &niAs, .pViewportState = &vpS, .pRasterizationState = &rasLine, .pMultisampleState = &mul, .pColorBlendState = &colS_no_blend, .layout = r->pipelineLayout, .renderPass = r->renderPass };
     vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &linePInfo, NULL, &r->nodeEdgePipeline);
 
+    VkShaderModule svMod, sfMod;
+    create_shader_module(r->device, SPHERE_VERT_SHADER_PATH, &svMod); create_shader_module(r->device, SPHERE_FRAG_SHADER_PATH, &sfMod);
+    VkPipelineShaderStageCreateInfo sstages[] = { {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,VK_SHADER_STAGE_VERTEX_BIT,svMod,"main",NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,VK_SHADER_STAGE_FRAGMENT_BIT,sfMod,"main",NULL} };
+    VkVertexInputBindingDescription sb[] = { {0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX} };
+    VkVertexInputAttributeDescription sa[] = { {0,0,VK_FORMAT_R32G32B32_SFLOAT,0}, {1,0,VK_FORMAT_R32G32B32_SFLOAT,12}, {2,0,VK_FORMAT_R32G32_SFLOAT,24} };
+    VkPipelineVertexInputStateCreateInfo svi = { .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 1, .pVertexBindingDescriptions = sb, .vertexAttributeDescriptionCount = 3, .pVertexAttributeDescriptions = sa };
+    
+    // Transparent blending
+    VkPipelineColorBlendAttachmentState colB_trans = {
+        .colorWriteMask = 0xF, .blendEnable = VK_TRUE,
+        .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA, .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        .colorBlendOp = VK_BLEND_OP_ADD,
+        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE, .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+        .alphaBlendOp = VK_BLEND_OP_ADD
+    };
+    VkPipelineColorBlendStateCreateInfo colS_trans = { .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO, .attachmentCount = 1, .pAttachments = &colB_trans };
+    
+    // Disable depth write for transparent objects (usually), but keeping depth test
+    VkPipelineDepthStencilStateCreateInfo ds = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_FALSE, .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL
+    };
+
+    VkGraphicsPipelineCreateInfo spInfo = { .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = sstages, .pVertexInputState = &svi, .pInputAssemblyState = &niAs, .pViewportState = &vpS, .pRasterizationState = &ras, .pMultisampleState = &mul, .pColorBlendState = &colS_trans, .pDepthStencilState = &ds, .layout = r->pipelineLayout, .renderPass = r->renderPass };
+    vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &spInfo, NULL, &r->spherePipeline);
+    vkDestroyShaderModule(r->device, sfMod, NULL); vkDestroyShaderModule(r->device, svMod, NULL);
+
     VkPipelineShaderStageCreateInfo estages[] = { {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,VK_SHADER_STAGE_VERTEX_BIT,eVMod,"main",NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,VK_SHADER_STAGE_FRAGMENT_BIT,efMod,"main",NULL} };
     VkVertexInputBindingDescription eb[] = { {0, sizeof(EdgeVertex), VK_VERTEX_INPUT_RATE_VERTEX} };
     VkVertexInputAttributeDescription ea[] = { {0,0,VK_FORMAT_R32G32B32_SFLOAT,0}, {1,0,VK_FORMAT_R32G32B32_SFLOAT,12}, {2,0,VK_FORMAT_R32_SFLOAT,24} };
@@ -284,7 +314,121 @@ void renderer_update_ui(Renderer* r, const char* text) {
 void renderer_update_graph(Renderer* r, GraphData* graph) {
     vkDeviceWaitIdle(r->device);
     r->nodeCount = graph->node_count; r->edgeCount = graph->edge_count;
-    if (r->instanceBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(r->device, r->instanceBuffer, NULL); vkFreeMemory(r->device, r->instanceBufferMemory, NULL); vkDestroyBuffer(r->device, r->edgeVertexBuffer, NULL); vkFreeMemory(r->device, r->edgeVertexBufferMemory, NULL); if (r->labelInstanceBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(r->device, r->labelInstanceBuffer, NULL); vkFreeMemory(r->device, r->labelInstanceBufferMemory, NULL); } }
+    if (r->instanceBuffer != VK_NULL_HANDLE) { 
+        vkDestroyBuffer(r->device, r->instanceBuffer, NULL); vkFreeMemory(r->device, r->instanceBufferMemory, NULL); 
+        vkDestroyBuffer(r->device, r->edgeVertexBuffer, NULL); vkFreeMemory(r->device, r->edgeVertexBufferMemory, NULL); 
+        if (r->labelInstanceBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(r->device, r->labelInstanceBuffer, NULL); vkFreeMemory(r->device, r->labelInstanceBufferMemory, NULL); }
+        if (r->sphereVertexBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(r->device, r->sphereVertexBuffer, NULL); vkFreeMemory(r->device, r->sphereVertexBufferMemory, NULL); }
+        if (r->sphereIndexBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(r->device, r->sphereIndexBuffer, NULL); vkFreeMemory(r->device, r->sphereIndexBufferMemory, NULL); }
+        if (r->sphereIndexCounts) { free(r->sphereIndexCounts); r->sphereIndexCounts = NULL; }
+        if (r->sphereIndexOffsets) { free(r->sphereIndexOffsets); r->sphereIndexOffsets = NULL; }
+    }
+
+    // Generate Sphere Backgrounds if Layered Layout
+    if (graph->active_layout == LAYOUT_LAYERED_SPHERE && graph->layered_sphere && graph->layered_sphere->initialized) {
+        LayeredSphereContext* ctx = graph->layered_sphere;
+        r->numSpheres = ctx->num_spheres;
+        r->sphereIndexCounts = malloc(sizeof(uint32_t) * r->numSpheres);
+        r->sphereIndexOffsets = malloc(sizeof(uint32_t) * r->numSpheres);
+        
+        uint32_t totalVertices = 0;
+        uint32_t totalIndices = 0;
+        
+        // Pass 1: Calculate sizes
+        for (int s = 0; s < ctx->num_spheres; s++) {
+            int target_faces = ctx->grids[s].max_slots;
+            // Approximate: faces = 2 * rings * sectors. Let rings = sectors = sqrt(faces/2)
+            int rings = (int)sqrt(target_faces / 2.0);
+            if (rings < 8) rings = 8;
+            int sectors = rings * 2;
+            
+            // UV Sphere vertices: (rings + 1) * (sectors + 1)
+            // UV Sphere indices: rings * sectors * 6
+            totalVertices += (rings + 1) * (sectors + 1);
+            totalIndices += rings * sectors * 6;
+        }
+        
+        // Create buffers
+        createBuffer(r->device, r->physicalDevice, sizeof(Vertex)*totalVertices, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->sphereVertexBuffer, &r->sphereVertexBufferMemory);
+        createBuffer(r->device, r->physicalDevice, sizeof(uint32_t)*totalIndices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->sphereIndexBuffer, &r->sphereIndexBufferMemory);
+        
+        Vertex* allVerts = malloc(sizeof(Vertex) * totalVertices);
+        uint32_t* allIndices = malloc(sizeof(uint32_t) * totalIndices);
+        
+        uint32_t vOffset = 0;
+        uint32_t iOffset = 0;
+        
+        // Pass 2: Generate geometry
+        for (int s = 0; s < ctx->num_spheres; s++) {
+            // Infer radius from grid slot 0 (all slots have same radius)
+            double radius = 5.0; // Default
+            if (ctx->grids[s].max_slots > 0) {
+                double x = ctx->grids[s].slots[0].x;
+                double y = ctx->grids[s].slots[0].y;
+                double z = ctx->grids[s].slots[0].z;
+                radius = sqrt(x*x + y*y + z*z);
+            }
+            // Scale by layout scale
+            float R = (float)radius * r->layoutScale;
+
+            int target_faces = ctx->grids[s].max_slots;
+            int rings = (int)sqrt(target_faces / 2.0);
+            if (rings < 8) rings = 8;
+            int sectors = rings * 2;
+            
+            r->sphereIndexOffsets[s] = iOffset;
+            uint32_t startIndex = vOffset;
+            
+            float const R_inv = 1.f / R;
+            float const S = 1.f / (float)sectors;
+            float const T = 1.f / (float)rings;
+
+            for(int r_idx = 0; r_idx <= rings; r_idx++) {
+                float const y = sin( -M_PI_2 + M_PI * r_idx * T );
+                float const xz = cos( -M_PI_2 + M_PI * r_idx * T );
+                
+                for(int s_idx = 0; s_idx <= sectors; s_idx++) {
+                    float const x = xz * cos(2*M_PI * s_idx * S);
+                    float const z = xz * sin(2*M_PI * s_idx * S);
+                    
+                    vec3 n = {x, y, z};
+                    vec3 p; glm_vec3_scale(n, R, p);
+                    
+                    memcpy(allVerts[vOffset].pos, p, 12);
+                    memcpy(allVerts[vOffset].normal, n, 12); // Use normal for shading
+                    allVerts[vOffset].texCoord[0] = s_idx*S;
+                    allVerts[vOffset].texCoord[1] = r_idx*T;
+                    vOffset++;
+                }
+            }
+            
+            uint32_t indexCount = 0;
+            for(int r_idx = 0; r_idx < rings; r_idx++) {
+                for(int s_idx = 0; s_idx < sectors; s_idx++) {
+                    uint32_t curRow = startIndex + r_idx * (sectors + 1);
+                    uint32_t nextRow = startIndex + (r_idx + 1) * (sectors + 1);
+                    
+                    allIndices[iOffset++] = curRow + s_idx;
+                    allIndices[iOffset++] = nextRow + s_idx;
+                    allIndices[iOffset++] = nextRow + (s_idx + 1);
+                    
+                    allIndices[iOffset++] = curRow + s_idx;
+                    allIndices[iOffset++] = nextRow + (s_idx + 1);
+                    allIndices[iOffset++] = curRow + (s_idx + 1);
+                    
+                    indexCount += 6;
+                }
+            }
+            r->sphereIndexCounts[s] = indexCount;
+        }
+        
+        updateBuffer(r->device, r->sphereVertexBufferMemory, sizeof(Vertex)*totalVertices, allVerts);
+        updateBuffer(r->device, r->sphereIndexBufferMemory, sizeof(uint32_t)*totalIndices, allIndices);
+        free(allVerts); free(allIndices);
+    } else {
+        r->numSpheres = 0;
+    }
+
     createBuffer(r->device, r->physicalDevice, sizeof(Node)*r->nodeCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->instanceBuffer, &r->instanceBufferMemory);
     int segments = (graph->active_layout == LAYOUT_LAYERED_SPHERE) ? 20 : 1; r->edgeVertexCount = r->edgeCount * segments * 2;
     createBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex)*r->edgeVertexCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
@@ -435,6 +579,22 @@ void renderer_draw_frame(Renderer* r) {
         vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, lbs, los);
         vkCmdDraw(r->commandBuffers[r->currentFrame], 4, r->labelCharCount, 0, 0);
     }
+    
+    // Draw Transparent Spheres (Last for blending)
+    if(r->showSpheres && r->numSpheres > 0 && r->sphereVertexBuffer != VK_NULL_HANDLE) {
+        vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->spherePipeline);
+        VkBuffer vbs[] = {r->sphereVertexBuffer}; VkDeviceSize vos[] = {0};
+        vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1, vbs, vos);
+        vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->sphereIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        
+        // Draw from largest to smallest (outer to inner) to help with alpha blending order if outside
+        // Or smallest to largest if inside. 
+        // Simple loop for now.
+        for(int s = 0; s < r->numSpheres; s++) {
+             vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->sphereIndexCounts[s], 1, r->sphereIndexOffsets[s], 0, 0);
+        }
+    }
+
     if(r->showUI) {
         vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->uiPipeline);
         VkDeviceSize zero = 0; vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1, &r->uiBgVertexBuffer, &zero);

@@ -32,6 +32,7 @@ typedef struct {
     VkPipelineLayout pipelineLayout;
     VkPipeline graphicsPipeline;
     VkPipeline nodeEdgePipeline; // New pipeline for node edges
+    VkPipeline spherePipeline;   // Pipeline for semi-transparent spheres
     VkPipeline edgePipeline;
     VkPipeline labelPipeline;
     VkPipeline uiPipeline;
@@ -92,6 +93,16 @@ typedef struct {
     VkBuffer uiTextInstanceBuffer;
     VkDeviceMemory uiTextInstanceBufferMemory;
     uint32_t uiTextCharCount;
+
+    // Layered Spheres (Transparent)
+    VkBuffer sphereVertexBuffer;
+    VkDeviceMemory sphereVertexBufferMemory;
+    VkBuffer sphereIndexBuffer;
+    VkDeviceMemory sphereIndexBufferMemory;
+    uint32_t* sphereIndexCounts;   // Array of index counts per sphere
+    uint32_t* sphereIndexOffsets;  // Array of offsets into the index buffer
+    uint32_t numSpheres;           // Number of spheres to draw
+    bool showSpheres;              // Toggle
 } Renderer;
 
 int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph);
