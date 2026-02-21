@@ -338,8 +338,9 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
         for (int s = 0; s < ctx->num_spheres; s++) {
             int target_faces = ctx->grids[s].max_slots;
             // Approximate: faces = 2 * rings * sectors. Let rings = sectors = sqrt(faces/2)
-            int rings = (int)sqrt(target_faces / 2.0);
-            if (rings < 8) rings = 8;
+            // User requested reduced face count, so we divide target by 4 (approx half resolution in each dim)
+            int rings = (int)sqrt(target_faces / 8.0);
+            if (rings < 4) rings = 4;
             int sectors = rings * 2;
             
             // UV Sphere vertices: (rings + 1) * (sectors + 1)
@@ -372,8 +373,8 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
             float R = (float)radius * r->layoutScale;
 
             int target_faces = ctx->grids[s].max_slots;
-            int rings = (int)sqrt(target_faces / 2.0);
-            if (rings < 8) rings = 8;
+            int rings = (int)sqrt(target_faces / 8.0);
+            if (rings < 4) rings = 4;
             int sectors = rings * 2;
             
             r->sphereIndexOffsets[s] = iOffset;
@@ -582,6 +583,10 @@ void renderer_draw_frame(Renderer* r) {
     
     // Draw Transparent Spheres (Last for blending)
     if(r->showSpheres && r->numSpheres > 0 && r->sphereVertexBuffer != VK_NULL_HANDLE) {
+        float alpha_sphere = 0.2f / (float)r->numSpheres; // Scale transparency
+        if (alpha_sphere < 0.02f) alpha_sphere = 0.02f;
+        
+        vkCmdPushConstants(r->commandBuffers[r->currentFrame], r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_sphere);
         vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->spherePipeline);
         VkBuffer vbs[] = {r->sphereVertexBuffer}; VkDeviceSize vos[] = {0};
         vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1, vbs, vos);
