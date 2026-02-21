@@ -4,8 +4,7 @@
 #include <stdbool.h>
 #include <igraph.h>
 
-// Assuming your GraphData struct is defined in this header, 
-// or adjust the include to match your project structure.
+// Assuming your GraphData struct is defined here
 #include "graph_loader.h" 
 
 typedef enum {
@@ -21,15 +20,17 @@ typedef struct LayeredSphereContext {
     int current_iter;
     int total_iters;
     
-    // Graph properties
-    igraph_vector_int_t degrees;        // Now storing K-Coreness
+    // Dynamic Scaling Parameters
+    int num_spheres;
     
-    // For inside-out processing
-    igraph_vector_int_t unique_degrees; // Sorted highest to lowest
-    int current_degree_idx;             // Which sphere are we currently optimizing?
+    // Graph properties mapped to nodes
+    igraph_vector_int_t sphere_ids; // Maps node_id -> sphere_id
     
-    // Edge cutting based on Jaccard Similarity
-    bool* cut_edges;                    // Flat array tracking weak ties
+    // Edge cutting
+    bool* cut_edges; 
+    
+    // State tracking for Inter-Sphere Odd/Even passes
+    int inter_sphere_pass; 
 } LayeredSphereContext;
 
 void layered_sphere_init(LayeredSphereContext* ctx, int node_count);
