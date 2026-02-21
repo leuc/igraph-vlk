@@ -9,16 +9,6 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-// --- FAST THREAD-SAFE PRNG FOR OPENMP ---
-// Standard rand() causes lock contention in OpenMP. 
-static inline double fast_rand_float(unsigned int u, unsigned int v, unsigned int iter) {
-    unsigned int hash = u * 73856093 ^ v * 19349663 ^ iter * 83492791;
-    hash = (hash ^ (hash >> 16)) * 0x85ebca6b;
-    hash = (hash ^ (hash >> 13)) * 0xc2b2ae35;
-    hash = hash ^ (hash >> 16);
-    return (double)(hash % 100000) / 100000.0;
-}
-
 // --- HILBERT CURVE LOGIC ---
 void rot(int n, int *x, int *y, int rx, int ry) {
     if (ry == 0) {
@@ -44,7 +34,6 @@ typedef struct {
     int node_count;
 } CommData;
 
-// Sort communities by Average K-Core descending
 int compare_communities_kcore(const void *a, const void *b) {
     CommData* commA = (CommData*)a;
     CommData* commB = (CommData*)b;
@@ -58,24 +47,13 @@ typedef struct {
     double density; 
 } NodePlacement;
 
-// Sorts primarily by Community, secondarily by Density
 int compare_nodes_placement(const void *a, const void *b) {
     NodePlacement* nodeA = (NodePlacement*)a;
     NodePlacement* nodeB = (NodePlacement*)b;
-    
-    // Group by community first
     if (nodeA->community_id != nodeB->community_id) {
         return nodeA->community_id - nodeB->community_id;
     }
-    
-    // If in the same community, sort by density
     double diff = nodeA->density - nodeB->density;
-    return (diff > 0) - (diff < 0);
-}
-
-typedef struct { int id; double density; } NodeDensity;
-int compare_nodes_density(const void *a, const void *b) {
-    double diff = ((NodeDensity*)a)->density - ((NodeDensity*)b)->density;
     return (diff > 0) - (diff < 0);
 }
 
@@ -83,24 +61,7 @@ int compare_points(const void *a, const void *b) {
     return ((SpherePoint*)a)->hilbert_dist - ((SpherePoint*)b)->hilbert_dist;
 }
 
-typedef struct { int id; double composite_score; } NodeComposite;
-int compare_composite_desc(const void *a, const void *b) {
-    double diff = ((NodeComposite*)b)->composite_score - ((NodeComposite*)a)->composite_score;
-    return (diff > 0) - (diff < 0);
-}
-
 // --- MATH & ENERGY HELPERS ---
-double dist3d(double x1, double y1, double z1, double x2, double y2, double z2) {
-    return sqrt((x1-x2)*(x1-x2) + (y1-y2)*(y1-y2) + (z1-z2)*(z1-z2));
-}
-
-double get_vector_max(const igraph_vector_t* v) {
-    double max_val = 0;
-    for (int i = 0; i < igraph_vector_size(v); i++) {
-        if (VECTOR(*v)[i] > max_val && !isinf(VECTOR(*v)[i])) max_val = VECTOR(*v)[i];
-    }
-    return max_val == 0 ? 1.0 : max_val;
-}
 
 int get_vector_int_max(const igraph_vector_int_t* v) {
     int max_val = 0;
@@ -110,77 +71,123 @@ int get_vector_int_max(const igraph_vector_int_t* v) {
     return max_val == 0 ? 1 : max_val;
 }
 
-// Evaluates the energy change if Node U moves to a new grid slot.
-// Automatically handles "Sliding" (slot is empty) vs "Swapping" (slot is occupied by V).
-double calculate_move_delta(const igraph_t *ig, const igraph_matrix_t *layout, 
-                            LayeredSphereContext* ctx,
-                            int u, int target_sphere_s, int target_slot_k, 
-                            bool respect_cuts, int eval_sphere_1, int eval_sphere_2) {
-                                
+int find_closest_slot_by_hilbert(SphereGrid* grid, int target_h) {
+    int low = 0, high = grid->max_slots - 1;
+    while (low < high) {
+        int mid = low + (high - low) / 2;
+        if (grid->slots[mid].hilbert_dist < target_h) low = mid + 1;
+        else high = mid;
+    }
+    int best_idx = low;
+    if (low > 0 && abs(grid->slots[low-1].hilbert_dist - target_h) < abs(grid->slots[low].hilbert_dist - target_h)) {
+        best_idx = low - 1;
+    }
+    return best_idx;
+}
+
+// ---------------------------------------------------------
+// DELTA CALCULATION: INTRA-SPHERE (Euclidean Squared Distance)
+// ---------------------------------------------------------
+double calculate_move_delta_intra(const igraph_t *ig, const igraph_matrix_t *layout, 
+                                  LayeredSphereContext* ctx, int u, int target_sphere_s, int target_slot_k) {
     int v = ctx->grids[target_sphere_s].slot_occupant[target_slot_k];
+    double current_score = 0.0, potential_score = 0.0;
     
-    double old_energy = 0.0, new_energy = 0.0;
-    
-    double ux = MATRIX(*layout, u, 0), uy = MATRIX(*layout, u, 1), uz = MATRIX(*layout, u, 2);
-    double target_x = ctx->grids[target_sphere_s].slots[target_slot_k].x;
-    double target_y = ctx->grids[target_sphere_s].slots[target_slot_k].y;
-    double target_z = ctx->grids[target_sphere_s].slots[target_slot_k].z;
+    double tx = ctx->grids[target_sphere_s].slots[target_slot_k].x;
+    double ty = ctx->grids[target_sphere_s].slots[target_slot_k].y;
+    double tz = ctx->grids[target_sphere_s].slots[target_slot_k].z;
 
-    igraph_vector_int_t u_edges, v_edges;
-    igraph_vector_int_init(&u_edges, 0);
-    igraph_vector_int_init(&v_edges, 0);
-    
-    igraph_incident(ig, &u_edges, u, IGRAPH_ALL);
-    if (v != -1) igraph_incident(ig, &v_edges, v, IGRAPH_ALL);
+    int u_slot = ctx->node_to_slot_idx[u];
+    double ux = ctx->grids[target_sphere_s].slots[u_slot].x;
+    double uy = ctx->grids[target_sphere_s].slots[u_slot].y;
+    double uz = ctx->grids[target_sphere_s].slots[u_slot].z;
 
-    // Calculate delta for U's edges
-    for (int i = 0; i < igraph_vector_int_size(&u_edges); i++) {
-        igraph_integer_t edge_id = VECTOR(u_edges)[i];
-        //if (respect_cuts && ctx->cut_edges && ctx->cut_edges[edge_id]) continue;
+    igraph_vector_int_t neis; igraph_vector_int_init(&neis, 0);
+    igraph_incident(ig, &neis, u, IGRAPH_ALL);
+    for (int i = 0; i < igraph_vector_int_size(&neis); i++) {
+        igraph_integer_t from, to; igraph_edge(ig, VECTOR(neis)[i], &from, &to);
+        int neighbor = (from == u) ? to : from;
         
-        igraph_integer_t from, to;
-        igraph_edge(ig, edge_id, &from, &to);
-        igraph_integer_t neighbor = (from == u) ? to : from;
-        
-        if (neighbor == v) continue; // Distance between U and V doesn't change when they swap
-        
-        if (eval_sphere_1 != -1) {
-            int n_sphere = ctx->node_to_sphere_id[neighbor];
-            if (n_sphere != eval_sphere_1 && n_sphere != eval_sphere_2) continue;
-        }
+        // ONLY consider neighbors on the exact same sphere
+        if (neighbor == v || ctx->node_to_sphere_id[neighbor] != target_sphere_s) continue;
         
         double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
-        old_energy += dist3d(ux, uy, uz, nx, ny, nz);
-        new_energy += dist3d(target_x, target_y, target_z, nx, ny, nz); // U takes the target slot
+        current_score += (ux-nx)*(ux-nx) + (uy-ny)*(uy-ny) + (uz-nz)*(uz-nz);
+        potential_score += (tx-nx)*(tx-nx) + (ty-ny)*(ty-ny) + (tz-nz)*(tz-nz);
     }
+    igraph_vector_int_destroy(&neis);
 
-    // Calculate delta for V's edges (if target slot was occupied)
     if (v != -1) {
-        double vx = target_x, vy = target_y, vz = target_z;
-        for (int i = 0; i < igraph_vector_int_size(&v_edges); i++) {
-            igraph_integer_t edge_id = VECTOR(v_edges)[i];
-            //if (respect_cuts && ctx->cut_edges && ctx->cut_edges[edge_id]) continue;
-            
-            igraph_integer_t from, to;
-            igraph_edge(ig, edge_id, &from, &to);
-            igraph_integer_t neighbor = (from == v) ? to : from;
-            
-            if (neighbor == u) continue;
-            
-            if (eval_sphere_1 != -1) {
-                int n_sphere = ctx->node_to_sphere_id[neighbor];
-                if (n_sphere != eval_sphere_1 && n_sphere != eval_sphere_2) continue;
-            }
-            
-            double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
-            old_energy += dist3d(vx, vy, vz, nx, ny, nz);
-            new_energy += dist3d(ux, uy, uz, nx, ny, nz); // V takes U's old slot
-        }
-    }
+        igraph_vector_int_init(&neis, 0);
+        igraph_incident(ig, &neis, v, IGRAPH_ALL);
+        for (int i = 0; i < igraph_vector_int_size(&neis); i++) {
+            igraph_integer_t from, to; igraph_edge(ig, VECTOR(neis)[i], &from, &to);
+            int neighbor = (from == v) ? to : from;
+            if (neighbor == u || ctx->node_to_sphere_id[neighbor] != target_sphere_s) continue;
 
-    igraph_vector_int_destroy(&u_edges);
-    igraph_vector_int_destroy(&v_edges);
-    return new_energy - old_energy;
+            double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
+            current_score += (tx-nx)*(tx-nx) + (ty-ny)*(ty-ny) + (tz-nz)*(tz-nz);
+            potential_score += (ux-nx)*(ux-nx) + (uy-ny)*(uy-ny) + (uz-nz)*(uz-nz);
+        }
+        igraph_vector_int_destroy(&neis);
+    }
+    return potential_score - current_score;
+}
+
+// ---------------------------------------------------------
+// DELTA CALCULATION: INTER-SPHERE (Angular Dot-Product)
+// ---------------------------------------------------------
+double calculate_move_delta_inter(const igraph_t *ig, const igraph_matrix_t *layout, 
+                                  LayeredSphereContext* ctx, int u, int target_sphere_s, int target_slot_k) {
+    int v = ctx->grids[target_sphere_s].slot_occupant[target_slot_k];
+    double current_score = 0.0, potential_score = 0.0;
+    double r = ctx->grids[target_sphere_s].radius;
+    
+    double tx = ctx->grids[target_sphere_s].slots[target_slot_k].x / r;
+    double ty = ctx->grids[target_sphere_s].slots[target_slot_k].y / r;
+    double tz = ctx->grids[target_sphere_s].slots[target_slot_k].z / r;
+
+    int u_slot = ctx->node_to_slot_idx[u];
+    double ux = ctx->grids[target_sphere_s].slots[u_slot].x / r;
+    double uy = ctx->grids[target_sphere_s].slots[u_slot].y / r;
+    double uz = ctx->grids[target_sphere_s].slots[u_slot].z / r;
+
+    igraph_vector_int_t neis; igraph_vector_int_init(&neis, 0);
+    igraph_incident(ig, &neis, u, IGRAPH_ALL);
+    for (int i = 0; i < igraph_vector_int_size(&neis); i++) {
+        igraph_integer_t from, to; igraph_edge(ig, VECTOR(neis)[i], &from, &to);
+        int neighbor = (from == u) ? to : from;
+        if (neighbor == v) continue;
+        
+        double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
+        double n_len = sqrt(nx*nx + ny*ny + nz*nz);
+        if (n_len < 0.001) continue;
+        nx /= n_len; ny /= n_len; nz /= n_len;
+
+        current_score += (1.0 - (ux*nx + uy*ny + uz*nz));
+        potential_score += (1.0 - (tx*nx + ty*ny + tz*nz));
+    }
+    igraph_vector_int_destroy(&neis);
+
+    if (v != -1) {
+        igraph_vector_int_init(&neis, 0);
+        igraph_incident(ig, &neis, v, IGRAPH_ALL);
+        for (int i = 0; i < igraph_vector_int_size(&neis); i++) {
+            igraph_integer_t from, to; igraph_edge(ig, VECTOR(neis)[i], &from, &to);
+            int neighbor = (from == v) ? to : from;
+            if (neighbor == u) continue;
+
+            double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
+            double n_len = sqrt(nx*nx + ny*ny + nz*nz);
+            if (n_len < 0.001) continue;
+            nx /= n_len; ny /= n_len; nz /= n_len;
+
+            current_score += (1.0 - (tx*nx + ty*ny + tz*nz));
+            potential_score += (1.0 - (ux*nx + uy*ny + uz*nz));
+        }
+        igraph_vector_int_destroy(&neis);
+    }
+    return potential_score - current_score;
 }
 
 // --- MAIN LIFECYCLE ---
@@ -192,15 +199,12 @@ void layered_sphere_init(LayeredSphereContext* ctx, int node_count) {
     ctx->grids = NULL;
     ctx->node_to_sphere_id = NULL;
     ctx->node_to_slot_idx = NULL;
-    ctx->cut_edges = NULL;
 }
 
 void layered_sphere_cleanup(LayeredSphereContext* ctx) {
     if (ctx->initialized) {
-        if (ctx->cut_edges) free(ctx->cut_edges);
         if (ctx->node_to_sphere_id) free(ctx->node_to_sphere_id);
         if (ctx->node_to_slot_idx) free(ctx->node_to_slot_idx);
-        
         if (ctx->grids) {
             for (int s = 0; s < ctx->num_spheres; s++) {
                 if (ctx->grids[s].slots) free(ctx->grids[s].slots);
@@ -218,47 +222,29 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
     igraph_t* ig = &graph->g; 
     int vcount = graph->node_count;
     int ecount = igraph_ecount(ig);
+    int hilbert_res = 32768;
 
     // ---------------------------------------------------------
-    // PHASE 0: Dynamic Scaling & Sparse Grid Placement
+    // PHASE 0: Capacity Scaling, Community Packing, & Grids
     // ---------------------------------------------------------
     if (ctx->phase == PHASE_INIT) {
-        printf("[DEBUG] PHASE 0: Initializing Sparse Grids for %d nodes...\n", vcount);
-        
-        ctx->num_spheres = (int)fmax(3.0, sqrt(vcount) * 0.5);
-        ctx->grids = calloc(ctx->num_spheres, sizeof(SphereGrid));
         ctx->node_to_sphere_id = malloc(vcount * sizeof(int));
         ctx->node_to_slot_idx = malloc(vcount * sizeof(int));
-
-
-// ---------------------------------------------------------
-        // 1. Metrics & Community Detection
-        // ---------------------------------------------------------
-        igraph_vector_int_t coreness; 
-        igraph_vector_int_init(&coreness, vcount);
+        
+        // 1. Coreness & Community Detection (CPM)
+        igraph_vector_int_t coreness; igraph_vector_int_init(&coreness, vcount);
         igraph_coreness(ig, &coreness, IGRAPH_ALL);
 
-
-	// 3. Community Detection (Leiden using CPM)
-        igraph_vector_int_t membership; 
-        igraph_vector_int_init(&membership, vcount);
-        
-        // Calculate the actual global density of the graph (Edges / Possible Edges)
+        igraph_vector_int_t membership; igraph_vector_int_init(&membership, vcount);
         double graph_density = (vcount > 1) ? (2.0 * ecount) / ((double)vcount * (vcount - 1)) : 0.0;
-        
-        // CPM Resolution: We want to find communities that are ~3x denser than the background.
-        // We floor it at 0.001 to prevent it from lumping everything into one giant blob.
         double cpm_resolution = fmax(graph_density * 3.0, 0.001);
         
-        // VERY IMPORTANT: Arg 6 must be 'true' so Leiden starts from singletons and merges them!
         igraph_community_leiden(ig, NULL, NULL, cpm_resolution, 0.01, true, 2, &membership, NULL, NULL);
 
         int num_communities = get_vector_int_max(&membership) + 1;
-        printf("[DEBUG] Leiden Resolution %.2f. Found %d communities.\n", cpm_resolution, num_communities);
+        printf("[DEBUG] Leiden CPM Resolution %.4f. Found %d communities.\n", cpm_resolution, num_communities);
 
-        // ---------------------------------------------------------
-        // 2. Aggregate Community K-Cores
-        // ---------------------------------------------------------
+        // 2. Aggregate Community Metrics
         CommData* comms = calloc(num_communities, sizeof(CommData));
         for (int i = 0; i < vcount; i++) {
             int c = VECTOR(membership)[i];
@@ -266,23 +252,22 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
             comms[c].avg_kcore += VECTOR(coreness)[i];
             comms[c].node_count++;
         }
-        
-        // Calculate the actual average
         for (int i = 0; i < num_communities; i++) {
-            if (comms[i].node_count > 0) {
-                comms[i].avg_kcore /= comms[i].node_count;
-            }
+            if (comms[i].node_count > 0) comms[i].avg_kcore /= comms[i].node_count;
         }
-
-        // Sort communities from Densest (Center) to Weakest (Outer)
         qsort(comms, num_communities, sizeof(CommData), compare_communities_kcore);
 
-        // ---------------------------------------------------------
-        // 3. Bin-Pack Entire Communities onto Spheres
-        // ---------------------------------------------------------
+        // 3. Mathematical Capacity Scaling (Outer Spheres hold exponentially more)
         ctx->num_spheres = (int)fmax(3.0, sqrt(vcount) * 0.5);
-        int target_load_per_sphere = (int)ceil((double)vcount / ctx->num_spheres);
+        double sum_squares = 0.0;
+        for (int s = 0; s < ctx->num_spheres; s++) sum_squares += (s + 1.0) * (s + 1.0);
         
+        int* sphere_capacities = malloc(ctx->num_spheres * sizeof(int));
+        for (int s = 0; s < ctx->num_spheres; s++) {
+            sphere_capacities[s] = (int)ceil(vcount * (((s + 1.0) * (s + 1.0)) / sum_squares));
+        }
+
+        // 4. Bin-Pack Communities into Scaled Spheres
         int* comm_to_sphere = malloc(num_communities * sizeof(int));
         int current_sphere = 0;
         int current_load = 0;
@@ -290,322 +275,220 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         for (int i = 0; i < num_communities; i++) {
             if (comms[i].node_count == 0) continue;
             
-            int cid = comms[i].comm_id;
-            comm_to_sphere[cid] = current_sphere;
+            comm_to_sphere[comms[i].comm_id] = current_sphere;
             current_load += comms[i].node_count;
 
-            // If this sphere is full (and we aren't on the last sphere), move to the next shell
-            if (current_load >= target_load_per_sphere && current_sphere < ctx->num_spheres - 1) {
+            if (current_load >= sphere_capacities[current_sphere] && current_sphere < ctx->num_spheres - 1) {
                 current_sphere++;
                 current_load = 0; 
             }
         }
+        for (int i = 0; i < vcount; i++) ctx->node_to_sphere_id[i] = comm_to_sphere[VECTOR(membership)[i]];
 
-        // Map the assignment back to the individual nodes
-        for (int i = 0; i < vcount; i++) {
-            ctx->node_to_sphere_id[i] = comm_to_sphere[VECTOR(membership)[i]];
-        }
-
-        free(comms);
-        free(comm_to_sphere);
+        free(comms); free(comm_to_sphere); free(sphere_capacities);
         igraph_vector_int_destroy(&coreness);
 
-        // Edge Cutting
-        ctx->cut_edges = calloc(ecount, sizeof(bool));
-        igraph_vector_int_t edge_pairs; igraph_vector_int_init(&edge_pairs, ecount * 2);
-        for (int i = 0; i < ecount; i++) {
-            igraph_integer_t u, v; igraph_edge(ig, i, &u, &v);
-            VECTOR(edge_pairs)[i*2] = u; VECTOR(edge_pairs)[i*2+1] = v;
-        }
-        igraph_vector_t jaccard_sim; igraph_vector_init(&jaccard_sim, ecount);
-        igraph_similarity_jaccard_pairs(ig, &jaccard_sim, &edge_pairs, IGRAPH_ALL, 0); 
-
-        for (int i = 0; i < ecount; i++) {
-            igraph_integer_t u = VECTOR(edge_pairs)[i*2], v = VECTOR(edge_pairs)[i*2+1];
-            if (ctx->node_to_sphere_id[u] == ctx->node_to_sphere_id[v]) {
-                if (VECTOR(jaccard_sim)[i] < 0.05) ctx->cut_edges[i] = true;
-            }
-        }
-        igraph_vector_int_destroy(&edge_pairs); igraph_vector_destroy(&jaccard_sim);
-
-        // Density & Sparse Grid Calculation
+        // 5. Build Sparse Grids & Assign Hilbert
         igraph_vector_t transitivity; igraph_vector_init(&transitivity, vcount);
         igraph_transitivity_local_undirected(ig, &transitivity, igraph_vss_all(), IGRAPH_TRANSITIVITY_ZERO);
 
-       
-	// ---------------------------------------------------------
-        // Dynamic Radius Calculation (Graph Property + Log Scale)
-        // ---------------------------------------------------------
-        double* sphere_radii = malloc(ctx->num_spheres * sizeof(double));
-        double current_radius = 5.0; // Base radius for innermost sphere
+        ctx->grids = calloc(ctx->num_spheres, sizeof(SphereGrid));
+        double current_radius = 5.0;
 
-        for (int s = 0; s < ctx->num_spheres; s++) {
-            // 1. Check graph properties: How many nodes are on this sphere?
-            int n_in_group = 0;
-            for (int i = 0; i < vcount; i++) {
-                if (ctx->node_to_sphere_id[i] == s) n_in_group++;
-            }
-            
-            // 2. Mathematically, how much radius do we need to fit these nodes?
-            // Assuming we want ~40 units of physical surface area per node
-            double required_area = n_in_group * 40.0; 
-            double needed_radius = sqrt(required_area / (4.0 * M_PI));
-
-            // 3. Logarithmic Gap: Inner spheres have wide gaps, outer spheres pack tightly
-            // e.g., s=0 gap is ~28.0. s=50 gap is ~11.0.
-            double log_gap = 8.0 + (20.0 / log2(s + 2.0));
-            
-            // The radius must be large enough to clear the previous sphere + gap,
-            // AND large enough to comfortably fit all of its own nodes!
-            current_radius = fmax(current_radius + log_gap, needed_radius);
-            sphere_radii[s] = current_radius;
-        }
-
-        int hilbert_res = 32768;
-
-        #pragma omp parallel for schedule(dynamic)
         for (int s = 0; s < ctx->num_spheres; s++) {
             int n_in_group = 0;
             for (int i = 0; i < vcount; i++) if (ctx->node_to_sphere_id[i] == s) n_in_group++;
             if (n_in_group == 0) continue;
 
-            // Apply our dynamically calculated, log-scaled radius!
-            double radius = sphere_radii[s];
+            double required_area = n_in_group * 40.0; 
+            double needed_r = sqrt(required_area / (4.0 * M_PI));
+            double log_gap = 8.0 + (20.0 / log2(s + 2.0));
+            current_radius = fmax(current_radius + log_gap, needed_r);
             
-            // MATH: Surface Area Proportional Grid Scaling
-            // We guarantee at least 3x empty space, scaling up quadratically for outer spheres
-            int M_s = (int)fmax(n_in_group * 3.0, (4.0 * M_PI * radius * radius) / 20.0);
-            if (M_s > 100000) M_s = 100000; // Hard cap to prevent memory exhaustion on massive graphs
-            
+            ctx->grids[s].radius = current_radius;
+            int M_s = (int)fmin(100000, fmax(n_in_group * 3.0, (4.0 * M_PI * current_radius * current_radius) / 20.0));
             ctx->grids[s].max_slots = M_s;
-            ctx->grids[s].num_occupants = n_in_group;
-            ctx->grids[s].slots = malloc(M_s * sizeof(SpherePoint));
             ctx->grids[s].slot_occupant = malloc(M_s * sizeof(int));
-            
-            for(int k=0; k<M_s; k++) ctx->grids[s].slot_occupant[k] = -1; // -1 means empty
+            ctx->grids[s].slots = malloc(M_s * sizeof(SpherePoint));
+            for(int k=0; k<M_s; k++) ctx->grids[s].slot_occupant[k] = -1;
 
-            // Generate dense Fibonacci grid
             for (int i = 0; i < M_s; i++) {
                 double phi = acos(1.0 - 2.0 * (i + 0.5) / M_s);
                 double theta = M_PI * (1.0 + sqrt(5.0)) * i;
-                ctx->grids[s].slots[i].x = radius * cos(theta) * sin(phi);
-                ctx->grids[s].slots[i].y = radius * sin(theta) * sin(phi);
-                ctx->grids[s].slots[i].z = radius * cos(phi);
-
-                double norm_x = fmod(theta, 2 * M_PI) / (2 * M_PI);
-                if (norm_x < 0) norm_x += 1.0;
-                ctx->grids[s].slots[i].hilbert_dist = xy2d(hilbert_res, (int)(norm_x*(hilbert_res-1)), (int)((phi/M_PI)*(hilbert_res-1)));
+                ctx->grids[s].slots[i].x = current_radius * cos(theta) * sin(phi);
+                ctx->grids[s].slots[i].y = current_radius * sin(theta) * sin(phi);
+                ctx->grids[s].slots[i].z = current_radius * cos(phi);
+                double nx = fmod(theta, 2 * M_PI) / (2 * M_PI); if (nx < 0) nx += 1.0;
+                ctx->grids[s].slots[i].hilbert_dist = xy2d(hilbert_res, (int)(nx*(hilbert_res-1)), (int)((phi/M_PI)*(hilbert_res-1)));
             }
             qsort(ctx->grids[s].slots, M_s, sizeof(SpherePoint), compare_points);
 
-	    // Group nodes by Community and Density
             NodePlacement *group_nodes = malloc(n_in_group * sizeof(NodePlacement));
-            int idx = 0;
+            int g_idx = 0;
             for (int i = 0; i < vcount; i++) {
                 if (ctx->node_to_sphere_id[i] == s) {
-                    group_nodes[idx].id = i;
-                    group_nodes[idx].community_id = VECTOR(membership)[i];
-                    group_nodes[idx].density = VECTOR(transitivity)[i];
-                    idx++;
+                    group_nodes[g_idx].id = i;
+                    group_nodes[g_idx].community_id = VECTOR(membership)[i];
+                    group_nodes[g_idx].density = VECTOR(transitivity)[i];
+                    g_idx++;
                 }
             }
-            
-            // This is the magic step. The Hilbert curve will now draw physical
-            // boundaries around these sorted communities on the sphere surface.
             qsort(group_nodes, n_in_group, sizeof(NodePlacement), compare_nodes_placement);
 
-
-            // Sparse assignment across the grid
             int step = M_s / n_in_group;
             for (int i = 0; i < n_in_group; i++) {
-                int node_id = group_nodes[i].id;
-                int slot_idx = i * step;
-                if (slot_idx >= M_s) slot_idx = M_s - 1; // Failsafe
-                
-                ctx->grids[s].slot_occupant[slot_idx] = node_id;
-                ctx->node_to_slot_idx[node_id] = slot_idx;
-                
-                MATRIX(graph->current_layout, node_id, 0) = ctx->grids[s].slots[slot_idx].x;
-                MATRIX(graph->current_layout, node_id, 1) = ctx->grids[s].slots[slot_idx].y;
-                MATRIX(graph->current_layout, node_id, 2) = ctx->grids[s].slots[slot_idx].z;
+                int nid = group_nodes[i].id;
+                int sid = fmin(M_s - 1, i * step);
+                ctx->grids[s].slot_occupant[sid] = nid;
+                ctx->node_to_slot_idx[nid] = sid;
+                MATRIX(graph->current_layout, nid, 0) = ctx->grids[s].slots[sid].x;
+                MATRIX(graph->current_layout, nid, 1) = ctx->grids[s].slots[sid].y;
+                MATRIX(graph->current_layout, nid, 2) = ctx->grids[s].slots[sid].z;
             }
             free(group_nodes);
         }
 
-        // Sync initial layout visually
         for (int i=0; i<vcount; i++) {
             graph->nodes[i].position[0] = MATRIX(graph->current_layout, i, 0);
             graph->nodes[i].position[1] = MATRIX(graph->current_layout, i, 1);
             graph->nodes[i].position[2] = MATRIX(graph->current_layout, i, 2);
         }
 
-       
-        // Cleanup remaining vectors used for density and sorting
-        igraph_vector_destroy(&transitivity);
         igraph_vector_int_destroy(&membership);
-        
-        
+        igraph_vector_destroy(&transitivity);
+
         ctx->phase = PHASE_INTRA_SPHERE;
         ctx->phase_iter = 0;
         return true; 
     }
 
     // ---------------------------------------------------------
-    // PHASE 1: Parallel Intra-Sphere Random-Walk
+    // BARYCENTER ENGINE (Deterministic Coordinate Descent)
     // ---------------------------------------------------------
-    if (ctx->phase == PHASE_INTRA_SPHERE) {
-        int local_moves = 0, evaluated = 0;
-        double temperature = 50.0 * pow(0.95, ctx->phase_iter);
+    int local_moves = 0;
+    bool is_intra = (ctx->phase == PHASE_INTRA_SPHERE);
+    int start_s = is_intra ? 0 : (ctx->inter_sphere_pass % 2);
+    int step_s  = is_intra ? 1 : 2;
+
+    #pragma omp parallel for schedule(dynamic) reduction(+:local_moves)
+    for (int s = start_s; s < ctx->num_spheres; s += step_s) {
+        double radius = ctx->grids[s].radius;
         
-        #pragma omp parallel for schedule(dynamic) reduction(+:local_moves, evaluated)
-        for (int s = 0; s < ctx->num_spheres; s++) {
-            int max_slots = ctx->grids[s].max_slots;
+        for (int u = 0; u < vcount; u++) {
+            if (ctx->node_to_sphere_id[u] != s) continue;
+            int current_slot = ctx->node_to_slot_idx[u];
             
-            for (int u = 0; u < vcount; u++) {
-                if (ctx->node_to_sphere_id[u] != s) continue;
-                int current_slot = ctx->node_to_slot_idx[u];
+            double bx = 0, by = 0, bz = 0;
+            int neighbor_count = 0;
+            
+            igraph_vector_int_t neis; igraph_vector_int_init(&neis, 0);
+            igraph_incident(ig, &neis, u, IGRAPH_ALL);
+            
+            for (int j = 0; j < igraph_vector_int_size(&neis); j++) {
+                igraph_integer_t from, to; igraph_edge(ig, VECTOR(neis)[j], &from, &to);
+                int neighbor = (from == u) ? to : from;
+                int n_sphere = ctx->node_to_sphere_id[neighbor];
                 
-                // Attempt 15 random moves/slides across the fine grid per node
-                for (int attempt = 0; attempt < 15; attempt++) {
-                    evaluated++;
-                    
-                    int target_slot = (int)(fast_rand_float(u, attempt, ctx->phase_iter) * max_slots);
-                    if (target_slot >= max_slots) target_slot = max_slots - 1;
-                    if (target_slot == current_slot) continue;
-                    
-                    double delta = calculate_move_delta(ig, &graph->current_layout, ctx, u, s, target_slot, true, s, s);
-                    bool accept = false;
-                    
-                    if (delta < -0.001) accept = true;
-                    else if (temperature > 0.01 && fast_rand_float(u, target_slot, ctx->phase_iter) < exp(-delta / temperature)) accept = true;
-                    
-                    if (accept) {
-                        int v = ctx->grids[s].slot_occupant[target_slot];
-                        
-                        // U slides to target
-                        MATRIX(graph->current_layout, u, 0) = ctx->grids[s].slots[target_slot].x;
-                        MATRIX(graph->current_layout, u, 1) = ctx->grids[s].slots[target_slot].y;
-                        MATRIX(graph->current_layout, u, 2) = ctx->grids[s].slots[target_slot].z;
-                        ctx->grids[s].slot_occupant[target_slot] = u;
-                        ctx->node_to_slot_idx[u] = target_slot;
-                        
-                        // If occupied, V slides to U's old spot
-                        if (v != -1) {
-                            MATRIX(graph->current_layout, v, 0) = ctx->grids[s].slots[current_slot].x;
-                            MATRIX(graph->current_layout, v, 1) = ctx->grids[s].slots[current_slot].y;
-                            MATRIX(graph->current_layout, v, 2) = ctx->grids[s].slots[current_slot].z;
-                            ctx->grids[s].slot_occupant[current_slot] = v;
-                            ctx->node_to_slot_idx[v] = current_slot;
-                            
-                            graph->nodes[v].position[0] = MATRIX(graph->current_layout, v, 0);
-                            graph->nodes[v].position[1] = MATRIX(graph->current_layout, v, 1);
-                            graph->nodes[v].position[2] = MATRIX(graph->current_layout, v, 2);
-                        } else {
-                            ctx->grids[s].slot_occupant[current_slot] = -1; // Slot is now empty
-                        }
-                        
-                        graph->nodes[u].position[0] = MATRIX(graph->current_layout, u, 0);
-                        graph->nodes[u].position[1] = MATRIX(graph->current_layout, u, 1);
-                        graph->nodes[u].position[2] = MATRIX(graph->current_layout, u, 2);
-                        
-                        local_moves++;
-                        break; // Stop evaluating this node if a move was successful
+                if (is_intra) {
+                    // INTRA: Euclidean Barycenter (Only same sphere)
+                    if (n_sphere != s) continue;
+                    bx += MATRIX(graph->current_layout, neighbor, 0);
+                    by += MATRIX(graph->current_layout, neighbor, 1);
+                    bz += MATRIX(graph->current_layout, neighbor, 2);
+                } else {
+                    // INTER: Angular Barycenter (All spheres)
+                    double nx = MATRIX(graph->current_layout, neighbor, 0);
+                    double ny = MATRIX(graph->current_layout, neighbor, 1);
+                    double nz = MATRIX(graph->current_layout, neighbor, 2);
+                    double n_len = sqrt(nx*nx + ny*ny + nz*nz);
+                    if (n_len > 0.001) {
+                        bx += (nx / n_len);
+                        by += (ny / n_len);
+                        bz += (nz / n_len);
                     }
                 }
+                neighbor_count++;
+            }
+            igraph_vector_int_destroy(&neis);
+            
+            if (neighbor_count == 0) continue; 
+            
+            double len = sqrt(bx*bx + by*by + bz*bz);
+            if (len < 0.0001) continue; 
+            bx = (bx / len) * radius; 
+            by = (by / len) * radius; 
+            bz = (bz / len) * radius;
+            
+            double phi = acos(bz / radius);
+            double theta = atan2(by, bx);
+            if (theta < 0) theta += 2 * M_PI;
+            
+            int target_h = xy2d(hilbert_res, 
+                                (int)((theta / (2 * M_PI)) * (hilbert_res - 1)), 
+                                (int)((phi / M_PI) * (hilbert_res - 1)));
+                                
+            int target_slot = find_closest_slot_by_hilbert(&ctx->grids[s], target_h);
+            if (target_slot == current_slot) continue;
+            
+            double delta;
+            if (is_intra) delta = calculate_move_delta_intra(ig, &graph->current_layout, ctx, u, s, target_slot);
+            else          delta = calculate_move_delta_inter(ig, &graph->current_layout, ctx, u, s, target_slot);
+            
+            // Deterministic descent: Only move if it strictly improves the chosen metric
+            if (delta < -0.001) {
+                int v = ctx->grids[s].slot_occupant[target_slot];
+                
+                MATRIX(graph->current_layout, u, 0) = ctx->grids[s].slots[target_slot].x;
+                MATRIX(graph->current_layout, u, 1) = ctx->grids[s].slots[target_slot].y;
+                MATRIX(graph->current_layout, u, 2) = ctx->grids[s].slots[target_slot].z;
+                ctx->grids[s].slot_occupant[target_slot] = u;
+                ctx->node_to_slot_idx[u] = target_slot;
+                
+                if (v != -1) {
+                    MATRIX(graph->current_layout, v, 0) = ctx->grids[s].slots[current_slot].x;
+                    MATRIX(graph->current_layout, v, 1) = ctx->grids[s].slots[current_slot].y;
+                    MATRIX(graph->current_layout, v, 2) = ctx->grids[s].slots[current_slot].z;
+                    ctx->grids[s].slot_occupant[current_slot] = v;
+                    ctx->node_to_slot_idx[v] = current_slot;
+                    
+                    graph->nodes[v].position[0] = MATRIX(graph->current_layout, v, 0);
+                    graph->nodes[v].position[1] = MATRIX(graph->current_layout, v, 1);
+                    graph->nodes[v].position[2] = MATRIX(graph->current_layout, v, 2);
+                } else {
+                    ctx->grids[s].slot_occupant[current_slot] = -1;
+                }
+                
+                graph->nodes[u].position[0] = MATRIX(graph->current_layout, u, 0);
+                graph->nodes[u].position[1] = MATRIX(graph->current_layout, u, 1);
+                graph->nodes[u].position[2] = MATRIX(graph->current_layout, u, 2);
+                
+                local_moves++;
             }
         }
+    }
 
-        printf("[DEBUG] P1 Temp: %.2f | Eval: %d | Moves: %d\n", temperature, evaluated, local_moves);
-
-        if (temperature <= 0.01 && local_moves == 0) {
+    if (ctx->phase == PHASE_INTRA_SPHERE) {
+        printf("[DEBUG] Phase 1 (Intra) Iter %d: %d Barycenter Moves\n", ctx->phase_iter, local_moves);
+        if (local_moves == 0 || ctx->phase_iter > 50) {
             ctx->phase = PHASE_INTER_SPHERE;
             ctx->phase_iter = 0; 
         } else {
             ctx->phase_iter++;
         }
-        ctx->current_iter++;
-        return true;
-    }
-
-    // ---------------------------------------------------------
-    // PHASE 2: Parallel Inter-Sphere Random-Walk
-    // ---------------------------------------------------------
-    if (ctx->phase == PHASE_INTER_SPHERE) {
-        int local_moves = 0, evaluated = 0;
-        double temperature = 20.0 * pow(0.95, ctx->phase_iter); 
-        int start_s = ctx->inter_sphere_pass % 2;
+    } else if (ctx->phase == PHASE_INTER_SPHERE) {
+        printf("[DEBUG] Phase 2 (Inter) Iter %d (%s): %d Barycenter Moves\n", 
+               ctx->phase_iter, (ctx->inter_sphere_pass % 2 == 0) ? "Even" : "Odd", local_moves);
         
-        // HOGWILD Approach: We accept benign read-races on neighbor coords globally 
-        // to ensure true global alignment without locking the entire matrix.
-        #pragma omp parallel for schedule(dynamic) reduction(+:local_moves, evaluated)
-        for (int s = start_s; s < ctx->num_spheres; s += 2) {
-            int max_slots = ctx->grids[s].max_slots;
-            
-            for (int u = 0; u < vcount; u++) {
-                if (ctx->node_to_sphere_id[u] != s) continue;
-                int current_slot = ctx->node_to_slot_idx[u];
-                
-                for (int attempt = 0; attempt < 15; attempt++) {
-                    evaluated++;
-                    int target_slot = (int)(fast_rand_float(u, attempt, ctx->phase_iter) * max_slots);
-                    if (target_slot >= max_slots) target_slot = max_slots - 1;
-                    if (target_slot == current_slot) continue;
-                    
-                    // Eval -1 ensures we check distance to ALL connected spheres
-                    double delta = calculate_move_delta(ig, &graph->current_layout, ctx, u, s, target_slot, false, -1, -1);
-                    bool accept = false;
-                    
-                    if (delta < -0.001) accept = true;
-                    else if (temperature > 0.01 && fast_rand_float(u, target_slot, ctx->phase_iter) < exp(-delta / temperature)) accept = true;
-
-                    if (accept) {
-                        int v = ctx->grids[s].slot_occupant[target_slot];
-                        
-                        MATRIX(graph->current_layout, u, 0) = ctx->grids[s].slots[target_slot].x;
-                        MATRIX(graph->current_layout, u, 1) = ctx->grids[s].slots[target_slot].y;
-                        MATRIX(graph->current_layout, u, 2) = ctx->grids[s].slots[target_slot].z;
-                        ctx->grids[s].slot_occupant[target_slot] = u;
-                        ctx->node_to_slot_idx[u] = target_slot;
-                        
-                        if (v != -1) {
-                            MATRIX(graph->current_layout, v, 0) = ctx->grids[s].slots[current_slot].x;
-                            MATRIX(graph->current_layout, v, 1) = ctx->grids[s].slots[current_slot].y;
-                            MATRIX(graph->current_layout, v, 2) = ctx->grids[s].slots[current_slot].z;
-                            ctx->grids[s].slot_occupant[current_slot] = v;
-                            ctx->node_to_slot_idx[v] = current_slot;
-                            
-                            graph->nodes[v].position[0] = MATRIX(graph->current_layout, v, 0);
-                            graph->nodes[v].position[1] = MATRIX(graph->current_layout, v, 1);
-                            graph->nodes[v].position[2] = MATRIX(graph->current_layout, v, 2);
-                        } else {
-                            ctx->grids[s].slot_occupant[current_slot] = -1;
-                        }
-                        
-                        graph->nodes[u].position[0] = MATRIX(graph->current_layout, u, 0);
-                        graph->nodes[u].position[1] = MATRIX(graph->current_layout, u, 1);
-                        graph->nodes[u].position[2] = MATRIX(graph->current_layout, u, 2);
-                        
-                        local_moves++;
-                        break;
-                    }
-                }
-            }
-        }
-
-        printf("[DEBUG] P2 Temp: %.2f | Eval: %d | Moves: %d\n", temperature, evaluated, local_moves);
-
         ctx->inter_sphere_pass++;
-        if (temperature <= 0.01 && local_moves == 0 && (ctx->inter_sphere_pass % 2 == 0)) {
+        if ((local_moves == 0 && (ctx->inter_sphere_pass % 2 == 0)) || ctx->phase_iter > 100) {
             ctx->phase = PHASE_DONE;
             return false; 
         }
-        
         ctx->phase_iter++;
-        ctx->current_iter++;
-        return true;
     }
 
-    return false;
+    ctx->current_iter++;
+    return true;
 }
 
 const char* layered_sphere_get_stage_name(LayeredSphereContext* ctx) {
@@ -613,12 +496,12 @@ const char* layered_sphere_get_stage_name(LayeredSphereContext* ctx) {
     if (!ctx || !ctx->initialized) return "Layered Sphere - Uninitialized";
 
     switch (ctx->phase) {
-        case PHASE_INIT: return "Phase 0: Sparse Grid Initialization";
+        case PHASE_INIT: return "Phase 0: Mathematical Capacity Assignment";
         case PHASE_INTRA_SPHERE: 
-            snprintf(stage_name, sizeof(stage_name), "Phase 1: Intra-Sphere Sliding (%d Spheres)", ctx->num_spheres);
+            snprintf(stage_name, sizeof(stage_name), "Phase 1: Intra-Sphere Barycenter (%d Spheres)", ctx->num_spheres);
             return stage_name;
         case PHASE_INTER_SPHERE:
-            snprintf(stage_name, sizeof(stage_name), "Phase 2: Global Align (%s Pairs)", 
+            snprintf(stage_name, sizeof(stage_name), "Phase 2: Inter-Sphere Barycenter (%s Pairs)", 
                     (ctx->inter_sphere_pass % 2 == 0) ? "Even" : "Odd");
             return stage_name;
         case PHASE_DONE: return "Optimization Complete";
