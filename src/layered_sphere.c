@@ -230,18 +230,29 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         double max_b = get_vector_max(&betweenness);
         double max_e = get_vector_max(&eccentricity);
 
+
+
 	// ---------------------------------------------------------
-        // Calculate Communities (Leiden)
+        // Calculate Communities (Leiden) with Dynamic Resolution
         // ---------------------------------------------------------
         igraph_vector_int_t membership;
         igraph_vector_int_init(&membership, vcount);
         
-        // Resolution = 1.0 is standard. Increase it to get smaller, more granular communities.
-        // Beta = 0.01 is standard for randomness.
-        igraph_community_leiden(ig, NULL, NULL, 1.0, 0.01, false, 2, &membership, NULL, NULL);
+        // Calculate Average Degree
+        double avg_degree = (vcount > 0) ? (double)(2 * ecount) / vcount : 0.0;
         
-        printf("[DEBUG] Leiden Community Detection found %d communities.\n", 
-               get_vector_int_max(&membership) + 1);
+        // Dynamic Resolution Formula:
+        // We floor it at 1.0 (standard modularity) so sparse graphs don't shatter.
+        // For dense graphs, we increase the resolution to force smaller, localized clusters.
+        // Dividing by 5.0 is a highly effective heuristic for 3D spatial chunking.
+        double dynamic_resolution = fmax(1.0, avg_degree / 5.0);
+        
+        // Pass the dynamic_resolution into the Leiden algorithm
+        igraph_community_leiden(ig, NULL, NULL, dynamic_resolution, 0.01, false, 2, &membership, NULL, NULL);
+        
+        printf("[DEBUG] Leiden Resolution set to %.2f (Avg Deg: %.2f). Found %d communities.\n", 
+               dynamic_resolution, avg_degree, get_vector_int_max(&membership) + 1);
+
         NodeComposite *composite_nodes = malloc(vcount * sizeof(NodeComposite));
         for (int i = 0; i < vcount; i++) {
             double c_norm = VECTOR(coreness)[i] / max_c;
