@@ -1,41 +1,43 @@
 #version 450
 
-// We process 256 edges simultaneously per workgroup
 layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
-// 1. The input nodes (Position, Size, etc.)
 struct Node {
     vec3 position;
     float pad1;
     vec3 color;
     float size;
     int degree;
-    int pad2, pad3, pad4; // Padding for 16-byte alignment
+    int pad2, pad3, pad4;
 };
 
 layout(std430, binding = 0) readonly buffer NodeBuffer {
     Node nodes[];
 };
 
-// 2. The output Edge paths
-// We allocate 6 vec4s for the path: (x, y, z, alpha_glow)
 struct Edge {
     int sourceId;
     int targetId;
-    int elevationLevel; // Determines how high off the sphere the trace floats
-    int pathLength;     // Usually 6 for a full circuit route
-    vec4 path[6];       // The control points
+    int elevationLevel;
+    int pathLength;
+    vec4 path[16]; // EXPANDED to 16 points for complex routing
 };
 
 layout(std430, binding = 1) buffer EdgeBuffer {
     Edge edges[];
 };
 
-// Push constants for global layout parameters
 layout(push_constant) uniform Constants {
     int maxEdges;
     float baseRadius;
 } pc;
+
+// Helper to calculate a deterministic lateral spread based on edge ID
+float getSpreadOffset(uint id, float maxSpread) {
+    // Generates a float between -1.0 and 1.0 based on ID
+    float hash = fract(sin(float(id) * 12.9898) * 43758.5453) * 2.0 - 1.0;
+    return hash * maxSpread;
+}
 
 void main() {
     uint idx = gl_GlobalInvocationID.x;
@@ -48,58 +50,75 @@ void main() {
     vec3 srcPos = nodes[srcId].position;
     vec3 dstPos = nodes[dstId].position;
 
-    // Radius of the source sphere
-    float sphereRadius = length(srcPos); 
-    if (sphereRadius < 0.001) sphereRadius = pc.baseRadius;
+    float srcRadius = length(srcPos); 
+    if (srcRadius < 0.001) srcRadius = pc.baseRadius;
+    float dstRadius = length(dstPos);
+    if (dstRadius < 0.001) dstRadius = pc.baseRadius;
     
-    // Calculate the elevated highway radius
-    // E.g., level 0 is flat, level 1 floats 0.5 units above, etc.
-    float highwayRadius = sphereRadius + (float(elevation) * 0.5) + 0.1;
+    // FIX: Only jump Z-levels if elevation > 0. Add tiny 0.005 offset to prevent Z-fighting.
+    float highwayRadius = srcRadius + (elevation > 0 ? (float(elevation) * 0.4) : 0.005);
 
-    // Convert Cartesian to Spherical for routing
-    // Source
     vec3 srcNorm = normalize(srcPos);
-    float srcLat = acos(srcNorm.y); // Y is up
-    float srcLon = atan(srcNorm.z, srcNorm.x);
-    
-    // Target
     vec3 dstNorm = normalize(dstPos);
+
+    // --- PCB FAN-OUT CALCULATION ---
+    // 1. Get the direction towards the target
+    vec3 dir = normalize(dstPos - srcPos);
+    
+    // 2. Project onto the tangent plane of the source node
+    vec3 srcTang = normalize(dir - srcNorm * dot(dir, srcNorm));
+    vec3 srcRight = cross(srcTang, srcNorm); // The lateral vector for parallel separation
+    
+    // 3. Project onto the tangent plane of the target node
+    vec3 dstTang = normalize(-dir - dstNorm * dot(-dir, dstNorm));
+    vec3 dstRight = cross(dstTang, dstNorm);
+
+    // Calculate lateral spread so wires don't overlap
+    float srcSpread = getSpreadOffset(idx, nodes[srcId].size * 0.4);
+    float dstSpread = getSpreadOffset(idx, nodes[dstId].size * 0.4);
+
+    // Calculate the physical "Ports" on the edge of the N-gon tiles
+    vec3 srcPort = srcPos + (srcTang * (nodes[srcId].size * 0.45)) + (srcRight * srcSpread);
+    vec3 dstPort = dstPos + (dstTang * (nodes[dstId].size * 0.45)) + (dstRight * dstSpread);
+
+    // Calculate the "Stubs" (traces must go straight out from the port before turning)
+    vec3 srcStub = srcPos + (srcTang * (nodes[srcId].size * 0.8)) + (srcRight * srcSpread);
+    vec3 dstStub = dstPos + (dstTang * (nodes[dstId].size * 0.8)) + (dstRight * dstSpread);
+
+    // Calculate Spherical Coordinates for the routing phase
+    float srcLat = acos(srcNorm.y);
+    float srcLon = atan(srcNorm.z, srcNorm.x);
     float dstLat = acos(dstNorm.y);
     float dstLon = atan(dstNorm.z, dstNorm.x);
 
-    // --- Generate the 6 Control Points ---
+    // --- BUILD THE 8-POINT CIRCUIT PATH ---
     
-    // Point 0: The Source Node (Surface level)
-    edges[idx].path[0] = vec4(srcPos, 1.0);
+    edges[idx].path[0] = vec4(srcPort, 1.0); // Exit node
+    edges[idx].path[1] = vec4(srcStub, 1.0); // Straight pin trace
 
-    // Point 1: Ascend to Highway Elevation
-    vec3 p1 = srcNorm * highwayRadius;
-    edges[idx].path[1] = vec4(p1, 1.0);
-
-    // Point 2: Route along Longitude (Match Target's Longitude, keep Source's Latitude)
-    // We calculate a new normal vector with mixed spherical coordinates
-    vec3 p2Norm = vec3(
-        sin(srcLat) * cos(dstLon),
-        cos(srcLat),
-        sin(srcLat) * sin(dstLon)
-    );
-    vec3 p2 = normalize(p2Norm) * highwayRadius;
+    // Ascend to highway
+    vec3 p2 = normalize(srcStub) * highwayRadius;
     edges[idx].path[2] = vec4(p2, 1.0);
 
-    // Point 3: Route along Latitude (Match Target's Latitude)
-    vec3 p3Norm = vec3(
-        sin(dstLat) * cos(dstLon),
-        cos(dstLat),
-        sin(dstLat) * sin(dstLon)
-    );
+    // Route Longitude
+    vec3 p3Norm = vec3(sin(srcLat) * cos(dstLon), cos(srcLat), sin(srcLat) * sin(dstLon));
     vec3 p3 = normalize(p3Norm) * highwayRadius;
     edges[idx].path[3] = vec4(p3, 1.0);
 
-    // Point 4: Arrive directly above Target Node
-    edges[idx].path[4] = vec4(p3, 1.0); // Duplicate for smooth cornering later if needed
+    // Route Latitude
+    vec3 p4Norm = vec3(sin(dstLat) * cos(dstLon), cos(dstLat), sin(dstLat) * sin(dstLon));
+    vec3 p4 = normalize(p4Norm) * highwayRadius;
+    edges[idx].path[4] = vec4(p4, 1.0);
 
-    // Point 5: Drop down to Target Node (Surface level)
-    edges[idx].path[5] = vec4(dstPos, 1.0);
+    // Descend above target stub
+    vec3 p5 = normalize(dstStub) * highwayRadius;
+    edges[idx].path[5] = vec4(p5, 1.0);
 
-    edges[idx].pathLength = 6;
+    // Drop to surface stub
+    edges[idx].path[6] = vec4(dstStub, 1.0);
+    
+    // Enter target port
+    edges[idx].path[7] = vec4(dstPort, 1.0);
+
+    edges[idx].pathLength = 8;
 }

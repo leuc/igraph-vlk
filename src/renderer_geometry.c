@@ -9,7 +9,7 @@
 extern FontAtlas globalAtlas;
 
 typedef struct { vec3 position; float pad1; vec3 color; float size; int degree; int pad2, pad3, pad4; } CompNode;
-typedef struct { int sourceId; int targetId; int elevationLevel; int pathLength; vec4 path[6]; } CompEdge;
+typedef struct { int sourceId; int targetId; int elevationLevel; int pathLength; vec4 path[16]; } CompEdge;
 
 void renderer_update_ui(Renderer* r, const char* text) {
     int len = strlen(text); if (len > 1024) len = 1024;
@@ -146,7 +146,7 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
     }
 
     createBuffer(r->device, r->physicalDevice, sizeof(Node)*r->nodeCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->instanceBuffer, &r->instanceBufferMemory);
-    int segments = (graph->active_layout == LAYOUT_LAYERED_SPHERE) ? 5 : 1; r->edgeVertexCount = r->edgeCount * segments * 2;
+    int segments = (graph->active_layout == LAYOUT_LAYERED_SPHERE) ? 15 : 1; r->edgeVertexCount = r->edgeCount * segments * 2;
     createBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex)*r->edgeVertexCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
     Node* sorted = malloc(sizeof(Node) * graph->node_count); uint32_t currentOffset = 0;
     for (int t = 0; t < PLATONIC_COUNT; t++) {
@@ -244,6 +244,8 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
             memcpy(evs[idx].pos, p2, 12); memcpy(evs[idx].color, graph->nodes[graph->edges[i].to].color, 12); evs[idx].size = graph->edges[i].size; idx++;
         }
     }
+
+    r->edgeVertexCount = idx;
 
 
     updateBuffer(r->device, r->edgeVertexBufferMemory, sizeof(EdgeVertex)*r->edgeVertexCount, evs); free(evs);
