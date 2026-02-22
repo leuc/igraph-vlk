@@ -109,7 +109,7 @@ int renderer_create_pipelines(Renderer* r) {
     VkPipelineLayoutCreateInfo cPlyLayInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->computeDescriptorSetLayout, .pushConstantRangeCount = 1, .pPushConstantRanges = &cPush };
     vkCreatePipelineLayout(r->device, &cPlyLayInfo, NULL, &r->computePipelineLayout);
 
-    VkShaderModule sphMod, hubMod;
+    VkShaderModule sphMod = VK_NULL_HANDLE, hubMod = VK_NULL_HANDLE;
     create_shader_module(r->device, ROUTING_COMP_SHADER_PATH, &sphMod);
     create_shader_module(r->device, ROUTING_HUB_COMP_SHADER_PATH, &hubMod);
     VkPipelineShaderStageCreateInfo cStageSph = { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = sphMod, .pName = "main" };

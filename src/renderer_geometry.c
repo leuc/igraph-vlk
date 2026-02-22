@@ -147,9 +147,11 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
     }
 
     createBuffer(r->device, r->physicalDevice, sizeof(Node)*r->nodeCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->instanceBuffer, &r->instanceBufferMemory);
-	int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
 
+    int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
+    r->edgeVertexCount = graph->edge_count * segments * 2;
     createBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex)*r->edgeVertexCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
+
     Node* sorted = malloc(sizeof(Node) * graph->node_count); uint32_t currentOffset = 0;
     for (int t = 0; t < PLATONIC_COUNT; t++) {
         r->platonicDrawCalls[t].firstInstance = currentOffset; uint32_t count = 0;
