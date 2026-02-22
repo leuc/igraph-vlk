@@ -1,0 +1,51 @@
+#version 450
+
+layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+struct Node { vec3 position; float pad1; vec3 color; float size; int degree; int pad2, pad3, pad4; };
+layout(std430, binding = 0) readonly buffer NodeBuffer { Node nodes[]; };
+
+struct Edge { int sourceId; int targetId; int elevationLevel; int pathLength; vec4 path[16]; };
+layout(std430, binding = 1) buffer EdgeBuffer { Edge edges[]; };
+
+struct Hub { vec3 position; float pad; };
+layout(std430, binding = 2) readonly buffer HubBuffer { Hub hubs[]; };
+
+layout(push_constant) uniform Constants { 
+    int maxEdges; 
+    float baseRadius; 
+    int numHubs; 
+} pc;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= pc.maxEdges) return;
+
+    int srcId = edges[idx].sourceId;
+    int dstId = edges[idx].targetId;
+    vec3 srcPos = nodes[srcId].position;
+    vec3 dstPos = nodes[dstId].position;
+
+    // Find nearest hubs
+    int bestSrcHub = 0; float bestSrcDist = 1000000.0;
+    int bestDstHub = 0; float bestDstDist = 1000000.0;
+
+    for(int i = 0; i < pc.numHubs; i++) {
+        float d1 = distance(srcPos, hubs[i].position);
+        if (d1 < bestSrcDist) { bestSrcDist = d1; bestSrcHub = i; }
+        
+        float d2 = distance(dstPos, hubs[i].position);
+        if (d2 < bestDstDist) { bestDstDist = d2; bestDstHub = i; }
+    }
+
+    vec3 h1 = hubs[bestSrcHub].position;
+    vec3 h2 = hubs[bestDstHub].position;
+
+    // Draw the transit map route
+    edges[idx].path[0] = vec4(srcPos, 1.0);
+    edges[idx].path[1] = vec4(h1, 1.0);
+    edges[idx].path[2] = vec4(h2, 1.0);
+    edges[idx].path[3] = vec4(dstPos, 1.0);
+    
+    edges[idx].pathLength = 4;
+}
