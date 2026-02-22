@@ -42,12 +42,16 @@ find_package(OpenMP REQUIRED)
 
 add_executable(igraph-vlk 
     src/main.c 
+    src/vulkan_utils.c
+    src/renderer_pipelines.c
+    src/renderer_geometry.c
     src/renderer.c 
     src/polyhedron.c 
     src/text.c
     src/graph_loader.c
     src/layout_openord.c
     src/layered_sphere.c
+
     ${SPIRV_SHADERS}
 )
 
