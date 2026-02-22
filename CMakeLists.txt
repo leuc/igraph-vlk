@@ -23,6 +23,7 @@ set(SHADERS
     shaders/ui.frag
     shaders/transparent_sphere.vert
     shaders/transparent_sphere.frag
+    shaders/routing.comp
 )
 
 foreach(SHADER ${SHADERS})
