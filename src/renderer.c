@@ -240,6 +240,9 @@ void renderer_cleanup(Renderer* r) {
     vkDestroyCommandPool(r->device, r->commandPool, NULL); vkDestroyDescriptorPool(r->device, r->descriptorPool, NULL);
     vkDestroySampler(r->device, r->textureSampler, NULL); vkDestroyImageView(r->device, r->textureImageView, NULL); vkDestroyImage(r->device, r->textureImage, NULL); vkFreeMemory(r->device, r->textureImageMemory, NULL);
     for(uint32_t i=0; i<r->swapchainImageCount; i++) { vkDestroyFramebuffer(r->device, r->framebuffers[i], NULL); vkDestroyImageView(r->device, r->swapchainImageViews[i], NULL); }
+    vkDestroyPipeline(r->device, r->computePipeline, NULL);
+    vkDestroyPipelineLayout(r->device, r->computePipelineLayout, NULL);
+    vkDestroyDescriptorSetLayout(r->device, r->computeDescriptorSetLayout, NULL);
     vkDestroyPipeline(r->device, r->uiPipeline, NULL); vkDestroyPipeline(r->device, r->labelPipeline, NULL); vkDestroyPipeline(r->device, r->edgePipeline, NULL); vkDestroyPipeline(r->device, r->nodeEdgePipeline, NULL); vkDestroyPipeline(r->device, r->graphicsPipeline, NULL);
     vkDestroyPipelineLayout(r->device, r->pipelineLayout, NULL); vkDestroyDescriptorSetLayout(r->device, r->descriptorSetLayout, NULL);
     vkDestroyRenderPass(r->device, r->renderPass, NULL); vkDestroySwapchainKHR(r->device, r->swapchain, NULL);

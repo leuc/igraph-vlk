@@ -36,6 +36,11 @@ typedef struct {
     VkPipeline edgePipeline;
     VkPipeline labelPipeline;
     VkPipeline uiPipeline;
+
+    VkDescriptorSetLayout computeDescriptorSetLayout;
+    VkPipelineLayout computePipelineLayout;
+    VkPipeline computePipeline;
+
     VkFramebuffer* framebuffers;
     VkCommandPool commandPool;
     VkCommandBuffer* commandBuffers;
