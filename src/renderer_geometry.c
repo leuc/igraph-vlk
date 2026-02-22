@@ -246,7 +246,12 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
         // --- END GPU DISPATCH ---
 
         for(uint32_t i=0; i<graph->edge_count; i++) {
-            for(int p=0; p<cEdges[i].pathLength - 1; p++) {
+            // CLAMP PATH LENGTH to prevent Heap Buffer Overflows!
+            int pLen = cEdges[i].pathLength;
+            if (pLen < 0) pLen = 0;
+            if (pLen > 16) pLen = 16;
+
+            for(int p=0; p < pLen - 1; p++) {
                 memcpy(evs[idx].pos, cEdges[i].path[p], 12);
                 memcpy(evs[idx].color, graph->nodes[graph->edges[i].from].color, 12);
                 evs[idx].size = graph->edges[i].size; idx++;
@@ -269,8 +274,12 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
 
     r->edgeVertexCount = idx;
 
+    // PREVENT 0-byte memory maps which crash Vulkan
+    if (r->edgeVertexCount > 0) {
+        updateBuffer(r->device, r->edgeVertexBufferMemory, sizeof(EdgeVertex)*r->edgeVertexCount, evs);
+    }
+    free(evs);
 
-    updateBuffer(r->device, r->edgeVertexBufferMemory, sizeof(EdgeVertex)*r->edgeVertexCount, evs); free(evs);
     uint32_t tc = 0; for(uint32_t i=0; i<r->nodeCount; i++) if(graph->nodes[i].label) tc += strlen(graph->nodes[i].label);
     r->labelCharCount = tc;
     if(tc > 0) {
@@ -290,4 +299,6 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
         updateBuffer(r->device, r->labelInstanceBufferMemory, sizeof(LabelInstance)*r->labelCharCount, li); free(li);
     } else { r->labelInstanceBuffer = VK_NULL_HANDLE; }
     free(sorted);
+
+
 }
