@@ -19,7 +19,7 @@ static void sync_node_positions(GraphData* data) {
 static void refresh_graph_data(GraphData* data) {
     data->node_count = igraph_vcount(&data->g);
     data->edge_count = igraph_ecount(&data->g);
-    
+
     data->props.node_count = (int)data->node_count;
     data->props.edge_count = (int)data->edge_count;
 
@@ -71,6 +71,7 @@ int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_
     data->node_attr_name = node_attr ? strdup(node_attr) : strdup("pagerank");
     data->edge_attr_name = edge_attr ? strdup(edge_attr) : strdup("betweenness");
     data->nodes = NULL; data->edges = NULL;
+    data->hubs = NULL; data->hub_count = 0;
 
     igraph_matrix_init(&data->current_layout, 0, 0);
     if (layout_type == LAYOUT_OPENORD_3D || layout_type == LAYOUT_RANDOM_3D) {
@@ -91,17 +92,17 @@ void graph_filter_degree(GraphData* data, int min_degree) {
     igraph_vector_int_t vids; igraph_vector_int_init(&vids, 0);
     igraph_vector_int_t degrees; igraph_vector_int_init(&degrees, 0);
     igraph_degree(&data->g, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS);
-    
+
     for (int i = 0; i < igraph_vector_int_size(&degrees); i++) {
         if (VECTOR(degrees)[i] < min_degree) {
             igraph_vector_int_push_back(&vids, i);
         }
     }
-    
+
     if (igraph_vector_int_size(&vids) > 0) {
         printf("Filtering nodes with degree < %d. Removing %d nodes...\n", min_degree, (int)igraph_vector_int_size(&vids));
         igraph_delete_vertices(&data->g, igraph_vss_vector(&vids));
-        
+
         // Cleanup graph
         igraph_simplify(&data->g, 1, 1, NULL);
 
@@ -120,13 +121,13 @@ void graph_filter_coreness(GraphData* data, int min_coreness) {
     igraph_vector_int_t vids; igraph_vector_int_init(&vids, 0);
     igraph_vector_int_t coreness; igraph_vector_int_init(&coreness, 0);
     igraph_coreness(&data->g, &coreness, IGRAPH_ALL);
-    
+
     for (int i = 0; i < igraph_vector_int_size(&coreness); i++) {
         if (VECTOR(coreness)[i] < min_coreness) {
             igraph_vector_int_push_back(&vids, i);
         }
     }
-    
+
     if (igraph_vector_int_size(&vids) > 0) {
         printf("Filtering nodes with coreness < %d. Removing %d nodes...\n", min_coreness, (int)igraph_vector_int_size(&vids));
         igraph_delete_vertices(&data->g, igraph_vss_vector(&vids));
@@ -196,7 +197,7 @@ void graph_remove_overlaps(GraphData* data, float layoutScale) {
     }
     float cellSize = (max_radius * 2.0f) + 0.1f;
     int dimX = (int)((max_p[0] - min_p[0]) / cellSize) + 1; int dimY = (int)((max_p[1] - min_p[1]) / cellSize) + 1; int dimZ = (int)((max_p[2] - min_p[2]) / cellSize) + 1;
-    if (dimX * dimY * dimZ > 1000000) cellSize *= 2.0f; 
+    if (dimX * dimY * dimZ > 1000000) cellSize *= 2.0f;
     int totalCells = dimX * dimY * dimZ;
     int* head = malloc(sizeof(int) * totalCells); int* next = malloc(sizeof(int) * data->node_count);
     memset(head, -1, sizeof(int) * totalCells);
@@ -258,7 +259,7 @@ void graph_cluster(GraphData* data, ClusterType type) {
         default: break;
     }
     int cluster_count = 0; for(int i=0; i<igraph_vector_int_size(&membership); i++) if(VECTOR(membership)[i] > cluster_count) cluster_count = VECTOR(membership)[i];
-    cluster_count++; 
+    cluster_count++;
     int* cluster_sizes = calloc(cluster_count, sizeof(int));
     for(int i=0; i<data->node_count; i++) cluster_sizes[VECTOR(membership)[i]]++;
     int max_cluster_size = 0;
@@ -294,9 +295,9 @@ void graph_calculate_centrality(GraphData* data, CentralityType type) {
         default: break;
     }
     igraph_real_t min_v, max_v; igraph_vector_minmax(&result, &min_v, &max_v);
-    for(int i=0; i<data->node_count; i++) { 
-        float val = (float)VECTOR(result)[i]; 
-        data->nodes[i].size = (max_v > 0) ? (val / (float)max_v) : 1.0f; 
+    for(int i=0; i<data->node_count; i++) {
+        float val = (float)VECTOR(result)[i];
+        data->nodes[i].size = (max_v > 0) ? (val / (float)max_v) : 1.0f;
         data->nodes[i].degree = (int)(data->nodes[i].size * 20.0f);
         data->nodes[i].glow = (max_v > 0) ? (val / (float)max_v) : 0.0f;
     }
@@ -305,7 +306,7 @@ void graph_calculate_centrality(GraphData* data, CentralityType type) {
 
 void graph_highlight_infrastructure(GraphData* data) {
     if (!data->graph_initialized) return;
-    
+
     // Reset glow
     for (int i = 0; i < data->node_count; i++) data->nodes[i].glow = 0.0f;
 
@@ -334,11 +335,56 @@ void graph_highlight_infrastructure(GraphData* data) {
     igraph_vector_int_destroy(&bridges);
 }
 
+
+void graph_generate_hubs(GraphData* data, int num_hubs) {
+    if (data->edge_count == 0) return;
+    data->hub_count = num_hubs;
+    data->hubs = realloc(data->hubs, sizeof(Hub) * num_hubs);
+
+    // Init hubs randomly to node positions
+    for(int i = 0; i < num_hubs; i++) {
+        int n = rand() % data->node_count;
+        memcpy(data->hubs[i].position, data->nodes[n].position, sizeof(float)*3);
+    }
+
+    // K-Means Clustering on Edge Midpoints (10 Iterations)
+    int* counts = calloc(num_hubs, sizeof(int));
+    float* sums = calloc(num_hubs * 3, sizeof(float));
+
+    for(int iter = 0; iter < 10; iter++) {
+        memset(counts, 0, sizeof(int) * num_hubs);
+        memset(sums, 0, sizeof(float) * num_hubs * 3);
+
+        for(uint32_t i = 0; i < data->edge_count; i++) {
+            float mid[3] = { (data->nodes[data->edges[i].from].position[0] + data->nodes[data->edges[i].to].position[0]) * 0.5f,
+                             (data->nodes[data->edges[i].from].position[1] + data->nodes[data->edges[i].to].position[1]) * 0.5f,
+                             (data->nodes[data->edges[i].from].position[2] + data->nodes[data->edges[i].to].position[2]) * 0.5f };
+            int best_hub = 0; float best_dist = 1e9f;
+            for(int h = 0; h < num_hubs; h++) {
+                float dx = mid[0] - data->hubs[h].position[0]; float dy = mid[1] - data->hubs[h].position[1]; float dz = mid[2] - data->hubs[h].position[2];
+                float d = dx*dx + dy*dy + dz*dz;
+                if (d < best_dist) { best_dist = d; best_hub = h; }
+            }
+            sums[best_hub*3+0] += mid[0]; sums[best_hub*3+1] += mid[1]; sums[best_hub*3+2] += mid[2];
+            counts[best_hub]++;
+        }
+        for(int h = 0; h < num_hubs; h++) {
+            if (counts[h] > 0) {
+                data->hubs[h].position[0] = sums[h*3+0] / counts[h];
+                data->hubs[h].position[1] = sums[h*3+1] / counts[h];
+                data->hubs[h].position[2] = sums[h*3+2] / counts[h];
+            }
+        }
+    }
+    free(counts); free(sums);
+}
+
 void graph_free_data(GraphData* data) {
     if (data->graph_initialized) { igraph_destroy(&data->g); igraph_matrix_destroy(&data->current_layout); data->graph_initialized = false; }
     if (data->openord) { openord_cleanup(data->openord); free(data->openord); data->openord = NULL; }
     if (data->layered_sphere) { layered_sphere_cleanup(data->layered_sphere); free(data->layered_sphere); data->layered_sphere = NULL; }
     if (data->node_attr_name) free(data->node_attr_name); if (data->edge_attr_name) free(data->edge_attr_name);
+    if (data->hubs) { free(data->hubs); data->hubs = NULL; }
     for (uint32_t i = 0; i < data->node_count; i++) if (data->nodes[i].label) free(data->nodes[i].label);
     free(data->nodes); free(data->edges);
 }

@@ -10,6 +10,7 @@ extern FontAtlas globalAtlas;
 
 typedef struct { vec3 position; float pad1; vec3 color; float size; int degree; int pad2, pad3, pad4; } CompNode;
 typedef struct { int sourceId; int targetId; int elevationLevel; int pathLength; vec4 path[16]; } CompEdge;
+typedef struct { float position[3]; float pad; } CompHub;
 
 void renderer_update_ui(Renderer* r, const char* text) {
     int len = strlen(text); if (len > 1024) len = 1024;
@@ -146,7 +147,8 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
     }
 
     createBuffer(r->device, r->physicalDevice, sizeof(Node)*r->nodeCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->instanceBuffer, &r->instanceBufferMemory);
-    int segments = (graph->active_layout == LAYOUT_LAYERED_SPHERE) ? 15 : 1; r->edgeVertexCount = r->edgeCount * segments * 2;
+	int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
+
     createBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex)*r->edgeVertexCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
     Node* sorted = malloc(sizeof(Node) * graph->node_count); uint32_t currentOffset = 0;
     for (int t = 0; t < PLATONIC_COUNT; t++) {
@@ -161,7 +163,7 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
     updateBuffer(r->device, r->instanceBufferMemory, sizeof(Node)*graph->node_count, sorted);
     EdgeVertex* evs = malloc(sizeof(EdgeVertex)*r->edgeVertexCount);
     uint32_t idx = 0;
-    if (graph->active_layout == LAYOUT_LAYERED_SPHERE && graph->layered_sphere && graph->layered_sphere->initialized) {
+    if (r->currentRoutingMode != ROUTING_MODE_STRAIGHT) {
         CompNode* cNodes = malloc(sizeof(CompNode) * graph->node_count);
         CompEdge* cEdges = malloc(sizeof(CompEdge) * graph->edge_count);
 
@@ -173,39 +175,56 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
         }
         for(uint32_t i=0; i<graph->edge_count; i++) {
             cEdges[i].sourceId = graph->edges[i].from; cEdges[i].targetId = graph->edges[i].to;
-            int s1 = graph->layered_sphere->node_to_sphere_id[graph->edges[i].from];
-            int s2 = graph->layered_sphere->node_to_sphere_id[graph->edges[i].to];
-            cEdges[i].elevationLevel = (s1 != s2) ? 1 : 0; // Elevate inter-sphere bundles
+			cEdges[i].elevationLevel = 0;
+			if (graph->active_layout == LAYOUT_LAYERED_SPHERE && graph->layered_sphere && graph->layered_sphere->initialized) {
+    			int s1 = graph->layered_sphere->node_to_sphere_id[graph->edges[i].from];
+    			int s2 = graph->layered_sphere->node_to_sphere_id[graph->edges[i].to];
+    			cEdges[i].elevationLevel = (s1 != s2) ? 1 : 0;
+			}
             cEdges[i].pathLength = 0;
         }
 
         // --- GPU COMPUTE DISPATCH ---
-        VkBuffer nBuf, eBuf; VkDeviceMemory nMem, eMem;
+        VkBuffer nBuf, eBuf, hBuf = VK_NULL_HANDLE; VkDeviceMemory nMem, eMem, hMem = VK_NULL_HANDLE;
         createBuffer(r->device, r->physicalDevice, sizeof(CompNode)*graph->node_count, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &nBuf, &nMem);
         createBuffer(r->device, r->physicalDevice, sizeof(CompEdge)*graph->edge_count, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &eBuf, &eMem);
         updateBuffer(r->device, nMem, sizeof(CompNode)*graph->node_count, cNodes);
         updateBuffer(r->device, eMem, sizeof(CompEdge)*graph->edge_count, cEdges);
 
-        VkDescriptorPoolSize dps = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2};
+        CompHub* cHubs = NULL;
+        if (r->currentRoutingMode == ROUTING_MODE_3D_HUB_SPOKE && graph->hub_count > 0) {
+            cHubs = malloc(sizeof(CompHub) * graph->hub_count);
+            for(int i=0; i<graph->hub_count; i++) { memcpy(cHubs[i].position, graph->hubs[i].position, sizeof(float)*3); cHubs[i].pad = 0; }
+            createBuffer(r->device, r->physicalDevice, sizeof(CompHub)*graph->hub_count, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &hBuf, &hMem);
+            updateBuffer(r->device, hMem, sizeof(CompHub)*graph->hub_count, cHubs);
+        } else {
+            createBuffer(r->device, r->physicalDevice, sizeof(CompHub), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &hBuf, &hMem);
+        }
+
+        VkDescriptorPoolSize dps = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3};
         VkDescriptorPoolCreateInfo dpInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, NULL, 0, 1, 1, &dps};
         VkDescriptorPool cPool; vkCreateDescriptorPool(r->device, &dpInfo, NULL, &cPool);
         VkDescriptorSetAllocateInfo dsAlloc = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, NULL, cPool, 1, &r->computeDescriptorSetLayout};
         VkDescriptorSet cSet; vkAllocateDescriptorSets(r->device, &dsAlloc, &cSet);
-        VkDescriptorBufferInfo nbi = {nBuf, 0, VK_WHOLE_SIZE}, ebi = {eBuf, 0, VK_WHOLE_SIZE};
-        VkWriteDescriptorSet writes[2] = {
+        VkDescriptorBufferInfo nbi = {nBuf, 0, VK_WHOLE_SIZE}, ebi = {eBuf, 0, VK_WHOLE_SIZE}, hbi = {hBuf, 0, VK_WHOLE_SIZE};
+        VkWriteDescriptorSet writes[3] = {
             {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, cSet, 0, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &nbi, NULL},
-            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, cSet, 1, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &ebi, NULL}
+            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, cSet, 1, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &ebi, NULL},
+            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, cSet, 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &hbi, NULL}
         };
-        vkUpdateDescriptorSets(r->device, 2, writes, 0, NULL);
+        vkUpdateDescriptorSets(r->device, 3, writes, 0, NULL);
 
         VkCommandBufferAllocateInfo cbAlloc = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, NULL, r->commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
         VkCommandBuffer cBuf; vkAllocateCommandBuffers(r->device, &cbAlloc, &cBuf);
         VkCommandBufferBeginInfo bInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL};
         vkBeginCommandBuffer(cBuf, &bInfo);
-        vkCmdBindPipeline(cBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computePipeline);
+        if (r->currentRoutingMode == ROUTING_MODE_SPHERICAL_PCB) vkCmdBindPipeline(cBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computeSphericalPipeline);
+        else if (r->currentRoutingMode == ROUTING_MODE_3D_HUB_SPOKE) vkCmdBindPipeline(cBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computeHubSpokePipeline);
+
         vkCmdBindDescriptorSets(cBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computePipelineLayout, 0, 1, &cSet, 0, NULL);
-        struct { int maxE; float baseR; } pcVals = { graph->edge_count, 5.0f * r->layoutScale };
+        struct { int maxE; float baseR; int numHubs; } pcVals = { graph->edge_count, 5.0f * r->layoutScale, graph->hub_count };
         vkCmdPushConstants(cBuf, r->computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcVals), &pcVals);
+
         vkCmdDispatch(cBuf, (graph->edge_count + 255) / 256, 1, 1);
         vkEndCommandBuffer(cBuf);
 
@@ -216,6 +235,9 @@ void renderer_update_graph(Renderer* r, GraphData* graph) {
         void* mapped; vkMapMemory(r->device, eMem, 0, VK_WHOLE_SIZE, 0, &mapped);
         memcpy(cEdges, mapped, sizeof(CompEdge)*graph->edge_count);
         vkUnmapMemory(r->device, eMem);
+
+        vkDestroyBuffer(r->device, hBuf, NULL); vkFreeMemory(r->device, hMem, NULL);
+        if(cHubs) free(cHubs);
 
         vkFreeCommandBuffers(r->device, r->commandPool, 1, &cBuf);
         vkDestroyDescriptorPool(r->device, cPool, NULL);

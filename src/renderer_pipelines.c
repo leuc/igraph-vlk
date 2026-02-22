@@ -47,7 +47,7 @@ int renderer_create_pipelines(Renderer* r) {
     VkVertexInputBindingDescription sb[] = { {0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX} };
     VkVertexInputAttributeDescription sa[] = { {0,0,VK_FORMAT_R32G32B32_SFLOAT,0}, {1,0,VK_FORMAT_R32G32B32_SFLOAT,12}, {2,0,VK_FORMAT_R32G32_SFLOAT,24} };
     VkPipelineVertexInputStateCreateInfo svi = { .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 1, .pVertexBindingDescriptions = sb, .vertexAttributeDescriptionCount = 3, .pVertexAttributeDescriptions = sa };
-    
+
     // Transparent blending
     VkPipelineColorBlendAttachmentState colB_trans = {
         .colorWriteMask = 0xF, .blendEnable = VK_TRUE,
@@ -57,7 +57,7 @@ int renderer_create_pipelines(Renderer* r) {
         .alphaBlendOp = VK_BLEND_OP_ADD
     };
     VkPipelineColorBlendStateCreateInfo colS_trans = { .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO, .attachmentCount = 1, .pAttachments = &colB_trans };
-    
+
     // Disable depth write for transparent objects (usually), but keeping depth test
     VkPipelineDepthStencilStateCreateInfo ds = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
@@ -98,19 +98,28 @@ int renderer_create_pipelines(Renderer* r) {
     vkDestroyShaderModule(r->device, uiFMod, NULL); vkDestroyShaderModule(r->device, uiVMod, NULL); vkDestroyShaderModule(r->device, lfMod, NULL); vkDestroyShaderModule(r->device, lVMod, NULL); vkDestroyShaderModule(r->device, efMod, NULL); vkDestroyShaderModule(r->device, eVMod, NULL); vkDestroyShaderModule(r->device, fMod, NULL); vkDestroyShaderModule(r->device, vMod, NULL);
 
     // --- COMPUTE PIPELINE SETUP ---
-    VkDescriptorSetLayoutBinding cBindings[] = { { 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL }, { 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL } };
-    VkDescriptorSetLayoutCreateInfo cLayInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 2, .pBindings = cBindings };
+    VkDescriptorSetLayoutBinding cBindings[] = {
+        { 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL },
+        { 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL },
+        { 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL }
+    };
+    VkDescriptorSetLayoutCreateInfo cLayInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 3, .pBindings = cBindings };
     vkCreateDescriptorSetLayout(r->device, &cLayInfo, NULL, &r->computeDescriptorSetLayout);
-    VkPushConstantRange cPush = { .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = sizeof(int) * 2 };
+    VkPushConstantRange cPush = { .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = sizeof(int) * 3 };
     VkPipelineLayoutCreateInfo cPlyLayInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->computeDescriptorSetLayout, .pushConstantRangeCount = 1, .pPushConstantRanges = &cPush };
     vkCreatePipelineLayout(r->device, &cPlyLayInfo, NULL, &r->computePipelineLayout);
-    
-    VkShaderModule compMod; create_shader_module(r->device, ROUTING_COMP_SHADER_PATH, &compMod);
-    VkPipelineShaderStageCreateInfo cStage = { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = compMod, .pName = "main" };
-    VkComputePipelineCreateInfo cpInfo = { .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = cStage, .layout = r->computePipelineLayout };
-    vkCreateComputePipelines(r->device, VK_NULL_HANDLE, 1, &cpInfo, NULL, &r->computePipeline);
-    vkDestroyShaderModule(r->device, compMod, NULL);
+
+    VkShaderModule sphMod, hubMod;
+    create_shader_module(r->device, ROUTING_COMP_SHADER_PATH, &sphMod);
+    create_shader_module(r->device, ROUTING_HUB_COMP_SHADER_PATH, &hubMod);
+    VkPipelineShaderStageCreateInfo cStageSph = { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = sphMod, .pName = "main" };
+    VkPipelineShaderStageCreateInfo cStageHub = { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = hubMod, .pName = "main" };
+    VkComputePipelineCreateInfo cpInfoSph = { .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = cStageSph, .layout = r->computePipelineLayout };
+    VkComputePipelineCreateInfo cpInfoHub = { .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = cStageHub, .layout = r->computePipelineLayout };
+    vkCreateComputePipelines(r->device, VK_NULL_HANDLE, 1, &cpInfoSph, NULL, &r->computeSphericalPipeline);
+    vkCreateComputePipelines(r->device, VK_NULL_HANDLE, 1, &cpInfoHub, NULL, &r->computeHubSpokePipeline);
+    vkDestroyShaderModule(r->device, sphMod, NULL); vkDestroyShaderModule(r->device, hubMod, NULL);
     // ------------------------------
-    
+
     return 0;
 }

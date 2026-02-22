@@ -17,10 +17,11 @@ int renderer_init(Renderer* r, GLFWwindow* window, GraphData* graph) {
     r->window = window; r->currentFrame = 0; r->nodeCount = graph->node_count; r->edgeCount = graph->edge_count; r->edgeVertexCount = 0;
     r->showLabels = true; r->showNodes = true; r->showEdges = true; r->showUI = true; r->showSpheres = true; r->layoutScale = 1.0f;
     r->numSpheres = 0; r->sphereIndexCounts = NULL; r->sphereIndexOffsets = NULL;
+    r->currentRoutingMode = ROUTING_MODE_SPHERICAL_PCB;
     r->sphereVertexBuffer = VK_NULL_HANDLE; r->sphereIndexBuffer = VK_NULL_HANDLE;
-    
+
     glfwSetWindowTitle(window, "igraph-vlk");
-    
+
     // Application Icon
     unsigned char icon_pixels[16 * 16 * 4];
     for (int i = 0; i < 16 * 16; i++) {
@@ -190,18 +191,18 @@ void renderer_draw_frame(Renderer* r) {
         vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, lbs, los);
         vkCmdDraw(r->commandBuffers[r->currentFrame], 4, r->labelCharCount, 0, 0);
     }
-    
+
     // Draw Transparent Spheres (Last for blending)
     if(r->showSpheres && r->numSpheres > 0 && r->sphereVertexBuffer != VK_NULL_HANDLE) {
         float alpha_sphere = 0.2f / (float)r->numSpheres; // Scale transparency
         if (alpha_sphere < 0.02f) alpha_sphere = 0.02f;
-        
+
         vkCmdPushConstants(r->commandBuffers[r->currentFrame], r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_sphere);
         vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->spherePipeline);
         VkBuffer vbs[] = {r->sphereVertexBuffer}; VkDeviceSize vos[] = {0};
         vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1, vbs, vos);
         vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->sphereIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-        
+
         for(int s = 0; s < r->numSpheres; s++) {
              vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->sphereIndexCounts[s], 1, r->sphereIndexOffsets[s], 0, 0);
         }
@@ -240,7 +241,8 @@ void renderer_cleanup(Renderer* r) {
     vkDestroyCommandPool(r->device, r->commandPool, NULL); vkDestroyDescriptorPool(r->device, r->descriptorPool, NULL);
     vkDestroySampler(r->device, r->textureSampler, NULL); vkDestroyImageView(r->device, r->textureImageView, NULL); vkDestroyImage(r->device, r->textureImage, NULL); vkFreeMemory(r->device, r->textureImageMemory, NULL);
     for(uint32_t i=0; i<r->swapchainImageCount; i++) { vkDestroyFramebuffer(r->device, r->framebuffers[i], NULL); vkDestroyImageView(r->device, r->swapchainImageViews[i], NULL); }
-    vkDestroyPipeline(r->device, r->computePipeline, NULL);
+    vkDestroyPipeline(r->device, r->computeSphericalPipeline, NULL);
+    vkDestroyPipeline(r->device, r->computeHubSpokePipeline, NULL);
     vkDestroyPipelineLayout(r->device, r->computePipelineLayout, NULL);
     vkDestroyDescriptorSetLayout(r->device, r->computeDescriptorSetLayout, NULL);
     vkDestroyPipeline(r->device, r->uiPipeline, NULL); vkDestroyPipeline(r->device, r->labelPipeline, NULL); vkDestroyPipeline(r->device, r->edgePipeline, NULL); vkDestroyPipeline(r->device, r->nodeEdgePipeline, NULL); vkDestroyPipeline(r->device, r->graphicsPipeline, NULL);

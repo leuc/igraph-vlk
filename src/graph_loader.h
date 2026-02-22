@@ -53,6 +53,8 @@ typedef struct {
     float glow;
 } Node;
 
+typedef struct { float position[3]; } Hub;
+
 typedef struct {
     uint32_t from;
     uint32_t to;
@@ -70,7 +72,7 @@ typedef struct {
     uint32_t node_count;
     Edge* edges;
     uint32_t edge_count;
-    
+
     igraph_t g;
     igraph_matrix_t current_layout;
     bool graph_initialized;
@@ -80,6 +82,8 @@ typedef struct {
     LayoutType active_layout;
     struct OpenOrdContext* openord;
     struct LayeredSphereContext* layered_sphere;
+    Hub* hubs;
+    int hub_count;
 } GraphData;
 
 int graph_load_graphml(const char* filename, GraphData* data, LayoutType layout_type, const char* node_attr, const char* edge_attr);
@@ -91,5 +95,6 @@ void graph_filter_degree(GraphData* data, int min_degree);
 void graph_filter_coreness(GraphData* data, int min_coreness);
 void graph_highlight_infrastructure(GraphData* data);
 void graph_free_data(GraphData* data);
+void graph_generate_hubs(GraphData* data, int num_hubs);
 
 #endif

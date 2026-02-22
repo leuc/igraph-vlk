@@ -24,6 +24,7 @@ set(SHADERS
     shaders/transparent_sphere.vert
     shaders/transparent_sphere.frag
     shaders/routing.comp
+    shaders/routing_hub.comp
 )
 
 foreach(SHADER ${SHADERS})
@@ -40,13 +41,13 @@ endforeach()
 
 find_package(OpenMP REQUIRED)
 
-add_executable(igraph-vlk 
-    src/main.c 
+add_executable(igraph-vlk
+    src/main.c
     src/vulkan_utils.c
     src/renderer_pipelines.c
     src/renderer_geometry.c
-    src/renderer.c 
-    src/polyhedron.c 
+    src/renderer.c
+    src/polyhedron.c
     src/text.c
     src/graph_loader.c
     src/layout_openord.c
@@ -55,14 +56,14 @@ add_executable(igraph-vlk
     ${SPIRV_SHADERS}
 )
 
-target_include_directories(igraph-vlk PRIVATE 
+target_include_directories(igraph-vlk PRIVATE
     ${Vulkan_INCLUDE_DIRS}
     ${CGLM_INCLUDE_DIR}
     ${IGRAPH_INCLUDE_DIRS}
     ${CMAKE_BINARY_DIR}
 )
 
-target_link_libraries(igraph-vlk PRIVATE 
+target_link_libraries(igraph-vlk PRIVATE
     Vulkan::Vulkan
     glfw
     ${IGRAPH_LIBRARIES}
@@ -70,7 +71,7 @@ target_link_libraries(igraph-vlk PRIVATE
     OpenMP::OpenMP_C
 )
 
-target_compile_definitions(igraph-vlk PRIVATE 
+target_compile_definitions(igraph-vlk PRIVATE
     VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/shader.vert.spv"
     FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/shader.frag.spv"
     EDGE_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/edge.vert.spv"
@@ -82,4 +83,5 @@ target_compile_definitions(igraph-vlk PRIVATE
     SPHERE_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/transparent_sphere.vert.spv"
     SPHERE_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/transparent_sphere.frag.spv"
     ROUTING_COMP_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/routing.comp.spv"
+    ROUTING_HUB_COMP_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/routing_hub.comp.spv"
 )

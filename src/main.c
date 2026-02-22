@@ -36,17 +36,17 @@ const char* centrality_names[] = { "PageRank", "Hubs", "Authorities", "Betweenne
 void update_ui_text(float fps) {
     char stage_info[64] = "";
     if (currentLayout == LAYOUT_OPENORD_3D && currentGraph.openord) {
-        snprintf(stage_info, sizeof(stage_info), " [%s:%d]", 
+        snprintf(stage_info, sizeof(stage_info), " [%s:%d]",
             openord_get_stage_name(currentGraph.openord->stage_id),
             currentGraph.openord->current_iter);
     } else if (currentLayout == LAYOUT_LAYERED_SPHERE && currentGraph.layered_sphere) {
-        snprintf(stage_info, sizeof(stage_info), " [%s:%d]", 
+        snprintf(stage_info, sizeof(stage_info), " [%s:%d]",
             layered_sphere_get_stage_name(currentGraph.layered_sphere),
             currentGraph.layered_sphere->current_iter);
     }
 
     char buf[1024];
-    snprintf(buf, sizeof(buf), 
+    snprintf(buf, sizeof(buf),
         "[L]ayout:%s%s [I]terate [C]ommunity:%s Str[u]cture:%s [O]verlap [B]ridge [T]ext:%s [N]ode:%d [E]dge:%d Filter:1-9 [K]Core:%d [R]eset [H]ide FPS:%.1f",
         layout_names[currentLayout],
         stage_info,
@@ -112,6 +112,21 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         case GLFW_KEY_I: run_iteration(); break;
         case GLFW_KEY_O: graph_remove_overlaps(&currentGraph, renderer.layoutScale); renderer_update_graph(&renderer, &currentGraph); break;
         case GLFW_KEY_R: run_reset(); break;
+
+        // --- NEW ROUTING HOT-SWAP ---
+        case GLFW_KEY_M:
+            renderer.currentRoutingMode = (renderer.currentRoutingMode + 1) % 3;
+            printf("Switched Edge Routing Mode to %d\n", renderer.currentRoutingMode);
+
+            if (renderer.currentRoutingMode == ROUTING_MODE_3D_HUB_SPOKE) {
+                printf("Generating K-Means Hubs...\n");
+                graph_generate_hubs(&currentGraph, 150); // Generate 150 transit hubs
+            }
+
+            renderer_update_graph(&renderer, &currentGraph); // Re-dispatch compute shaders
+            break;
+        // ----------------------------
+
         case GLFW_KEY_KP_ADD:
         case GLFW_KEY_EQUAL: renderer.layoutScale *= 1.2f; renderer_update_graph(&renderer, &currentGraph); break;
         case GLFW_KEY_KP_SUBTRACT:

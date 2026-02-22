@@ -8,6 +8,13 @@
 #include "graph_loader.h"
 #include "polyhedron.h"
 
+typedef enum {
+    ROUTING_MODE_STRAIGHT = 0,
+    ROUTING_MODE_SPHERICAL_PCB = 1,
+    ROUTING_MODE_3D_HUB_SPOKE = 2,
+    ROUTING_MODE_3D_VOXEL = 3
+} EdgeRoutingMode;
+
 typedef struct {
     mat4 model;
     mat4 view;
@@ -37,9 +44,14 @@ typedef struct {
     VkPipeline labelPipeline;
     VkPipeline uiPipeline;
 
+	EdgeRoutingMode currentRoutingMode;
+
     VkDescriptorSetLayout computeDescriptorSetLayout;
     VkPipelineLayout computePipelineLayout;
-    VkPipeline computePipeline;
+
+    VkPipeline computeSphericalPipeline;
+    VkPipeline computeHubSpokePipeline;
+    VkPipeline computeVoxelPipeline;
 
     VkFramebuffer* framebuffers;
     VkCommandPool commandPool;
@@ -53,7 +65,7 @@ typedef struct {
     VkBuffer indexBuffers[PLATONIC_COUNT];
     VkDeviceMemory indexBufferMemories[PLATONIC_COUNT];
     uint32_t platonicIndexCounts[PLATONIC_COUNT];
-    
+
     struct {
         uint32_t count;
         uint32_t firstInstance;
@@ -84,7 +96,7 @@ typedef struct {
     VkBuffer labelInstanceBuffer;
     VkDeviceMemory labelInstanceBufferMemory;
     uint32_t labelCharCount;
-    
+
     // Visibility toggles
     bool showLabels;
     bool showNodes;
