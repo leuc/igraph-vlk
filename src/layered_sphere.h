@@ -39,7 +39,7 @@ typedef struct LayeredSphereContext {
     
     int* node_to_sphere_id;       
     int* node_to_slot_idx;        
-    
+    int* node_to_comm_id;
     int inter_sphere_pass; 
 } LayeredSphereContext;
 

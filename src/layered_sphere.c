@@ -223,22 +223,27 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
     int ecount = igraph_ecount(ig);
     int hilbert_res = 32768;
 
-    // ---------------------------------------------------------
-    // PHASE 0: Dynamic Growing Spheres & Community Packing
-    // ---------------------------------------------------------
+
     if (ctx->phase == PHASE_INIT) {
         ctx->node_to_sphere_id = malloc(vcount * sizeof(int));
         ctx->node_to_slot_idx = malloc(vcount * sizeof(int));
+        ctx->node_to_comm_id = malloc(vcount * sizeof(int));
         
-        // 1. Coreness & Community Detection (CPM)
+        // --- NEW: Create a temporary undirected clone for analysis ---
+        igraph_t undirected_ig;
+        igraph_copy(&undirected_ig, ig);
+        // Collapse directed edges (A->B and B->A become a single A-B edge). NULL drops attributes.
+        igraph_to_undirected(&undirected_ig, IGRAPH_TO_UNDIRECTED_COLLAPSE, NULL);
+
+        // 1. Coreness & Community Detection (Using the undirected clone)
         igraph_vector_int_t coreness; igraph_vector_int_init(&coreness, vcount);
-        igraph_coreness(ig, &coreness, IGRAPH_ALL);
+        igraph_coreness(&undirected_ig, &coreness, IGRAPH_ALL);
 
         igraph_vector_int_t membership; igraph_vector_int_init(&membership, vcount);
         double graph_density = (vcount > 1) ? (2.0 * ecount) / ((double)vcount * (vcount - 1)) : 0.0;
         double cpm_resolution = fmax(graph_density * 3.0, 0.001);
         
-        igraph_community_leiden(ig, NULL, NULL, cpm_resolution, 0.01, true, 2, &membership, NULL, NULL);
+        igraph_community_leiden(&undirected_ig, NULL, NULL, cpm_resolution, 0.01, true, 2, &membership, NULL, NULL);
 
         int num_communities = get_vector_int_max(&membership) + 1;
         printf("[DEBUG] Leiden CPM Resolution %.4f. Found %d communities.\n", cpm_resolution, num_communities);
@@ -303,13 +308,17 @@ bool layered_sphere_step(LayeredSphereContext* ctx, GraphData* graph) {
         free(comms); free(comm_to_sphere);
         igraph_vector_int_destroy(&coreness);
        
-
         // 4. Build Sparse Grids & Assign Hilbert
+
         igraph_vector_t transitivity; igraph_vector_init(&transitivity, vcount);
-        igraph_transitivity_local_undirected(ig, &transitivity, igraph_vss_all(), IGRAPH_TRANSITIVITY_ZERO);
+        // Use the undirected clone here too!
+        igraph_transitivity_local_undirected(&undirected_ig, &transitivity, igraph_vss_all(), IGRAPH_TRANSITIVITY_ZERO);
+
+        // --- NEW: Destroy the temporary undirected clone ---
+        igraph_destroy(&undirected_ig);
 
         ctx->grids = calloc(ctx->num_spheres, sizeof(SphereGrid));
-        double current_radius = 0.0; // Start at the absolute center
+        double current_radius = 0.0;
 
         for (int s = 0; s < ctx->num_spheres; s++) {
             int n_in_group = 0;
