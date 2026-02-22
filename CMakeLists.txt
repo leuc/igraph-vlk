@@ -77,4 +77,5 @@ target_compile_definitions(igraph-vlk PRIVATE
     UI_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/ui.frag.spv"
     SPHERE_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/transparent_sphere.vert.spv"
     SPHERE_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/transparent_sphere.frag.spv"
+    ROUTING_COMP_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/routing.comp.spv"
 )
