@@ -19,9 +19,11 @@ void main() {
 
 	// "Subway" animation effect
 	if (fragIsAnimating > 0) {
-		float tube_segment_length = 0.15; // Length of the glowing segment
-		float tube_glow_intensity = 4.5;  // How bright the tube segment is
-
+		float max_tube_length = 0.15;
+		float tube_segment_length =
+			min(max_tube_length,
+				min(fragAnimationProgress, 1.0 - fragAnimationProgress) * 2.0);
+		float tube_glow_intensity = 1.0; // How bright the tube segment is
 		float start_segment_pos =
 			fragAnimationProgress - tube_segment_length * 0.5;
 		float end_segment_pos =
@@ -31,13 +33,10 @@ void main() {
 		// segment
 		if (fragNormalizedPos >= start_segment_pos &&
 			fragNormalizedPos <= end_segment_pos) {
-			// Apply a glowing effect by ADDING the color rather than mixing
-			// out-of-bounds
-			finalColor =
-				finalColor + (vec3(1.0, 1.0, 1.0) * tube_glow_intensity);
+			vec3 inverseColor = vec3(1.0) - fragColor;
+			finalColor = finalColor + (inverseColor * tube_glow_intensity);
 			alpha = 1.0;
 		}
 	}
-
 	outColor = vec4(finalColor, alpha);
 }
