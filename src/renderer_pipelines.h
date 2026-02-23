@@ -3,6 +3,6 @@
 
 #include "renderer.h"
 
-int renderer_create_pipelines(Renderer *r);
+int renderer_create_pipelines (Renderer *r);
 
 #endif
