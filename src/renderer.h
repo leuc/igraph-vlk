@@ -51,7 +51,6 @@ typedef struct {
 
 	VkPipeline computeSphericalPipeline;
 	VkPipeline computeHubSpokePipeline;
-	VkPipeline computeVoxelPipeline;
 
 	VkFramebuffer *framebuffers;
 	VkCommandPool commandPool;

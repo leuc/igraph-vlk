@@ -270,6 +270,42 @@ int renderer_create_pipelines(Renderer *r) {
 	vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &lpInfo, NULL,
 							  &r->labelPipeline);
 
+// Define stages for UI
+VkPipelineShaderStageCreateInfo uiStages[] = {
+    {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, uiVMod, "main", NULL},
+    {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, uiFMod, "main", NULL}
+};
+
+// Define Vertex Input (Matching UIVertex and UIInstance)
+// Assuming UIVertex has pos (vec3) and tex (vec2)
+// Assuming UIInstance has color (vec4)
+VkVertexInputBindingDescription uib[] = {
+    {0, sizeof(UIVertex), VK_VERTEX_INPUT_RATE_VERTEX},
+    {1, sizeof(UIInstance), VK_VERTEX_INPUT_RATE_INSTANCE}
+};
+
+VkVertexInputAttributeDescription uia[] = {
+    {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0}, // pos
+    {1, 0, VK_FORMAT_R32G32_SFLOAT, 12},   // tex
+    {2, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0} // color
+};
+
+VkPipelineVertexInputStateCreateInfo uivi = {
+    .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+    .vertexBindingDescriptionCount = 2,
+    .pVertexBindingDescriptions = uib,
+    .vertexAttributeDescriptionCount = 3,
+    .pVertexAttributeDescriptions = uia
+};
+
+// Create the pipeline
+VkGraphicsPipelineCreateInfo uiPInfo = pInfo; // Reuse basic config
+uiPInfo.stageCount = 2;
+uiPInfo.pStages = uiStages;
+uiPInfo.pVertexInputState = &uivi;
+uiPInfo.pInputAssemblyState = &lias; // UI usually uses triangle strips/lists
+
+vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &uiPInfo, NULL, &r->uiPipeline);
 
 
 	vkDestroyShaderModule(r->device, uiFMod, NULL);
