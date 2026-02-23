@@ -55,6 +55,7 @@ typedef struct
   int degree;
   int coreness;
   float glow;
+  float selected;
 } Node;
 
 typedef struct
@@ -67,6 +68,7 @@ typedef struct
   uint32_t from;
   uint32_t to;
   float size;
+  float selected;
 } Edge;
 
 typedef struct

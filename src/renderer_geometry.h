@@ -8,6 +8,7 @@ typedef struct
   vec3 pos;
   vec3 color;
   float size;
+  float selected;
 } EdgeVertex;
 typedef struct
 {

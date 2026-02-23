@@ -11,6 +11,7 @@ layout(location = 1) in vec2 fragTexCoord;
 layout(location = 2) in vec3 fragColor;
 layout(location = 3) in float fragGlow;
 layout(location = 4) in flat int fragDegree;
+layout(location = 5) in float fragSelected;
 
 layout(location = 0) out vec4 outColor;
 
@@ -39,5 +40,10 @@ void main() {
         baseColor *= 0.5; // Darken the outer edge to frame the node
     }
     
-    outColor = vec4(baseColor + glowColor, pc.alpha);
+    float finalAlpha = pc.alpha;
+    if (fragSelected > 0.5) {
+        finalAlpha = 1.0;
+    }
+    
+    outColor = vec4(baseColor + glowColor, finalAlpha);
 }

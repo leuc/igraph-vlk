@@ -64,12 +64,14 @@ renderer_create_pipelines (Renderer *r)
           { 3, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof (Node, position) },
           { 4, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof (Node, color) },
           { 5, 1, VK_FORMAT_R32_SFLOAT, offsetof (Node, size) },
-          { 6, 1, VK_FORMAT_R32_SFLOAT, offsetof (Node, glow) } };
+          { 6, 1, VK_FORMAT_R32_SFLOAT, offsetof (Node, glow) },
+          { 7, 1, VK_FORMAT_R32_SINT, offsetof (Node, degree) },
+          { 8, 1, VK_FORMAT_R32_SFLOAT, offsetof (Node, selected) } };
   VkPipelineVertexInputStateCreateInfo nvi
       = { .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
           .vertexBindingDescriptionCount = 2,
           .pVertexBindingDescriptions = nb,
-          .vertexAttributeDescriptionCount = 7,
+          .vertexAttributeDescriptionCount = 9,
           .pVertexAttributeDescriptions = na };
   VkPipelineInputAssemblyStateCreateInfo niAs
       = { .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -192,12 +194,13 @@ renderer_create_pipelines (Renderer *r)
   VkVertexInputAttributeDescription ea[]
       = { { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 },
           { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12 },
-          { 2, 0, VK_FORMAT_R32_SFLOAT, 24 } };
+          { 2, 0, VK_FORMAT_R32_SFLOAT, 24 },
+          { 3, 0, VK_FORMAT_R32_SFLOAT, 28 } };
   VkPipelineVertexInputStateCreateInfo evi
       = { .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
           .vertexBindingDescriptionCount = 1,
           .pVertexBindingDescriptions = eb,
-          .vertexAttributeDescriptionCount = 3,
+          .vertexAttributeDescriptionCount = 4,
           .pVertexAttributeDescriptions = ea };
   VkPipelineInputAssemblyStateCreateInfo eia
       = { .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,

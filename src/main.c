@@ -325,6 +325,13 @@ pick_object (bool isDoubleClick)
   float min_t = FLT_MAX;
   int hit_node = -1;
   int hit_edge = -1;
+
+  // Clear previous selection
+  for (uint32_t i = 0; i < currentGraph.node_count; i++)
+    currentGraph.nodes[i].selected = 0.0f;
+  for (uint32_t i = 0; i < currentGraph.edge_count; i++)
+    currentGraph.edges[i].selected = 0.0f;
+
   for (uint32_t i = 0; i < currentGraph.node_count; i++)
     {
       vec3 pos;
@@ -360,6 +367,7 @@ pick_object (bool isDoubleClick)
     }
   if (hit_node != -1)
     {
+      currentGraph.nodes[hit_node].selected = 1.0f;
       printf ("%s Clicked Node %d: %s\n", isDoubleClick ? "Double" : "Single",
               hit_node,
               currentGraph.nodes[hit_node].label
@@ -368,11 +376,14 @@ pick_object (bool isDoubleClick)
     }
   else if (hit_edge != -1)
     {
+      currentGraph.edges[hit_edge].selected = 1.0f;
       printf ("%s Clicked Edge %d: %d -> %d\n",
               isDoubleClick ? "Double" : "Single", hit_edge,
               currentGraph.edges[hit_edge].from,
               currentGraph.edges[hit_edge].to);
     }
+
+  renderer_update_graph (&renderer, &currentGraph);
 }
 
 void

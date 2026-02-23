@@ -61,9 +61,31 @@ renderer_update_ui (Renderer *r, const char *text)
       instances[i].color[3] = 1;
       xoff += (ci->xadvance * scale) / 1720.0f;
     }
-  r->uiTextCharCount = len;
+  
+  // Add crosshair at the center
+  unsigned char crossChar = '+';
+  CharInfo *ci_cross = &globalAtlas.chars[crossChar];
+  instances[len].screenPos[0] = 0.0f;
+  instances[len].screenPos[1] = 0.0f;
+  float crossScale = 1.5f;
+  float cw = (ci_cross->x1 - ci_cross->x0) * crossScale;
+  float ch = (ci_cross->y1 - ci_cross->y0) * crossScale;
+  instances[len].charRect[0] = -cw * 0.5f;
+  instances[len].charRect[1] = -ch * 0.5f;
+  instances[len].charRect[2] = cw * 0.5f;
+  instances[len].charRect[3] = ch * 0.5f;
+  instances[len].charUV[0] = ci_cross->u0;
+  instances[len].charUV[1] = ci_cross->v0;
+  instances[len].charUV[2] = ci_cross->u1;
+  instances[len].charUV[3] = ci_cross->v1;
+  instances[len].color[0] = 0.0f;
+  instances[len].color[1] = 1.0f;
+  instances[len].color[2] = 0.0f;
+  instances[len].color[3] = 1.0f;
+
+  r->uiTextCharCount = len + 1;
   updateBuffer (r->device, r->uiTextInstanceBufferMemory,
-                sizeof (UIInstance) * len, instances);
+                sizeof (UIInstance) * (len + 1), instances);
 }
 
 void
@@ -469,12 +491,14 @@ renderer_update_graph (Renderer *r, GraphData *graph)
               memcpy (evs[idx].color, graph->nodes[graph->edges[i].from].color,
                       12);
               evs[idx].size = graph->edges[i].size;
+              evs[idx].selected = graph->edges[i].selected;
               idx++;
 
               memcpy (evs[idx].pos, cEdges[i].path[p + 1], 12);
               memcpy (evs[idx].color, graph->nodes[graph->edges[i].to].color,
                       12);
               evs[idx].size = graph->edges[i].size;
+              evs[idx].selected = graph->edges[i].selected;
               idx++;
             }
         }
@@ -494,10 +518,12 @@ renderer_update_graph (Renderer *r, GraphData *graph)
           memcpy (evs[idx].color, graph->nodes[graph->edges[i].from].color,
                   12);
           evs[idx].size = graph->edges[i].size;
+          evs[idx].selected = graph->edges[i].selected;
           idx++;
           memcpy (evs[idx].pos, p2, 12);
           memcpy (evs[idx].color, graph->nodes[graph->edges[i].to].color, 12);
           evs[idx].size = graph->edges[i].size;
+          evs[idx].selected = graph->edges[i].selected;
           idx++;
         }
     }

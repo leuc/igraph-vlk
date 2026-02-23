@@ -9,11 +9,14 @@ layout(binding = 0) uniform UniformBufferObject {
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inColor;
 layout(location = 2) in float inSize;
+layout(location = 3) in float inSelected;
 
 layout(location = 0) out vec3 fragColor;
+layout(location = 1) out float fragSelected;
 
 void main() {
     gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
     // Use inSize to dim/brighten the edge
     fragColor = inColor * (0.2 + 0.8 * inSize);
+    fragSelected = inSelected;
 }

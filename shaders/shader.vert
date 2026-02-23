@@ -14,12 +14,14 @@ layout(location = 4) in vec3 instanceColor;
 layout(location = 5) in float instanceSize;
 layout(location = 6) in float instanceGlow;
 layout(location = 7) in int instanceDegree;
+layout(location = 8) in float instanceSelected;
 
 layout(location = 0) out vec3 fragNormal;
 layout(location = 1) out vec2 fragTexCoord;
 layout(location = 2) out vec3 fragColor;
 layout(location = 3) out float fragGlow;
 layout(location = 4) out flat int fragDegree;
+layout(location = 5) out float fragSelected;
 
 void main() {
     float finalSize = 0.5 * instanceSize;
@@ -45,4 +47,5 @@ void main() {
     fragColor = instanceColor;
     fragGlow = instanceGlow;
     fragDegree = instanceDegree;
+    fragSelected = instanceSelected;
 }
