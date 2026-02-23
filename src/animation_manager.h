@@ -8,6 +8,8 @@
 #include "graph_loader.h"
 #include "renderer.h"
 
+#define MAX_ANIMATIONS 256 // Max number of concurrent animations
+
 // Represents a single edge animation
 typedef struct EdgeAnimation
 {
@@ -21,6 +23,8 @@ typedef struct EdgeAnimation
   vec3 start_pos;
   vec3 end_pos;
   vec3 particle_color; // Color of the animating particle
+  float particle_size;
+  float particle_glow;
 } EdgeAnimation;
 
 // Manages all active animations

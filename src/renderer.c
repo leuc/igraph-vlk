@@ -3,9 +3,12 @@
 #include "renderer_pipelines.h"
 #include "text.h"
 #include "vulkan_utils.h"
+#include "animation_manager.h" // New include
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+extern AnimationManager globalAnimationManager;
 
 #define MAX_FRAMES_IN_FLIGHT 2
 #define FONT_PATH "/usr/share/fonts/truetype/inconsolata/Inconsolata.otf"
@@ -568,6 +571,35 @@ renderer_draw_frame (Renderer *r)
                           sizeof (float), &alpha_particle);
       vkCmdBindPipeline (r->commandBuffers[r->currentFrame],
                          VK_PIPELINE_BIND_POINT_GRAPHICS, r->particlePipeline); // Use particle pipeline
+
+      // Get particle data from animation manager
+      vec3 *particle_positions = malloc(sizeof(vec3) * MAX_ANIMATIONS); // Assuming MAX_ANIMATIONS is sufficient
+      vec3 *particle_colors = malloc(sizeof(vec3) * MAX_ANIMATIONS);
+      uint32_t active_particles_count = 0;
+      animation_manager_get_particle_data(&globalAnimationManager, particle_positions, particle_colors, &active_particles_count);
+      
+      // Update the renderer's particle count
+      r->currentParticleCount = active_particles_count;
+
+      if (r->currentParticleCount > 0) {
+        // Create temporary Node instances for particle rendering
+        Node *particle_nodes = malloc(sizeof(Node) * r->currentParticleCount);
+        for (uint32_t i = 0; i < r->currentParticleCount; ++i) {
+          glm_vec3_copy(particle_positions[i], particle_nodes[i].position);
+          glm_vec3_copy(particle_colors[i], particle_nodes[i].color);
+          particle_nodes[i].size = 1.5f; // Fixed size for now, could be passed from animation_manager
+          particle_nodes[i].glow = 8.0f;  // Fixed glow for now, could be passed from animation_manager
+          particle_nodes[i].degree = 3;   // Smallest platonic solid (tetrahedron)
+          particle_nodes[i].selected = 0.0f; // Not selected
+        }
+
+        updateBuffer (r->device, r->particleVertexBufferMemory,
+                      sizeof (Node) * r->currentParticleCount, particle_nodes);
+        free(particle_nodes);
+      }
+
+      free(particle_positions);
+      free(particle_colors);
       
       // We reuse the first platonic solid (tetrahedron) for particles
       VkBuffer vbs[] = { r->vertexBuffers[0], r->particleVertexBuffer };

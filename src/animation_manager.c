@@ -3,13 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define INITIAL_ANIMATION_CAPACITY 16
-
 void
 animation_manager_init (AnimationManager *am, Renderer *r, GraphData *gd)
 {
   am->animations = (EdgeAnimation *)malloc (
-      sizeof (EdgeAnimation) * INITIAL_ANIMATION_CAPACITY);
+      sizeof (EdgeAnimation) * MAX_ANIMATIONS);
   if (!am->animations)
     {
       fprintf (stderr, "Failed to allocate memory for EdgeAnimation array.\n");
@@ -18,7 +16,7 @@ animation_manager_init (AnimationManager *am, Renderer *r, GraphData *gd)
       return;
     }
   am->num_animations = 0;
-  am->max_animations = INITIAL_ANIMATION_CAPACITY;
+  am->max_animations = MAX_ANIMATIONS;
   am->renderer_ptr = r;
   am->graph_data_ptr = gd;
   am->animating_edge_idx = -1; // No edge is animating initially
@@ -99,9 +97,11 @@ animation_manager_add_edge (AnimationManager *am, uint32_t edge_id,
                   new_anim->end_pos);
   
   // For now, use a fixed color, could be derived from edge or node colors
-  new_anim->particle_color[0] = 1.0f; // Red
-  new_anim->particle_color[1] = 0.0f;
-  new_anim->particle_color[2] = 0.0f;
+  new_anim->particle_color[0] = 0.0f; // Cyan
+  new_anim->particle_color[1] = 1.0f;
+  new_anim->particle_color[2] = 1.0f;
+  new_anim->particle_size = 1.5f;   // Make particles larger
+  new_anim->particle_glow = 8.0f;   // Make particles glow brightly
 
   am->animating_edge_idx = am->num_animations;
   am->num_animations++;

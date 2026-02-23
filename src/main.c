@@ -32,6 +32,8 @@ char *currentNodeAttr;
 char *currentEdgeAttr;
 
 AnimationManager globalAnimationManager; // Declare global animation manager
+int last_picked_node = -1; // Stores the index of the last picked node
+int last_picked_edge = -1; // Stores the index of the last picked edge
 
 const char *layout_names[] = { "Fruchterman-Reingold",
                                "Kamada-Kawai",
@@ -269,7 +271,7 @@ key_callback (GLFWwindow *window, int key, int scancode, int action, int mods)
       break;
     }
 }
- 
+
 bool
 ray_sphere_intersection (vec3 ori, vec3 dir, vec3 center, float radius, float *t)
 {
@@ -335,6 +337,12 @@ pick_object (bool isDoubleClick)
   for (uint32_t i = 0; i < currentGraph.edge_count; i++)
     currentGraph.edges[i].selected = 0.0f;
 
+  // Clear previous animations if a new object is picked or on double-click
+  if (isDoubleClick || (last_picked_node != -1 && hit_node != last_picked_node) || (last_picked_edge != -1 && hit_edge != last_picked_edge)) {
+    animation_manager_cleanup(&globalAnimationManager);
+    animation_manager_init(&globalAnimationManager, &renderer, &currentGraph);
+  }
+
   for (uint32_t i = 0; i < currentGraph.node_count; i++)
     {
       vec3 pos;
@@ -376,6 +384,35 @@ pick_object (bool isDoubleClick)
               currentGraph.nodes[hit_node].label
                   ? currentGraph.nodes[hit_node].label
                   : "no label");
+      last_picked_node = hit_node;
+      last_picked_edge = -1; // Clear edge selection
+
+      if (isDoubleClick)
+        {
+          printf ("Double-clicked node %d. Animating connected edges.\n",
+                  hit_node);
+          for (uint32_t i = 0; i < currentGraph.edge_count; ++i)
+            {
+              uint32_t edge_from = currentGraph.edges[i].from;
+              uint32_t edge_to = currentGraph.edges[i].to;
+              int direction = 0;
+
+              if (edge_from == hit_node)
+                {
+                  direction = 1; // From hit_node to edge.to
+                }
+              else if (edge_to == hit_node)
+                {
+                  direction = -1; // From hit_node to edge.from (i.e. backward)
+                }
+
+              if (direction != 0)
+                {
+                  animation_manager_add_edge (&globalAnimationManager, i, direction);
+                  printf ("From: %d To: %d \n", edge_from, edge_to);
+                }
+            }
+        }
     }
   else if (hit_edge != -1)
     {
@@ -384,6 +421,13 @@ pick_object (bool isDoubleClick)
               isDoubleClick ? "Double" : "Single", hit_edge,
               currentGraph.edges[hit_edge].from,
               currentGraph.edges[hit_edge].to);
+      last_picked_edge = hit_edge;
+      last_picked_node = -1; // Clear node selection
+    }
+  else
+    {
+      last_picked_node = -1;
+      last_picked_edge = -1;
     }
 
   renderer_update_graph (&renderer, &currentGraph);
@@ -513,10 +557,7 @@ main (int argc, char **argv)
     return EXIT_FAILURE;
 
   animation_manager_init(&globalAnimationManager, &renderer, &currentGraph);
-  // Add a dummy animation for testing (e.g., edge 0)
-  if (currentGraph.edge_count > 0) {
-      animation_manager_add_edge(&globalAnimationManager, 0, 1);
-  }
+  // Dummy animation removed
 
   float lastFrame = 0.0f;
   float fpsTimer = 0.0f;
