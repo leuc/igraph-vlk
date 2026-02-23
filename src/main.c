@@ -3,6 +3,7 @@
 #include "layout_openord.h"
 #include "renderer.h"
 #include <cglm/cglm.h>
+#include <float.h>
 #include <getopt.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -265,6 +266,127 @@ key_callback (GLFWwindow *window, int key, int scancode, int action, int mods)
       break;
     }
 }
+ 
+bool
+ray_sphere_intersection (vec3 ori, vec3 dir, vec3 center, float radius, float *t)
+{
+  vec3 oc;
+  glm_vec3_sub (ori, center, oc);
+  float b = glm_vec3_dot (oc, dir);
+  float c = glm_vec3_dot (oc, oc) - radius * radius;
+  float h = b * b - c;
+  if (h < 0.0f)
+    return false;
+  h = sqrtf (h);
+  *t = -b - h;
+  return true;
+}
+
+float
+dist_ray_segment (vec3 ori, vec3 dir, vec3 p1, vec3 p2, float *t_out)
+{
+  vec3 u, v, w;
+  glm_vec3_sub (p2, p1, u);
+  glm_vec3_copy (dir, v);
+  glm_vec3_sub (p1, ori, w);
+  float a = glm_vec3_dot (u, u);
+  float b = glm_vec3_dot (u, v);
+  float c = glm_vec3_dot (v, v);
+  float d = glm_vec3_dot (u, w);
+  float e = glm_vec3_dot (v, w);
+  float D = a * c - b * b;
+  float sc, tc;
+  if (D < 0.000001f)
+    {
+      sc = 0.0f;
+      tc = (b > c ? d / b : e / c);
+    }
+  else
+    {
+      sc = (b * e - c * d) / D;
+      tc = (a * e - b * d) / D;
+    }
+  if (sc < 0.0f)
+    sc = 0.0f;
+  else if (sc > 1.0f)
+    sc = 1.0f;
+  vec3 p_seg, p_ray;
+  glm_vec3_scale (u, sc, p_seg);
+  glm_vec3_add (p1, p_seg, p_seg);
+  glm_vec3_scale (v, tc, p_ray);
+  glm_vec3_add (ori, p_ray, p_ray);
+  *t_out = tc;
+  return glm_vec3_distance (p_seg, p_ray);
+}
+
+void
+pick_object (bool isDoubleClick)
+{
+  float min_t = FLT_MAX;
+  int hit_node = -1;
+  int hit_edge = -1;
+  for (uint32_t i = 0; i < currentGraph.node_count; i++)
+    {
+      vec3 pos;
+      glm_vec3_scale (currentGraph.nodes[i].position, renderer.layoutScale,
+                      pos);
+      float radius = currentGraph.nodes[i].size * 0.5f;
+      float t;
+      if (ray_sphere_intersection (cameraPos, cameraFront, pos, radius, &t))
+        {
+          if (t > 0 && t < min_t)
+            {
+              min_t = t;
+              hit_node = i;
+              hit_edge = -1;
+            }
+        }
+    }
+  for (uint32_t i = 0; i < currentGraph.edge_count; i++)
+    {
+      vec3 p1, p2;
+      glm_vec3_scale (currentGraph.nodes[currentGraph.edges[i].from].position,
+                      renderer.layoutScale, p1);
+      glm_vec3_scale (currentGraph.nodes[currentGraph.edges[i].to].position,
+                      renderer.layoutScale, p2);
+      float t, dist;
+      dist = dist_ray_segment (cameraPos, cameraFront, p1, p2, &t);
+      if (dist < 0.2f && t > 0 && t < min_t)
+        {
+          min_t = t;
+          hit_node = -1;
+          hit_edge = i;
+        }
+    }
+  if (hit_node != -1)
+    {
+      printf ("%s Clicked Node %d: %s\n", isDoubleClick ? "Double" : "Single",
+              hit_node,
+              currentGraph.nodes[hit_node].label
+                  ? currentGraph.nodes[hit_node].label
+                  : "no label");
+    }
+  else if (hit_edge != -1)
+    {
+      printf ("%s Clicked Edge %d: %d -> %d\n",
+              isDoubleClick ? "Double" : "Single", hit_edge,
+              currentGraph.edges[hit_edge].from,
+              currentGraph.edges[hit_edge].to);
+    }
+}
+
+void
+mouse_button_callback (GLFWwindow *window, int button, int action, int mods)
+{
+  if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+    {
+      static double lastClickTime = 0;
+      double currentTime = glfwGetTime ();
+      bool isDoubleClick = (currentTime - lastClickTime) < 0.3;
+      lastClickTime = currentTime;
+      pick_object (isDoubleClick);
+    }
+}
 
 void
 mouse_callback (GLFWwindow *window, double xpos, double ypos)
@@ -370,6 +492,7 @@ main (int argc, char **argv)
   if (!window)
     return EXIT_FAILURE;
   glfwSetKeyCallback (window, key_callback);
+  glfwSetMouseButtonCallback (window, mouse_button_callback);
   glfwSetCursorPosCallback (window, mouse_callback);
   glfwSetInputMode (window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
   if (renderer_init (&renderer, window, &currentGraph) != 0)
