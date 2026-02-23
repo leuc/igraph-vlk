@@ -75,7 +75,7 @@ void animation_manager_add_edge(AnimationManager *am, uint32_t edge_id,
 	// If not found in manager, add a new animation entry
 	EdgeAnimation *new_anim = &am->animations[am->num_animations];
 	new_anim->edge_id = edge_id;
-	new_anim->speed = 0.5f; // Default speed: traverse edge in 2 seconds
+	new_anim->speed = 4.2f; // Default speed: traverse edge in 2 seconds
 	new_anim->is_active = true;
 
 	edge_to_animate->is_animating = true;
@@ -130,9 +130,24 @@ void animation_manager_update(AnimationManager *am, float deltaTime) {
 		EdgeAnimation *anim = &am->animations[i];
 		if (anim->is_active) {
 			Edge *animated_edge = &am->graph_data_ptr->edges[anim->edge_id];
+
+			// 1. Get the 3D positions of the start and end nodes
+			vec3 *pos_from = &am->graph_data_ptr->nodes[animated_edge->from].position;
+			vec3 *pos_to = &am->graph_data_ptr->nodes[animated_edge->to].position;
+
+			// 2. Calculate the physical length of the edge
+			float edge_length = glm_vec3_distance(*pos_from, *pos_to);
+
+			// 3. Normalize the speed so it traverses 'animation_speed' world units per second
+			float normalized_speed = animated_edge->animation_speed;
+			if (edge_length > 0.0001f) { // Prevent division by zero
+				normalized_speed = animated_edge->animation_speed / edge_length;
+			}
+
+			// 4. Apply the normalized speed
 			animated_edge->animation_progress +=
 				animated_edge->animation_direction *
-				animated_edge->animation_speed * deltaTime;
+				normalized_speed * deltaTime;
 
 			if (animated_edge->animation_progress < 0.0f) {
 				animated_edge->animation_progress = 0.0f;
