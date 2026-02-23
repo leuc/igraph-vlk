@@ -1,17 +1,17 @@
-#include "renderer.h"
 #include "graph_loader.h"
-#include "layout_openord.h"
 #include "layered_sphere.h"
+#include "layout_openord.h"
+#include "renderer.h"
+#include <cglm/cglm.h>
+#include <getopt.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
-#include <getopt.h>
-#include <cglm/cglm.h>
 
-vec3 cameraPos = {0.0f, 0.0f, 50.0f};
-vec3 cameraFront = {0.0f, 0.0f, -1.0f};
-vec3 cameraUp = {0.0f, 1.0f, 0.0f};
+vec3 cameraPos = { 0.0f, 0.0f, 50.0f };
+vec3 cameraFront = { 0.0f, 0.0f, -1.0f };
+vec3 cameraUp = { 0.0f, 1.0f, 0.0f };
 float yaw = -90.0f;
 float pitch = 0.0f;
 float lastX = 1720, lastY = 720;
@@ -22,175 +22,398 @@ int windowedX, windowedY, windowedWidth, windowedHeight;
 
 Renderer renderer;
 GraphData currentGraph;
-char* currentFilename;
+char *currentFilename;
 LayoutType currentLayout = LAYOUT_OPENORD_3D;
 ClusterType currentCluster = CLUSTER_FASTGREEDY;
 CentralityType currentCentrality = CENTRALITY_PAGERANK;
-char* currentNodeAttr;
-char* currentEdgeAttr;
+char *currentNodeAttr;
+char *currentEdgeAttr;
 
-const char* layout_names[] = { "Fruchterman-Reingold", "Kamada-Kawai", "Random", "Sphere", "Grid", "UMAP", "DrL", "OpenOrd", "Layered Sphere" };
-const char* cluster_names[] = { "Fast Greedy", "Walktrap", "Label Propagation", "Multilevel", "Leiden" };
-const char* centrality_names[] = { "PageRank", "Hubs", "Authorities", "Betweenness", "Degree", "Closeness", "Harmonic", "Eigenvector", "Strength", "Constraint" };
+const char *layout_names[] = { "Fruchterman-Reingold",
+                               "Kamada-Kawai",
+                               "Random",
+                               "Sphere",
+                               "Grid",
+                               "UMAP",
+                               "DrL",
+                               "OpenOrd",
+                               "Layered Sphere" };
+const char *cluster_names[] = { "Fast Greedy", "Walktrap", "Label Propagation",
+                                "Multilevel", "Leiden" };
+const char *centrality_names[]
+    = { "PageRank",  "Hubs",     "Authorities", "Betweenness", "Degree",
+        "Closeness", "Harmonic", "Eigenvector", "Strength",    "Constraint" };
 
-void update_ui_text(float fps) {
-    char stage_info[64] = "";
-    if (currentLayout == LAYOUT_OPENORD_3D && currentGraph.openord) {
-        snprintf(stage_info, sizeof(stage_info), " [%s:%d]",
-            openord_get_stage_name(currentGraph.openord->stage_id),
-            currentGraph.openord->current_iter);
-    } else if (currentLayout == LAYOUT_LAYERED_SPHERE && currentGraph.layered_sphere) {
-        snprintf(stage_info, sizeof(stage_info), " [%s:%d]",
-            layered_sphere_get_stage_name(currentGraph.layered_sphere),
-            currentGraph.layered_sphere->current_iter);
+void
+update_ui_text (float fps)
+{
+  char stage_info[64] = "";
+  if (currentLayout == LAYOUT_OPENORD_3D && currentGraph.openord)
+    {
+      snprintf (stage_info, sizeof (stage_info), " [%s:%d]",
+                openord_get_stage_name (currentGraph.openord->stage_id),
+                currentGraph.openord->current_iter);
+    }
+  else if (currentLayout == LAYOUT_LAYERED_SPHERE
+           && currentGraph.layered_sphere)
+    {
+      snprintf (stage_info, sizeof (stage_info), " [%s:%d]",
+                layered_sphere_get_stage_name (currentGraph.layered_sphere),
+                currentGraph.layered_sphere->current_iter);
     }
 
-    char buf[1024];
-    snprintf(buf, sizeof(buf),
-        "[L]ayout:%s%s [I]terate [C]ommunity:%s Str[u]cture:%s [O]verlap [B]ridge [T]ext:%s [N]ode:%d [E]dge:%d Filter:1-9 [K]Core:%d [R]eset [H]ide FPS:%.1f",
-        layout_names[currentLayout],
-        stage_info,
-        cluster_names[currentCluster],
-        centrality_names[currentCentrality],
-        renderer.showLabels ? "ON" : "OFF",
-        currentGraph.props.node_count,
-        currentGraph.props.edge_count,
-        currentGraph.props.coreness_filter,
-        fps
-    );
-    renderer_update_ui(&renderer, buf);
+  char buf[1024];
+  snprintf (buf, sizeof (buf),
+            "[L]ayout:%s%s [I]terate [C]ommunity:%s Str[u]cture:%s [O]verlap "
+            "[B]ridge [T]ext:%s [N]ode:%d [E]dge:%d Filter:1-9 [K]Core:%d "
+            "[R]eset [H]ide FPS:%.1f",
+            layout_names[currentLayout], stage_info,
+            cluster_names[currentCluster], centrality_names[currentCentrality],
+            renderer.showLabels ? "ON" : "OFF", currentGraph.props.node_count,
+            currentGraph.props.edge_count, currentGraph.props.coreness_filter,
+            fps);
+  renderer_update_ui (&renderer, buf);
 }
 
-void update_layout() { graph_layout_step(&currentGraph, currentLayout, 50); renderer_update_graph(&renderer, &currentGraph); }
-void run_clustering() { graph_cluster(&currentGraph, currentCluster); renderer_update_graph(&renderer, &currentGraph); }
-void run_centrality() { graph_calculate_centrality(&currentGraph, currentCentrality); renderer_update_graph(&renderer, &currentGraph); }
-void run_iteration() { graph_layout_step(&currentGraph, currentLayout, 1); renderer_update_graph(&renderer, &currentGraph); }
-void run_filter(int min_deg) { graph_filter_degree(&currentGraph, min_deg); renderer_update_graph(&renderer, &currentGraph); }
-void run_coreness_filter(int min_core) { graph_filter_coreness(&currentGraph, min_core); renderer_update_graph(&renderer, &currentGraph); }
-void run_infrastructure() { graph_highlight_infrastructure(&currentGraph); renderer_update_graph(&renderer, &currentGraph); }
+void
+update_layout ()
+{
+  graph_layout_step (&currentGraph, currentLayout, 50);
+  renderer_update_graph (&renderer, &currentGraph);
+}
+void
+run_clustering ()
+{
+  graph_cluster (&currentGraph, currentCluster);
+  renderer_update_graph (&renderer, &currentGraph);
+}
+void
+run_centrality ()
+{
+  graph_calculate_centrality (&currentGraph, currentCentrality);
+  renderer_update_graph (&renderer, &currentGraph);
+}
+void
+run_iteration ()
+{
+  graph_layout_step (&currentGraph, currentLayout, 1);
+  renderer_update_graph (&renderer, &currentGraph);
+}
+void
+run_filter (int min_deg)
+{
+  graph_filter_degree (&currentGraph, min_deg);
+  renderer_update_graph (&renderer, &currentGraph);
+}
+void
+run_coreness_filter (int min_core)
+{
+  graph_filter_coreness (&currentGraph, min_core);
+  renderer_update_graph (&renderer, &currentGraph);
+}
+void
+run_infrastructure ()
+{
+  graph_highlight_infrastructure (&currentGraph);
+  renderer_update_graph (&renderer, &currentGraph);
+}
 
-void run_reset() {
-    graph_free_data(&currentGraph);
-    currentLayout = LAYOUT_OPENORD_3D;
-    renderer.layoutScale = 1.0f;
-    currentGraph.props.coreness_filter = 0;
-    if (graph_load_graphml(currentFilename, &currentGraph, currentLayout, currentNodeAttr, currentEdgeAttr) == 0) {
-        renderer_update_graph(&renderer, &currentGraph);
+void
+run_reset ()
+{
+  graph_free_data (&currentGraph);
+  currentLayout = LAYOUT_OPENORD_3D;
+  renderer.layoutScale = 1.0f;
+  currentGraph.props.coreness_filter = 0;
+  if (graph_load_graphml (currentFilename, &currentGraph, currentLayout,
+                          currentNodeAttr, currentEdgeAttr)
+      == 0)
+    {
+      renderer_update_graph (&renderer, &currentGraph);
     }
 }
 
-GLFWmonitor* get_current_monitor(GLFWwindow* window) {
-    int nmonitors; GLFWmonitor** monitors = glfwGetMonitors(&nmonitors); if (nmonitors <= 1) return glfwGetPrimaryMonitor();
-    int wx, wy, ww, wh; glfwGetWindowPos(window, &wx, &wy); glfwGetWindowSize(window, &ww, &wh);
-    int best_overlap = 0; GLFWmonitor* best_monitor = monitors[0];
-    for (int i = 0; i < nmonitors; i++) {
-        int mx, my; glfwGetMonitorPos(monitors[i], &mx, &my); const GLFWvidmode* mode = glfwGetVideoMode(monitors[i]);
-        int overlap = fmax(0, fmin(wx + ww, mx + mode->width) - fmax(wx, mx)) * fmax(0, fmin(wy + wh, my + mode->height) - fmax(wy, my));
-        if (overlap > best_overlap) { best_overlap = overlap; best_monitor = monitors[i]; }
-    }
-    return best_monitor;
-}
-
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    if (action != GLFW_PRESS) return;
-    if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9) { run_filter(key - GLFW_KEY_0); return; }
-    switch (key) {
-        case GLFW_KEY_F:
-            if (!isFullscreen) { glfwGetWindowPos(window, &windowedX, &windowedY); glfwGetWindowSize(window, &windowedWidth, &windowedHeight); GLFWmonitor* monitor = get_current_monitor(window); const GLFWvidmode* mode = glfwGetVideoMode(monitor); glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate); }
-            else { glfwSetWindowMonitor(window, NULL, windowedX, windowedY, windowedWidth, windowedHeight, 0); }
-            isFullscreen = !isFullscreen; break;
-        case GLFW_KEY_T: renderer.showLabels = !renderer.showLabels; break;
-        case GLFW_KEY_P: renderer.showSpheres = !renderer.showSpheres; break;
-        case GLFW_KEY_N: renderer.showNodes = !renderer.showNodes; break;
-        case GLFW_KEY_E: renderer.showEdges = !renderer.showEdges; break;
-        case GLFW_KEY_H: renderer.showUI = !renderer.showUI; break;
-        case GLFW_KEY_B: run_infrastructure(); break;
-        case GLFW_KEY_K: run_coreness_filter(currentGraph.props.coreness_filter + 1); break;
-        case GLFW_KEY_L: currentLayout = (currentLayout + 1) % LAYOUT_COUNT; update_layout(); break;
-        case GLFW_KEY_C: currentCluster = (currentCluster + 1) % CLUSTER_COUNT; run_clustering(); break;
-        case GLFW_KEY_U: currentCentrality = (currentCentrality + 1) % CENTRALITY_COUNT; run_centrality(); break;
-        case GLFW_KEY_I: run_iteration(); break;
-        case GLFW_KEY_O: graph_remove_overlaps(&currentGraph, renderer.layoutScale); renderer_update_graph(&renderer, &currentGraph); break;
-        case GLFW_KEY_R: run_reset(); break;
-
-        // --- NEW ROUTING HOT-SWAP ---
-        case GLFW_KEY_M:
-            renderer.currentRoutingMode = (renderer.currentRoutingMode + 1) % 3;
-            printf("Switched Edge Routing Mode to %d\n", renderer.currentRoutingMode);
-
-            if (renderer.currentRoutingMode == ROUTING_MODE_3D_HUB_SPOKE) {
-                printf("Generating K-Means Hubs...\n");
-                graph_generate_hubs(&currentGraph, 150); // Generate 150 transit hubs
-            }
-
-            renderer_update_graph(&renderer, &currentGraph); // Re-dispatch compute shaders
-            break;
-        // ----------------------------
-
-        case GLFW_KEY_KP_ADD:
-        case GLFW_KEY_EQUAL: renderer.layoutScale *= 1.2f; renderer_update_graph(&renderer, &currentGraph); break;
-        case GLFW_KEY_KP_SUBTRACT:
-        case GLFW_KEY_MINUS: renderer.layoutScale /= 1.2f; renderer_update_graph(&renderer, &currentGraph); break;
-    }
-}
-
-void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
-    if (firstMouse) { lastX = (float)xpos; lastY = (float)ypos; firstMouse = false; }
-    float xoffset = ((float)xpos - lastX) * 0.1f; float yoffset = (lastY - (float)ypos) * 0.1f;
-    lastX = (float)xpos; lastY = (float)ypos;
-    yaw += xoffset; pitch += yoffset;
-    if (pitch > 89.0f) pitch = 89.0f; if (pitch < -89.0f) pitch = -89.0f;
-    vec3 front; front[0] = cosf(glm_rad(yaw)) * cosf(glm_rad(pitch)); front[1] = sinf(glm_rad(pitch)); front[2] = sinf(glm_rad(yaw)) * cosf(glm_rad(pitch));
-    glm_vec3_normalize_to(front, cameraFront);
-}
-
-void processInput(GLFWwindow *window, float deltaTime) {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
-    float cameraSpeed = 20.0f * deltaTime; vec3 temp;
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) { glm_vec3_scale(cameraFront, cameraSpeed, temp); glm_vec3_add(cameraPos, temp, cameraPos); }
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) { glm_vec3_scale(cameraFront, cameraSpeed, temp); glm_vec3_sub(cameraPos, temp, cameraPos); }
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) { vec3 cross; glm_vec3_cross(cameraFront, cameraUp, cross); glm_vec3_normalize(cross); glm_vec3_scale(cross, cameraSpeed, temp); glm_vec3_sub(cameraPos, temp, cameraPos); }
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) { vec3 cross; glm_vec3_cross(cameraFront, cameraUp, cross); glm_vec3_normalize(cross); glm_vec3_scale(cross, cameraSpeed, temp); glm_vec3_add(cameraPos, temp, cameraPos); }
-}
-
-int main(int argc, char** argv) {
-    int opt; static struct option long_options[] = { {"layout", 1, 0, 'l'}, {"node-attr", 1, 0, 1}, {"edge-attr", 1, 0, 2}, {0, 0, 0, 0} };
-    while ((opt = getopt_long(argc, argv, "l:", long_options, NULL)) != -1) {
-        switch (opt) {
-            case 'l': if (strcmp(optarg, "fr") == 0) currentLayout = LAYOUT_FR_3D; else if (strcmp(optarg, "kk") == 0) currentLayout = LAYOUT_KK_3D; break;
-            case 1: currentNodeAttr = optarg; break;
-            case 2: currentEdgeAttr = optarg; break;
+GLFWmonitor *
+get_current_monitor (GLFWwindow *window)
+{
+  int nmonitors;
+  GLFWmonitor **monitors = glfwGetMonitors (&nmonitors);
+  if (nmonitors <= 1)
+    return glfwGetPrimaryMonitor ();
+  int wx, wy, ww, wh;
+  glfwGetWindowPos (window, &wx, &wy);
+  glfwGetWindowSize (window, &ww, &wh);
+  int best_overlap = 0;
+  GLFWmonitor *best_monitor = monitors[0];
+  for (int i = 0; i < nmonitors; i++)
+    {
+      int mx, my;
+      glfwGetMonitorPos (monitors[i], &mx, &my);
+      const GLFWvidmode *mode = glfwGetVideoMode (monitors[i]);
+      int overlap
+          = fmax (0, fmin (wx + ww, mx + mode->width) - fmax (wx, mx))
+            * fmax (0, fmin (wy + wh, my + mode->height) - fmax (wy, my));
+      if (overlap > best_overlap)
+        {
+          best_overlap = overlap;
+          best_monitor = monitors[i];
         }
     }
-    if (optind >= argc) return EXIT_FAILURE;
-    currentFilename = argv[optind];
-    currentGraph.graph_initialized = false;
-    if (graph_load_graphml(currentFilename, &currentGraph, currentLayout, currentNodeAttr, currentEdgeAttr) != 0) return EXIT_FAILURE;
-    if (!glfwInit()) return EXIT_FAILURE;
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    GLFWwindow* window = glfwCreateWindow(3440, 1440, "Graph Sphere", NULL, NULL);
-    if (!window) return EXIT_FAILURE;
-    glfwSetKeyCallback(window, key_callback);
-    glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    if (renderer_init(&renderer, window, &currentGraph) != 0) return EXIT_FAILURE;
-    float lastFrame = 0.0f; float fpsTimer = 0.0f; int frameCount = 0; float currentFps = 0.0f;
-    while (!glfwWindowShouldClose(window)) {
-        float currentFrame = (float)glfwGetTime(); float deltaTime = currentFrame - lastFrame; lastFrame = currentFrame;
-        fpsTimer += deltaTime; frameCount++;
-        if (fpsTimer >= 1.0f) { currentFps = frameCount / fpsTimer; frameCount = 0; fpsTimer = 0.0f; }
-        glfwPollEvents(); processInput(window, deltaTime); update_ui_text(currentFps);
+  return best_monitor;
+}
 
-        if (currentLayout == LAYOUT_OPENORD_3D && currentGraph.openord && currentGraph.openord->stage_id < 5) {
-            graph_layout_step(&currentGraph, currentLayout, 1);
-            renderer_update_graph(&renderer, &currentGraph);
-        } else if (currentLayout == LAYOUT_LAYERED_SPHERE && currentGraph.layered_sphere) {
-            graph_layout_step(&currentGraph, currentLayout, 1);
-            renderer_update_graph(&renderer, &currentGraph);
+void
+key_callback (GLFWwindow *window, int key, int scancode, int action, int mods)
+{
+  if (action != GLFW_PRESS)
+    return;
+  if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9)
+    {
+      run_filter (key - GLFW_KEY_0);
+      return;
+    }
+  switch (key)
+    {
+    case GLFW_KEY_F:
+      if (!isFullscreen)
+        {
+          glfwGetWindowPos (window, &windowedX, &windowedY);
+          glfwGetWindowSize (window, &windowedWidth, &windowedHeight);
+          GLFWmonitor *monitor = get_current_monitor (window);
+          const GLFWvidmode *mode = glfwGetVideoMode (monitor);
+          glfwSetWindowMonitor (window, monitor, 0, 0, mode->width,
+                                mode->height, mode->refreshRate);
+        }
+      else
+        {
+          glfwSetWindowMonitor (window, NULL, windowedX, windowedY,
+                                windowedWidth, windowedHeight, 0);
+        }
+      isFullscreen = !isFullscreen;
+      break;
+    case GLFW_KEY_T:
+      renderer.showLabels = !renderer.showLabels;
+      break;
+    case GLFW_KEY_P:
+      renderer.showSpheres = !renderer.showSpheres;
+      break;
+    case GLFW_KEY_N:
+      renderer.showNodes = !renderer.showNodes;
+      break;
+    case GLFW_KEY_E:
+      renderer.showEdges = !renderer.showEdges;
+      break;
+    case GLFW_KEY_H:
+      renderer.showUI = !renderer.showUI;
+      break;
+    case GLFW_KEY_B:
+      run_infrastructure ();
+      break;
+    case GLFW_KEY_K:
+      run_coreness_filter (currentGraph.props.coreness_filter + 1);
+      break;
+    case GLFW_KEY_L:
+      currentLayout = (currentLayout + 1) % LAYOUT_COUNT;
+      update_layout ();
+      break;
+    case GLFW_KEY_C:
+      currentCluster = (currentCluster + 1) % CLUSTER_COUNT;
+      run_clustering ();
+      break;
+    case GLFW_KEY_U:
+      currentCentrality = (currentCentrality + 1) % CENTRALITY_COUNT;
+      run_centrality ();
+      break;
+    case GLFW_KEY_I:
+      run_iteration ();
+      break;
+    case GLFW_KEY_O:
+      graph_remove_overlaps (&currentGraph, renderer.layoutScale);
+      renderer_update_graph (&renderer, &currentGraph);
+      break;
+    case GLFW_KEY_R:
+      run_reset ();
+      break;
+
+    // --- NEW ROUTING HOT-SWAP ---
+    case GLFW_KEY_M:
+      renderer.currentRoutingMode = (renderer.currentRoutingMode + 1) % 3;
+      printf ("Switched Edge Routing Mode to %d\n",
+              renderer.currentRoutingMode);
+
+      if (renderer.currentRoutingMode == ROUTING_MODE_3D_HUB_SPOKE)
+        {
+          printf ("Generating K-Means Hubs...\n");
+          graph_generate_hubs (&currentGraph,
+                               150); // Generate 150 transit hubs
         }
 
-        renderer_update_view(&renderer, cameraPos, cameraFront, cameraUp); renderer_draw_frame(&renderer);
+      renderer_update_graph (&renderer,
+                             &currentGraph); // Re-dispatch compute shaders
+      break;
+      // ----------------------------
+
+    case GLFW_KEY_KP_ADD:
+    case GLFW_KEY_EQUAL:
+      renderer.layoutScale *= 1.2f;
+      renderer_update_graph (&renderer, &currentGraph);
+      break;
+    case GLFW_KEY_KP_SUBTRACT:
+    case GLFW_KEY_MINUS:
+      renderer.layoutScale /= 1.2f;
+      renderer_update_graph (&renderer, &currentGraph);
+      break;
     }
-    graph_free_data(&currentGraph); renderer_cleanup(&renderer); glfwDestroyWindow(window); glfwTerminate();
-    return 0;
+}
+
+void
+mouse_callback (GLFWwindow *window, double xpos, double ypos)
+{
+  if (firstMouse)
+    {
+      lastX = (float)xpos;
+      lastY = (float)ypos;
+      firstMouse = false;
+    }
+  float xoffset = ((float)xpos - lastX) * 0.1f;
+  float yoffset = (lastY - (float)ypos) * 0.1f;
+  lastX = (float)xpos;
+  lastY = (float)ypos;
+  yaw += xoffset;
+  pitch += yoffset;
+  if (pitch > 89.0f)
+    pitch = 89.0f;
+  if (pitch < -89.0f)
+    pitch = -89.0f;
+  vec3 front;
+  front[0] = cosf (glm_rad (yaw)) * cosf (glm_rad (pitch));
+  front[1] = sinf (glm_rad (pitch));
+  front[2] = sinf (glm_rad (yaw)) * cosf (glm_rad (pitch));
+  glm_vec3_normalize_to (front, cameraFront);
+}
+
+void
+processInput (GLFWwindow *window, float deltaTime)
+{
+  if (glfwGetKey (window, GLFW_KEY_ESCAPE) == GLFW_PRESS
+      || glfwGetKey (window, GLFW_KEY_Q) == GLFW_PRESS)
+    glfwSetWindowShouldClose (window, true);
+  float cameraSpeed = 20.0f * deltaTime;
+  vec3 temp;
+  if (glfwGetKey (window, GLFW_KEY_W) == GLFW_PRESS)
+    {
+      glm_vec3_scale (cameraFront, cameraSpeed, temp);
+      glm_vec3_add (cameraPos, temp, cameraPos);
+    }
+  if (glfwGetKey (window, GLFW_KEY_S) == GLFW_PRESS)
+    {
+      glm_vec3_scale (cameraFront, cameraSpeed, temp);
+      glm_vec3_sub (cameraPos, temp, cameraPos);
+    }
+  if (glfwGetKey (window, GLFW_KEY_A) == GLFW_PRESS)
+    {
+      vec3 cross;
+      glm_vec3_cross (cameraFront, cameraUp, cross);
+      glm_vec3_normalize (cross);
+      glm_vec3_scale (cross, cameraSpeed, temp);
+      glm_vec3_sub (cameraPos, temp, cameraPos);
+    }
+  if (glfwGetKey (window, GLFW_KEY_D) == GLFW_PRESS)
+    {
+      vec3 cross;
+      glm_vec3_cross (cameraFront, cameraUp, cross);
+      glm_vec3_normalize (cross);
+      glm_vec3_scale (cross, cameraSpeed, temp);
+      glm_vec3_add (cameraPos, temp, cameraPos);
+    }
+}
+
+int
+main (int argc, char **argv)
+{
+  int opt;
+  static struct option long_options[] = { { "layout", 1, 0, 'l' },
+                                          { "node-attr", 1, 0, 1 },
+                                          { "edge-attr", 1, 0, 2 },
+                                          { 0, 0, 0, 0 } };
+  while ((opt = getopt_long (argc, argv, "l:", long_options, NULL)) != -1)
+    {
+      switch (opt)
+        {
+        case 'l':
+          if (strcmp (optarg, "fr") == 0)
+            currentLayout = LAYOUT_FR_3D;
+          else if (strcmp (optarg, "kk") == 0)
+            currentLayout = LAYOUT_KK_3D;
+          break;
+        case 1:
+          currentNodeAttr = optarg;
+          break;
+        case 2:
+          currentEdgeAttr = optarg;
+          break;
+        }
+    }
+  if (optind >= argc)
+    return EXIT_FAILURE;
+  currentFilename = argv[optind];
+  currentGraph.graph_initialized = false;
+  if (graph_load_graphml (currentFilename, &currentGraph, currentLayout,
+                          currentNodeAttr, currentEdgeAttr)
+      != 0)
+    return EXIT_FAILURE;
+  if (!glfwInit ())
+    return EXIT_FAILURE;
+  glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
+  GLFWwindow *window
+      = glfwCreateWindow (3440, 1440, "Graph Sphere", NULL, NULL);
+  if (!window)
+    return EXIT_FAILURE;
+  glfwSetKeyCallback (window, key_callback);
+  glfwSetCursorPosCallback (window, mouse_callback);
+  glfwSetInputMode (window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+  if (renderer_init (&renderer, window, &currentGraph) != 0)
+    return EXIT_FAILURE;
+  float lastFrame = 0.0f;
+  float fpsTimer = 0.0f;
+  int frameCount = 0;
+  float currentFps = 0.0f;
+  while (!glfwWindowShouldClose (window))
+    {
+      float currentFrame = (float)glfwGetTime ();
+      float deltaTime = currentFrame - lastFrame;
+      lastFrame = currentFrame;
+      fpsTimer += deltaTime;
+      frameCount++;
+      if (fpsTimer >= 1.0f)
+        {
+          currentFps = frameCount / fpsTimer;
+          frameCount = 0;
+          fpsTimer = 0.0f;
+        }
+      glfwPollEvents ();
+      processInput (window, deltaTime);
+      update_ui_text (currentFps);
+
+      if (currentLayout == LAYOUT_OPENORD_3D && currentGraph.openord
+          && currentGraph.openord->stage_id < 5)
+        {
+          graph_layout_step (&currentGraph, currentLayout, 1);
+          renderer_update_graph (&renderer, &currentGraph);
+        }
+      else if (currentLayout == LAYOUT_LAYERED_SPHERE
+               && currentGraph.layered_sphere)
+        {
+          graph_layout_step (&currentGraph, currentLayout, 1);
+          renderer_update_graph (&renderer, &currentGraph);
+        }
+
+      renderer_update_view (&renderer, cameraPos, cameraFront, cameraUp);
+      renderer_draw_frame (&renderer);
+    }
+  graph_free_data (&currentGraph);
+  renderer_cleanup (&renderer);
+  glfwDestroyWindow (window);
+  glfwTerminate ();
+  return 0;
 }
