@@ -1,135 +1,130 @@
 #version 450
 
-layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
-struct Node
-{
-  vec3 position;
-  float pad1;
-  vec3 color;
-  float size;
-  int degree;
-  int pad2, pad3, pad4;
+struct Node {
+	vec3 position;
+	float pad1;
+	vec3 color;
+	float size;
+	int degree;
+	int pad2, pad3, pad4;
 };
 
-layout (std430, binding = 0) readonly buffer NodeBuffer { Node nodes[]; };
+layout(std430, binding = 0) readonly buffer NodeBuffer { Node nodes[]; };
 
-struct Edge
-{
-  int sourceId;
-  int targetId;
-  int elevationLevel;
-  int pathLength;
-  vec4 path[16];
+struct Edge {
+	int sourceId;
+	int targetId;
+	int elevationLevel;
+	int pathLength;
+	vec4 path[16];
 
-  // Add the variables added in the C struct
-  float animation_progress;
-  int animation_direction;
-  int is_animating;
+	// Add the variables added in the C struct
+	float animation_progress;
+	int animation_direction;
+	int is_animating;
 
-  // Add padding to align to 16 bytes (since the above 3 variables are 12
-  // bytes)
-  int pad;
+	// Add padding to align to 16 bytes (since the above 3 variables are 12
+	// bytes)
+	int pad;
 };
 
-layout (std430, binding = 1) buffer EdgeBuffer { Edge edges[]; };
+layout(std430, binding = 1) buffer EdgeBuffer { Edge edges[]; };
 
-layout (push_constant) uniform Constants
-{
-  int maxEdges;
-  float baseRadius;
+layout(push_constant) uniform Constants {
+	int maxEdges;
+	float baseRadius;
 }
 pc;
 
-void
-main ()
-{
-  uint idx = gl_GlobalInvocationID.x;
-  if (idx >= pc.maxEdges)
-    return;
+void main() {
+	uint idx = gl_GlobalInvocationID.x;
+	if (idx >= pc.maxEdges)
+		return;
 
-  int srcId = edges[idx].sourceId;
-  int dstId = edges[idx].targetId;
-  int elevation = edges[idx].elevationLevel;
+	int srcId = edges[idx].sourceId;
+	int dstId = edges[idx].targetId;
+	int elevation = edges[idx].elevationLevel;
 
-  vec3 srcPos = nodes[srcId].position;
-  vec3 dstPos = nodes[dstId].position;
+	vec3 srcPos = nodes[srcId].position;
+	vec3 dstPos = nodes[dstId].position;
 
-  float srcRadius = length (srcPos);
-  if (srcRadius < 0.001)
-    srcRadius = pc.baseRadius;
-  float dstRadius = length (dstPos);
-  if (dstRadius < 0.001)
-    dstRadius = pc.baseRadius;
+	float srcRadius = length(srcPos);
+	if (srcRadius < 0.001)
+		srcRadius = pc.baseRadius;
+	float dstRadius = length(dstPos);
+	if (dstRadius < 0.001)
+		dstRadius = pc.baseRadius;
 
-  // --- ELEVATION CONTROL ---
-  // Change this to -1.0 if you want inter-sphere lines to tunnel inward!
-  float ELEVATION_DIR = 3.0;
-  float highwayRadius
-      = srcRadius
-        + (elevation > 0 ? (ELEVATION_DIR * float (elevation) * 0.4) : 0.005);
+	// --- ELEVATION CONTROL ---
+	// Change this to -1.0 if you want inter-sphere lines to tunnel inward!
+	float ELEVATION_DIR = 3.0;
+	float highwayRadius =
+		srcRadius +
+		(elevation > 0 ? (ELEVATION_DIR * float(elevation) * 0.4) : 0.005);
 
-  vec3 srcNorm = normalize (srcPos);
-  vec3 dstNorm = normalize (dstPos);
+	vec3 srcNorm = normalize(srcPos);
+	vec3 dstNorm = normalize(dstPos);
 
-  // --- CLEAN RADIAL FAN-OUT ---
-  // 1. Get the raw direction vector between the two nodes
-  vec3 dir = normalize (dstPos - srcPos);
+	// --- CLEAN RADIAL FAN-OUT ---
+	// 1. Get the raw direction vector between the two nodes
+	vec3 dir = normalize(dstPos - srcPos);
 
-  // 2. Project direction onto the tangent plane of the sphere to keep traces
-  // flat
-  vec3 srcTang = normalize (dir - srcNorm * dot (dir, srcNorm));
-  vec3 dstTang = normalize (-dir - dstNorm * dot (-dir, dstNorm));
+	// 2. Project direction onto the tangent plane of the sphere to keep traces
+	// flat
+	vec3 srcTang = normalize(dir - srcNorm * dot(dir, srcNorm));
+	vec3 dstTang = normalize(-dir - dstNorm * dot(-dir, dstNorm));
 
-  // Calculate the physical "Ports" exactly on the edge of the N-gon tiles
-  // facing the target
-  vec3 srcPort = srcPos + (srcTang * (nodes[srcId].size * 0.45));
-  vec3 dstPort = dstPos + (dstTang * (nodes[dstId].size * 0.45));
+	// Calculate the physical "Ports" exactly on the edge of the N-gon tiles
+	// facing the target
+	vec3 srcPort = srcPos + (srcTang * (nodes[srcId].size * 0.45));
+	vec3 dstPort = dstPos + (dstTang * (nodes[dstId].size * 0.45));
 
-  // Calculate the "Stubs" (straight PCB pins before the trace bends)
-  vec3 srcStub = srcPos + (srcTang * (nodes[srcId].size * 1.0));
-  vec3 dstStub = dstPos + (dstTang * (nodes[dstId].size * 1.0));
+	// Calculate the "Stubs" (straight PCB pins before the trace bends)
+	vec3 srcStub = srcPos + (srcTang * (nodes[srcId].size * 1.0));
+	vec3 dstStub = dstPos + (dstTang * (nodes[dstId].size * 1.0));
 
-  // --- FIX THE ZIGZAG ---
-  // Calculate Spherical Coordinates based on the STUBS, not the Node centers!
-  vec3 routeSrcNorm = normalize (srcStub);
-  float srcLat = acos (routeSrcNorm.y);
-  float srcLon = atan (routeSrcNorm.z, routeSrcNorm.x);
+	// --- FIX THE ZIGZAG ---
+	// Calculate Spherical Coordinates based on the STUBS, not the Node centers!
+	vec3 routeSrcNorm = normalize(srcStub);
+	float srcLat = acos(routeSrcNorm.y);
+	float srcLon = atan(routeSrcNorm.z, routeSrcNorm.x);
 
-  vec3 routeDstNorm = normalize (dstStub);
-  float dstLat = acos (routeDstNorm.y);
-  float dstLon = atan (routeDstNorm.z, routeDstNorm.x);
+	vec3 routeDstNorm = normalize(dstStub);
+	float dstLat = acos(routeDstNorm.y);
+	float dstLon = atan(routeDstNorm.z, routeDstNorm.x);
 
-  // --- BUILD THE CIRCUIT PATH ---
+	// --- BUILD THE CIRCUIT PATH ---
 
-  edges[idx].path[0] = vec4 (srcPort, 1.0);
-  edges[idx].path[1] = vec4 (srcStub, 1.0);
+	edges[idx].path[0] = vec4(srcPort, 1.0);
+	edges[idx].path[1] = vec4(srcStub, 1.0);
 
-  // Ascend/Descend to highway
-  vec3 p2 = routeSrcNorm * highwayRadius;
-  edges[idx].path[2] = vec4 (p2, 1.0);
+	// Ascend/Descend to highway
+	vec3 p2 = routeSrcNorm * highwayRadius;
+	edges[idx].path[2] = vec4(p2, 1.0);
 
-  // Route Longitude (Sweep around the Y-axis)
-  vec3 p3Norm = vec3 (sin (srcLat) * cos (dstLon), cos (srcLat),
-                      sin (srcLat) * sin (dstLon));
-  vec3 p3 = normalize (p3Norm) * highwayRadius;
-  edges[idx].path[3] = vec4 (p3, 1.0);
+	// Route Longitude (Sweep around the Y-axis)
+	vec3 p3Norm =
+		vec3(sin(srcLat) * cos(dstLon), cos(srcLat), sin(srcLat) * sin(dstLon));
+	vec3 p3 = normalize(p3Norm) * highwayRadius;
+	edges[idx].path[3] = vec4(p3, 1.0);
 
-  // Route Latitude (Sweep up/down the Y-axis)
-  vec3 p4Norm = vec3 (sin (dstLat) * cos (dstLon), cos (dstLat),
-                      sin (dstLat) * sin (dstLon));
-  vec3 p4 = normalize (p4Norm) * highwayRadius;
-  edges[idx].path[4] = vec4 (p4, 1.0);
+	// Route Latitude (Sweep up/down the Y-axis)
+	vec3 p4Norm =
+		vec3(sin(dstLat) * cos(dstLon), cos(dstLat), sin(dstLat) * sin(dstLon));
+	vec3 p4 = normalize(p4Norm) * highwayRadius;
+	edges[idx].path[4] = vec4(p4, 1.0);
 
-  // Descend above target stub
-  vec3 p5 = routeDstNorm * highwayRadius;
-  edges[idx].path[5] = vec4 (p5, 1.0);
+	// Descend above target stub
+	vec3 p5 = routeDstNorm * highwayRadius;
+	edges[idx].path[5] = vec4(p5, 1.0);
 
-  // Drop to surface stub
-  edges[idx].path[6] = vec4 (dstStub, 1.0);
+	// Drop to surface stub
+	edges[idx].path[6] = vec4(dstStub, 1.0);
 
-  // Enter target port
-  edges[idx].path[7] = vec4 (dstPort, 1.0);
+	// Enter target port
+	edges[idx].path[7] = vec4(dstPort, 1.0);
 
-  edges[idx].pathLength = 8;
+	edges[idx].pathLength = 8;
 }
