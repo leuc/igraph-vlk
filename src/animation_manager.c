@@ -3,192 +3,144 @@
 #include <stdlib.h>
 #include <string.h>
 
-void
-animation_manager_init (AnimationManager *am, Renderer *r, GraphData *gd)
-{
-  am->animations = (EdgeAnimation *)malloc (
-      sizeof (EdgeAnimation) * MAX_ANIMATIONS);
-  if (!am->animations)
-    {
-      fprintf (stderr, "Failed to allocate memory for EdgeAnimation array.\n");
-      am->num_animations = 0;
-      am->max_animations = 0;
-      return;
-    }
-  am->num_animations = 0;
-  am->max_animations = MAX_ANIMATIONS;
-  am->renderer_ptr = r;
-  am->graph_data_ptr = gd;
-  am->animating_edge_idx = -1; // No edge is animating initially
+void animation_manager_init(AnimationManager *am, Renderer *r, GraphData *gd) {
+	am->animations =
+		(EdgeAnimation *)malloc(sizeof(EdgeAnimation) * MAX_ANIMATIONS);
+	if (!am->animations) {
+		fprintf(stderr, "Failed to allocate memory for EdgeAnimation array.\n");
+		am->num_animations = 0;
+		am->max_animations = 0;
+		return;
+	}
+	am->num_animations = 0;
+	am->max_animations = MAX_ANIMATIONS;
+	am->renderer_ptr = r;
+	am->graph_data_ptr = gd;
 }
 
-void
-animation_manager_cleanup (AnimationManager *am)
-{
-  if (am->animations)
-    {
-      free (am->animations);
-      am->animations = NULL;
-    }
-  am->num_animations = 0;
-  am->max_animations = 0;
-  am->renderer_ptr = NULL;
-  am->graph_data_ptr = NULL;
+void animation_manager_cleanup(AnimationManager *am) {
+	if (am->animations) {
+		// Before freeing, ensure all edges are marked as not animating
+		for (uint32_t i = 0; i < am->num_animations; ++i) {
+			if (am->animations[i].is_active) {
+				am->graph_data_ptr->edges[am->animations[i].edge_id]
+					.is_animating = false;
+			}
+		}
+		free(am->animations);
+		am->animations = NULL;
+	}
+	am->num_animations = 0;
+	am->max_animations = 0;
+	am->renderer_ptr = NULL;
+	am->graph_data_ptr = NULL;
 }
 
-static void
-resize_animations_array (AnimationManager *am)
-{
-  uint32_t new_capacity = am->max_animations * 2;
-  EdgeAnimation *new_array = (EdgeAnimation *)realloc (
-      am->animations, sizeof (EdgeAnimation) * new_capacity);
-  if (!new_array)
-    {
-      fprintf (stderr, "Failed to reallocate memory for EdgeAnimation array.\n");
-      return;
-    }
-  am->animations = new_array;
-  am->max_animations = new_capacity;
+static void resize_animations_array(AnimationManager *am) {
+	uint32_t new_capacity = am->max_animations * 2;
+	EdgeAnimation *new_array = (EdgeAnimation *)realloc(
+		am->animations, sizeof(EdgeAnimation) * new_capacity);
+	if (!new_array) {
+		fprintf(stderr,
+				"Failed to reallocate memory for EdgeAnimation array.\n");
+		return;
+	}
+	am->animations = new_array;
+	am->max_animations = new_capacity;
 }
 
-void
-animation_manager_add_edge (AnimationManager *am, uint32_t edge_id,
-                            int direction)
-{
-  if (am->num_animations >= am->max_animations)
-    {
-      resize_animations_array (am);
-    }
+void animation_manager_add_edge(AnimationManager *am, uint32_t edge_id,
+								int direction) {
+	if (am->num_animations >= am->max_animations) {
+		resize_animations_array(am);
+	}
 
-  // Check if this edge is already animating
-  for (uint32_t i = 0; i < am->num_animations; ++i)
-    {
-      if (am->animations[i].edge_id == edge_id)
-        {
-          // Edge already animating, just change direction or reactivate
-          am->animations[i].is_active = true;
-          am->animations[i].direction = direction;
-          am->animations[i].progress = (direction == 1) ? 0.0f : 1.0f;
-          am->animating_edge_idx = i;
-          return;
-        }
-    }
+	// Set animation state directly on the edge in GraphData
+	Edge *edge_to_animate = &am->graph_data_ptr->edges[edge_id];
 
-  EdgeAnimation *new_anim = &am->animations[am->num_animations];
-  new_anim->edge_id = edge_id;
-  new_anim->progress = (direction == 1) ? 0.0f : 1.0f;
-  new_anim->direction = direction;
-  new_anim->speed = 0.5f; // Default speed: traverse edge in 2 seconds
-  new_anim->is_active = true;
+	// Check if this edge is already animating via the manager
+	for (uint32_t i = 0; i < am->num_animations; ++i) {
+		if (am->animations[i].edge_id == edge_id) {
+			// Edge already in manager, just update its active state and
+			// direction
+			am->animations[i].is_active = true;
+			edge_to_animate->is_animating = true;
+			edge_to_animate->animation_direction = direction;
+			edge_to_animate->animation_progress =
+				(direction == 1) ? 0.0f : 1.0f;
+			return;
+		}
+	}
 
-  // Get edge's start and end node positions (scaled)
-  const Edge *edge = &am->graph_data_ptr->edges[edge_id];
-  const Node *from_node = &am->graph_data_ptr->nodes[edge->from];
-  const Node *to_node = &am->graph_data_ptr->nodes[edge->to];
+	// If not found in manager, add a new animation entry
+	EdgeAnimation *new_anim = &am->animations[am->num_animations];
+	new_anim->edge_id = edge_id;
+	new_anim->speed = 0.5f; // Default speed: traverse edge in 2 seconds
+	new_anim->is_active = true;
 
-  // Cast const to non-const for glm_vec3_scale (which modifies dest)
-  vec3 temp_from_pos, temp_to_pos;
-  glm_vec3_copy(from_node->position, temp_from_pos);
-  glm_vec3_copy(to_node->position, temp_to_pos);
+	edge_to_animate->is_animating = true;
+	edge_to_animate->animation_direction = direction;
+	edge_to_animate->animation_progress = (direction == 1) ? 0.0f : 1.0f;
+	edge_to_animate->animation_speed = new_anim->speed;
 
-  glm_vec3_scale (temp_from_pos, am->renderer_ptr->layoutScale,
-                  new_anim->start_pos);
-  glm_vec3_scale (temp_to_pos, am->renderer_ptr->layoutScale,
-                  new_anim->end_pos);
-  
-  // For now, use a fixed color, could be derived from edge or node colors
-  new_anim->particle_color[0] = 0.0f; // Cyan
-  new_anim->particle_color[1] = 1.0f;
-  new_anim->particle_color[2] = 1.0f;
-  new_anim->particle_size = 1.5f;   // Make particles larger
-  new_anim->particle_glow = 8.0f;   // Make particles glow brightly
-
-  am->animating_edge_idx = am->num_animations;
-  am->num_animations++;
+	am->num_animations++;
 }
 
-void
-animation_manager_remove_edge (AnimationManager *am, uint32_t edge_id)
-{
-  for (uint32_t i = 0; i < am->num_animations; ++i)
-    {
-      if (am->animations[i].edge_id == edge_id)
-        {
-          am->animations[i].is_active = false; // Just deactivate for now
-          if (am->animating_edge_idx == (int)i) {
-            am->animating_edge_idx = -1;
-          }
-          // Optional: compact array by swapping with last element and decrementing num_animations
-          return;
-        }
-    }
+void animation_manager_remove_edge(AnimationManager *am, uint32_t edge_id) {
+	for (uint32_t i = 0; i < am->num_animations; ++i) {
+		if (am->animations[i].edge_id == edge_id) {
+			am->animations[i].is_active = false;
+			// Mark the edge in GraphData as not animating
+			am->graph_data_ptr->edges[edge_id].is_animating = false;
+			// Optional: compact array by swapping with last element and
+			// decrementing num_animations
+			return;
+		}
+	}
 }
 
-void
-animation_manager_toggle_edge (AnimationManager *am, uint32_t edge_id)
-{
-    // Find the edge in the active animations
-    for (uint32_t i = 0; i < am->num_animations; ++i) {
-        if (am->animations[i].edge_id == edge_id) {
-            if (am->animations[i].is_active) {
-                // If active, stop it.
-                am->animations[i].is_active = false;
-                am->animating_edge_idx = -1;
-            } else {
-                // If inactive, reactivate and reverse direction
-                am->animations[i].is_active = true;
-                am->animations[i].direction *= -1;
-                // Reset progress to start or end based on new direction
-                am->animations[i].progress = (am->animations[i].direction == 1) ? 0.0f : 1.0f;
-                am->animating_edge_idx = i;
-            }
-            return;
-        }
-    }
-    // If not found, add it, starting forward
-    animation_manager_add_edge(am, edge_id, 1);
+void animation_manager_toggle_edge(AnimationManager *am, uint32_t edge_id,
+								   int direction) {
+	// Find the edge in the active animations
+	for (uint32_t i = 0; i < am->num_animations; ++i) {
+		if (am->animations[i].edge_id == edge_id) {
+			Edge *animated_edge = &am->graph_data_ptr->edges[edge_id];
+			if (am->animations[i].is_active) {
+				// If active, stop it.
+				am->animations[i].is_active = false;
+				animated_edge->is_animating = false;
+			} else {
+				// If inactive, reactivate and reverse direction
+				am->animations[i].is_active = true;
+				animated_edge->is_animating = true;
+				animated_edge->animation_direction *= -1;
+				// Reset progress to start or end based on new direction
+				animated_edge->animation_progress =
+					(animated_edge->animation_direction == 1) ? 0.0f : 1.0f;
+			}
+			return;
+		}
+	}
+	// If not found, add it, starting with the provided direction
+	animation_manager_add_edge(am, edge_id, direction);
 }
 
-void
-animation_manager_update (AnimationManager *am, float deltaTime)
-{
-  for (uint32_t i = 0; i < am->num_animations; ++i)
-    {
-      EdgeAnimation *anim = &am->animations[i];
-      if (anim->is_active)
-        {
-          anim->progress += anim->direction * anim->speed * deltaTime;
+void animation_manager_update(AnimationManager *am, float deltaTime) {
+	for (uint32_t i = 0; i < am->num_animations; ++i) {
+		EdgeAnimation *anim = &am->animations[i];
+		if (anim->is_active) {
+			Edge *animated_edge = &am->graph_data_ptr->edges[anim->edge_id];
+			animated_edge->animation_progress +=
+				animated_edge->animation_direction *
+				animated_edge->animation_speed * deltaTime;
 
-          if (anim->progress < 0.0f)
-            {
-              anim->progress = 0.0f;
-              anim->direction = 1; // Reverse
-            }
-          else if (anim->progress > 1.0f)
-            {
-              anim->progress = 1.0f;
-              anim->direction = -1; // Reverse
-            }
-        }
-    }
-}
-
-void
-animation_manager_get_particle_data (AnimationManager *am, vec3 *out_positions, vec3 *out_colors,
-                                     uint32_t *out_count)
-{
-  uint32_t count = 0;
-  for (uint32_t i = 0; i < am->num_animations; ++i)
-    {
-      EdgeAnimation *anim = &am->animations[i];
-      if (anim->is_active)
-        {
-          // Linear interpolation for particle position
-          glm_vec3_lerp (anim->start_pos, anim->end_pos, anim->progress,
-                         out_positions[count]);
-          glm_vec3_copy(anim->particle_color, out_colors[count]);
-          count++;
-        }
-    }
-  *out_count = count;
+			if (animated_edge->animation_progress < 0.0f) {
+				animated_edge->animation_progress = 0.0f;
+				animated_edge->animation_direction = 1; // Reverse
+			} else if (animated_edge->animation_progress > 1.0f) {
+				animated_edge->animation_progress = 1.0f;
+				animated_edge->animation_direction = -1; // Reverse
+			}
+		}
+	}
 }
