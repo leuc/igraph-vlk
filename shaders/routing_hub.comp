@@ -18,6 +18,13 @@ struct Edge {
 	int elevationLevel;
 	int pathLength;
 	vec4 path[16];
+
+	float animation_progress;
+	int animation_direction;
+	int is_animating;
+
+	// Add padding to align to 16 bytes
+	int pad;
 };
 layout(std430, binding = 1) buffer EdgeBuffer { Edge edges[]; };
 
