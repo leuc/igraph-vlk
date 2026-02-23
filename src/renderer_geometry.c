@@ -34,10 +34,13 @@ typedef struct {
 } CompHub;
 
 void renderer_update_ui(Renderer *r, const char *text) {
+	// Max text characters (1024 - 1 for crosshair)
+	int max_text_len = 1024 - 1; 
+
 	int len = strlen(text);
-	if (len > 1024)
-		len = 1024;
-	UIInstance instances[1024];
+	if (len > max_text_len) // Cap text length
+		len = max_text_len;
+	UIInstance instances[1024]; // This array can hold up to 1024 elements (0 to 1023)
 	float xoff = -0.98f;
 	float scale = 0.65f;
 	for (int i = 0; i < len; i++) {
@@ -84,7 +87,7 @@ void renderer_update_ui(Renderer *r, const char *text) {
 
 	r->uiTextCharCount = len + 1;
 	updateBuffer(r->device, r->uiTextInstanceBufferMemory,
-				 sizeof(UIInstance) * (len + 1), instances);
+				 sizeof(UIInstance) * r->uiTextCharCount, instances);
 }
 
 void renderer_update_graph(Renderer *r, GraphData *graph) {
