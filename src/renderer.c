@@ -312,6 +312,15 @@ renderer_init (Renderer *r, GLFWwindow *window, GraphData *graph)
   r->instanceBuffer = VK_NULL_HANDLE;
   r->edgeVertexBuffer = VK_NULL_HANDLE;
   r->labelInstanceBuffer = VK_NULL_HANDLE;
+
+  // Particle buffer initialization
+  // Max possible particles = max edges, assuming one particle per edge for now
+  createBuffer (r->device, r->physicalDevice, sizeof(Node) * graph->edge_count,
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                &r->particleVertexBuffer, &r->particleVertexBufferMemory);
+  r->currentParticleCount = 0; // Initialize to zero
+
   renderer_update_graph (r, graph);
 
   r->uniformBuffers = malloc (sizeof (VkBuffer) * MAX_FRAMES_IN_FLIGHT);
@@ -549,6 +558,29 @@ renderer_draw_frame (Renderer *r)
                      0, 0);
         }
     }
+    
+  // Draw Animated Particles
+  if (r->currentParticleCount > 0)
+    {
+      float alpha_particle = 1.0f; // Fully opaque
+      vkCmdPushConstants (r->commandBuffers[r->currentFrame], r->pipelineLayout,
+                          VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                          sizeof (float), &alpha_particle);
+      vkCmdBindPipeline (r->commandBuffers[r->currentFrame],
+                         VK_PIPELINE_BIND_POINT_GRAPHICS, r->particlePipeline); // Use particle pipeline
+      
+      // We reuse the first platonic solid (tetrahedron) for particles
+      VkBuffer vbs[] = { r->vertexBuffers[0], r->particleVertexBuffer };
+      VkDeviceSize vos[] = { 0, 0 };
+      vkCmdBindVertexBuffers (r->commandBuffers[r->currentFrame], 0, 2,
+                              vbs, vos);
+      vkCmdBindIndexBuffer (r->commandBuffers[r->currentFrame],
+                            r->indexBuffers[0], 0, VK_INDEX_TYPE_UINT32);
+      vkCmdDrawIndexed (r->commandBuffers[r->currentFrame],
+                        r->platonicIndexCounts[0],
+                        r->currentParticleCount, 0, 0, 0);
+    }
+    
   vkCmdEndRenderPass (r->commandBuffers[r->currentFrame]);
   vkEndCommandBuffer (r->commandBuffers[r->currentFrame]);
   VkPipelineStageFlags ws = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -608,6 +640,13 @@ renderer_cleanup (Renderer *r)
   vkFreeMemory (r->device, r->uiBgVertexBufferMemory, NULL);
   vkDestroyBuffer (r->device, r->uiTextInstanceBuffer, NULL);
   vkFreeMemory (r->device, r->uiTextInstanceBufferMemory, NULL);
+  
+  // Cleanup particle buffers
+  if (r->particleVertexBuffer != VK_NULL_HANDLE) {
+    vkDestroyBuffer(r->device, r->particleVertexBuffer, NULL);
+    vkFreeMemory(r->device, r->particleVertexBufferMemory, NULL);
+  }
+
   vkDestroyCommandPool (r->device, r->commandPool, NULL);
   vkDestroyDescriptorPool (r->device, r->descriptorPool, NULL);
   vkDestroySampler (r->device, r->textureSampler, NULL);
@@ -629,6 +668,7 @@ renderer_cleanup (Renderer *r)
   vkDestroyPipeline (r->device, r->edgePipeline, NULL);
   vkDestroyPipeline (r->device, r->nodeEdgePipeline, NULL);
   vkDestroyPipeline (r->device, r->graphicsPipeline, NULL);
+  vkDestroyPipeline (r->device, r->particlePipeline, NULL); // Destroy particle pipeline
   vkDestroyPipelineLayout (r->device, r->pipelineLayout, NULL);
   vkDestroyDescriptorSetLayout (r->device, r->descriptorSetLayout, NULL);
   vkDestroyRenderPass (r->device, r->renderPass, NULL);

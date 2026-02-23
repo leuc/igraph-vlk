@@ -2,6 +2,7 @@
 #include "layered_sphere.h"
 #include "layout_openord.h"
 #include "renderer.h"
+#include "animation_manager.h" // New include
 #include <cglm/cglm.h>
 #include <float.h>
 #include <getopt.h>
@@ -29,6 +30,8 @@ ClusterType currentCluster = CLUSTER_FASTGREEDY;
 CentralityType currentCentrality = CENTRALITY_PAGERANK;
 char *currentNodeAttr;
 char *currentEdgeAttr;
+
+AnimationManager globalAnimationManager; // Declare global animation manager
 
 const char *layout_names[] = { "Fruchterman-Reingold",
                                "Kamada-Kawai",
@@ -508,6 +511,13 @@ main (int argc, char **argv)
   glfwSetInputMode (window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
   if (renderer_init (&renderer, window, &currentGraph) != 0)
     return EXIT_FAILURE;
+
+  animation_manager_init(&globalAnimationManager, &renderer, &currentGraph);
+  // Add a dummy animation for testing (e.g., edge 0)
+  if (currentGraph.edge_count > 0) {
+      animation_manager_add_edge(&globalAnimationManager, 0, 1);
+  }
+
   float lastFrame = 0.0f;
   float fpsTimer = 0.0f;
   int frameCount = 0;
@@ -528,6 +538,7 @@ main (int argc, char **argv)
       glfwPollEvents ();
       processInput (window, deltaTime);
       update_ui_text (currentFps);
+      animation_manager_update(&globalAnimationManager, deltaTime); // Update animations
 
       if (currentLayout == LAYOUT_OPENORD_3D && currentGraph.openord
           && currentGraph.openord->stage_id < 5)
@@ -546,6 +557,7 @@ main (int argc, char **argv)
       renderer_draw_frame (&renderer);
     }
   graph_free_data (&currentGraph);
+  animation_manager_cleanup(&globalAnimationManager); // Cleanup animations
   renderer_cleanup (&renderer);
   glfwDestroyWindow (window);
   glfwTerminate ();

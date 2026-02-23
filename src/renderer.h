@@ -41,6 +41,7 @@ typedef struct
   VkDescriptorSetLayout descriptorSetLayout;
   VkPipelineLayout pipelineLayout;
   VkPipeline graphicsPipeline;
+  VkPipeline particlePipeline; // Particle pipeline for animations
   VkPipeline nodeEdgePipeline; // New pipeline for node edges
   VkPipeline spherePipeline;   // Pipeline for semi-transparent spheres
   VkPipeline edgePipeline;
@@ -124,6 +125,12 @@ typedef struct
   uint32_t *sphereIndexOffsets; // Array of offsets into the index buffer
   uint32_t numSpheres;          // Number of spheres to draw
   bool showSpheres;             // Toggle
+
+  // Animated Particles
+  VkBuffer particleVertexBuffer;
+  VkDeviceMemory particleVertexBufferMemory;
+  uint32_t currentParticleCount;
+
 } Renderer;
 
 int renderer_init (Renderer *r, GLFWwindow *window, GraphData *graph);
