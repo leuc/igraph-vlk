@@ -1,4 +1,5 @@
 #include "layout_openord.h"
+
 #include <cglm/cglm.h>
 #include <math.h>
 #include <omp.h>

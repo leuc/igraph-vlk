@@ -1,5 +1,6 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "text.h"
+
 #include <stb/stb_truetype.h>
 #include <stdio.h>
 #include <stdlib.h>

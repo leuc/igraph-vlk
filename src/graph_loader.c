@@ -1,11 +1,13 @@
 #define _GNU_SOURCE
 #include "graph_loader.h"
-#include "layered_sphere.h"
-#include "layout_openord.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "layered_sphere.h"
+#include "layout_openord.h"
 
 static void sync_node_positions(GraphData *data) {
 	if (!data->nodes)

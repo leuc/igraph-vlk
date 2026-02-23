@@ -1,11 +1,13 @@
 #include "renderer_geometry.h"
-#include "layered_sphere.h"
-#include "text.h"
-#include "vulkan_utils.h"
+
 #include <cglm/vec4.h> // New include for glm_vec4_to_vec3
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "layered_sphere.h"
+#include "text.h"
+#include "vulkan_utils.h"
 
 extern FontAtlas globalAtlas;
 
@@ -353,8 +355,8 @@ void renderer_update_graph(Renderer *r, GraphData *graph) {
 			graph->hub_count > 0) {
 			cHubs = malloc(sizeof(CompHub) * graph->hub_count);
 			for (int i = 0; i < graph->hub_count; i++) {
-				memcpy(cHubs[i].position, graph->hubs[i].position,
-					   sizeof(float) * 3);
+				glm_vec3_scale(graph->hubs[i].position, r->layoutScale,
+							   cHubs[i].position);
 				cHubs[i].pad = 0;
 			}
 			createBuffer(r->device, r->physicalDevice,

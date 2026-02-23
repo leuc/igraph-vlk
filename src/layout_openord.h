@@ -1,8 +1,9 @@
 #ifndef LAYOUT_OPENORD_H
 #define LAYOUT_OPENORD_H
 
-#include "graph_loader.h"
 #include <stdbool.h>
+
+#include "graph_loader.h"
 
 // OpenOrd parameters
 typedef struct {

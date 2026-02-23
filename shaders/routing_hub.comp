@@ -12,18 +12,17 @@ struct Node {
 };
 layout(std430, binding = 0) readonly buffer NodeBuffer { Node nodes[]; };
 
+// IMPORTANT: Ensure this perfectly matches your C struct (including the
+// animation vars AND the padding)
 struct Edge {
 	int sourceId;
 	int targetId;
 	int elevationLevel;
 	int pathLength;
 	vec4 path[16];
-
 	float animation_progress;
 	int animation_direction;
 	int is_animating;
-
-	// Add padding to align to 16 bytes
 	int pad;
 };
 layout(std430, binding = 1) buffer EdgeBuffer { Edge edges[]; };
@@ -48,14 +47,16 @@ void main() {
 
 	int srcId = edges[idx].sourceId;
 	int dstId = edges[idx].targetId;
+
 	vec3 srcPos = nodes[srcId].position;
 	vec3 dstPos = nodes[dstId].position;
 
-	// Find nearest hubs
+	// FIX 1: Use absolute max float. 1,000,000 is often too small for scaled
+	// layouts!
 	int bestSrcHub = 0;
-	float bestSrcDist = 1000000.0;
+	float bestSrcDist = 3.402823466e+38;
 	int bestDstHub = 0;
-	float bestDstDist = 1000000.0;
+	float bestDstDist = 3.402823466e+38;
 
 	for (int i = 0; i < pc.numHubs; i++) {
 		float d1 = distance(srcPos, hubs[i].position);
@@ -71,13 +72,29 @@ void main() {
 		}
 	}
 
+	// FIX 2: Bundle Jitter. Create a deterministic spread so the lines don't
+	// perfectly overlap into a 1-pixel thread.
+	vec3 jitter = vec3(fract(sin(float(idx) * 12.9898) * 43758.5453),
+					   fract(sin(float(idx) * 78.233) * 43758.5453),
+					   fract(sin(float(idx) * 37.719) * 43758.5453)) *
+					  2.0 -
+				  1.0;
+
+	// Scale the spread by the base radius to create a thick "cable" of wires
+	vec3 bundle_spread = jitter * pc.baseRadius * 0.25;
+
 	vec3 h1 = hubs[bestSrcHub].position;
 	vec3 h2 = hubs[bestDstHub].position;
 
+	// Only apply the spread to the inter-hub transit lines, keeping the nodes
+	// perfectly attached
+	vec3 bundle_h1 = h1 + bundle_spread;
+	vec3 bundle_h2 = h2 + bundle_spread;
+
 	// Draw the transit map route
 	edges[idx].path[0] = vec4(srcPos, 1.0);
-	edges[idx].path[1] = vec4(h1, 1.0);
-	edges[idx].path[2] = vec4(h2, 1.0);
+	edges[idx].path[1] = vec4(bundle_h1, 1.0);
+	edges[idx].path[2] = vec4(bundle_h2, 1.0);
 	edges[idx].path[3] = vec4(dstPos, 1.0);
 
 	edges[idx].pathLength = 4;
