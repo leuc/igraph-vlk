@@ -43,6 +43,15 @@ typedef enum {
 	CENTRALITY_COUNT
 } CentralityType;
 
+typedef enum {
+    COMMUNITY_ARRANGEMENT_NONE,
+    COMMUNITY_ARRANGEMENT_KECECI_2D,
+    COMMUNITY_ARRANGEMENT_KECECI_TETRA_3D,
+    COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_2D,   // New 2D
+    COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_3D,   // New 3D
+    COMMUNITY_ARRANGEMENT_COUNT
+} CommunityArrangementMode;
+
 typedef struct {
 	vec3 position;
 	vec3 color;
@@ -107,5 +116,7 @@ void graph_filter_coreness(GraphData *data, int min_coreness);
 void graph_highlight_infrastructure(GraphData *data);
 void graph_free_data(GraphData *data);
 void graph_generate_hubs(GraphData *data, int num_hubs);
+
+void graph_apply_community_arrangement(GraphData *data, CommunityArrangementMode mode);
 
 #endif

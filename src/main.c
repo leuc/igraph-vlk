@@ -29,6 +29,7 @@ char *currentFilename;
 LayoutType currentLayout = LAYOUT_OPENORD_3D;
 ClusterType currentCluster = CLUSTER_FASTGREEDY;
 CentralityType currentCentrality = CENTRALITY_PAGERANK;
+CommunityArrangementMode currentCommArrangement = COMMUNITY_ARRANGEMENT_NONE;
 char *currentNodeAttr;
 char *currentEdgeAttr;
 
@@ -51,6 +52,15 @@ const char *centrality_names[] = {
 	"PageRank",	 "Hubs",	 "Authorities", "Betweenness", "Degree",
 	"Closeness", "Harmonic", "Eigenvector", "Strength",	   "Constraint"};
 
+const char *comm_arrangement_names[] = {
+    "None", 
+    "Kececi 2D", 
+    "Kececi Tetra 3D", 
+    "Compact Ortho 2D", 
+    "Compact Ortho 3D"
+};
+
+
 void update_ui_text(float fps) {
 	char stage_info[64] = "";
 	if (currentLayout == LAYOUT_OPENORD_3D && currentGraph.openord) {
@@ -66,14 +76,15 @@ void update_ui_text(float fps) {
 
 	char buf[1024];
 	snprintf(buf, sizeof(buf),
-			 "[L]ayout:%s%s [I]terate [C]ommunity:%s Str[u]cture:%s [O]verlap "
-			 "[B]ridge [T]ext:%s [N]ode:%d [E]dge:%d Filter:1-9 [K]Core:%d "
+			 "[L]ayout:%s%s [Y]SubGraph:%s [I]terate [C]ommunity:%s Str[u]cture:%s "
+			 "[T]ext:%s [N]ode:%d [E]dge:%d Filter:1-9 [K]Core:%d "
 			 "[R]eset [H]ide FPS:%.1f",
 			 layout_names[currentLayout], stage_info,
+             comm_arrangement_names[currentCommArrangement],
 			 cluster_names[currentCluster], centrality_names[currentCentrality],
 			 renderer.showLabels ? "ON" : "OFF", currentGraph.props.node_count,
 			 currentGraph.props.edge_count, currentGraph.props.coreness_filter,
-			 fps);
+			 fps);	
 	renderer_update_ui(&renderer, buf);
 }
 
@@ -207,7 +218,15 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action,
 	case GLFW_KEY_R:
 		run_reset();
 		break;
-
+	case GLFW_KEY_Y:
+		currentCommArrangement = (currentCommArrangement + 1) % COMMUNITY_ARRANGEMENT_COUNT;
+		if (currentCommArrangement == COMMUNITY_ARRANGEMENT_NONE) {
+			update_layout();
+		} else {
+			graph_apply_community_arrangement(&currentGraph, currentCommArrangement);
+			renderer_update_graph(&renderer, &currentGraph);
+		}
+		break;
 	// --- NEW ROUTING HOT-SWAP ---
 	case GLFW_KEY_M:
 		renderer.currentRoutingMode = (renderer.currentRoutingMode + 1) % 3;

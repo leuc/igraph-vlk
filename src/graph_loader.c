@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <omp.h>
 
 #include "layered_sphere.h"
 #include "layout_openord.h"
@@ -650,6 +651,156 @@ void graph_generate_hubs(GraphData *data, int num_hubs) {
 	}
 	free(counts);
 	free(sums);
+}
+
+
+void graph_apply_community_arrangement(GraphData *data, CommunityArrangementMode mode) {
+    if (!data->graph_initialized || mode == COMMUNITY_ARRANGEMENT_NONE) return;
+    
+    igraph_matrix_resize(&data->current_layout, data->node_count, 3);
+    float primary_spacing = 2.0f;
+    float secondary_spacing = 2.0f;
+
+    // 1. Sort nodes by community (Sequential, but fast enough for most graphs)
+    int *indices = malloc(sizeof(int) * data->node_count);
+    for (int i = 0; i < data->node_count; i++) indices[i] = i;
+    
+    for (int i = 0; i < data->node_count - 1; i++) {
+        for (int j = i + 1; j < data->node_count; j++) {
+            float sum_i = data->nodes[indices[i]].color[0] + data->nodes[indices[i]].color[1]*10 + data->nodes[indices[i]].color[2]*100;
+            float sum_j = data->nodes[indices[j]].color[0] + data->nodes[indices[j]].color[1]*10 + data->nodes[indices[j]].color[2]*100;
+            if (sum_j < sum_i) {
+                int temp = indices[i];
+                indices[i] = indices[j];
+                indices[j] = temp;
+            }
+        }
+    }
+
+    if (mode == COMMUNITY_ARRANGEMENT_KECECI_2D) { 
+        // Fully independent: Parallelize the Kececi 2D placement
+        #pragma omp parallel for
+        for (int i = 0; i < data->node_count; i++) {
+            int node_idx = indices[i];
+            MATRIX(data->current_layout, node_idx, 0) = i * primary_spacing;
+            MATRIX(data->current_layout, node_idx, 1) = (i % 2 == 0) ? secondary_spacing : -secondary_spacing;
+            MATRIX(data->current_layout, node_idx, 2) = 0.0f;
+        }
+    } else if (mode == COMMUNITY_ARRANGEMENT_KECECI_TETRA_3D) { 
+        // Fully independent: Parallelize the Kececi 3D placement
+        #pragma omp parallel for
+        for (int i = 0; i < data->node_count; i++) {
+            int node_idx = indices[i];
+            MATRIX(data->current_layout, node_idx, 0) = i * primary_spacing;
+            
+            int mod = i % 4;
+            float y = 0.0f, z = 0.0f;
+            if (mod == 0) { y = 1.0f; z = 1.0f; }
+            else if (mod == 1) { y = -1.0f; z = -1.0f; }
+            else if (mod == 2) { y = 1.0f; z = -1.0f; }
+            else if (mod == 3) { y = -1.0f; z = 1.0f; }
+
+            MATRIX(data->current_layout, node_idx, 1) = y * secondary_spacing;
+            MATRIX(data->current_layout, node_idx, 2) = z * secondary_spacing;
+        }
+    } else if (mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_2D || mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_3D) {
+        bool is_3d = (mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_3D);
+        float grid_spacing = 2.0f;
+        int grid_size = is_3d ? (int)ceil(cbrt(data->node_count)) : (int)ceil(sqrt(data->node_count));
+        if (grid_size < 1) grid_size = 1;
+
+        vec3 *grid_pos = malloc(sizeof(vec3) * data->node_count);
+        vec3 *target_pos = malloc(sizeof(vec3) * data->node_count); // Buffer for parallel calculations
+        
+        // Parallel initial grid setup
+        #pragma omp parallel for
+        for (int i = 0; i < data->node_count; i++) {
+            int node_idx = indices[i];
+            if (is_3d) {
+                grid_pos[node_idx][0] = (i % grid_size);
+                grid_pos[node_idx][1] = ((i / grid_size) % grid_size);
+                grid_pos[node_idx][2] = (i / (grid_size * grid_size));
+            } else {
+                grid_pos[node_idx][0] = (i % grid_size);
+                grid_pos[node_idx][1] = (i / grid_size);
+                grid_pos[node_idx][2] = 0.0f;
+            }
+        }
+
+        float temperature = 10.0f;
+        float cooling_rate = 0.95f;
+        int iterations = 50; 
+        
+        for (int iter = 0; iter < iterations && temperature > 0.2f; iter++) {
+            
+            // PHASE 1: PARALLEL CALCULATION
+            // Calculate where each node wants to go without modifying the grid yet
+            #pragma omp parallel for
+            for (int u = 0; u < data->node_count; u++) {
+                vec3 desired_pos = {0};
+                int neighbor_count = 0;
+                
+                for (uint32_t e = 0; e < data->edge_count; e++) {
+                    int v = -1;
+                    if (data->edges[e].from == u) v = data->edges[e].to;
+                    else if (data->edges[e].to == u) v = data->edges[e].from;
+                    
+                    if (v != -1) {
+                        desired_pos[0] += grid_pos[v][0];
+                        desired_pos[1] += grid_pos[v][1];
+                        desired_pos[2] += grid_pos[v][2];
+                        neighbor_count++;
+                    }
+                }
+                
+                if (neighbor_count > 0) {
+                    desired_pos[0] = roundf(desired_pos[0] / neighbor_count);
+                    desired_pos[1] = roundf(desired_pos[1] / neighbor_count);
+                    desired_pos[2] = is_3d ? roundf(desired_pos[2] / neighbor_count) : 0.0f;
+                    glm_vec3_copy(desired_pos, target_pos[u]);
+                } else {
+                    glm_vec3_copy(grid_pos[u], target_pos[u]);
+                }
+            }
+
+            // PHASE 2: SEQUENTIAL APPLICATION
+            // Resolve collisions and apply the moves sequentially to prevent race conditions
+            for (int u = 0; u < data->node_count; u++) {
+                int swap_target = -1;
+                for (int j = 0; j < data->node_count; j++) {
+                    if (u != j && grid_pos[j][0] == target_pos[u][0] && 
+                        grid_pos[j][1] == target_pos[u][1] && grid_pos[j][2] == target_pos[u][2]) {
+                        swap_target = j;
+                        break;
+                    }
+                }
+                
+                if (swap_target != -1) {
+                    vec3 temp;
+                    glm_vec3_copy(grid_pos[u], temp);
+                    glm_vec3_copy(grid_pos[swap_target], grid_pos[u]);
+                    glm_vec3_copy(temp, grid_pos[swap_target]);
+                } else {
+                    glm_vec3_copy(target_pos[u], grid_pos[u]);
+                }
+            }
+            temperature *= cooling_rate;
+        }
+
+        // Parallel map back to layout matrix
+        #pragma omp parallel for
+        for (int i = 0; i < data->node_count; i++) {
+            MATRIX(data->current_layout, i, 0) = grid_pos[i][0] * grid_spacing;
+            MATRIX(data->current_layout, i, 1) = grid_pos[i][1] * grid_spacing;
+            MATRIX(data->current_layout, i, 2) = grid_pos[i][2] * grid_spacing;
+        }
+        
+        free(grid_pos);
+        free(target_pos);
+    }
+
+    free(indices);
+    sync_node_positions(data); 
 }
 
 void graph_free_data(GraphData *data) {
