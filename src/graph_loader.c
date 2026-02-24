@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <omp.h>
+#include <math.h>
 
 #include "layered_sphere.h"
 #include "layout_openord.h"
@@ -654,17 +655,26 @@ void graph_generate_hubs(GraphData *data, int num_hubs) {
 }
 
 
+typedef struct {
+    int start_idx;
+    int end_idx;
+} CommBlock;
+
 void graph_apply_community_arrangement(GraphData *data, CommunityArrangementMode mode) {
     if (!data->graph_initialized || mode == COMMUNITY_ARRANGEMENT_NONE) return;
-    
-    igraph_matrix_resize(&data->current_layout, data->node_count, 3);
-    float primary_spacing = 2.0f;
-    float secondary_spacing = 2.0f;
 
-    // 1. Sort nodes by community (Sequential, but fast enough for most graphs)
+    // Backup current layout positions so we can safely compute local community centroids
+    vec3 *old_pos = malloc(sizeof(vec3) * data->node_count);
+    for(int i = 0; i < data->node_count; i++) {
+        old_pos[i][0] = MATRIX(data->current_layout, i, 0);
+        old_pos[i][1] = MATRIX(data->current_layout, i, 1);
+        old_pos[i][2] = MATRIX(data->current_layout, i, 2);
+    }
+
+    // 1. Sort nodes by community color to group them
     int *indices = malloc(sizeof(int) * data->node_count);
     for (int i = 0; i < data->node_count; i++) indices[i] = i;
-    
+
     for (int i = 0; i < data->node_count - 1; i++) {
         for (int j = i + 1; j < data->node_count; j++) {
             float sum_i = data->nodes[indices[i]].color[0] + data->nodes[indices[i]].color[1]*10 + data->nodes[indices[i]].color[2]*100;
@@ -677,128 +687,176 @@ void graph_apply_community_arrangement(GraphData *data, CommunityArrangementMode
         }
     }
 
-    if (mode == COMMUNITY_ARRANGEMENT_KECECI_2D) { 
-        // Fully independent: Parallelize the Kececi 2D placement
-        #pragma omp parallel for
-        for (int i = 0; i < data->node_count; i++) {
-            int node_idx = indices[i];
-            MATRIX(data->current_layout, node_idx, 0) = i * primary_spacing;
-            MATRIX(data->current_layout, node_idx, 1) = (i % 2 == 0) ? secondary_spacing : -secondary_spacing;
-            MATRIX(data->current_layout, node_idx, 2) = 0.0f;
-        }
-    } else if (mode == COMMUNITY_ARRANGEMENT_KECECI_TETRA_3D) { 
-        // Fully independent: Parallelize the Kececi 3D placement
-        #pragma omp parallel for
-        for (int i = 0; i < data->node_count; i++) {
-            int node_idx = indices[i];
-            MATRIX(data->current_layout, node_idx, 0) = i * primary_spacing;
-            
-            int mod = i % 4;
-            float y = 0.0f, z = 0.0f;
-            if (mod == 0) { y = 1.0f; z = 1.0f; }
-            else if (mod == 1) { y = -1.0f; z = -1.0f; }
-            else if (mod == 2) { y = 1.0f; z = -1.0f; }
-            else if (mod == 3) { y = -1.0f; z = 1.0f; }
+    // 2. Map out the start and end indices of each distinct community
+    CommBlock *blocks = malloc(sizeof(CommBlock) * data->node_count);
+    int num_blocks = 0;
+    int current_start = 0;
 
-            MATRIX(data->current_layout, node_idx, 1) = y * secondary_spacing;
-            MATRIX(data->current_layout, node_idx, 2) = z * secondary_spacing;
-        }
-    } else if (mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_2D || mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_3D) {
-        bool is_3d = (mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_3D);
-        float grid_spacing = 2.0f;
-        int grid_size = is_3d ? (int)ceil(cbrt(data->node_count)) : (int)ceil(sqrt(data->node_count));
-        if (grid_size < 1) grid_size = 1;
-
-        vec3 *grid_pos = malloc(sizeof(vec3) * data->node_count);
-        vec3 *target_pos = malloc(sizeof(vec3) * data->node_count); // Buffer for parallel calculations
-        
-        // Parallel initial grid setup
-        #pragma omp parallel for
-        for (int i = 0; i < data->node_count; i++) {
-            int node_idx = indices[i];
-            if (is_3d) {
-                grid_pos[node_idx][0] = (i % grid_size);
-                grid_pos[node_idx][1] = ((i / grid_size) % grid_size);
-                grid_pos[node_idx][2] = (i / (grid_size * grid_size));
-            } else {
-                grid_pos[node_idx][0] = (i % grid_size);
-                grid_pos[node_idx][1] = (i / grid_size);
-                grid_pos[node_idx][2] = 0.0f;
-            }
-        }
-
-        float temperature = 10.0f;
-        float cooling_rate = 0.95f;
-        int iterations = 50; 
-        
-        for (int iter = 0; iter < iterations && temperature > 0.2f; iter++) {
-            
-            // PHASE 1: PARALLEL CALCULATION
-            // Calculate where each node wants to go without modifying the grid yet
-            #pragma omp parallel for
-            for (int u = 0; u < data->node_count; u++) {
-                vec3 desired_pos = {0};
-                int neighbor_count = 0;
-                
-                for (uint32_t e = 0; e < data->edge_count; e++) {
-                    int v = -1;
-                    if (data->edges[e].from == u) v = data->edges[e].to;
-                    else if (data->edges[e].to == u) v = data->edges[e].from;
-                    
-                    if (v != -1) {
-                        desired_pos[0] += grid_pos[v][0];
-                        desired_pos[1] += grid_pos[v][1];
-                        desired_pos[2] += grid_pos[v][2];
-                        neighbor_count++;
-                    }
-                }
-                
-                if (neighbor_count > 0) {
-                    desired_pos[0] = roundf(desired_pos[0] / neighbor_count);
-                    desired_pos[1] = roundf(desired_pos[1] / neighbor_count);
-                    desired_pos[2] = is_3d ? roundf(desired_pos[2] / neighbor_count) : 0.0f;
-                    glm_vec3_copy(desired_pos, target_pos[u]);
-                } else {
-                    glm_vec3_copy(grid_pos[u], target_pos[u]);
-                }
-            }
-
-            // PHASE 2: SEQUENTIAL APPLICATION
-            // Resolve collisions and apply the moves sequentially to prevent race conditions
-            for (int u = 0; u < data->node_count; u++) {
-                int swap_target = -1;
-                for (int j = 0; j < data->node_count; j++) {
-                    if (u != j && grid_pos[j][0] == target_pos[u][0] && 
-                        grid_pos[j][1] == target_pos[u][1] && grid_pos[j][2] == target_pos[u][2]) {
-                        swap_target = j;
-                        break;
-                    }
-                }
-                
-                if (swap_target != -1) {
-                    vec3 temp;
-                    glm_vec3_copy(grid_pos[u], temp);
-                    glm_vec3_copy(grid_pos[swap_target], grid_pos[u]);
-                    glm_vec3_copy(temp, grid_pos[swap_target]);
-                } else {
-                    glm_vec3_copy(target_pos[u], grid_pos[u]);
-                }
-            }
-            temperature *= cooling_rate;
-        }
-
-        // Parallel map back to layout matrix
-        #pragma omp parallel for
-        for (int i = 0; i < data->node_count; i++) {
-            MATRIX(data->current_layout, i, 0) = grid_pos[i][0] * grid_spacing;
-            MATRIX(data->current_layout, i, 1) = grid_pos[i][1] * grid_spacing;
-            MATRIX(data->current_layout, i, 2) = grid_pos[i][2] * grid_spacing;
+    while (current_start < data->node_count) {
+        int current_end = current_start;
+        float current_sum = data->nodes[indices[current_start]].color[0] + 
+                            data->nodes[indices[current_start]].color[1]*10 + 
+                            data->nodes[indices[current_start]].color[2]*100;
+                            
+        while (current_end < data->node_count) {
+            float sum = data->nodes[indices[current_end]].color[0] + 
+                        data->nodes[indices[current_end]].color[1]*10 + 
+                        data->nodes[indices[current_end]].color[2]*100;
+            if (fabs(sum - current_sum) > 0.01f) break;
+            current_end++;
         }
         
-        free(grid_pos);
-        free(target_pos);
+        blocks[num_blocks].start_idx = current_start;
+        blocks[num_blocks].end_idx = current_end;
+        num_blocks++;
+        current_start = current_end;
     }
 
+    // Use smaller spacing so the local communities don't expand into each other
+    float primary_spacing = 0.5f; 
+    float secondary_spacing = 0.5f;
+    float grid_spacing = 0.5f;
+
+    // 3. Process each community locally in PARALLEL
+    #pragma omp parallel for
+    for (int b = 0; b < num_blocks; b++) {
+        int s_idx = blocks[b].start_idx;
+        int e_idx = blocks[b].end_idx;
+        int comm_size = e_idx - s_idx;
+
+        // Calculate the physical centroid of this community in the current layout
+        vec3 centroid = {0, 0, 0};
+        for (int i = s_idx; i < e_idx; i++) {
+            glm_vec3_add(centroid, old_pos[indices[i]], centroid);
+        }
+        glm_vec3_scale(centroid, 1.0f / comm_size, centroid);
+
+        // --- KECECI SEQUENCES ---
+        if (mode == COMMUNITY_ARRANGEMENT_KECECI_2D || mode == COMMUNITY_ARRANGEMENT_KECECI_TETRA_3D) {
+            for (int i = 0; i < comm_size; i++) {
+                int node_idx = indices[s_idx + i];
+                // Center the sequence on the X axis relative to the centroid
+                float x = (i - comm_size / 2.0f) * primary_spacing;
+                float y = 0.0f, z = 0.0f;
+
+                if (mode == COMMUNITY_ARRANGEMENT_KECECI_2D) {
+                    y = (i % 2 == 0) ? secondary_spacing : -secondary_spacing;
+                } else {
+                    int mod = i % 4;
+                    if (mod == 0) { y = secondary_spacing; z = secondary_spacing; }
+                    else if (mod == 1) { y = -secondary_spacing; z = -secondary_spacing; }
+                    else if (mod == 2) { y = secondary_spacing; z = -secondary_spacing; }
+                    else if (mod == 3) { y = -secondary_spacing; z = secondary_spacing; }
+                }
+
+                MATRIX(data->current_layout, node_idx, 0) = centroid[0] + x;
+                MATRIX(data->current_layout, node_idx, 1) = centroid[1] + y;
+                MATRIX(data->current_layout, node_idx, 2) = centroid[2] + z;
+            }
+        } 
+        // --- COMPACT ORTHOGONAL GRIDS ---
+        else if (mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_2D || mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_3D) {
+            bool is_3d = (mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_3D);
+            int grid_size = is_3d ? (int)ceil(cbrt(comm_size)) : (int)ceil(sqrt(comm_size));
+            if (grid_size < 1) grid_size = 1;
+
+            vec3 *grid_pos = malloc(sizeof(vec3) * comm_size);
+            vec3 *target_pos = malloc(sizeof(vec3) * comm_size);
+
+            // Initialize local grid layout
+            for (int i = 0; i < comm_size; i++) {
+                if (is_3d) {
+                    grid_pos[i][0] = (i % grid_size);
+                    grid_pos[i][1] = ((i / grid_size) % grid_size);
+                    grid_pos[i][2] = (i / (grid_size * grid_size));
+                } else {
+                    grid_pos[i][0] = (i % grid_size);
+                    grid_pos[i][1] = (i / grid_size);
+                    grid_pos[i][2] = 0.0f;
+                }
+            }
+
+            // Local Simulated Annealing
+            float temperature = 10.0f;
+            float cooling_rate = 0.95f;
+            int iterations = 50;
+
+            for (int iter = 0; iter < iterations && temperature > 0.2f; iter++) {
+                for (int i = 0; i < comm_size; i++) {
+                    int u = indices[s_idx + i];
+                    vec3 desired_pos = {0};
+                    int neighbor_count = 0;
+
+                    // Find internal neighbors within the same community block
+                    for (uint32_t e = 0; e < data->edge_count; e++) {
+                        int v_global = -1;
+                        if (data->edges[e].from == u) v_global = data->edges[e].to;
+                        else if (data->edges[e].to == u) v_global = data->edges[e].from;
+
+                        if (v_global != -1) {
+                            int v_local = -1;
+                            for(int j = 0; j < comm_size; j++) {
+                                if(indices[s_idx + j] == v_global) {
+                                    v_local = j; break;
+                                }
+                            }
+                            if(v_local != -1) {
+                                desired_pos[0] += grid_pos[v_local][0];
+                                desired_pos[1] += grid_pos[v_local][1];
+                                desired_pos[2] += grid_pos[v_local][2];
+                                neighbor_count++;
+                            }
+                        }
+                    }
+
+                    if (neighbor_count > 0) {
+                        desired_pos[0] = roundf(desired_pos[0] / neighbor_count);
+                        desired_pos[1] = roundf(desired_pos[1] / neighbor_count);
+                        desired_pos[2] = is_3d ? roundf(desired_pos[2] / neighbor_count) : 0.0f;
+                        glm_vec3_copy(desired_pos, target_pos[i]);
+                    } else {
+                        glm_vec3_copy(grid_pos[i], target_pos[i]);
+                    }
+                }
+
+                // Resolve Collisions
+                for (int i = 0; i < comm_size; i++) {
+                    int swap_target = -1;
+                    for (int j = 0; j < comm_size; j++) {
+                        if (i != j && grid_pos[j][0] == target_pos[i][0] &&
+                            grid_pos[j][1] == target_pos[i][1] && grid_pos[j][2] == target_pos[i][2]) {
+                            swap_target = j; break;
+                        }
+                    }
+                    if (swap_target != -1) {
+                        vec3 temp;
+                        glm_vec3_copy(grid_pos[i], temp);
+                        glm_vec3_copy(grid_pos[swap_target], grid_pos[i]);
+                        glm_vec3_copy(temp, grid_pos[swap_target]);
+                    } else {
+                        glm_vec3_copy(target_pos[i], grid_pos[i]);
+                    }
+                }
+                temperature *= cooling_rate;
+            }
+
+            // Offset the compacted grid exactly to the community's physical centroid
+            vec3 grid_center = { (grid_size - 1) / 2.0f, (grid_size - 1) / 2.0f, is_3d ? (grid_size - 1) / 2.0f : 0.0f };
+
+            for (int i = 0; i < comm_size; i++) {
+                int node_idx = indices[s_idx + i];
+                MATRIX(data->current_layout, node_idx, 0) = centroid[0] + (grid_pos[i][0] - grid_center[0]) * grid_spacing;
+                MATRIX(data->current_layout, node_idx, 1) = centroid[1] + (grid_pos[i][1] - grid_center[1]) * grid_spacing;
+                MATRIX(data->current_layout, node_idx, 2) = centroid[2] + (grid_pos[i][2] - grid_center[2]) * grid_spacing;
+            }
+
+            free(grid_pos);
+            free(target_pos);
+        }
+    }
+
+    free(blocks);
+    free(old_pos);
     free(indices);
     sync_node_positions(data); 
 }
