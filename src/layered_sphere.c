@@ -52,6 +52,7 @@ typedef struct {
 	int id;
 	int community_id;
 	double density;
+	int intra_degree;
 } NodePlacement;
 
 int compare_nodes_placement(const void *a, const void *b) {
@@ -59,6 +60,9 @@ int compare_nodes_placement(const void *a, const void *b) {
 	NodePlacement *nodeB = (NodePlacement *)b;
 	if (nodeA->community_id != nodeB->community_id) {
 		return nodeA->community_id - nodeB->community_id;
+	}
+	if (nodeA->intra_degree != nodeB->intra_degree) {
+		return nodeB->intra_degree - nodeA->intra_degree;
 	}
 	double diff = nodeA->density - nodeB->density;
 	return (diff > 0) - (diff < 0);
@@ -382,7 +386,20 @@ bool layered_sphere_step(LayeredSphereContext *ctx, GraphData *graph) {
 											 igraph_vss_all(),
 											 IGRAPH_TRANSITIVITY_ZERO);
 
-		// --- NEW: Destroy the temporary undirected clone ---
+		// --- Calculate Intra-Community Degree ---
+		int *intra_degree = calloc(vcount, sizeof(int));
+		for (int e = 0; e < ecount; e++) {
+			igraph_integer_t from, to;
+			igraph_edge(&undirected_ig, e, &from, &to);
+			
+			// If both nodes are in the same community, increment their internal degree
+			if (VECTOR(membership)[from] == VECTOR(membership)[to]) {
+				intra_degree[from]++;
+				intra_degree[to]++;
+			}
+		}
+
+		// ---  Destroy the temporary undirected clone ---
 		igraph_destroy(&undirected_ig);
 
 		ctx->grids = calloc(ctx->num_spheres, sizeof(SphereGrid));
@@ -454,6 +471,7 @@ bool layered_sphere_step(LayeredSphereContext *ctx, GraphData *graph) {
 					group_nodes[g_idx].id = i;
 					group_nodes[g_idx].community_id = VECTOR(membership)[i];
 					group_nodes[g_idx].density = VECTOR(transitivity)[i];
+					group_nodes[g_idx].intra_degree = intra_degree[i];
 					g_idx++;
 				}
 			}
