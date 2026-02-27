@@ -7,8 +7,9 @@
 #include "vulkan/utils.h"
 
 VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge *edgeResults) {
-	if (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) {
-		// No compute needed for straight edges
+	if (r->currentRoutingMode == ROUTING_MODE_STRAIGHT ||
+		r->currentRoutingMode == ROUTING_MODE_3D_VOXEL) {
+		// No compute needed for straight edges or voxel mode (not yet implemented)
 		return VK_SUCCESS;
 	}
 
