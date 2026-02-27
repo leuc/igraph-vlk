@@ -1,13 +1,13 @@
-#include "renderer.h"
+#include "vulkan/renderer.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "renderer_geometry.h"
-#include "renderer_pipelines.h"
-#include "text.h"
-#include "vulkan_utils.h"
+#include "vulkan/renderer_geometry.h"
+#include "vulkan/renderer_pipelines.h"
+#include "vulkan/text.h"
+#include "vulkan/utils.h"
 
 #define MAX_FRAMES_IN_FLIGHT 2
 #define FONT_PATH "/usr/share/fonts/truetype/inconsolata/Inconsolata.otf"

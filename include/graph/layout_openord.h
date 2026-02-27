@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#include "graph_loader.h"
+#include "graph/loader.h"
 
 // OpenOrd parameters
 typedef struct {

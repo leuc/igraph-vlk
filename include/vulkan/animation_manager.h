@@ -5,8 +5,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "graph_loader.h"
-#include "renderer.h"
+#include "graph/loader.h"
+#include "vulkan/renderer.h"
 
 #define MAX_ANIMATIONS 256 // Max number of concurrent animations
 

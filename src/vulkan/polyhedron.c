@@ -1,4 +1,4 @@
-#include "polyhedron.h"
+#include "vulkan/polyhedron.h"
 
 #include <math.h>
 #include <stdlib.h>

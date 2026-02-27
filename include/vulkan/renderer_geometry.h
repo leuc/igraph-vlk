@@ -1,7 +1,7 @@
 #ifndef RENDERER_GEOMETRY_H
 #define RENDERER_GEOMETRY_H
 
-#include "renderer.h"
+#include "vulkan/renderer.h"
 
 typedef struct {
 	vec3 pos;

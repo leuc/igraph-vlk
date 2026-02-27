@@ -1,10 +1,10 @@
-#include "renderer_pipelines.h"
+#include "vulkan/renderer_pipelines.h"
 
 #include <stddef.h>
 #include <stdlib.h>
 
-#include "renderer_geometry.h"
-#include "vulkan_utils.h"
+#include "vulkan/renderer_geometry.h"
+#include "vulkan/utils.h"
 
 int renderer_create_pipelines(Renderer *r) {
 	VkShaderModule vMod, fMod, eVMod, efMod, lVMod, lfMod, uiVMod, uiFMod;

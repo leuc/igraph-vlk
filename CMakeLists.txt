@@ -43,22 +43,22 @@ find_package(OpenMP REQUIRED)
 
 add_executable(igraph-vlk
     src/main.c
-    src/vulkan_utils.c
-    src/renderer_pipelines.c
-    src/renderer_geometry.c
-    src/renderer.c
-    src/polyhedron.c
-    src/text.c
-    src/graph_loader.c
-    src/layout_openord.c
-    src/layered_sphere.c
-    src/animation_manager.c
-
+    src/vulkan/utils.c
+    src/vulkan/renderer_pipelines.c
+    src/vulkan/renderer_geometry.c
+    src/vulkan/renderer.c
+    src/vulkan/polyhedron.c
+    src/vulkan/text.c
+    include/graph/graph_loader.c
+    include/graph/layout_openord.c
+    include/graph/layered_sphere.c
+    include/vulkan/animation_manager.c
 
     ${SPIRV_SHADERS}
 )
 
 target_include_directories(igraph-vlk PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
     ${Vulkan_INCLUDE_DIRS}
     ${CGLM_INCLUDE_DIR}
     ${IGRAPH_INCLUDE_DIRS}

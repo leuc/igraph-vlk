@@ -5,8 +5,8 @@
 #include <GLFW/glfw3.h>
 #include <cglm/cglm.h>
 
-#include "graph_loader.h"
-#include "polyhedron.h"
+#include "graph/loader.h"
+#include "vulkan/polyhedron.h"
 
 typedef enum {
 	ROUTING_MODE_STRAIGHT = 0,

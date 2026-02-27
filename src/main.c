@@ -6,11 +6,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "animation_manager.h" // New include
-#include "graph_loader.h"
-#include "layered_sphere.h"
-#include "layout_openord.h"
-#include "renderer.h"
+#include "vulkan/animation_manager.h"
+#include "graph/loader.h"
+#include "graph/layered_sphere.h"
+#include "graph/layout_openord.h"
+#include "vulkan/renderer.h"
 
 vec3 cameraPos = {0.0f, 0.0f, 50.0f};
 vec3 cameraFront = {0.0f, 0.0f, -1.0f};

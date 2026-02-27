@@ -1,13 +1,13 @@
-#include "renderer_geometry.h"
+#include "vulkan/renderer_geometry.h"
 
 #include <cglm/vec4.h> // New include for glm_vec4_to_vec3
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "layered_sphere.h"
-#include "text.h"
-#include "vulkan_utils.h"
+#include "graph/layered_sphere.h"
+#include "vulkan/text.h"
+#include "vulkan/utils.h"
 
 extern FontAtlas globalAtlas;
 
