@@ -49,10 +49,10 @@ add_executable(igraph-vlk
     src/vulkan/renderer.c
     src/vulkan/polyhedron.c
     src/vulkan/text.c
-    include/graph/graph_loader.c
-    include/graph/layout_openord.c
-    include/graph/layered_sphere.c
-    include/vulkan/animation_manager.c
+    src/vulkan/animation_manager.c
+    src/graph/graph_loader.c
+    src/graph/layout_openord.c
+    src/graph/layered_sphere.c
 
     ${SPIRV_SHADERS}
 )

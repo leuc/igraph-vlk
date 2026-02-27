@@ -1,4 +1,4 @@
-#include "layered_sphere.h"
+#include "graph/layered_sphere.h"
 
 #include <math.h>
 #include <omp.h>

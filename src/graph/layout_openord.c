@@ -1,4 +1,4 @@
-#include "layout_openord.h"
+#include "graph/layout_openord.h"
 
 #include <cglm/cglm.h>
 #include <math.h>

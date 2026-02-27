@@ -7,8 +7,8 @@
 #include <string.h>
 #include <omp.h>
 
-#include "layered_sphere.h"
-#include "layout_openord.h"
+#include "graph/layered_sphere.h"
+#include "graph/layout_openord.h"
 
 static void sync_node_positions(GraphData *data) {
 	if (!data->nodes)
