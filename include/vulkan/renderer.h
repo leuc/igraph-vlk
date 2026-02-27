@@ -126,6 +126,6 @@ void renderer_cleanup(Renderer *r);
 void renderer_draw_frame(Renderer *r);
 void renderer_update_view(Renderer *r, vec3 pos, vec3 front, vec3 up);
 void renderer_update_graph(Renderer *r, GraphData *graph);
-void renderer_update_ui(Renderer *r, const char *text);
+// renderer_update_ui is declared in renderer_ui.h
 
 #endif

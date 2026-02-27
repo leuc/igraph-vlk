@@ -11,6 +11,7 @@
 #include "graph/layered_sphere.h"
 #include "graph/layout_openord.h"
 #include "vulkan/renderer.h"
+#include "vulkan/renderer_ui.h"
 
 vec3 cameraPos = {0.0f, 0.0f, 50.0f};
 vec3 cameraFront = {0.0f, 0.0f, -1.0f};

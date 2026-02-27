@@ -43,10 +43,14 @@ find_package(OpenMP REQUIRED)
 
 add_executable(igraph-vlk
     src/main.c
-    src/vulkan/utils.c
-    src/vulkan/renderer_pipelines.c
-    src/vulkan/renderer_geometry.c
+    # Renderer core
     src/vulkan/renderer.c
+    src/vulkan/renderer_geometry.c
+    src/vulkan/renderer_compute.c
+    src/vulkan/renderer_ui.c
+    src/vulkan/renderer_pipelines.c
+    # Utilities and helpers
+    src/vulkan/utils.c
     src/vulkan/polyhedron.c
     src/vulkan/text.c
     src/vulkan/animation_manager.c
