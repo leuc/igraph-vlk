@@ -144,6 +144,9 @@ int main(int argc, char **argv) {
 
         // Update animations
         animation_manager_update(&app.anim_manager, deltaTime);
+        if (app.anim_manager.num_animations > 0) {
+            renderer_update_graph(&app.renderer, &app.current_graph);
+        }
 
         // Step background layout (OpenOrd / Layered Sphere)
         graph_action_step_background_layout(&app);
@@ -152,6 +155,8 @@ int main(int argc, char **argv) {
         renderer_update_view(&app.renderer, app.camera.pos, app.camera.front,
                              app.camera.up);
         renderer_draw_frame(&app.renderer);
+
+        glfwPollEvents();
     }
 
     // Cleanup

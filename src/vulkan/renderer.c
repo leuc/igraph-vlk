@@ -34,6 +34,11 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph) {
 	r->sphereVertexBuffer = VK_NULL_HANDLE;
 	r->sphereIndexBuffer = VK_NULL_HANDLE;
 
+	// Get actual window size for swapchain
+	int width, height;
+	glfwGetWindowSize(window, &width, &height);
+	r->swapchainExtent = (VkExtent2D){(uint32_t)width, (uint32_t)height};
+
 	glfwSetWindowTitle(window, "igraph-vlk");
 
 	// Application Icon
