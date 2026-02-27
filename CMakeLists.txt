@@ -43,6 +43,7 @@ find_package(OpenMP REQUIRED)
 
 add_executable(igraph-vlk
     src/main.c
+
     # Renderer core
     src/vulkan/renderer.c
     src/vulkan/renderer_geometry.c
@@ -54,6 +55,8 @@ add_executable(igraph-vlk
     src/vulkan/polyhedron.c
     src/vulkan/text.c
     src/vulkan/animation_manager.c
+
+    # Graph modules
     src/graph/graph_core.c
     src/graph/graph_io.c
     src/graph/graph_analysis.c
@@ -62,12 +65,22 @@ add_executable(igraph-vlk
     src/graph/graph_layout.c
     src/graph/layout_openord.c
     src/graph/layered_sphere.c
+    src/graph/graph_actions.c
+
+    # Interaction modules
+    src/interaction/camera.c
+    src/interaction/input.c
+    src/interaction/picking.c
+
+    # UI modules
+    src/ui/hud.c
 
     ${SPIRV_SHADERS}
 )
 
 target_include_directories(igraph-vlk PRIVATE
     ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
     ${Vulkan_INCLUDE_DIRS}
     ${CGLM_INCLUDE_DIR}
     ${IGRAPH_INCLUDE_DIRS}
