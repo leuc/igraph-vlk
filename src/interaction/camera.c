@@ -1,4 +1,4 @@
-#include "camera.h"
+#include "interaction/camera.h"
 #include <cglm/cglm.h>
 #include <math.h>
 #include <stdio.h>

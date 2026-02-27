@@ -1,4 +1,4 @@
-#include "graph_actions.h"
+#include "graph/graph_actions.h"
 #include "graph/graph_core.h"
 #include "graph/graph_layout.h"
 #include "graph/graph_clustering.h"

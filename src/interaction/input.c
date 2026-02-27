@@ -1,7 +1,7 @@
-#include "input.h"
-#include "camera.h"
-#include "picking.h"
-#include "../graph/graph_actions.h"
+#include "interaction/input.h"
+#include "interaction/camera.h"
+#include "interaction/picking.h"
+#include "graph/graph_actions.h"
 #include <GLFW/glfw3.h>
 #include <stdio.h>
 #include <stdlib.h>

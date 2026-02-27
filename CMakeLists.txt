@@ -80,7 +80,6 @@ add_executable(igraph-vlk
 
 target_include_directories(igraph-vlk PRIVATE
     ${CMAKE_SOURCE_DIR}/include
-    ${CMAKE_SOURCE_DIR}/src
     ${Vulkan_INCLUDE_DIRS}
     ${CGLM_INCLUDE_DIR}
     ${IGRAPH_INCLUDE_DIRS}
