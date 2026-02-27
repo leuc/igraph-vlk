@@ -35,20 +35,23 @@ void interaction_process_continuous_input(AppState *state, float delta_time) {
         glfwSetWindowShouldClose(window, true);
     }
 
+    // Determine movement speed (Shift increases speed)
+    float speed_multiplier = 1.0f;
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
+        glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS) {
+        speed_multiplier = 3.0f;
+    }
+    float adjusted_delta = delta_time * speed_multiplier;
+
     // Handle camera movement
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        camera_process_keyboard(&state->camera, CAMERA_DIR_FORWARD, delta_time);
+        camera_process_keyboard(&state->camera, CAMERA_DIR_FORWARD, adjusted_delta);
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        camera_process_keyboard(&state->camera, CAMERA_DIR_BACKWARD, delta_time);
+        camera_process_keyboard(&state->camera, CAMERA_DIR_BACKWARD, adjusted_delta);
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        camera_process_keyboard(&state->camera, CAMERA_DIR_LEFT, delta_time);
+        camera_process_keyboard(&state->camera, CAMERA_DIR_LEFT, adjusted_delta);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        camera_process_keyboard(&state->camera, CAMERA_DIR_RIGHT, delta_time);
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-        camera_process_keyboard(&state->camera, CAMERA_DIR_UP, delta_time);
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
-        glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS)
-        camera_process_keyboard(&state->camera, CAMERA_DIR_DOWN, delta_time);
+        camera_process_keyboard(&state->camera, CAMERA_DIR_RIGHT, adjusted_delta);
 }
 
 GLFWmonitor* interaction_get_current_monitor(GLFWwindow *window) {
@@ -96,11 +99,11 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action,
         state->renderer.showLabels = !state->renderer.showLabels;
         renderer_update_graph(&state->renderer, &state->current_graph);
         break;
-    case GLFW_KEY_P:
+    case GLFW_KEY_N:
         state->renderer.showNodes = !state->renderer.showNodes;
         renderer_update_graph(&state->renderer, &state->current_graph);
         break;
-    case GLFW_KEY_N:
+    case GLFW_KEY_P:
         state->renderer.showSpheres = !state->renderer.showSpheres;
         renderer_update_graph(&state->renderer, &state->current_graph);
         break;

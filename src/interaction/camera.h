@@ -5,12 +5,12 @@
 /**
  * Camera direction constants for keyboard input.
  */
-#define CAMERA_DIR_FORWARD 1
-#define CAMERA_DIR_BACKWARD (-1)
-#define CAMERA_DIR_LEFT (-1)
-#define CAMERA_DIR_RIGHT 1
-#define CAMERA_DIR_UP 1
-#define CAMERA_DIR_DOWN (-1)
+#define CAMERA_DIR_FORWARD  0
+#define CAMERA_DIR_BACKWARD 1
+#define CAMERA_DIR_LEFT     2
+#define CAMERA_DIR_RIGHT    3
+#define CAMERA_DIR_UP       4
+#define CAMERA_DIR_DOWN     5
 
 /**
  * Camera state for 3D navigation.

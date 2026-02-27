@@ -39,15 +39,17 @@ void camera_process_keyboard(Camera *cam, int direction, float delta_time) {
         glm_vec3_add(cam->pos, temp, cam->pos);
     } else if (direction == CAMERA_DIR_LEFT) {
         vec3 cross;
-        glm_vec3_cross(cam->front, cam->up, cross);
+        glm_vec3_cross(cam->up, cam->front, cross);
         glm_vec3_normalize(cross);
-        glm_vec3_scale(cross, -speed, temp);
+        // up × front points left, so use +speed
+        glm_vec3_scale(cross, speed, temp);
         glm_vec3_add(cam->pos, temp, cam->pos);
     } else if (direction == CAMERA_DIR_RIGHT) {
         vec3 cross;
-        glm_vec3_cross(cam->front, cam->up, cross);
+        glm_vec3_cross(cam->up, cam->front, cross);
         glm_vec3_normalize(cross);
-        glm_vec3_scale(cross, speed, temp);
+        // up × front points left, negate for right
+        glm_vec3_scale(cross, -speed, temp);
         glm_vec3_add(cam->pos, temp, cam->pos);
     } else if (direction == CAMERA_DIR_UP) {
         glm_vec3_scale(cam->up, speed, temp);
