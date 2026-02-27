@@ -5,7 +5,7 @@
 #include <GLFW/glfw3.h>
 #include <cglm/cglm.h>
 
-#include "graph/loader.h"
+#include "graph/graph_types.h"
 #include "vulkan/polyhedron.h"
 
 typedef enum {

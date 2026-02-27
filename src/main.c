@@ -7,7 +7,13 @@
 #include <string.h>
 
 #include "vulkan/animation_manager.h"
-#include "graph/loader.h"
+#include "graph/graph_types.h"
+#include "graph/graph_core.h"
+#include "graph/graph_io.h"
+#include "graph/graph_layout.h"
+#include "graph/graph_clustering.h"
+#include "graph/graph_analysis.h"
+#include "graph/graph_filter.h"
 #include "graph/layered_sphere.h"
 #include "graph/layout_openord.h"
 #include "vulkan/renderer.h"

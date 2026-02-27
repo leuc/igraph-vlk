@@ -4,7 +4,8 @@
 #include <igraph.h>
 #include <stdbool.h>
 
-#include "loader.h"
+#include "cglm/vec3.h"
+#include "graph/graph_types.h"
 
 // Define a physical grid slot on a sphere
 typedef struct {

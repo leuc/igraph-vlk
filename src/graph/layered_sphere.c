@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "graph/graph_core.h"
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif

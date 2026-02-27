@@ -3,7 +3,8 @@
 
 #include <stdbool.h>
 
-#include "graph/loader.h"
+#include "cglm/vec3.h"
+#include "graph/graph_types.h"
 
 // OpenOrd parameters
 typedef struct {

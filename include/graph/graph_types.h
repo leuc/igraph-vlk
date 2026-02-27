@@ -1,9 +1,20 @@
-#ifndef GRAPH_LOADER_H
-#define GRAPH_LOADER_H
+#ifndef GRAPH_TYPES_H
+#define GRAPH_TYPES_H
 
 #include <cglm/cglm.h>
 #include <igraph/igraph.h>
+#include <stdint.h>
+#include <stdbool.h>
 
+// Forward declare complex contexts from layout engines
+typedef struct OpenOrdContext OpenOrdContext;
+typedef struct LayeredSphereContext LayeredSphereContext;
+
+/* ============================================================================
+ * Enums (defined first as they're used by GraphData)
+ * ============================================================================ */
+
+/* Layout Type Enum */
 typedef enum {
 	LAYOUT_FR_3D,
 	LAYOUT_KK_3D,
@@ -17,9 +28,7 @@ typedef enum {
 	LAYOUT_COUNT
 } LayoutType;
 
-typedef struct OpenOrdContext OpenOrdContext; // Fixed typedef
-typedef struct LayeredSphereContext LayeredSphereContext;
-
+/* Cluster Type Enum */
 typedef enum {
 	CLUSTER_FASTGREEDY,
 	CLUSTER_WALKTRAP,
@@ -29,6 +38,7 @@ typedef enum {
 	CLUSTER_COUNT
 } ClusterType;
 
+/* Centrality Type Enum */
 typedef enum {
 	CENTRALITY_PAGERANK,
 	CENTRALITY_HUB,
@@ -43,14 +53,19 @@ typedef enum {
 	CENTRALITY_COUNT
 } CentralityType;
 
+/* Community Arrangement Mode Enum */
 typedef enum {
     COMMUNITY_ARRANGEMENT_NONE,
     COMMUNITY_ARRANGEMENT_KECECI_2D,
     COMMUNITY_ARRANGEMENT_KECECI_TETRA_3D,
-    COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_2D,   // New 2D
-    COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_3D,   // New 3D
+    COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_2D,
+    COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_3D,
     COMMUNITY_ARRANGEMENT_COUNT
 } CommunityArrangementMode;
+
+/* ============================================================================
+ * Core Data Structures
+ * ============================================================================ */
 
 typedef struct {
 	vec3 position;
@@ -98,25 +113,10 @@ typedef struct {
 	char *edge_attr_name;
 	GraphProperties props;
 	LayoutType active_layout;
-	struct OpenOrdContext *openord;
-	struct LayeredSphereContext *layered_sphere;
+	OpenOrdContext *openord;
+	LayeredSphereContext *layered_sphere;
 	Hub *hubs;
 	int hub_count;
 } GraphData;
 
-int graph_load_graphml(const char *filename, GraphData *data,
-					   LayoutType layout_type, const char *node_attr,
-					   const char *edge_attr);
-void graph_cluster(GraphData *data, ClusterType type);
-void graph_calculate_centrality(GraphData *data, CentralityType type);
-void graph_layout_step(GraphData *data, LayoutType type, int iterations);
-void graph_remove_overlaps(GraphData *data, float layoutScale);
-void graph_filter_degree(GraphData *data, int min_degree);
-void graph_filter_coreness(GraphData *data, int min_coreness);
-void graph_highlight_infrastructure(GraphData *data);
-void graph_free_data(GraphData *data);
-void graph_generate_hubs(GraphData *data, int num_hubs);
-
-void graph_apply_community_arrangement(GraphData *data, CommunityArrangementMode mode);
-
-#endif
+#endif // GRAPH_TYPES_H

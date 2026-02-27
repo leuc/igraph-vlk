@@ -54,7 +54,12 @@ add_executable(igraph-vlk
     src/vulkan/polyhedron.c
     src/vulkan/text.c
     src/vulkan/animation_manager.c
-    src/graph/graph_loader.c
+    src/graph/graph_core.c
+    src/graph/graph_io.c
+    src/graph/graph_analysis.c
+    src/graph/graph_clustering.c
+    src/graph/graph_filter.c
+    src/graph/graph_layout.c
     src/graph/layout_openord.c
     src/graph/layered_sphere.c
 

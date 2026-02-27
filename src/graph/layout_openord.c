@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "graph/graph_core.h"
+
 #define GRID_DIM 128
 #define GRID_VOL (GRID_DIM * GRID_DIM * GRID_DIM)
 #define VIEW_SIZE 4000.0f
