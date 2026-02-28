@@ -43,6 +43,9 @@ void interaction_process_continuous_input(AppState *state, float delta_time) {
     }
     float adjusted_delta = delta_time * speed_multiplier;
 
+    if (state->app_ctx.current_state != STATE_GRAPH_VIEW)
+        return;
+
     // Handle camera movement
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         camera_process_keyboard(&state->camera, CAMERA_DIR_FORWARD, adjusted_delta);
@@ -138,6 +141,15 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action,
     case GLFW_KEY_H:
         state->renderer.showUI = !state->renderer.showUI;
         break;
+    case GLFW_KEY_SPACE:
+        if (state->app_ctx.current_state == STATE_GRAPH_VIEW) {
+            state->app_ctx.current_state = STATE_MENU_OPEN;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        } else if (state->app_ctx.current_state == STATE_MENU_OPEN) {
+            state->app_ctx.current_state = STATE_GRAPH_VIEW;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        }
+        break;
     case GLFW_KEY_1:
     case GLFW_KEY_2:
     case GLFW_KEY_3:
@@ -189,14 +201,23 @@ static void mouse_button_callback(GLFWwindow *window, int button, int action,
 
         AppState *state = (AppState *)glfwGetWindowUserPointer(window);
         if (state) {
-            interaction_pick_object(state, isDoubleClick);
+            if (state->app_ctx.current_state == STATE_GRAPH_VIEW) {
+                interaction_pick_object(state, isDoubleClick);
+            } else if (state->app_ctx.current_state == STATE_MENU_OPEN) {
+                double mx, my;
+                glfwGetCursorPos(window, &mx, &my);
+                MenuNode* selected = interaction_pick_menu_node(state, mx, my);
+                if (selected) {
+                    handle_menu_selection(&state->app_ctx, selected);
+                }
+            }
         }
     }
 }
 
 static void mouse_callback(GLFWwindow *window, double xpos, double ypos) {
     AppState *state = (AppState *)glfwGetWindowUserPointer(window);
-    if (state) {
+    if (state && state->app_ctx.current_state == STATE_GRAPH_VIEW) {
         camera_process_mouse(&state->camera, (float)xpos, (float)ypos);
     }
 }

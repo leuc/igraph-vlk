@@ -66,14 +66,17 @@ add_executable(igraph-vlk
     src/graph/layout_openord.c
     src/graph/layered_sphere.c
     src/graph/graph_actions.c
+    src/graph/wrappers.c
 
     # Interaction modules
     src/interaction/camera.c
     src/interaction/input.c
     src/interaction/picking.c
+    src/interaction/state.c
 
     # UI modules
     src/ui/hud.c
+    src/ui/sphere_menu.c
 
     ${SPIRV_SHADERS}
 )

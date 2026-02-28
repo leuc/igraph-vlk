@@ -1,67 +1,109 @@
-#include "state.h"
-#include "../ui/sphere_menu.h"
+#include "interaction/state.h"
 #include <stdlib.h>
-#include <igraph.h>
+#include <stdio.h>
 
-// Global or passed app context updater - stub for main loop integration
-void update_app_state(AppContext* ctx) {
-    // Central switch-statement for state transitions
-    switch (ctx->current_state) {
-        case STATE_GRAPH_VIEW:
-            // Freely navigating the graph
-            // Transition: User summons menu (e.g., key press or gesture) -> STATE_MENU_OPEN
-            // Stub: ctx->current_state = STATE_MENU_OPEN; // Triggered by input handler
-            break;
-
-        case STATE_MENU_OPEN:
-            // Sphere menu active, graph dimmed
-            // Transition: User selects leaf -> check params, go to STATE_AWAITING_SELECTION or STATE_EXECUTING
-            // or back to STATE_GRAPH_VIEW
-            // Stub: ctx->current_state = STATE_AWAITING_SELECTION;
-            break;
-
-        case STATE_AWAITING_SELECTION:
-            // User picks nodes/edges via raycast
-            // Increment ctx->selection_step on pick
-            // When enough selections: ctx->current_state = STATE_AWAITING_INPUT or STATE_EXECUTING
-            ctx->selection_step++;  // Example increment (actual from picking.c)
-            if (ctx->selection_step >= ctx->pending_command->num_params) {  // Pseudo-check
-                ctx->current_state = STATE_EXECUTING;
-            }
-            break;
-
-        case STATE_AWAITING_INPUT:
-            // Handle sliders/text inputs
-            // Transition to STATE_EXECUTING when complete
-            // Stub
-            ctx->current_state = STATE_EXECUTING;
-            break;
-
-        case STATE_EXECUTING:
-            // Run igraph command, update visuals via callback
-            // Transition back to STATE_GRAPH_VIEW on completion
-            // Stub
-            ctx->current_state = STATE_GRAPH_VIEW;
-            break;
-
-        default:
-            ctx->current_state = STATE_GRAPH_VIEW;
-            break;
-    }
-}
-
-// Initialization function
 void app_context_init(AppContext* ctx, igraph_t* graph, MenuNode* root_menu) {
     ctx->current_state = STATE_GRAPH_VIEW;
     ctx->root_menu = root_menu;
     ctx->active_menu_level = root_menu;
     ctx->pending_command = NULL;
     ctx->selection_step = 0;
-    ctx->current_graph = graph;
-    igraph_empty(&ctx->target_graph, 0, 0);  // Initialize empty target graph
+    ctx->target_graph = graph;
 }
 
-// Cleanup function
 void app_context_destroy(AppContext* ctx) {
-    igraph_destroy(&ctx->target_graph);
+    // Cleanup if anything was allocated
+}
+
+void update_app_state(AppContext* app) {
+    switch (app->current_state) {
+        case STATE_GRAPH_VIEW:
+            // Normal navigation, handle "Menu Open" trigger (e.g., Space key)
+            break;
+            
+        case STATE_MENU_OPEN:
+            // Menu is visible, handle interactions with it
+            break;
+            
+        case STATE_AWAITING_SELECTION:
+            // Highlight nodes/edges for picking
+            if (app->pending_command) {
+                // Check if all parameters of type PARAM_TYPE_NODE_SELECTION or EDGE_SELECTION are filled
+                bool all_filled = true;
+                for (int i = 0; i < app->pending_command->num_params; i++) {
+                    if ((app->pending_command->params[i].type == PARAM_TYPE_NODE_SELECTION || 
+                         app->pending_command->params[i].type == PARAM_TYPE_EDGE_SELECTION) &&
+                        app->pending_command->params[i].value.selection_id == -1) {
+                        all_filled = false;
+                        break;
+                    }
+                }
+                
+                if (all_filled) {
+                    app->current_state = STATE_EXECUTING;
+                }
+            }
+            break;
+            
+        case STATE_AWAITING_INPUT:
+            // Handle floating forms
+            break;
+            
+        case STATE_EXECUTING:
+            if (app->pending_command && app->pending_command->execute) {
+                printf("[State] Executing command: %s\n", app->pending_command->display_name);
+                
+                ExecutionContext exec_ctx;
+                exec_ctx.current_graph = app->target_graph; // Use the graph in AppContext
+                exec_ctx.params = app->pending_command->params;
+                exec_ctx.num_params = app->pending_command->num_params;
+                exec_ctx.update_visuals_callback = NULL; // To be set
+                
+                app->pending_command->execute(&exec_ctx);
+                
+                // Reset after execution
+                app->pending_command = NULL;
+                app->current_state = STATE_GRAPH_VIEW;
+            }
+            break;
+    }
+}
+
+void handle_menu_selection(AppContext* app, MenuNode* selected_node) {
+    if (selected_node->type == NODE_BRANCH) {
+        app->active_menu_level = selected_node;
+    } else if (selected_node->type == NODE_LEAF) {
+        app->pending_command = selected_node->command;
+        app->selection_step = 0;
+        
+        // Reset selection parameters
+        for (int i = 0; i < app->pending_command->num_params; i++) {
+            if (app->pending_command->params[i].type == PARAM_TYPE_NODE_SELECTION ||
+                app->pending_command->params[i].type == PARAM_TYPE_EDGE_SELECTION) {
+                app->pending_command->params[i].value.selection_id = -1;
+            }
+        }
+        
+        check_pending_command_requirements(app);
+    }
+}
+
+void check_pending_command_requirements(AppContext* app) {
+    if (!app->pending_command) return;
+    
+    bool needs_selection = false;
+    for (int i = 0; i < app->pending_command->num_params; i++) {
+        if (app->pending_command->params[i].type == PARAM_TYPE_NODE_SELECTION ||
+            app->pending_command->params[i].type == PARAM_TYPE_EDGE_SELECTION) {
+            needs_selection = true;
+            break;
+        }
+    }
+    
+    if (needs_selection) {
+        app->current_state = STATE_AWAITING_SELECTION;
+    } else {
+        // Might need other inputs or can execute directly
+        app->current_state = STATE_EXECUTING;
+    }
 }

@@ -4,6 +4,84 @@
 #include <cglm/cglm.h>
 #include <float.h>
 #include <stdio.h>
+#include <math.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+static MenuNode* pick_menu_recursive(AppState* state, MenuNode* node, float* ray_ori, float* ray_dir, float* min_t) {
+    if (node == NULL || node->current_radius < 0.1f) return NULL;
+    
+    MenuNode* best_hit = NULL;
+    
+    // Calculate world position of this menu node
+    // It orbits the camera at a fixed distance (e.g., 2.0 units)
+    float distance = 2.0f * node->current_radius;
+    
+    // Convert spherical coordinates (relative to camera front) to world space
+    vec3 offset;
+    float phi = node->target_phi;
+    float theta = node->target_theta;
+    
+    offset[0] = distance * sinf(phi) * cosf(theta);
+    offset[1] = distance * cosf(phi);
+    offset[2] = distance * sinf(phi) * sinf(theta);
+    
+    // In a real implementation, we'd rotate this offset by camera orientation
+    // For now, let's assume it's just in front of camera
+    vec3 world_pos;
+    glm_vec3_add(state->camera.pos, state->camera.front, world_pos); // Start with point in front
+    glm_vec3_add(world_pos, offset, world_pos);
+    
+    float t;
+    float hit_radius = 0.15f; // UI element hit size
+    if (picking_ray_sphere_intersection(ray_ori, ray_dir, world_pos, hit_radius, &t)) {
+        if (t > 0 && t < *min_t) {
+            *min_t = t;
+            best_hit = node;
+        }
+    }
+    
+    // Check children
+    for (int i = 0; i < node->num_children; i++) {
+        MenuNode* child_hit = pick_menu_recursive(state, node->children[i], ray_ori, ray_dir, min_t);
+        if (child_hit) {
+            best_hit = child_hit;
+        }
+    }
+    
+    return best_hit;
+}
+
+MenuNode* interaction_pick_menu_node(AppState* state, double mouse_x, double mouse_y) {
+    // Generate ray from mouse coordinates
+    // For simplicity, we can use the camera's front vector since the crosshair is at center
+    // and the menu is released. But if the mouse is free, we need proper unprojection.
+    
+    // Simplified: use a ray that goes through the mouse cursor
+    float x = (2.0f * (float)mouse_x) / state->win_w - 1.0f;
+    float y = 1.0f - (2.0f * (float)mouse_y) / state->win_h;
+    
+    // This is a rough approximation of unprojection
+    vec3 ray_dir;
+    vec3 right, up;
+    glm_vec3_cross(state->camera.front, state->camera.up, right);
+    glm_vec3_normalize(right);
+    glm_vec3_cross(right, state->camera.front, up);
+    glm_vec3_normalize(up);
+    
+    glm_vec3_copy(state->camera.front, ray_dir);
+    vec3 right_offset, up_offset;
+    glm_vec3_scale(right, x * 0.5f, right_offset); // FOV adjustment factor
+    glm_vec3_scale(up, y * 0.5f, up_offset);
+    glm_vec3_add(ray_dir, right_offset, ray_dir);
+    glm_vec3_add(ray_dir, up_offset, ray_dir);
+    glm_vec3_normalize(ray_dir);
+    
+    float min_t = FLT_MAX;
+    return pick_menu_recursive(state, state->app_ctx.root_menu, state->camera.pos, ray_dir, &min_t);
+}
 
 bool picking_ray_sphere_intersection(float *ori, float *dir, float *center,
                                      float radius, float *t) {

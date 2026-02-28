@@ -6,7 +6,11 @@
 #include "graph/graph_io.h"
 #include "vulkan/renderer.h"
 #include "vulkan/animation_manager.h"
+#include "interaction/state.h"
+#include "ui/sphere_menu.h"
 #include <GLFW/glfw3.h>
+
+
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -115,6 +119,11 @@ int main(int argc, char **argv) {
     // Initialize UI/HUD
     ui_hud_init();
 
+    // Initialize FSM menu system
+    MenuNode* root_menu = (MenuNode*)malloc(sizeof(MenuNode));
+    init_menu_tree(root_menu);
+    app_context_init(&app.app_ctx, &app.current_graph.g, root_menu);
+
     // Initialize timing
     float lastFrame = 0.0f;
     float fpsTimer = 0.0f;
@@ -142,6 +151,10 @@ int main(int argc, char **argv) {
         // Update HUD text
         ui_hud_update(&app, currentFps);
 
+        // Update App FSM and Menu animations
+        update_app_state(&app.app_ctx);
+        update_menu_animation(app.app_ctx.root_menu, deltaTime);
+
         // Update animations
         animation_manager_update(&app.anim_manager, deltaTime);
         if (app.anim_manager.num_animations > 0) {
@@ -160,6 +173,8 @@ int main(int argc, char **argv) {
     }
 
     // Cleanup
+    app_context_destroy(&app.app_ctx);
+    destroy_menu_tree(root_menu);
     graph_free_data(&app.current_graph);
     animation_manager_cleanup(&app.anim_manager);
     renderer_cleanup(&app.renderer);

@@ -11,6 +11,7 @@
 #include "graph/graph_core.h"
 #include "graph/graph_types.h"
 #include "interaction/camera.h"
+#include "interaction/state.h"
 
 /**
  * Central application state that glues together all modules.
@@ -46,5 +47,8 @@ typedef struct {
     float fps_timer;
     int frame_count;
     float current_fps;
+
+    /* FSM Menu System */
+    AppContext app_ctx;
 } AppState;
 

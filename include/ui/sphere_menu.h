@@ -1,34 +1,13 @@
-#ifndef SPHERE_MENU_H
-#define SPHERE_MENU_H
+#ifndef UI_SPHERE_MENU_H
+#define UI_SPHERE_MENU_H
 
-#include "../interaction/state.h"  // For IgraphCommand
+#include "interaction/state.h"  // For MenuNode, MenuNodeType, IgraphCommand, etc.
 
-// --- Menu Node Types ---
-typedef enum {
-    NODE_BRANCH, // Submenu
-    NODE_LEAF    // Actionable Command
-} MenuNodeType;
+// Menu management functions
+void init_menu_tree(MenuNode* root);
+void destroy_menu_tree(MenuNode* node);
+void update_menu_animation(MenuNode* node, float delta_time);
+void generate_vulkan_menu_buffers(MenuNode* node);
+MenuNode* find_menu_node(MenuNode* root, char const* label);
 
-// Forward declaration for self-referential struct
-typedef struct MenuNode MenuNode;
-
-// --- 3D Spherical Menu Tree Structure ---
-typedef struct MenuNode {
-    MenuNodeType type;
-    const char* label;
-    int icon_texture_id;  // Vulkan texture handle
-    
-    // 3D Visual State for unfolding animation
-    float target_phi;      // Spherical coordinate (azimuth)
-    float target_theta;    // Spherical coordinate (polar)
-    float current_radius; 
-    
-    // For Branches (submenus)
-    int num_children;
-    MenuNode** children;
-    
-    // For Leaves (commands)
-    IgraphCommand* command;
-} MenuNode;
-
-#endif // SPHERE_MENU_H
+#endif // UI_SPHERE_MENU_H

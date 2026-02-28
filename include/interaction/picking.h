@@ -34,3 +34,9 @@ float picking_dist_ray_segment(float *ori, float *dir, float *p1, float *p2,
  */
 void interaction_pick_object(AppState *state, bool is_double_click);
 
+/**
+ * Pick a menu node when the sphere menu is open.
+ */
+MenuNode* interaction_pick_menu_node(AppState* state, double mouse_x, double mouse_y);
+
+
