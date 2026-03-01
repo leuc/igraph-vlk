@@ -624,21 +624,6 @@ void renderer_draw_frame(Renderer *r) {
 		}
 	}
 
-	// --- Draw 3D Spherical Menu ---
-	if (r->app_ctx_ptr && r->app_ctx_ptr->current_state == STATE_MENU_OPEN &&
-		r->menuNodeCount > 0 && r->menuInstanceBuffer != VK_NULL_HANDLE) {
-		vkCmdBindPipeline(r->commandBuffers[r->currentFrame],
-						  VK_PIPELINE_BIND_POINT_GRAPHICS, r->menuPipeline);
-		VkBuffer vbs[] = {r->menuQuadVertexBuffer, r->menuInstanceBuffer};
-		VkDeviceSize vos[] = {0, 0};
-		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, vbs,
-							   vos);
-		vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame],
-							 r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexed(r->commandBuffers[r->currentFrame],
-						 r->menuQuadIndexCount, r->menuNodeCount, 0, 0, 0);
-	}
-
 	vkCmdEndRenderPass(r->commandBuffers[r->currentFrame]);
 	vkEndCommandBuffer(r->commandBuffers[r->currentFrame]);
 	VkPipelineStageFlags ws = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;

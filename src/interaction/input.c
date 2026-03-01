@@ -144,9 +144,11 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action,
     case GLFW_KEY_SPACE:
         if (state->app_ctx.current_state == STATE_GRAPH_VIEW) {
             state->app_ctx.current_state = STATE_MENU_OPEN;
+            state->app_ctx.root_menu->target_radius = 1.0f;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         } else if (state->app_ctx.current_state == STATE_MENU_OPEN) {
             state->app_ctx.current_state = STATE_GRAPH_VIEW;
+            state->app_ctx.root_menu->target_radius = 0.0f;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         }
         break;

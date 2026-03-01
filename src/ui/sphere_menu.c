@@ -13,10 +13,6 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-// Maximum children per page before using outer radius
-#define MAX_CHILDREN_PER_PAGE 15
-#define MENU_PAGINATION_THRESHOLD 12
-
 // Helper function to create a menu node
 static MenuNode* create_menu_node(const char* label, MenuNodeType type) {
     MenuNode* node = (MenuNode*)malloc(sizeof(MenuNode));
@@ -26,7 +22,7 @@ static MenuNode* create_menu_node(const char* label, MenuNodeType type) {
     node->target_phi = 0.0f;
     node->target_theta = 0.0f;
     node->current_radius = 0.0f;
-    node->target_radius = 1.0f;
+    node->target_radius = 0.0f; // Start collapsed
     node->num_children = 0;
     node->children = NULL;
     node->command = NULL;
@@ -42,13 +38,14 @@ static IgraphCommand* create_command(const char* id_name, const char* display_na
     cmd->execute = execute;
     cmd->num_params = num_params;
     cmd->params = (CommandParameter*)malloc(sizeof(CommandParameter) * num_params);
+    cmd->produces_visual_output = false;
     return cmd;
 }
 
 // Forward declaration
 static void assign_menu_icons(MenuNode* node);
 
-// Initialize the menu tree with sample data
+// Initialize the menu tree
 void init_menu_tree(MenuNode* root) {
     // Create main menu
     MenuNode* main_menu = create_menu_node("Main", NODE_BRANCH);
@@ -94,7 +91,7 @@ void init_menu_tree(MenuNode* root) {
     analysis_menu->children[1] = pagerank_node;
     analysis_menu->children[2] = betweenness_node;
     
-    visualize_menu->num_children = 0; // Placeholder for future commands
+    visualize_menu->num_children = 0; 
     visualize_menu->children = NULL;
     
     main_menu->num_children = 2;
@@ -109,13 +106,10 @@ void init_menu_tree(MenuNode* root) {
     assign_menu_icons(root);
 }
 
-// Helper to assign texture IDs recursively
 static void assign_menu_icons(MenuNode* node) {
     if (node == NULL) return;
-    
     static int next_icon_id = 0;
     node->icon_texture_id = next_icon_id++;
-    
     for (int i = 0; i < node->num_children; i++) {
         assign_menu_icons(node->children[i]);
     }
@@ -124,7 +118,6 @@ static void assign_menu_icons(MenuNode* node) {
 // Destroy the menu tree recursively
 void destroy_menu_tree(MenuNode* node) {
     if (node == NULL) return;
-    
     if (node->type == NODE_BRANCH) {
         for (int i = 0; i < node->num_children; i++) {
             destroy_menu_tree(node->children[i]);
@@ -137,33 +130,31 @@ void destroy_menu_tree(MenuNode* node) {
         free(node->command);
     }
     if (node->label) free((void*)node->label);
-    // Note: Don't free(node) if it's the root allocated on stack or special way
 }
 
 // Update menu animation with smooth easing
 void update_menu_animation(MenuNode* node, float delta_time) {
     if (node == NULL) return;
     
-    // Smooth radius transition
     float speed = 8.0f;
     node->current_radius += (node->target_radius - node->current_radius) * speed * delta_time;
     
-    // Distribute children on a sphere/arc
     if (node->num_children > 0) {
-        float golden_ratio = (1.0f + sqrtf(5.0f)) / 2.0f;
-        float angle_increment = 2.0f * M_PI * golden_ratio;
-
+        // Grid distribution for children relative to parent center (0,0)
+        int cols = (int)ceilf(sqrtf((float)node->num_children));
+        if (cols < 1) cols = 1;
+        
         for (int i = 0; i < node->num_children; i++) {
-            // Fibonacci sphere distribution for child offsets
-            float t = (float)i / node->num_children;
-            float phi = acosf(1.0f - 2.0f * t);
-            float theta = angle_increment * i;
-
-            // Offset from parent's orientation
-            node->children[i]->target_phi = node->target_phi + (phi - M_PI/2.0f) * 0.5f;
-            node->children[i]->target_theta = node->target_theta + theta * 0.2f;
+            int r = i / cols;
+            int c = i % cols;
             
-            // Set radius (only active level should be expanded)
+            // Center the grid
+            float x = (c - (cols - 1) / 2.0f) * 0.5f;
+            float y = (r - ((node->num_children + cols - 1) / cols - 1) / 2.0f) * 0.5f;
+            
+            // Update child targets
+            node->children[i]->target_phi = x;
+            node->children[i]->target_theta = y;
             node->children[i]->target_radius = (node->current_radius > 0.5f) ? 1.0f : 0.0f;
 
             update_menu_animation(node->children[i], delta_time);
@@ -184,42 +175,57 @@ void generate_vulkan_menu_buffers(MenuNode* node, Renderer* r, Camera* cam) {
     int stack_top = 0;
     stack[stack_top++] = node;
     
+    // Basis vectors for billboarding
+    vec3 right, up;
+    glm_vec3_cross(cam->front, cam->up, right);
+    glm_vec3_normalize(right);
+    glm_vec3_cross(right, cam->front, up);
+    glm_vec3_normalize(up);
+
     while (stack_top > 0) {
         MenuNode* current = stack[--stack_top];
         if (current == NULL) continue;
         
+        // Render every visible node except the root container if it's at (0,0)
         if (current->current_radius > 0.01f) {
             if (instance_count >= capacity) {
                 capacity *= 2;
                 instances = (MenuInstance*)realloc(instances, sizeof(MenuInstance) * capacity);
             }
             
-            // Calculate world position relative to camera
-            float dist = 2.0f * current->current_radius;
-            float phi = current->target_phi;
-            float theta = current->target_theta;
+            // Simple billboard position: cam_pos + 1.0*front + x*right + y*up
+            float x_off = current->target_phi;
+            float y_off = current->target_theta;
             
-            vec3 offset;
-            offset[0] = dist * sinf(phi) * cosf(theta);
-            offset[1] = dist * cosf(phi);
-            offset[2] = dist * sinf(phi) * sinf(theta);
-            
-            // For now, place it in front of camera
             vec3 world_pos;
-            glm_vec3_add(cam->pos, cam->front, world_pos);
-            glm_vec3_add(world_pos, offset, world_pos);
+            glm_vec3_copy(cam->pos, world_pos);
             
+            vec3 f_part, r_part, u_part;
+            glm_vec3_scale(cam->front, 1.0f, f_part); // 1 meter away
+            glm_vec3_scale(right, x_off, r_part);
+            glm_vec3_scale(up, y_off, u_part);
+            
+            glm_vec3_add(world_pos, f_part, world_pos);
+            glm_vec3_add(world_pos, r_part, world_pos);
+            glm_vec3_add(world_pos, u_part, world_pos);
+            
+            // Scale based on expansion
+            vec3 to_node;
+            glm_vec3_sub(world_pos, cam->pos, to_node);
+            glm_vec3_scale(to_node, current->current_radius, to_node);
+            glm_vec3_add(cam->pos, to_node, world_pos);
+
             glm_vec3_copy(world_pos, instances[instance_count].worldPos);
-            instances[instance_count].texCoord[0] = 0.5f;
-            instances[instance_count].texCoord[1] = 0.5f;
+            instances[instance_count].texCoord[0] = 0.0f;
+            instances[instance_count].texCoord[1] = 0.0f;
             instances[instance_count].texId = (float)current->icon_texture_id;
             
-            float s = 0.15f;
+            float s = 0.5f * current->current_radius; // HUGE
             instances[instance_count].scale[0] = s;
             instances[instance_count].scale[1] = s;
             instances[instance_count].scale[2] = s;
             
-            glm_vec4_copy((vec4){1, 0, 0, 0}, instances[instance_count].rotation);
+            glm_quat_identity(instances[instance_count].rotation);
             
             instance_count++;
         }
@@ -241,12 +247,6 @@ void generate_vulkan_menu_buffers(MenuNode* node, Renderer* r, Camera* cam) {
             };
             uint32_t qi[] = {0, 1, 2, 2, 3, 0};
             
-            // Use createBuffer with data
-            // Note: existing createBuffer in utils.c might need to be checked
-            // Looking at renderer.c, createBuffer is used as:
-            // createBuffer(device, physicalDevice, size, VK_BUFFER_USAGE_..., VK_MEMORY_PROPERTY_..., &buffer, &memory)
-            // It doesn't seem to take data directly. It's followed by updateBuffer.
-            
             createBuffer(r->device, r->physicalDevice, sizeof(qv),
                          VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -262,13 +262,15 @@ void generate_vulkan_menu_buffers(MenuNode* node, Renderer* r, Camera* cam) {
         }
         
         VkDeviceSize bufferSize = sizeof(MenuInstance) * instance_count;
-        if (r->menuInstanceBuffer == VK_NULL_HANDLE) {
-            createBuffer(r->device, r->physicalDevice, bufferSize,
-                         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                         &r->menuInstanceBuffer, &r->menuInstanceBufferMemory);
+        if (r->menuInstanceBuffer != VK_NULL_HANDLE) {
+            vkDeviceWaitIdle(r->device); // Ensure GPU is done with it
+            vkDestroyBuffer(r->device, r->menuInstanceBuffer, NULL);
+            vkFreeMemory(r->device, r->menuInstanceBufferMemory, NULL);
         }
-        // In a real app we might need to recreate if size changed, but for now just update
+        createBuffer(r->device, r->physicalDevice, bufferSize,
+                     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     &r->menuInstanceBuffer, &r->menuInstanceBufferMemory);
         updateBuffer(r->device, r->menuInstanceBufferMemory, bufferSize, instances);
         r->menuNodeCount = instance_count;
     }
@@ -276,7 +278,6 @@ void generate_vulkan_menu_buffers(MenuNode* node, Renderer* r, Camera* cam) {
     free(instances);
 }
 
-// Find a menu node by label
 MenuNode* find_menu_node(MenuNode* root, const char* label) {
     if (root == NULL || label == NULL) return NULL;
     if (strcmp(root->label, label) == 0) return root;

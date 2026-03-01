@@ -69,10 +69,17 @@ void ui_hud_update(AppState *state, float fps) {
     }
 
     char buf[1024];
+    char menu_state[32] = "";
+    if (state->app_ctx.current_state == STATE_MENU_OPEN) {
+        snprintf(menu_state, 32, " [MENU:%d]", state->renderer.menuNodeCount);
+    }
+    else if (state->app_ctx.current_state == STATE_AWAITING_SELECTION) strcpy(menu_state, " [PICKING]");
+    else if (state->app_ctx.current_state == STATE_EXECUTING) strcpy(menu_state, " [RUNNING]");
+
     snprintf(buf, sizeof(buf),
              "[L]ayout:%s%s [Y]SubGraph:%s [I]terate [C]ommunity:%s Str[u]cture:%s "
              "[T]ext:%s [N]ode:%d [E]dge:%d Filter:1-9 [K]Core:%d "
-             "[R]eset [H]ide FPS:%.1f",
+             "[R]eset [H]ide FPS:%.1f%s",
              layout_names[state->current_layout], stage_info,
              comm_arrangement_names[state->current_comm_arrangement],
              cluster_names[state->current_cluster],
@@ -81,7 +88,7 @@ void ui_hud_update(AppState *state, float fps) {
              state->current_graph.props.node_count,
              state->current_graph.props.edge_count,
              state->current_graph.props.coreness_filter,
-             fps);
+             fps, menu_state);
 
     renderer_update_ui(&state->renderer, buf);
 }

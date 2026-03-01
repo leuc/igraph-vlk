@@ -156,22 +156,36 @@ static MenuNode* pick_menu_recursive(AppState* state, MenuNode* node, float* ray
     
     MenuNode* best_hit = NULL;
     
-    // world position (must match generate_vulkan_menu_buffers)
-    float dist = 2.0f * node->current_radius;
-    float phi = node->target_phi;
-    float theta = node->target_theta;
+    // Basis vectors for billboarding
+    vec3 right, up;
+    glm_vec3_cross(state->camera.front, state->camera.up, right);
+    glm_vec3_normalize(right);
+    glm_vec3_cross(right, state->camera.front, up);
+    glm_vec3_normalize(up);
+
+    // billboard position (must match generate_vulkan_menu_buffers)
+    float x_off = node->target_phi;
+    float y_off = node->target_theta;
     
     vec3 world_pos;
-    world_pos[0] = dist * sinf(phi) * cosf(theta);
-    world_pos[1] = dist * cosf(phi);
-    world_pos[2] = dist * sinf(phi) * sinf(theta);
+    glm_vec3_copy(state->camera.pos, world_pos);
     
-    vec3 cam_world_pos;
-    glm_vec3_add(state->camera.pos, state->camera.front, cam_world_pos);
-    glm_vec3_add(cam_world_pos, world_pos, world_pos);
+    vec3 f_part, r_part, u_part;
+    glm_vec3_scale(state->camera.front, 2.0f, f_part);
+    glm_vec3_scale(right, x_off, r_part);
+    glm_vec3_scale(up, y_off, u_part);
+    
+    glm_vec3_add(world_pos, f_part, world_pos);
+    glm_vec3_add(world_pos, r_part, world_pos);
+    glm_vec3_add(world_pos, u_part, world_pos);
+    
+    vec3 to_node;
+    glm_vec3_sub(world_pos, state->camera.pos, to_node);
+    glm_vec3_scale(to_node, node->current_radius, to_node);
+    glm_vec3_add(state->camera.pos, to_node, world_pos);
     
     float t;
-    float hit_radius = 0.15f; 
+    float hit_radius = 0.15f * node->current_radius; 
     if (picking_ray_sphere_intersection(ray_ori, ray_dir, world_pos, hit_radius, &t)) {
         if (t > 0 && t < *min_t) {
             *min_t = t;
