@@ -17,6 +17,10 @@ typedef struct {
 typedef struct {
 	vec3 pos;
 	vec2 tex;
+} QuadVertex;  // Generic quad vertex for UI/menu instancing
+typedef struct {
+	vec3 pos;
+	vec2 tex;
 } LabelVertex;
 typedef struct {
 	vec3 nodePos;
@@ -33,5 +37,14 @@ typedef struct {
 	vec4 charUV;
 	vec4 color;
 } UIInstance;
+
+// 3D Spherical Menu Instanced Rendering
+typedef struct {
+	vec3 worldPos;   // Cartesian world position (x, y, z)
+	vec2 texCoord;   // Icon texture coordinates (if quad)
+	float texId;     // Texture ID for icon atlas (for sprite sheet)
+	vec3 scale;      // Non-uniform scale (x, y, z)
+	vec4 rotation;   // Quaternion rotation (w, x, y, z) - optional
+} MenuInstance;
 
 #endif

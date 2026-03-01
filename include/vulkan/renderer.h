@@ -8,6 +8,8 @@
 #include "graph/graph_types.h"
 #include "vulkan/polyhedron.h"
 
+struct AppContext;
+
 typedef enum {
 	ROUTING_MODE_STRAIGHT = 0,
 	ROUTING_MODE_SPHERICAL_PCB = 1,
@@ -109,6 +111,38 @@ typedef struct {
 	VkBuffer uiTextInstanceBuffer;
 	VkDeviceMemory uiTextInstanceBufferMemory;
 	uint32_t uiTextCharCount;
+
+	// 3D Spherical Menu
+	VkBuffer menuQuadVertexBuffer;
+	VkDeviceMemory menuQuadVertexBufferMemory;
+	VkBuffer menuQuadIndexBuffer;
+	VkDeviceMemory menuQuadIndexBufferMemory;
+	VkBuffer menuInstanceBuffer;
+	VkDeviceMemory menuInstanceBufferMemory;
+	uint32_t menuNodeCount;
+	uint32_t menuQuadIndexCount;
+	VkPipeline menuPipeline; // Instanced menu rendering pipeline
+
+	// Numeric Input Widget (world-space)
+	VkBuffer numericQuadVertexBuffer;
+	VkDeviceMemory numericQuadVertexBufferMemory;
+	VkBuffer numericQuadIndexBuffer;
+	VkDeviceMemory numericQuadIndexBufferMemory;
+	VkBuffer numericInstanceBuffer;
+	VkDeviceMemory numericInstanceBufferMemory;
+	uint32_t numericInstanceCount;
+	uint32_t numericQuadIndexCount;
+
+	// Numeric widget value string (HUD display)
+	char numericValueString[32];
+	bool showNumericValue;
+
+	// Results display (HUD)
+	char resultsMessage[128];
+	bool showResultsMessage;
+
+	// App context pointer for state checking
+	struct AppContext* app_ctx_ptr;
 
 	// Layered Spheres (Transparent)
 	VkBuffer sphereVertexBuffer;

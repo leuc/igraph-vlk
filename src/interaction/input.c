@@ -201,15 +201,33 @@ static void mouse_button_callback(GLFWwindow *window, int button, int action,
 
         AppState *state = (AppState *)glfwGetWindowUserPointer(window);
         if (state) {
-            if (state->app_ctx.current_state == STATE_GRAPH_VIEW) {
+            AppContext* app = &state->app_ctx;
+            
+            if (app->current_state == STATE_GRAPH_VIEW) {
                 interaction_pick_object(state, isDoubleClick);
-            } else if (state->app_ctx.current_state == STATE_MENU_OPEN) {
+            } else if (app->current_state == STATE_MENU_OPEN) {
                 double mx, my;
                 glfwGetCursorPos(window, &mx, &my);
                 MenuNode* selected = interaction_pick_menu_node(state, mx, my);
                 if (selected) {
-                    handle_menu_selection(&state->app_ctx, selected);
+                    handle_menu_selection(app, selected);
                 }
+            } else if (app->current_state == STATE_AWAITING_INPUT) {
+                // Click confirms the numeric value and proceeds to execution
+                IgraphCommand* cmd = app->pending_command;
+                if (cmd) {
+                    for (int i = 0; i < cmd->num_params; i++) {
+                        if (cmd->params[i].type == PARAM_TYPE_FLOAT || cmd->params[i].type == PARAM_TYPE_INT) {
+                            if (cmd->params[i].type == PARAM_TYPE_FLOAT) {
+                                cmd->params[i].value.f_val = app->numeric_input.current.float_val;
+                            } else {
+                                cmd->params[i].value.i_val = app->numeric_input.current.int_val;
+                            }
+                            break;
+                        }
+                    }
+                }
+                app->current_state = STATE_EXECUTING;
             }
         }
     }
@@ -217,8 +235,59 @@ static void mouse_button_callback(GLFWwindow *window, int button, int action,
 
 static void mouse_callback(GLFWwindow *window, double xpos, double ypos) {
     AppState *state = (AppState *)glfwGetWindowUserPointer(window);
-    if (state && state->app_ctx.current_state == STATE_GRAPH_VIEW) {
+    if (!state) return;
+    
+    AppContext* app = &state->app_ctx;
+    
+    if (app->current_state == STATE_GRAPH_VIEW) {
         camera_process_mouse(&state->camera, (float)xpos, (float)ypos);
+    } else if (app->current_state == STATE_AWAITING_INPUT) {
+        // Handle slider dragging
+        NumericInputWidget* widget = &app->numeric_input;
+        if (widget->active) {
+            // Calculate normalized mouse position in [-1, 1] range based on window size
+            int win_width, win_height;
+            glfwGetWindowSize(window, &win_width, &win_height);
+            float ndc_x = ((float)xpos / win_width) * 2.0f - 1.0f;
+            
+            // Convert slider world position to screen coordinates to map mouse movement
+            // For simplicity, use horizontal mouse movement to adjust value
+            // We'll store previous mouse X to compute delta
+            static double prev_x = 0;
+            double delta = xpos - prev_x;
+            prev_x = xpos;
+            
+            if (widget->param_type == PARAM_TYPE_FLOAT) {
+                float range = widget->constraints.float_range.max_val - widget->constraints.float_range.min_val;
+                float delta_val = (float)delta * 0.005f * range; // Sensitivity factor
+                widget->current.float_val += delta_val;
+                // Clamp
+                if (widget->current.float_val < widget->constraints.float_range.min_val)
+                    widget->current.float_val = widget->constraints.float_range.min_val;
+                if (widget->current.float_val > widget->constraints.float_range.max_val)
+                    widget->current.float_val = widget->constraints.float_range.max_val;
+                
+                // Update label
+                if (widget->label) free(widget->label);
+                CommandParameter* param = app->pending_command->params; // Simplified: assuming first numeric param
+                asprintf(&widget->label, "%s: %.2f", param->name, widget->current.float_val);
+            } else if (widget->param_type == PARAM_TYPE_INT) {
+                int range = widget->constraints.int_range.max_val - widget->constraints.int_range.min_val;
+                int delta_val = (int)(delta * 0.01f * range);
+                widget->current.int_val += delta_val;
+                // Clamp
+                if (widget->current.int_val < widget->constraints.int_range.min_val)
+                    widget->current.int_val = widget->constraints.int_range.min_val;
+                if (widget->current.int_val > widget->constraints.int_range.max_val)
+                    widget->current.int_val = widget->constraints.int_range.max_val;
+                
+                // Update label
+                if (widget->label) free(widget->label);
+                CommandParameter* param = app->pending_command->params;
+                asprintf(&widget->label, "%s: %d", param->name, widget->current.int_val);
+            }
+        }
     }
 }
+
 

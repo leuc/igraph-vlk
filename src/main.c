@@ -123,6 +123,7 @@ int main(int argc, char **argv) {
     MenuNode* root_menu = (MenuNode*)malloc(sizeof(MenuNode));
     init_menu_tree(root_menu);
     app_context_init(&app.app_ctx, &app.current_graph.g, root_menu);
+    app.renderer.app_ctx_ptr = &app.app_ctx;
 
     // Initialize timing
     float lastFrame = 0.0f;
@@ -155,6 +156,10 @@ int main(int argc, char **argv) {
         update_app_state(&app.app_ctx);
         update_menu_animation(app.app_ctx.root_menu, deltaTime);
 
+        if (app.app_ctx.current_state == STATE_MENU_OPEN) {
+            generate_vulkan_menu_buffers(app.app_ctx.root_menu, &app.renderer, &app.camera);
+        }
+
         // Update animations
         animation_manager_update(&app.anim_manager, deltaTime);
         if (app.anim_manager.num_animations > 0) {
@@ -183,4 +188,3 @@ int main(int argc, char **argv) {
 
     return 0;
 }
-

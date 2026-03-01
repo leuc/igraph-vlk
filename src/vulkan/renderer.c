@@ -8,6 +8,7 @@
 #include "vulkan/renderer_pipelines.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
+#include "interaction/state.h"
 
 #define MAX_FRAMES_IN_FLIGHT 2
 #define FONT_PATH "/usr/share/fonts/truetype/inconsolata/Inconsolata.otf"
@@ -309,6 +310,55 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph) {
 					 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 				 &r->uiTextInstanceBuffer, &r->uiTextInstanceBufferMemory);
 
+	// Initialize menu buffers (will be filled when menu is generated)
+	r->menuQuadVertexBuffer = VK_NULL_HANDLE;
+	r->menuQuadVertexBufferMemory = VK_NULL_HANDLE;
+	r->menuQuadIndexBuffer = VK_NULL_HANDLE;
+	r->menuQuadIndexBufferMemory = VK_NULL_HANDLE;
+	r->menuInstanceBuffer = VK_NULL_HANDLE;
+	r->menuInstanceBufferMemory = VK_NULL_HANDLE;
+	r->menuNodeCount = 0;
+	r->menuQuadIndexCount = 0;
+
+	// Create numeric widget quad vertex buffer (static geometry for slider)
+	QuadVertex numericQuadVertices[] = {
+		// Track: rectangle from (-0.5, -0.02, 0) to (0.5, 0.02, 0)
+		{{-0.5f, -0.02f, 0.0f}, {0.0f, 0.0f}},
+		{{ 0.5f, -0.02f, 0.0f}, {1.0f, 0.0f}},
+		{{-0.5f,  0.02f, 0.0f}, {0.0f, 1.0f}},
+		{{ 0.5f,  0.02f, 0.0f}, {1.0f, 1.0f}},
+		// Thumb: square from (-0.03, -0.05, 0) to (0.03, 0.05, 0)
+		{{-0.03f, -0.05f, 0.0f}, {0.0f, 0.0f}},
+		{{ 0.03f, -0.05f, 0.0f}, {1.0f, 0.0f}},
+		{{-0.03f,  0.05f, 0.0f}, {0.0f, 1.0f}},
+		{{ 0.03f,  0.05f, 0.0f}, {1.0f, 1.0f}}
+	};
+	uint32_t numericQuadIndices[] = {
+		// Track triangles (0-3)
+		0, 1, 2, 2, 1, 3,
+		// Thumb triangles (4-7)
+		4, 5, 6, 6, 5, 7
+	};
+	createBuffer(r->device, r->physicalDevice, sizeof(numericQuadVertices),
+				 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+				 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+					 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				 &r->numericQuadVertexBuffer, &r->numericQuadVertexBufferMemory);
+	updateBuffer(r->device, r->numericQuadVertexBufferMemory,
+				 sizeof(numericQuadVertices), numericQuadVertices);
+	createBuffer(r->device, r->physicalDevice, sizeof(numericQuadIndices),
+				 VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+				 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+					 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				 &r->numericQuadIndexBuffer, &r->numericQuadIndexBufferMemory);
+	updateBuffer(r->device, r->numericQuadIndexBufferMemory,
+				 sizeof(numericQuadIndices), numericQuadIndices);
+	r->numericQuadIndexCount = sizeof(numericQuadIndices) / sizeof(uint32_t);
+	// Numeric instance buffer will be dynamically allocated/updated when needed
+	r->numericInstanceBuffer = VK_NULL_HANDLE;
+	r->numericInstanceBufferMemory = VK_NULL_HANDLE;
+	r->numericInstanceCount = 0;
+
 	r->instanceBuffer = VK_NULL_HANDLE;
 	r->edgeVertexBuffer = VK_NULL_HANDLE;
 	r->labelInstanceBuffer = VK_NULL_HANDLE;
@@ -486,6 +536,47 @@ void renderer_draw_frame(Renderer *r) {
 				  0);
 	}
 
+	// Draw 3D Spherical Menu (if visible and has instances)
+	if (r->menuNodeCount > 0 && r->menuInstanceBuffer != VK_NULL_HANDLE) {
+		vkCmdBindPipeline(r->commandBuffers[r->currentFrame],
+						  VK_PIPELINE_BIND_POINT_GRAPHICS, r->menuPipeline);
+
+		// Bind quad vertex buffer (binding 0) and menu instance buffer (binding 1)
+		VkBuffer menuVbs[] = {r->menuQuadVertexBuffer, r->menuInstanceBuffer};
+		VkDeviceSize menuVos[] = {0, 0};
+		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2,
+							   menuVbs, menuVos);
+
+		// Bind index buffer for quad
+		vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame],
+							 r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+		// Draw each menu node instance with 6 indices (two triangles per quad)
+		vkCmdDrawIndexed(r->commandBuffers[r->currentFrame],
+						 r->menuQuadIndexCount,
+						 r->menuNodeCount,
+						 0, 0, 0);
+	}
+
+	// Draw Numeric Input Widget (if active)
+	// Uses menu pipeline for world-space quads (track + thumb) and UI label pipeline for value text
+	if (r->numericInstanceCount > 0 && r->numericInstanceBuffer != VK_NULL_HANDLE) {
+		// Draw slider track and thumb using the menu pipeline (world-space)
+		vkCmdBindPipeline(r->commandBuffers[r->currentFrame],
+						  VK_PIPELINE_BIND_POINT_GRAPHICS, r->menuPipeline);
+		VkBuffer numericVbs[] = {r->numericQuadVertexBuffer, r->numericInstanceBuffer};
+		VkDeviceSize numericVos[] = {0, 0};
+		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2,
+							   numericVbs, numericVos);
+		vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame],
+							 r->numericQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		// 6 indices per quad, 2 quads total
+		vkCmdDrawIndexed(r->commandBuffers[r->currentFrame],
+						 r->numericQuadIndexCount,
+						 r->numericInstanceCount,
+						 0, 0, 0);
+	}
+
 	// Draw Transparent Spheres (Last for blending)
 	if (r->showSpheres && r->numSpheres > 0 &&
 		r->sphereVertexBuffer != VK_NULL_HANDLE) {
@@ -532,6 +623,22 @@ void renderer_draw_frame(Renderer *r) {
 					  0, 0);
 		}
 	}
+
+	// --- Draw 3D Spherical Menu ---
+	if (r->app_ctx_ptr && r->app_ctx_ptr->current_state == STATE_MENU_OPEN &&
+		r->menuNodeCount > 0 && r->menuInstanceBuffer != VK_NULL_HANDLE) {
+		vkCmdBindPipeline(r->commandBuffers[r->currentFrame],
+						  VK_PIPELINE_BIND_POINT_GRAPHICS, r->menuPipeline);
+		VkBuffer vbs[] = {r->menuQuadVertexBuffer, r->menuInstanceBuffer};
+		VkDeviceSize vos[] = {0, 0};
+		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, vbs,
+							   vos);
+		vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame],
+							 r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(r->commandBuffers[r->currentFrame],
+						 r->menuQuadIndexCount, r->menuNodeCount, 0, 0, 0);
+	}
+
 	vkCmdEndRenderPass(r->commandBuffers[r->currentFrame]);
 	vkEndCommandBuffer(r->commandBuffers[r->currentFrame]);
 	VkPipelineStageFlags ws = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -586,6 +693,34 @@ void renderer_cleanup(Renderer *r) {
 	vkFreeMemory(r->device, r->uiBgVertexBufferMemory, NULL);
 	vkDestroyBuffer(r->device, r->uiTextInstanceBuffer, NULL);
 	vkFreeMemory(r->device, r->uiTextInstanceBufferMemory, NULL);
+
+	// Cleanup menu buffers
+	if (r->menuQuadVertexBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->menuQuadVertexBuffer, NULL);
+		vkFreeMemory(r->device, r->menuQuadVertexBufferMemory, NULL);
+	}
+	if (r->menuQuadIndexBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->menuQuadIndexBuffer, NULL);
+		vkFreeMemory(r->device, r->menuQuadIndexBufferMemory, NULL);
+	}
+	if (r->menuInstanceBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->menuInstanceBuffer, NULL);
+		vkFreeMemory(r->device, r->menuInstanceBufferMemory, NULL);
+	}
+
+	// Cleanup numeric widget buffers
+	if (r->numericQuadVertexBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->numericQuadVertexBuffer, NULL);
+		vkFreeMemory(r->device, r->numericQuadVertexBufferMemory, NULL);
+	}
+	if (r->numericQuadIndexBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->numericQuadIndexBuffer, NULL);
+		vkFreeMemory(r->device, r->numericQuadIndexBufferMemory, NULL);
+	}
+	if (r->numericInstanceBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->numericInstanceBuffer, NULL);
+		vkFreeMemory(r->device, r->numericInstanceBufferMemory, NULL);
+	}
 
 	vkDestroyCommandPool(r->device, r->commandPool, NULL);
 	vkDestroyDescriptorPool(r->device, r->descriptorPool, NULL);

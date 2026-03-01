@@ -7,7 +7,8 @@
 #include "vulkan/utils.h"
 
 int renderer_create_pipelines(Renderer *r) {
-	VkShaderModule vMod, fMod, eVMod, efMod, lVMod, lfMod, uiVMod, uiFMod;
+	VkShaderModule vMod, fMod, eVMod, efMod, lVMod, lfMod, uiVMod, uiFMod,
+		menuVMod, menuFMod;
 	create_shader_module(r->device, VERT_SHADER_PATH, &vMod);
 	create_shader_module(r->device, FRAG_SHADER_PATH, &fMod);
 	create_shader_module(r->device, EDGE_VERT_SHADER_PATH, &eVMod);
@@ -16,6 +17,8 @@ int renderer_create_pipelines(Renderer *r) {
 	create_shader_module(r->device, LABEL_FRAG_SHADER_PATH, &lfMod);
 	create_shader_module(r->device, UI_VERT_SHADER_PATH, &uiVMod);
 	create_shader_module(r->device, UI_FRAG_SHADER_PATH, &uiFMod);
+	create_shader_module(r->device, MENU_VERT_SHADER_PATH, &menuVMod);
+	create_shader_module(r->device, MENU_FRAG_SHADER_PATH, &menuFMod);
 
 	VkViewport vp = {0, 0, 3440, 1440, 0, 1};
 	VkRect2D sc = {{0, 0}, {3440, 1440}};
@@ -328,6 +331,70 @@ int renderer_create_pipelines(Renderer *r) {
 	vkDestroyShaderModule(r->device, eVMod, NULL);
 	vkDestroyShaderModule(r->device, fMod, NULL);
 	vkDestroyShaderModule(r->device, vMod, NULL);
+
+	// --- 3D SPHERICAL MENU PIPELINE ---
+	VkPipelineShaderStageCreateInfo menuStages[] = {
+		{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
+		 VK_SHADER_STAGE_VERTEX_BIT, menuVMod, "main", NULL},
+		{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
+		 VK_SHADER_STAGE_FRAGMENT_BIT, menuFMod, "main", NULL}};
+
+	// Vertex input: QuadVertex (binding 0) + MenuInstance (binding 1)
+	VkVertexInputBindingDescription menuB[] = {
+		{0, sizeof(QuadVertex), VK_VERTEX_INPUT_RATE_VERTEX},
+		{1, sizeof(MenuInstance), VK_VERTEX_INPUT_RATE_INSTANCE}};
+
+	VkVertexInputAttributeDescription menuA[] = {
+		// QuadVertex attributes (binding 0)
+		{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(QuadVertex, pos)},
+		{1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(QuadVertex, tex)},
+
+		// MenuInstance attributes (binding 1) - will be passed to shader
+		{2, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(MenuInstance, worldPos)},
+		{3, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(MenuInstance, texCoord)},
+		{4, 1, VK_FORMAT_R32_SFLOAT, offsetof(MenuInstance, texId)},
+		{5, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(MenuInstance, scale)},
+		{6, 1, VK_FORMAT_R32G32B32A32_SFLOAT,
+		 offsetof(MenuInstance, rotation)}};
+
+	VkPipelineVertexInputStateCreateInfo menuVI = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+		.vertexBindingDescriptionCount = 2,
+		.pVertexBindingDescriptions = menuB,
+		.vertexAttributeDescriptionCount = 7,
+		.pVertexAttributeDescriptions = menuA};
+
+	// Use triangle list for quads (two triangles per instance)
+	VkPipelineInputAssemblyStateCreateInfo menuIA = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+		.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+
+	// Depth: enable test and writes for solid 3D objects
+	VkPipelineDepthStencilStateCreateInfo menuDS = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+		.depthTestEnable = VK_TRUE,
+		.depthWriteEnable = VK_TRUE,
+		.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL};
+
+	VkGraphicsPipelineCreateInfo menuPInfo = {
+		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+		.stageCount = 2,
+		.pStages = menuStages,
+		.pVertexInputState = &menuVI,
+		.pInputAssemblyState = &menuIA,
+		.pViewportState = &vpS,
+		.pRasterizationState = &ras, // solid fill, cull none
+		.pMultisampleState = &mul,
+		.pColorBlendState = &colS, // with blending for textures
+		.pDepthStencilState = &menuDS,
+		.layout = r->pipelineLayout,
+		.renderPass = r->renderPass};
+
+	vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &menuPInfo, NULL,
+							  &r->menuPipeline);
+
+	vkDestroyShaderModule(r->device, menuFMod, NULL);
+	vkDestroyShaderModule(r->device, menuVMod, NULL);
 
 	// --- COMPUTE PIPELINE SETUP ---
 	VkDescriptorSetLayoutBinding cBindings[] = {
