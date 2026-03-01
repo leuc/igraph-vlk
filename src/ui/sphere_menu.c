@@ -215,10 +215,9 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 	if (node == NULL)
 		return;
 
-	// Phase 5: Ensure complete menu disappearance when closed
-	// If target_radius is 0.0f AND menu collapsed, don't render anything
-	// Changed from || to && to allow closing animation to play out
-	if (node->target_radius == 0.0f && node->current_radius < 0.01f) {
+	// Fully vanish after closing animation
+	// Reset counts to 0 once we're collapsed so nothing is drawn
+	if (node->target_radius == 0.0f && node->current_radius < 0.005f) {
 		r->menuNodeCount = 0;
 		r->menuTextCharCount = 0;
 		return;
@@ -285,10 +284,10 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 			instances[instance_count].texCoord[1] = 0.0f;
 			instances[instance_count].texId = (float)current->icon_texture_id;
 
-			// Dynamic box sizing based on text
-			float text_scale = 0.35f;
-			float padding_x = 0.2f;
-			float fixed_height = 0.15f;
+			// Dynamic box sizing based on text - Shrunken for compact look
+			float text_scale = 0.25f;  // Reduced scale
+			float padding_x = 0.12f;   // Smaller padding
+			float fixed_height = 0.10f; // Lower profile height
 
 			// Calculate total width for dynamic sizing (even if no label)
 			float total_w = 0.0f;
@@ -305,8 +304,8 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 
 			// Use dynamic bounds: width based on text + padding, height fixed
 			float box_width = (total_w * text_scale) + padding_x;
-			instances[instance_count].scale[0] = box_width;
-			instances[instance_count].scale[1] = fixed_height;
+			instances[instance_count].scale[0] = box_width * current->current_radius; // Shrink as it collapses
+			instances[instance_count].scale[1] = fixed_height * current->current_radius;
 			instances[instance_count].scale[2] = 1.0f; // Flat depth
 
 			// Center the background quad around the text anchor
@@ -320,7 +319,7 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 			glm_quat_identity(instances[instance_count].rotation);
 
 			// Generate label instances
-			if (current->label) {
+			if (current->label && current->current_radius > 0.5f) { // Only render text when mostly open
 				int len = strlen(current->label);
 				if (label_count + len >= label_capacity) {
 					label_capacity *= 2;
@@ -337,11 +336,12 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 					CharInfo *ci = (c < 128) ? &globalAtlas.chars[c]
 											 : &globalAtlas.chars[32];
 
-					// Offset text below the icon
+					// Center text within the box vertically
 					vec3 label_pos;
 					glm_vec3_copy(world_pos, label_pos);
 					vec3 down;
-					glm_vec3_scale(up, -0.08f, down);
+					// Adjust vertical centering: text height is roughly text_scale * baseline offset
+					glm_vec3_scale(up, -0.05f, down); 
 					glm_vec3_add(label_pos, down, label_pos);
 
 					glm_vec3_copy(label_pos, label_instances[label_count].nodePos);
