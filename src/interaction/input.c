@@ -146,8 +146,8 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action,
             state->app_ctx.current_state = STATE_MENU_OPEN;
             state->app_ctx.root_menu->target_radius = 1.0f;
             // Capture camera position and orientation for menu world-space anchor
-            glm_vec3_copy(state->app_ctx.menu_spawn_pos, state->camera.pos);
-            glm_vec3_copy(state->app_ctx.menu_spawn_front, state->camera.front);
+            glm_vec3_copy(state->camera.pos, state->app_ctx.menu_spawn_pos);
+            glm_vec3_copy(state->camera.front, state->app_ctx.menu_spawn_front);
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             // Keep cursor disabled to maintain camera lock for crosshair selection
         } else if (state->app_ctx.current_state == STATE_MENU_OPEN) {
