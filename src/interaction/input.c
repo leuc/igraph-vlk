@@ -43,7 +43,7 @@ void interaction_process_continuous_input(AppState *state, float delta_time) {
     }
     float adjusted_delta = delta_time * speed_multiplier;
 
-    if (state->app_ctx.current_state != STATE_GRAPH_VIEW)
+    if (state->app_ctx.current_state != STATE_GRAPH_VIEW && state->app_ctx.current_state != STATE_MENU_OPEN)
         return;
 
     // Handle camera movement
@@ -145,6 +145,9 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action,
         if (state->app_ctx.current_state == STATE_GRAPH_VIEW) {
             state->app_ctx.current_state = STATE_MENU_OPEN;
             state->app_ctx.root_menu->target_radius = 1.0f;
+            // Capture camera position and orientation for menu world-space anchor
+            glm_vec3_copy(state->app_ctx.menu_spawn_pos, state->camera.pos);
+            glm_vec3_copy(state->app_ctx.menu_spawn_front, state->camera.front);
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             // Keep cursor disabled to maintain camera lock for crosshair selection
         } else if (state->app_ctx.current_state == STATE_MENU_OPEN) {
@@ -242,7 +245,7 @@ static void mouse_callback(GLFWwindow *window, double xpos, double ypos) {
     
     AppContext* app = &state->app_ctx;
     
-    if (app->current_state == STATE_GRAPH_VIEW) {
+    if (app->current_state == STATE_GRAPH_VIEW || app->current_state == STATE_MENU_OPEN) {
         camera_process_mouse(&state->camera, (float)xpos, (float)ypos);
     } else if (app->current_state == STATE_AWAITING_INPUT) {
         // Handle slider dragging

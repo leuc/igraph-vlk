@@ -144,6 +144,10 @@ typedef struct AppContext {
     
     // Numeric input widget state
     NumericInputWidget numeric_input;
+    
+    // Menu world-space anchor (captured when menu opens)
+    vec3 menu_spawn_pos;
+    vec3 menu_spawn_front;
 } AppContext;
 
 // Function declarations

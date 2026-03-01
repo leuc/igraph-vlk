@@ -123,6 +123,11 @@ typedef struct {
 	uint32_t menuQuadIndexCount;
 	VkPipeline menuPipeline; // Instanced menu rendering pipeline
 
+	// Crosshair (screen-space overlay)
+	VkBuffer crosshairVertexBuffer;
+	VkDeviceMemory crosshairVertexBufferMemory;
+	uint32_t crosshairVertexCount;
+
 	// Numeric Input Widget (world-space)
 	VkBuffer numericQuadVertexBuffer;
 	VkDeviceMemory numericQuadVertexBufferMemory;

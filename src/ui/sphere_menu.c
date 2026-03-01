@@ -159,7 +159,7 @@ void update_menu_animation(MenuNode* node, float delta_time) {
 }
 
 // Generate Vulkan menu buffers (instanced rendering)
-void generate_vulkan_menu_buffers(MenuNode* node, Renderer* r, Camera* cam) {
+void generate_vulkan_menu_buffers(MenuNode* node, Renderer* r, vec3 spawn_pos, vec3 spawn_front) {
     if (node == NULL) return;
     
     int capacity = 128;
@@ -171,11 +171,11 @@ void generate_vulkan_menu_buffers(MenuNode* node, Renderer* r, Camera* cam) {
     int stack_top = 0;
     stack[stack_top++] = node;
     
-    // Basis vectors for billboarding
+    // Basis vectors for billboarding (using spawn_front as camera front)
     vec3 right, up;
-    glm_vec3_cross(cam->front, cam->up, right);
+    glm_vec3_cross(spawn_front, (vec3){0,1,0}, right); // Use world up (0,1,0) instead of cam->up
     glm_vec3_normalize(right);
-    glm_vec3_cross(right, cam->front, up);
+    glm_vec3_cross(right, spawn_front, up);
     glm_vec3_normalize(up);
 
     while (stack_top > 0) {
@@ -194,10 +194,10 @@ void generate_vulkan_menu_buffers(MenuNode* node, Renderer* r, Camera* cam) {
             float y_off = current->target_theta;
             
             vec3 world_pos;
-            glm_vec3_copy(cam->pos, world_pos);
+            glm_vec3_copy(spawn_pos, world_pos);
             
             vec3 f_part, r_part, u_part;
-            glm_vec3_scale(cam->front, 1.0f, f_part); // 1 meter away
+            glm_vec3_scale(spawn_front, 1.0f, f_part); // 1 meter away
             glm_vec3_scale(right, x_off, r_part);
             glm_vec3_scale(up, y_off, u_part);
             
@@ -207,9 +207,9 @@ void generate_vulkan_menu_buffers(MenuNode* node, Renderer* r, Camera* cam) {
             
             // Scale based on expansion
             vec3 to_node;
-            glm_vec3_sub(world_pos, cam->pos, to_node);
+            glm_vec3_sub(world_pos, spawn_pos, to_node);
             glm_vec3_scale(to_node, current->current_radius, to_node);
-            glm_vec3_add(cam->pos, to_node, world_pos);
+            glm_vec3_add(spawn_pos, to_node, world_pos);
 
             glm_vec3_copy(world_pos, instances[instance_count].worldPos);
             instances[instance_count].texCoord[0] = 0.0f;

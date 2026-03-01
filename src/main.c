@@ -157,7 +157,8 @@ int main(int argc, char **argv) {
         update_menu_animation(app.app_ctx.root_menu, deltaTime);
 
         if (app.app_ctx.current_state == STATE_MENU_OPEN) {
-            generate_vulkan_menu_buffers(app.app_ctx.root_menu, &app.renderer, &app.camera);
+            generate_vulkan_menu_buffers(app.app_ctx.root_menu, &app.renderer, 
+                                         app.app_ctx.menu_spawn_pos, app.app_ctx.menu_spawn_front);
         }
 
         // Update animations

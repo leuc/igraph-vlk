@@ -26,7 +26,7 @@ typedef struct {
 void init_menu_tree(MenuNode* root);
 void destroy_menu_tree(MenuNode* node);
 void update_menu_animation(MenuNode* node, float delta_time);
-void generate_vulkan_menu_buffers(MenuNode* node, Renderer* r, Camera* cam);
+void generate_vulkan_menu_buffers(MenuNode* node, Renderer* r, vec3 spawn_pos, vec3 spawn_front);
 MenuNode* find_menu_node(MenuNode* root, char const* label);
 
 // Data-driven initialization helper

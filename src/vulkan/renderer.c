@@ -320,6 +320,21 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph) {
 	r->menuNodeCount = 0;
 	r->menuQuadIndexCount = 0;
 
+	// Create crosshair vertex buffer (screen-space NDC lines)
+	UIVertex crosshairVertices[] = {
+		{{-0.02f, 0.0f, 0.0f}, {0, 0}},  // Left center
+		{{ 0.02f, 0.0f, 0.0f}, {0, 0}},  // Right center
+		{{ 0.0f, -0.03f, 0.0f}, {0, 0}}, // Top center
+		{{ 0.0f,  0.03f, 0.0f}, {0, 0}}  // Bottom center
+	};
+	createBuffer(r->device, r->physicalDevice, sizeof(crosshairVertices),
+				 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+				 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+					 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				 &r->crosshairVertexBuffer, &r->crosshairVertexBufferMemory);
+	updateBuffer(r->device, r->crosshairVertexBufferMemory, sizeof(crosshairVertices), crosshairVertices);
+	r->crosshairVertexCount = 4;
+
 	// Create numeric widget quad vertex buffer (static geometry for slider)
 	QuadVertex numericQuadVertices[] = {
 		// Track: rectangle from (-0.5, -0.02, 0) to (0.5, 0.02, 0)
@@ -624,6 +639,16 @@ void renderer_draw_frame(Renderer *r) {
 		}
 	}
 
+	// Draw Crosshair (always on top, screen-space NDC)
+	if (r->crosshairVertexCount > 0) {
+		vkCmdBindPipeline(r->commandBuffers[r->currentFrame],
+						  VK_PIPELINE_BIND_POINT_GRAPHICS, r->edgePipeline);
+		VkDeviceSize zero = 0;
+		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1,
+							   &r->crosshairVertexBuffer, &zero);
+		vkCmdDraw(r->commandBuffers[r->currentFrame], r->crosshairVertexCount, 1, 0, 0);
+	}
+
 	vkCmdEndRenderPass(r->commandBuffers[r->currentFrame]);
 	vkEndCommandBuffer(r->commandBuffers[r->currentFrame]);
 	VkPipelineStageFlags ws = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -678,6 +703,12 @@ void renderer_cleanup(Renderer *r) {
 	vkFreeMemory(r->device, r->uiBgVertexBufferMemory, NULL);
 	vkDestroyBuffer(r->device, r->uiTextInstanceBuffer, NULL);
 	vkFreeMemory(r->device, r->uiTextInstanceBufferMemory, NULL);
+
+	// Cleanup crosshair buffer
+	if (r->crosshairVertexBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->crosshairVertexBuffer, NULL);
+		vkFreeMemory(r->device, r->crosshairVertexBufferMemory, NULL);
+	}
 
 	// Cleanup menu buffers
 	if (r->menuQuadVertexBuffer != VK_NULL_HANDLE) {

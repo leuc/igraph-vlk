@@ -158,9 +158,9 @@ static MenuNode* pick_menu_recursive(AppState* state, MenuNode* node, float* ray
     
     // Basis vectors for billboarding
     vec3 right, up;
-    glm_vec3_cross(state->camera.front, state->camera.up, right);
+    glm_vec3_cross(state->app_ctx.menu_spawn_front, state->camera.up, right);
     glm_vec3_normalize(right);
-    glm_vec3_cross(right, state->camera.front, up);
+    glm_vec3_cross(right, state->app_ctx.menu_spawn_front, up);
     glm_vec3_normalize(up);
 
     // billboard position (must match generate_vulkan_menu_buffers)
@@ -168,7 +168,7 @@ static MenuNode* pick_menu_recursive(AppState* state, MenuNode* node, float* ray
     float y_off = node->target_theta;
     
     vec3 world_pos;
-    glm_vec3_copy(state->camera.pos, world_pos);
+    glm_vec3_copy(state->app_ctx.menu_spawn_pos, world_pos);
     
     vec3 f_part, r_part, u_part;
     glm_vec3_scale(state->camera.front, 2.0f, f_part);
