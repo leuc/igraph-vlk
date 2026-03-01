@@ -166,6 +166,13 @@ static void update_menu_layout_recursive(MenuNode *node, float delta_time, int d
 		node->current_radius += diff * speed * delta_time;
 	}
 
+	// If a parent is closing, children must start closing immediately
+	if (node->target_radius < 0.001f) {
+		for (int i = 0; i < node->num_children; i++) {
+			node->children[i]->target_radius = 0.0f;
+		}
+	}
+
 	if (node->num_children > 0) {
 		for (int i = 0; i < node->num_children; i++) {
 			MenuNode *child = node->children[i];
@@ -178,10 +185,10 @@ static void update_menu_layout_recursive(MenuNode *node, float delta_time, int d
 			
 			// Ensure the screen updates its layout vertically as items expand/collapse
 			// Using current_radius makes the stacking dynamic and animated
-			*current_y -= 0.15f * child->current_radius;
+			*current_y -= 0.12f * child->current_radius;
 
 			child->target_radius =
-				(node->current_radius > 0.5f) ? 1.0f : 0.0f;
+				(node->current_radius > 0.5f && node->target_radius > 0.5f) ? 1.0f : 0.0f;
 
 			// Pass the pointer and increment depth for the next level
 			// Continue recursion even if closing to ensure smooth collapse and offset reset
@@ -284,10 +291,10 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 			instances[instance_count].texCoord[1] = 0.0f;
 			instances[instance_count].texId = (float)current->icon_texture_id;
 
-			// Dynamic box sizing based on text - Shrunken for compact look
-			float text_scale = 0.25f;  // Reduced scale
-			float padding_x = 0.12f;   // Smaller padding
-			float fixed_height = 0.10f; // Lower profile height
+			// Dynamic box sizing based on text - Tightened to match font
+			float world_text_scale = 0.003f; // Font bake size (32px) to world units
+			float padding_x = 0.08f;   // Tight padding
+			float fixed_height = 0.09f; // Consistent height
 
 			// Calculate total width for dynamic sizing (even if no label)
 			float total_w = 0.0f;
@@ -303,10 +310,10 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 			}
 
 			// Use dynamic bounds: width based on text + padding, height fixed
-			float box_width = (total_w * text_scale) + padding_x;
-			instances[instance_count].scale[0] = box_width * current->current_radius; // Shrink as it collapses
+			float box_width = (total_w * world_text_scale) + padding_x;
+			instances[instance_count].scale[0] = box_width * current->current_radius; 
 			instances[instance_count].scale[1] = fixed_height * current->current_radius;
-			instances[instance_count].scale[2] = 1.0f; // Flat depth
+			instances[instance_count].scale[2] = 1.0f; 
 
 			// Center the background quad around the text anchor
 			if (current->label) {
@@ -319,7 +326,7 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 			glm_quat_identity(instances[instance_count].rotation);
 
 			// Generate label instances
-			if (current->label && current->current_radius > 0.5f) { // Only render text when mostly open
+			if (current->label && current->current_radius > 0.8f) { // Render text when open
 				int len = strlen(current->label);
 				if (label_count + len >= label_capacity) {
 					label_capacity *= 2;
@@ -336,19 +343,20 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 					CharInfo *ci = (c < 128) ? &globalAtlas.chars[c]
 											 : &globalAtlas.chars[32];
 
-					// Center text within the box vertically
+					// Offset text forward from the quad slightly to prevent z-fighting
 					vec3 label_pos;
 					glm_vec3_copy(world_pos, label_pos);
-					vec3 down;
-					// Adjust vertical centering: text height is roughly text_scale * baseline offset
-					glm_vec3_scale(up, -0.05f, down); 
-					glm_vec3_add(label_pos, down, label_pos);
+					vec3 forward_off, down_off;
+					glm_vec3_scale(spawn_front, -0.002f, forward_off); // Move slightly towards camera
+					glm_vec3_scale(up, -0.012f, down_off); // Centering adjustment
+					glm_vec3_add(label_pos, forward_off, label_pos);
+					glm_vec3_add(label_pos, down_off, label_pos);
 
 					glm_vec3_copy(label_pos, label_instances[label_count].nodePos);
-					label_instances[label_count].charRect[0] = (x_cursor + ci->x0) * text_scale;
-					label_instances[label_count].charRect[1] = ci->y0 * text_scale;
-					label_instances[label_count].charRect[2] = (x_cursor + ci->x1) * text_scale;
-					label_instances[label_count].charRect[3] = ci->y1 * text_scale;
+					label_instances[label_count].charRect[0] = (x_cursor + ci->x0) * world_text_scale;
+					label_instances[label_count].charRect[1] = ci->y0 * world_text_scale;
+					label_instances[label_count].charRect[2] = (x_cursor + ci->x1) * world_text_scale;
+					label_instances[label_count].charRect[3] = ci->y1 * world_text_scale;
 					label_instances[label_count].charUV[0] = ci->u0;
 					label_instances[label_count].charUV[1] = ci->v0;
 					label_instances[label_count].charUV[2] = ci->u1;

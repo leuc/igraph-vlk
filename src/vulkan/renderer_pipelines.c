@@ -265,6 +265,14 @@ int renderer_create_pipelines(Renderer *r) {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
 		.attachmentCount = 1,
 		.pAttachments = &lcb};
+
+	// Depth state for labels: test enabled, write disabled to prevent z-fighting
+	VkPipelineDepthStencilStateCreateInfo lds = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+		.depthTestEnable = VK_TRUE,
+		.depthWriteEnable = VK_FALSE,
+		.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL};
+
 	VkGraphicsPipelineCreateInfo lpInfo = {
 		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
 		.stageCount = 2,
@@ -275,6 +283,7 @@ int renderer_create_pipelines(Renderer *r) {
 		.pRasterizationState = &ras,
 		.pMultisampleState = &mul,
 		.pColorBlendState = &lcs,
+		.pDepthStencilState = &lds,
 		.layout = r->pipelineLayout,
 		.renderPass = r->renderPass};
 	vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &lpInfo, NULL,
