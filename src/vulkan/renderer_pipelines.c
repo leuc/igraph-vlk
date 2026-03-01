@@ -374,13 +374,14 @@ int renderer_create_pipelines(Renderer *r) {
 		{4, 1, VK_FORMAT_R32_SFLOAT, offsetof(MenuInstance, texId)},
 		{5, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(MenuInstance, scale)},
 		{6, 1, VK_FORMAT_R32G32B32A32_SFLOAT,
-		 offsetof(MenuInstance, rotation)}};
+		 offsetof(MenuInstance, rotation)},
+        {7, 1, VK_FORMAT_R32_SFLOAT, offsetof(MenuInstance, hovered)}};
 
 	VkPipelineVertexInputStateCreateInfo menuVI = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 		.vertexBindingDescriptionCount = 2,
 		.pVertexBindingDescriptions = menuB,
-		.vertexAttributeDescriptionCount = 7,
+		.vertexAttributeDescriptionCount = 8,
 		.pVertexAttributeDescriptions = menuA};
 
 	// Use triangle list for quads (two triangles per instance)

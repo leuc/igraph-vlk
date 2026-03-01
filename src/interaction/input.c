@@ -43,7 +43,9 @@ void interaction_process_continuous_input(AppState *state, float delta_time) {
     }
     float adjusted_delta = delta_time * speed_multiplier;
 
-    if (state->app_ctx.current_state != STATE_GRAPH_VIEW && state->app_ctx.current_state != STATE_MENU_OPEN)
+    if (state->app_ctx.current_state != STATE_GRAPH_VIEW && 
+        state->app_ctx.current_state != STATE_MENU_OPEN &&
+        state->app_ctx.current_state != STATE_AWAITING_SELECTION)
         return;
 
     // Handle camera movement
@@ -262,7 +264,9 @@ static void mouse_callback(GLFWwindow *window, double xpos, double ypos) {
     cam->last_x = xpos;
     cam->last_y = ypos;
     
-    if (app->current_state == STATE_GRAPH_VIEW || app->current_state == STATE_MENU_OPEN) {
+    if (app->current_state == STATE_GRAPH_VIEW || 
+        app->current_state == STATE_MENU_OPEN ||
+        app->current_state == STATE_AWAITING_SELECTION) {
         cam->yaw += xoffset;
         cam->pitch += yoffset;
         

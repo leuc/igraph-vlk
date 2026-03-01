@@ -79,6 +79,8 @@ typedef struct MenuNode {
     
     // For Leaves
     IgraphCommand* command;
+
+    bool hovered; // For visual feedback
 } MenuNode;
 
 // --- Floating 3D Slider/Dial Widget for Numeric Input ---

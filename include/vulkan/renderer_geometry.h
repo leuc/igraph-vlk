@@ -43,10 +43,11 @@ typedef struct {
 // 3D Spherical Menu Instanced Rendering
 typedef struct {
 	vec3 worldPos;   // Cartesian world position (x, y, z)
-	vec2 texCoord;   // Icon texture coordinates (if quad)
-	float texId;     // Texture ID for icon atlas (for sprite sheet)
+	vec2 texCoord;   // Icon texture region (sprite sheet) base UV
+	float texId;     // Texture ID / icon index
 	vec3 scale;      // Non-uniform scale (x, y, z)
 	vec4 rotation;   // Quaternion rotation (w, x, y, z) - optional
+    float hovered;   // 1.0 for hovered, 0.0 otherwise
 } MenuInstance;
 
 #endif

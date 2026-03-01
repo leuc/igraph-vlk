@@ -29,3 +29,15 @@ void wrapper_betweenness(ExecutionContext* ctx) {
     printf("[Wrapper] Calculating Betweenness Centrality using igraph_betweenness\n");
     // igraph_betweenness(ctx->current_graph, &vector, igraph_vss_all(), IGRAPH_DIRECTED, NULL);
 }
+
+void wrapper_reset_layout(ExecutionContext* ctx) {
+    printf("[Wrapper] Resetting Layout\n");
+}
+
+void wrapper_cycle_colors(ExecutionContext* ctx) {
+    printf("[Wrapper] Cycling Community Colors\n");
+}
+
+void wrapper_community_arrangement(ExecutionContext* ctx) {
+    printf("[Wrapper] Toggling Community Arrangement (Sphere/Grid)\n");
+}

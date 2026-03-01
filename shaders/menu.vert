@@ -10,6 +10,7 @@ layout(location = 3) in vec2 texCoord;     // Icon texture region (sprite sheet)
 layout(location = 4) in float texId;       // Texture ID / icon index
 layout(location = 5) in vec3 scale;        // Icon quad scaling
 layout(location = 6) in vec4 rotation;    // Quaternion rotation (w, x, y, z)
+layout(location = 7) in float inHovered;   // 1.0 if hovered
 
 // Uniform buffers
 layout(std140, set = 0, binding = 0) uniform UniformBufferObject {
@@ -21,6 +22,7 @@ layout(std140, set = 0, binding = 0) uniform UniformBufferObject {
 layout(location = 4) out vec2 fragTexCoord;
 layout(location = 5) out float fragTexId;
 layout(location = 6) out vec3 fragWorldPos;
+layout(location = 7) out float fragHovered;
 
 // Quaternion multiplication: q1 * q2
 vec4 quat_mul(vec4 q1, vec4 q2) {
@@ -59,4 +61,5 @@ void main() {
     fragTexCoord = inTexCoord;
     fragTexId = texId;
     fragWorldPos = finalPos;
+    fragHovered = inHovered;
 }

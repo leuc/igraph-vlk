@@ -100,6 +100,16 @@ void init_menu_tree(MenuNode *root) {
 	MenuNode *betweenness_node = create_menu_node("Betweenness", NODE_LEAF);
 	betweenness_node->command = cmd_betweenness;
 
+	// Create visualize leaf nodes
+	MenuNode *reset_layout_node = create_menu_node("Reset Layout", NODE_LEAF);
+	reset_layout_node->command = create_command("reset_layout", "Reset Layout", wrapper_reset_layout, 0);
+
+	MenuNode *cycle_colors_node = create_menu_node("Cycle Colors", NODE_LEAF);
+	cycle_colors_node->command = create_command("cycle_colors", "Cycle Colors", wrapper_cycle_colors, 0);
+
+	MenuNode *comm_arrange_node = create_menu_node("Arrangement", NODE_LEAF);
+	comm_arrange_node->command = create_command("comm_arrange", "Arrangement", wrapper_community_arrangement, 0);
+
 	// Build tree structure
 	paths_menu->num_children = 1;
 	paths_menu->children = (MenuNode **)malloc(sizeof(MenuNode *));
@@ -111,8 +121,11 @@ void init_menu_tree(MenuNode *root) {
 	analysis_menu->children[1] = pagerank_node;
 	analysis_menu->children[2] = betweenness_node;
 
-	visualize_menu->num_children = 0;
-	visualize_menu->children = NULL;
+	visualize_menu->num_children = 3;
+	visualize_menu->children = (MenuNode **)malloc(sizeof(MenuNode *) * 3);
+	visualize_menu->children[0] = reset_layout_node;
+	visualize_menu->children[1] = cycle_colors_node;
+	visualize_menu->children[2] = comm_arrange_node;
 
 	main_menu->num_children = 2;
 	main_menu->children = (MenuNode **)malloc(sizeof(MenuNode *) * 2);
@@ -308,6 +321,7 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 			instances[instance_count].scale[0] = box_width * current->current_radius; 
 			instances[instance_count].scale[1] = fixed_height * current->current_radius;
 			instances[instance_count].scale[2] = 1.0f; 
+            instances[instance_count].hovered = current->hovered ? 1.0f : 0.0f;
 
 			// Center the background quad around the text anchor
 			if (current->label) {

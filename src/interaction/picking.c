@@ -156,22 +156,28 @@ static MenuNode* pick_menu_recursive(AppState* state, MenuNode* node, float* ray
     
     MenuNode* best_hit = NULL;
     
-    // Basis vectors for billboarding
+    // Captured orientation at spawn
+    vec3 spawn_pos, spawn_front, spawn_up;
+    glm_vec3_copy(state->app_ctx.menu_spawn_pos, spawn_pos);
+    glm_vec3_copy(state->app_ctx.menu_spawn_front, spawn_front);
+    glm_vec3_copy(state->app_ctx.menu_spawn_up, spawn_up);
+
+    // Basis vectors (must match generate_vulkan_menu_buffers)
     vec3 right, up;
-    glm_vec3_cross(state->app_ctx.menu_spawn_front, state->camera.up, right);
+    glm_vec3_cross(spawn_front, spawn_up, right);
     glm_vec3_normalize(right);
-    glm_vec3_cross(right, state->app_ctx.menu_spawn_front, up);
+    glm_vec3_cross(right, spawn_front, up);
     glm_vec3_normalize(up);
 
-    // billboard position (must match generate_vulkan_menu_buffers)
-    float x_off = node->target_phi;
+    // Billboard position calculation (matches renderer precisely)
+    float x_off = node->target_phi - 0.8f;
     float y_off = node->target_theta;
     
     vec3 world_pos;
-    glm_vec3_copy(state->app_ctx.menu_spawn_pos, world_pos);
+    glm_vec3_copy(spawn_pos, world_pos);
     
     vec3 f_part, r_part, u_part;
-    glm_vec3_scale(state->camera.front, 2.0f, f_part);
+    glm_vec3_scale(spawn_front, 2.5f, f_part); // 2.5m away
     glm_vec3_scale(right, x_off, r_part);
     glm_vec3_scale(up, y_off, u_part);
     
@@ -179,13 +185,9 @@ static MenuNode* pick_menu_recursive(AppState* state, MenuNode* node, float* ray
     glm_vec3_add(world_pos, r_part, world_pos);
     glm_vec3_add(world_pos, u_part, world_pos);
     
-    vec3 to_node;
-    glm_vec3_sub(world_pos, state->camera.pos, to_node);
-    glm_vec3_scale(to_node, node->current_radius, to_node);
-    glm_vec3_add(state->camera.pos, to_node, world_pos);
-    
     float t;
-    float hit_radius = 0.15f * node->current_radius; 
+    // Radius of the clickable area for this node
+    float hit_radius = 0.12f * node->current_radius; 
     if (picking_ray_sphere_intersection(ray_ori, ray_dir, world_pos, hit_radius, &t)) {
         if (t > 0 && t < *min_t) {
             *min_t = t;
@@ -203,13 +205,24 @@ static MenuNode* pick_menu_recursive(AppState* state, MenuNode* node, float* ray
     return best_hit;
 }
 
+static void clear_menu_hover_recursive(MenuNode* node) {
+    if (!node) return;
+    node->hovered = false;
+    for (int i = 0; i < node->num_children; i++) {
+        clear_menu_hover_recursive(node->children[i]);
+    }
+}
+
 /**
  * Raycast from the crosshair (center of screen) to pick a menu node.
  * Uses camera position as origin and camera front as direction.
  */
 MenuNode* raycast_menu_crosshair(AppState* state) {
+    clear_menu_hover_recursive(state->app_ctx.root_menu);
     float min_t = FLT_MAX;
-    return pick_menu_recursive(state, state->app_ctx.root_menu, state->camera.pos, state->camera.front, &min_t);
+    MenuNode* hit = pick_menu_recursive(state, state->app_ctx.root_menu, state->camera.pos, state->camera.front, &min_t);
+    if (hit) hit->hovered = true;
+    return hit;
 }
 
 MenuNode* interaction_pick_menu_node(AppState* state, double mouse_x, double mouse_y) {
