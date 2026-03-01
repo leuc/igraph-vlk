@@ -166,39 +166,32 @@ static void update_menu_layout_recursive(MenuNode *node, float delta_time, int d
 		node->current_radius += diff * speed * delta_time;
 	}
 
-	// If a parent is closing, children must start closing immediately
-	if (node->target_radius < 0.001f) {
-		for (int i = 0; i < node->num_children; i++) {
-			node->children[i]->target_radius = 0.0f;
-		}
-	}
+	// Position THIS node
+	node->target_phi = (float)(depth - 1) * 0.12f;
+	node->target_theta = *current_y;
+	
+	// Only consume vertical space if this node is expanding/open
+	// This ensures smooth stacking animation
+	*current_y -= 0.12f * node->current_radius;
 
+	// Recursively update children
 	if (node->num_children > 0) {
 		for (int i = 0; i < node->num_children; i++) {
 			MenuNode *child = node->children[i];
 
-			// Use depth for X-axis indentation
-			child->target_phi = (float)depth * 0.15f;
-			
-			// Use the globally tracked current_y for Y-axis vertical position
-			child->target_theta = *current_y;
-			
-			// Ensure the screen updates its layout vertically as items expand/collapse
-			// Using current_radius makes the stacking dynamic and animated
-			*current_y -= 0.12f * child->current_radius;
-
+			// Children only expand if parent is mostly open
 			child->target_radius =
 				(node->current_radius > 0.5f && node->target_radius > 0.5f) ? 1.0f : 0.0f;
 
-			// Pass the pointer and increment depth for the next level
-			// Continue recursion even if closing to ensure smooth collapse and offset reset
-			if (child->target_radius > 0.0f || child->current_radius > 0.001f) {
+			// Always recurse if parent is visible to ensure children close/open correctly
+			if (node->current_radius > 0.001f) {
 				update_menu_layout_recursive(child, delta_time, depth + 1, current_y);
 			} else {
-				// Animation done and closed, reset position offsets
+				// Parent is fully closed, snap child state
+				child->current_radius = 0.0f;
+				child->target_radius = 0.0f;
 				child->target_phi = 0.0f;
 				child->target_theta = 0.0f;
-				child->current_radius = 0.0f;
 			}
 		}
 	}
@@ -339,7 +332,7 @@ void generate_vulkan_menu_buffers(MenuNode *node,
             glm_mat3_quat(rot_mat, instances[instance_count].rotation);
 
 			// Generate label instances
-			if (current->label && current->current_radius > 0.8f) { // Render text when open
+			if (current->label && current->current_radius > 0.01f) { // Render text as long as node is visible
 				int len = strlen(current->label);
 				if (label_count + len >= label_capacity) {
 					label_capacity *= 2;
@@ -374,9 +367,10 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 					label_instances[label_count].charUV[1] = ci->v0;
 					label_instances[label_count].charUV[2] = ci->u1;
 					label_instances[label_count].charUV[3] = ci->v1;
-					// Use fixed orientation vectors, scaled by world_text_scale
-					glm_vec3_scale(right, world_text_scale, label_instances[label_count].right);
-					glm_vec3_scale(up, world_text_scale, label_instances[label_count].up);
+					// Scale orientation vectors by current_radius so text shrinks/vanishes with the quad
+					float dynamic_scale = world_text_scale * current->current_radius;
+					glm_vec3_scale(right, dynamic_scale, label_instances[label_count].right);
+					glm_vec3_scale(up, dynamic_scale, label_instances[label_count].up);
 
 					x_cursor += ci->xadvance;
 					label_count++;
