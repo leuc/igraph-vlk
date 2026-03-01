@@ -15,11 +15,16 @@ layout(location = 2) in vec3 nodePos;
 layout(location = 3) in vec4 charRect; // x0, y0, x1, y1
 layout(location = 4) in vec4 charUV;   // u0, v0, u1, v1
 
+// Fixed orientation vectors from CPU (menu plane orientation)
+layout(location = 5) in vec3 fixedRight;
+layout(location = 6) in vec3 fixedUp;
+
 layout(location = 0) out vec2 fragTexCoord;
 
 void main() {
-	vec3 camRight = vec3(ubo.view[0][0], ubo.view[1][0], ubo.view[2][0]);
-	vec3 camUp = vec3(ubo.view[0][1], ubo.view[1][1], ubo.view[2][1]);
+	// Use fixed orientation vectors instead of dynamic billboarding
+	vec3 camRight = fixedRight;
+	vec3 camUp = fixedUp;
 
 	// Interpolate rect bounds based on [0,1] input position
 	float x = mix(charRect.x, charRect.z, inPosition.x);

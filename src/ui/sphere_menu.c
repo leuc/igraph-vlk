@@ -153,39 +153,58 @@ void destroy_menu_tree(MenuNode *node) {
 }
 
 // Update menu animation with smooth easing
-void update_menu_animation(MenuNode *node, float delta_time) {
+// Uses recursive vertical tree layout
+static void update_menu_layout_recursive(MenuNode *node, float delta_time, int depth, float *current_y) {
 	if (node == NULL)
 		return;
 
 	float speed = 8.0f;
-	node->current_radius +=
-		(node->target_radius - node->current_radius) * speed * delta_time;
+	float diff = node->target_radius - node->current_radius;
+	if (fabsf(diff) < 0.001f) {
+		node->current_radius = node->target_radius;
+	} else {
+		node->current_radius += diff * speed * delta_time;
+	}
 
 	if (node->num_children > 0) {
-		// Grid distribution for children relative to parent center (0,0)
-		int cols = (int)ceilf(sqrtf((float)node->num_children));
-		if (cols < 1)
-			cols = 1;
-
 		for (int i = 0; i < node->num_children; i++) {
-			int r = i / cols;
-			int c = i % cols;
+			MenuNode *child = node->children[i];
 
-			// Center the grid
-			float x = (c - (cols - 1) / 2.0f) * 0.5f;
-			float y =
-				(r - ((node->num_children + cols - 1) / cols - 1) / 2.0f) *
-				0.5f;
+			// Use depth for X-axis indentation
+			child->target_phi = (float)depth * 0.15f;
+			
+			// Use the globally tracked current_y for Y-axis vertical position
+			child->target_theta = *current_y;
+			
+			// Ensure the screen updates its layout vertically as items expand/collapse
+			// Using current_radius makes the stacking dynamic and animated
+			*current_y -= 0.15f * child->current_radius;
 
-			// Update child targets
-			node->children[i]->target_phi = x;
-			node->children[i]->target_theta = y;
-			node->children[i]->target_radius =
-				(node->current_radius > 0.5f) ? 2.0f : 0.0f;
+			child->target_radius =
+				(node->current_radius > 0.5f) ? 1.0f : 0.0f;
 
-			update_menu_animation(node->children[i], delta_time);
+			// Pass the pointer and increment depth for the next level
+			// Continue recursion even if closing to ensure smooth collapse and offset reset
+			if (child->target_radius > 0.0f || child->current_radius > 0.001f) {
+				update_menu_layout_recursive(child, delta_time, depth + 1, current_y);
+			} else {
+				// Animation done and closed, reset position offsets
+				child->target_phi = 0.0f;
+				child->target_theta = 0.0f;
+				child->current_radius = 0.0f;
+			}
 		}
 	}
+}
+
+void update_menu_animation(MenuNode *node, float delta_time) {
+    if (node == NULL) return;
+    
+    // Start tracking layout from the top
+    float start_y = 0.0f; 
+    
+    // The root node itself doesn't need indentation, its children start at depth 1
+    update_menu_layout_recursive(node, delta_time, 1, &start_y);
 }
 
 // Generate Vulkan menu buffers (instanced rendering)
@@ -195,6 +214,15 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 								  vec3 spawn_front) {
 	if (node == NULL)
 		return;
+
+	// Phase 5: Ensure complete menu disappearance when closed
+	// If target_radius is 0.0f AND menu collapsed, don't render anything
+	// Changed from || to && to allow closing animation to play out
+	if (node->target_radius == 0.0f && node->current_radius < 0.01f) {
+		r->menuNodeCount = 0;
+		r->menuTextCharCount = 0;
+		return;
+	}
 
 	int capacity = 128;
 	MenuInstance *instances =
@@ -249,21 +277,45 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 			glm_vec3_add(world_pos, r_part, world_pos);
 			glm_vec3_add(world_pos, u_part, world_pos);
 
-			// Scale based on expansion
-			vec3 to_node;
-			glm_vec3_sub(world_pos, spawn_pos, to_node);
-			glm_vec3_scale(to_node, current->current_radius, to_node);
-			glm_vec3_add(spawn_pos, to_node, world_pos);
+			// 2D tree layout - no spherical scaling needed
+			// world_pos already contains the correct flat position
 
 			glm_vec3_copy(world_pos, instances[instance_count].worldPos);
 			instances[instance_count].texCoord[0] = 0.0f;
 			instances[instance_count].texCoord[1] = 0.0f;
 			instances[instance_count].texId = (float)current->icon_texture_id;
 
-			float s = 0.5f * current->current_radius; // HUGE
-			instances[instance_count].scale[0] = s;
-			instances[instance_count].scale[1] = s;
-			instances[instance_count].scale[2] = s;
+			// Dynamic box sizing based on text
+			float text_scale = 0.35f;
+			float padding_x = 0.2f;
+			float fixed_height = 0.15f;
+
+			// Calculate total width for dynamic sizing (even if no label)
+			float total_w = 0.0f;
+			int label_len = 0;
+			if (current->label) {
+				label_len = strlen(current->label);
+				for (int i = 0; i < label_len; i++) {
+					unsigned char c = current->label[i];
+					CharInfo *ci = (c < 128) ? &globalAtlas.chars[c]
+											 : &globalAtlas.chars[32];
+					total_w += ci->xadvance;
+				}
+			}
+
+			// Use dynamic bounds: width based on text + padding, height fixed
+			float box_width = (total_w * text_scale) + padding_x;
+			instances[instance_count].scale[0] = box_width;
+			instances[instance_count].scale[1] = fixed_height;
+			instances[instance_count].scale[2] = 1.0f; // Flat depth
+
+			// Center the background quad around the text anchor
+			if (current->label) {
+				vec3 offset;
+				glm_vec3_scale(right, box_width * 0.5f, offset);
+				glm_vec3_add(instances[instance_count].worldPos, offset,
+							 instances[instance_count].worldPos);
+			}
 
 			glm_quat_identity(instances[instance_count].rotation);
 
@@ -277,16 +329,7 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 						sizeof(LabelInstance) * label_capacity);
 				}
 
-				float text_scale = 0.35f;
 				float x_cursor = 0.0f;
-				// Calculate total width for centering
-				float total_w = 0;
-				for (int i = 0; i < len; i++) {
-					unsigned char c = current->label[i];
-					CharInfo *ci = (c < 128) ? &globalAtlas.chars[c]
-											 : &globalAtlas.chars[32];
-					total_w += ci->xadvance;
-				}
 				x_cursor = -total_w * 0.5f;
 
 				for (int i = 0; i < len; i++) {
@@ -298,7 +341,7 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 					vec3 label_pos;
 					glm_vec3_copy(world_pos, label_pos);
 					vec3 down;
-					glm_vec3_scale(up, -0.6f * s, down);
+					glm_vec3_scale(up, -0.08f, down);
 					glm_vec3_add(label_pos, down, label_pos);
 
 					glm_vec3_copy(label_pos, label_instances[label_count].nodePos);
@@ -310,6 +353,9 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 					label_instances[label_count].charUV[1] = ci->v0;
 					label_instances[label_count].charUV[2] = ci->u1;
 					label_instances[label_count].charUV[3] = ci->v1;
+					// Use fixed orientation vectors from the menu plane
+					glm_vec3_copy(right, label_instances[label_count].right);
+					glm_vec3_copy(up, label_instances[label_count].up);
 
 					x_cursor += ci->xadvance;
 					label_count++;

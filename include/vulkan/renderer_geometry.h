@@ -26,6 +26,8 @@ typedef struct {
 	vec3 nodePos;
 	vec4 charRect;
 	vec4 charUV;
+	vec3 right;   // Fixed orientation vector for the menu plane
+	vec3 up;      // Fixed orientation vector for the menu plane
 } LabelInstance;
 typedef struct {
 	vec3 pos;
