@@ -146,24 +146,11 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action,
             state->app_ctx.current_state = STATE_MENU_OPEN;
             state->app_ctx.root_menu->target_radius = 1.0f;
 
-            // Position menu as a left sidebar
-            // First compute spawn position: camera position + forward direction
-            vec3 spawn_pos;
-            glm_vec3_add(state->camera.pos, state->camera.front, spawn_pos);
-
-            // Compute the left vector from camera orientation
-            vec3 left;
-            glm_vec3_cross(state->camera.up, state->camera.front, left);
-            glm_vec3_normalize(left);
-
-            // Offset 1.5 meters to the left to create sidebar effect
-            float sidebar_distance = 1.5f;
-            vec3 left_offset;
-            glm_vec3_scale(left, sidebar_distance, left_offset);
-            glm_vec3_add(spawn_pos, left_offset, spawn_pos);
-
-            glm_vec3_copy(spawn_pos, state->app_ctx.menu_spawn_pos);
+            // Capture the full camera transform at this moment
+            glm_vec3_copy(state->camera.pos, state->app_ctx.menu_spawn_pos);
             glm_vec3_copy(state->camera.front, state->app_ctx.menu_spawn_front);
+            glm_vec3_copy(state->camera.up, state->app_ctx.menu_spawn_up);
+
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             // Keep cursor disabled to maintain camera lock for crosshair selection
         } else if (state->app_ctx.current_state == STATE_MENU_OPEN || state->app_ctx.root_menu->current_radius > 0.99f) {

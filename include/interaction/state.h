@@ -148,6 +148,7 @@ typedef struct AppContext {
     // Menu world-space anchor (captured when menu opens)
     vec3 menu_spawn_pos;
     vec3 menu_spawn_front;
+    vec3 menu_spawn_up;
 } AppContext;
 
 // Function declarations

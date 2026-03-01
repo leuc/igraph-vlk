@@ -217,8 +217,9 @@ void update_menu_animation(MenuNode *node, float delta_time) {
 // Generate Vulkan menu buffers (instanced rendering)
 void generate_vulkan_menu_buffers(MenuNode *node,
 								  Renderer *r,
-								  vec3 spawn_pos,
-								  vec3 spawn_front) {
+								  vec3 cam_pos,
+								  vec3 cam_front,
+								  vec3 cam_up) {
 	if (node == NULL)
 		return;
 
@@ -246,12 +247,11 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 	int stack_top = 0;
 	stack[stack_top++] = node;
 
-	// Basis vectors for billboarding (using spawn_front as camera front)
+	// Basis vectors for billboarding (using cam_front as camera front)
 	vec3 right, up;
-	glm_vec3_cross(spawn_front, (vec3){0, 1, 0},
-				   right); // Use world up (0,1,0) instead of cam->up
+    glm_vec3_cross(cam_front, cam_up, right);
 	glm_vec3_normalize(right);
-	glm_vec3_cross(right, spawn_front, up);
+	glm_vec3_cross(right, cam_front, up);
 	glm_vec3_normalize(up);
 
 	while (stack_top > 0) {
@@ -267,15 +267,16 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 					instances, sizeof(MenuInstance) * capacity);
 			}
 
-			// Simple billboard position: cam_pos + 1.0*front + x*right + y*up
-			float x_off = current->target_phi;
+			// Simple billboard position: cam_pos + distance*front + x*right + y*up
+            // Offset adjusted to be a bit more centered (-0.8m) and further away (2.5m)
+			float x_off = current->target_phi - 0.8f;
 			float y_off = current->target_theta;
 
 			vec3 world_pos;
-			glm_vec3_copy(spawn_pos, world_pos);
+			glm_vec3_copy(cam_pos, world_pos);
 
 			vec3 f_part, r_part, u_part;
-			glm_vec3_scale(spawn_front, 1.0f, f_part); // 1 meter away
+			glm_vec3_scale(cam_front, 2.5f, f_part); // 2.5 meters away
 			glm_vec3_scale(right, x_off, r_part);
 			glm_vec3_scale(up, y_off, u_part);
 
@@ -323,7 +324,19 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 							 instances[instance_count].worldPos);
 			}
 
-			glm_quat_identity(instances[instance_count].rotation);
+            // Calculate rotation quaternion to align quad (default XY plane) with camera
+            // Camera orientation: front is Z (backwards), right is X, up is Y
+            // We want the quad's +Z to face the camera's -front
+            mat3 rot_mat;
+            vec3 neg_front;
+            glm_vec3_negate_to(cam_front, neg_front);
+            glm_mat3_identity(rot_mat);
+            glm_mat3_copy((mat3){
+                {right[0], right[1], right[2]},
+                {up[0],    up[1],    up[2]},
+                {neg_front[0], neg_front[1], neg_front[2]}
+            }, rot_mat);
+            glm_mat3_quat(rot_mat, instances[instance_count].rotation);
 
 			// Generate label instances
 			if (current->label && current->current_radius > 0.8f) { // Render text when open
@@ -347,7 +360,7 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 					vec3 label_pos;
 					glm_vec3_copy(world_pos, label_pos);
 					vec3 forward_off, down_off;
-					glm_vec3_scale(spawn_front, -0.002f, forward_off); // Move slightly towards camera
+					glm_vec3_scale(cam_front, -0.002f, forward_off); // Move slightly towards camera
 					glm_vec3_scale(up, -0.012f, down_off); // Centering adjustment
 					glm_vec3_add(label_pos, forward_off, label_pos);
 					glm_vec3_add(label_pos, down_off, label_pos);
@@ -361,7 +374,7 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 					label_instances[label_count].charUV[1] = ci->v0;
 					label_instances[label_count].charUV[2] = ci->u1;
 					label_instances[label_count].charUV[3] = ci->v1;
-					// Use fixed orientation vectors from the menu plane
+					// Use fixed orientation vectors captured at spawn for correct text billboarding
 					glm_vec3_copy(right, label_instances[label_count].right);
 					glm_vec3_copy(up, label_instances[label_count].up);
 
