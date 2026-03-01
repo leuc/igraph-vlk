@@ -246,6 +246,13 @@ static void mouse_callback(GLFWwindow *window, double xpos, double ypos) {
     Camera *cam = &state->camera;
     AppContext* app = &state->app_ctx;
     
+    // Initialize last position on first mouse movement to prevent jump
+    if (cam->first_mouse) {
+        cam->last_x = (float)xpos;
+        cam->last_y = (float)ypos;
+        cam->first_mouse = false;
+    }
+    
     float xoffset = (xpos - cam->last_x) * cam->sensitivity;
     float yoffset = (cam->last_y - ypos) * cam->sensitivity;
     

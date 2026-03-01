@@ -312,6 +312,13 @@ int renderer_create_pipelines(Renderer *r) {
 		.vertexAttributeDescriptionCount = 6,
 		.pVertexAttributeDescriptions = uia};
 
+	// Depth stencil state for UI (disable depth test for 2D overlay)
+	VkPipelineDepthStencilStateCreateInfo uiDS = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+		.depthTestEnable = VK_FALSE,
+		.depthWriteEnable = VK_FALSE,
+		.depthCompareOp = VK_COMPARE_OP_ALWAYS};
+
 	// Create the pipeline
 	VkGraphicsPipelineCreateInfo uiPInfo = pInfo; // Reuse basic config
 	uiPInfo.stageCount = 2;
@@ -319,6 +326,7 @@ int renderer_create_pipelines(Renderer *r) {
 	uiPInfo.pVertexInputState = &uivi;
 	uiPInfo.pInputAssemblyState =
 		&lias; // UI usually uses triangle strips/lists
+	uiPInfo.pDepthStencilState = &uiDS; // Disable depth test for 2D overlay
 
 	vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &uiPInfo, NULL,
 							  &r->uiPipeline);
