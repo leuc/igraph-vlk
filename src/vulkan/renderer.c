@@ -294,10 +294,10 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph) {
 				 &r->labelVertexBuffer, &r->labelVertexBufferMemory);
 	updateBuffer(r->device, r->labelVertexBufferMemory, sizeof(lvs), lvs);
 
-	UIVertex uiBg[] = {{{-1, -0.9, 0}, {0, 0}},
-					   {{1, -0.9, 0}, {1, 0}},
-					   {{-1, -1, 0}, {0, 1}},
-					   {{1, -1, 0}, {1, 1}}};
+	UIVertex uiBg[] = {{{0, 0, 0}, {0, 0}},
+					   {{1, 0, 0}, {1, 0}},
+					   {{0, 1, 0}, {0, 1}},
+					   {{1, 1, 0}, {1, 1}}};
 	createBuffer(r->device, r->physicalDevice, sizeof(uiBg),
 				 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 				 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
