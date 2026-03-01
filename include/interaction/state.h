@@ -3,6 +3,7 @@
 
 #include <igraph.h>
 #include <stdbool.h>
+#include <cglm/cglm.h>
 
 // --- Parameter Types required by igraph functions ---
 typedef enum {
@@ -52,6 +53,7 @@ typedef struct {
     CommandParameter* params;  // Array of required parameters
     
     IgraphWrapperFunc execute; // The actual C function that calls igraph
+    bool produces_visual_output; // If true, shows results overlay before returning to graph
 } IgraphCommand;
 
 // --- 3D Spherical Menu Tree Structure ---
@@ -79,16 +81,51 @@ typedef struct MenuNode {
     IgraphCommand* command;
 } MenuNode;
 
+// --- Floating 3D Slider/Dial Widget for Numeric Input ---
+typedef struct {
+    bool active;
+    ParameterType param_type;  // PARAM_TYPE_FLOAT or PARAM_TYPE_INT
+    
+    // Current value being adjusted
+    union {
+        float float_val;
+        int int_val;
+    } current;
+    
+    // Constraints
+    union {
+        struct {
+            float min_val;
+            float max_val;
+            float step;
+        } float_range;
+        struct {
+            int min_val;
+            int max_val;
+            int step;
+        } int_range;
+    } constraints;
+    
+    // 3D position (world space)
+    vec3 world_position;
+    
+    // Visual parameters
+    float slider_length;      // Length of the slider track
+    float slider_radius;      // Radius of the draggable knob
+    char* label;              // e.g., "Probability: 0.45"
+} NumericInputWidget;
+
 // --- Application State Machine ---
 typedef enum {
     STATE_GRAPH_VIEW,         // Freely navigating the graph
     STATE_MENU_OPEN,          // Sphere menu is active, dimming the graph
     STATE_AWAITING_SELECTION, // User must pick nodes/edges with the mouse/laser
     STATE_AWAITING_INPUT,     // Floating 3D form (sliders/text)
-    STATE_EXECUTING           // Calculating (blocks input or shows progress bar)
+    STATE_EXECUTING,          // Calculating (blocks input or shows progress bar)
+    STATE_DISPLAY_RESULTS     // Showing execution results (overlays, histograms, etc.)
 } AppInteractionState;
 
-typedef struct {
+typedef struct AppContext {
     AppInteractionState current_state;
     MenuNode* root_menu;
     MenuNode* active_menu_level;
@@ -97,6 +134,13 @@ typedef struct {
     int selection_step; // How many nodes have we picked so far?
     
     igraph_t* target_graph;
+    
+    // Results display state
+    bool has_visual_results;
+    void* results_data; // Optional: pointer to results for overlay rendering
+    
+    // Numeric input widget state
+    NumericInputWidget numeric_input;
 } AppContext;
 
 // Function declarations

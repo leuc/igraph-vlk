@@ -61,10 +61,22 @@ void update_app_state(AppContext* app) {
                 
                 app->pending_command->execute(&exec_ctx);
                 
-                // Reset after execution
-                app->pending_command = NULL;
-                app->current_state = STATE_GRAPH_VIEW;
+                // Check if this command produced visual results
+                if (app->pending_command->produces_visual_output) {
+                    app->has_visual_results = true;
+                    app->current_state = STATE_DISPLAY_RESULTS;
+                } else {
+                    // Reset after execution
+                    app->pending_command = NULL;
+                    app->current_state = STATE_GRAPH_VIEW;
+                }
             }
+            break;
+            
+        case STATE_DISPLAY_RESULTS:
+            // Results are displayed. Wait for user to close/dismiss them.
+            // For now, any keypress or click will return to graph view
+            // TODO: Implement proper dismissal (e.g., ESC key, or "Close" button in UI)
             break;
     }
 }
@@ -92,18 +104,26 @@ void check_pending_command_requirements(AppContext* app) {
     if (!app->pending_command) return;
     
     bool needs_selection = false;
+    bool has_numeric_input = false;
+    int numeric_param_idx = -1;
+    
     for (int i = 0; i < app->pending_command->num_params; i++) {
-        if (app->pending_command->params[i].type == PARAM_TYPE_NODE_SELECTION ||
-            app->pending_command->params[i].type == PARAM_TYPE_EDGE_SELECTION) {
+        ParameterType type = app->pending_command->params[i].type;
+        if (type == PARAM_TYPE_NODE_SELECTION || type == PARAM_TYPE_EDGE_SELECTION) {
             needs_selection = true;
-            break;
+        } else if (type == PARAM_TYPE_FLOAT || type == PARAM_TYPE_INT) {
+            has_numeric_input = true;
+            numeric_param_idx = i;
         }
     }
     
     if (needs_selection) {
         app->current_state = STATE_AWAITING_SELECTION;
+    } else if (has_numeric_input) {
+        // TODO: Implement numeric input widget properly
+        app->current_state = STATE_EXECUTING;
     } else {
-        // Might need other inputs or can execute directly
+        // No selection or numeric input needed, can execute directly
         app->current_state = STATE_EXECUTING;
     }
 }

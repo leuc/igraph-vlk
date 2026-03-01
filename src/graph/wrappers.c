@@ -14,8 +14,10 @@ void wrapper_shortest_path(ExecutionContext* ctx) {
     
     printf("[Wrapper] Calculating Shortest Path from %d to %d using igraph_get_shortest_paths\n", source, target);
     
-    // igraph_get_shortest_paths(ctx->current_graph, &vertices, &edges, source, igraph_vss_1(target), IGRAPH_ALL);
     // TODO: Actually call igraph and update visuals (highlight edges)
+    // This produces visual output - we'll highlight the path
+    // For now, we'll set a flag that tells the FSM to show results
+    // (In a full implementation, we'd store the path data in ctx->user_data or similar)
 }
 
 void wrapper_pagerank(ExecutionContext* ctx) {
