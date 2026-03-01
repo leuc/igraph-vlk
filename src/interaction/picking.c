@@ -203,6 +203,15 @@ static MenuNode* pick_menu_recursive(AppState* state, MenuNode* node, float* ray
     return best_hit;
 }
 
+/**
+ * Raycast from the crosshair (center of screen) to pick a menu node.
+ * Uses camera position as origin and camera front as direction.
+ */
+MenuNode* raycast_menu_crosshair(AppState* state) {
+    float min_t = FLT_MAX;
+    return pick_menu_recursive(state, state->app_ctx.root_menu, state->camera.pos, state->camera.front, &min_t);
+}
+
 MenuNode* interaction_pick_menu_node(AppState* state, double mouse_x, double mouse_y) {
     float x = (2.0f * (float)mouse_x) / state->win_w - 1.0f;
     float y = 1.0f - (2.0f * (float)mouse_y) / state->win_h;

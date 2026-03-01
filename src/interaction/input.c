@@ -145,7 +145,8 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action,
         if (state->app_ctx.current_state == STATE_GRAPH_VIEW) {
             state->app_ctx.current_state = STATE_MENU_OPEN;
             state->app_ctx.root_menu->target_radius = 1.0f;
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            // Keep cursor disabled to maintain camera lock for crosshair selection
         } else if (state->app_ctx.current_state == STATE_MENU_OPEN) {
             state->app_ctx.current_state = STATE_GRAPH_VIEW;
             state->app_ctx.root_menu->target_radius = 0.0f;

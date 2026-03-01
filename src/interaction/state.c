@@ -1,4 +1,7 @@
+#include "app_state.h"
 #include "interaction/state.h"
+#include "interaction/picking.h"
+#include <GLFW/glfw3.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -15,7 +18,22 @@ void app_context_destroy(AppContext* ctx) {
     // Cleanup if anything was allocated
 }
 
-void update_app_state(AppContext* app) {
+void update_app_state(AppState* state) {
+    AppContext* app = &state->app_ctx;
+    
+    // In menu open state: perform crosshair raycasting to track hover
+    if (app->current_state == STATE_MENU_OPEN) {
+        // Raycast from camera through screen center (crosshair)
+        MenuNode* hovered = raycast_menu_crosshair(state);
+        app->crosshair_hovered_node = hovered;
+        
+        // Check for activation trigger (left mouse button press)
+        if (hovered && glfwGetMouseButton(state->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+            printf("[DEBUG] Triggered menu option: %s\n", hovered->label);
+            handle_menu_selection(app, hovered);
+        }
+    }
+    
     switch (app->current_state) {
         case STATE_GRAPH_VIEW:
             // Normal navigation, handle "Menu Open" trigger (e.g., Space key)

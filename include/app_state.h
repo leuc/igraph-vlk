@@ -17,7 +17,7 @@
  * Central application state that glues together all modules.
  * This replaces all global variables previously in main.c.
  */
-typedef struct {
+typedef struct AppState {
     /* Core Subsystems */
     Renderer renderer;
     GraphData current_graph;

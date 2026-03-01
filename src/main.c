@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
         ui_hud_update(&app, currentFps);
 
         // Update App FSM and Menu animations
-        update_app_state(&app.app_ctx);
+        update_app_state(&app);
         update_menu_animation(app.app_ctx.root_menu, deltaTime);
 
         if (app.app_ctx.current_state == STATE_MENU_OPEN) {

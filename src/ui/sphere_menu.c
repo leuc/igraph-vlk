@@ -123,12 +123,8 @@ void destroy_menu_tree(MenuNode* node) {
             destroy_menu_tree(node->children[i]);
         }
         if (node->children) free(node->children);
-    } else if (node->type == NODE_LEAF && node->command != NULL) {
-        if (node->command->id_name) free((void*)node->command->id_name);
-        if (node->command->display_name) free((void*)node->command->display_name);
-        if (node->command->params) free((void*)node->command->params);
-        free(node->command);
     }
+
     if (node->label) free((void*)node->label);
 }
 
@@ -155,7 +151,7 @@ void update_menu_animation(MenuNode* node, float delta_time) {
             // Update child targets
             node->children[i]->target_phi = x;
             node->children[i]->target_theta = y;
-            node->children[i]->target_radius = (node->current_radius > 0.5f) ? 1.0f : 0.0f;
+            node->children[i]->target_radius = (node->current_radius > 0.5f) ? 2.0f : 0.0f;
 
             update_menu_animation(node->children[i], delta_time);
         }

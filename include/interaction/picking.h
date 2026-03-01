@@ -39,4 +39,10 @@ void interaction_pick_object(AppState *state, bool is_double_click);
  */
 MenuNode* interaction_pick_menu_node(AppState* state, double mouse_x, double mouse_y);
 
+/**
+ * Raycast from the crosshair (center of screen) to pick a menu node.
+ * Used for immersive 3D menu interaction without releasing mouse lock.
+ */
+MenuNode* raycast_menu_crosshair(AppState* state);
+
 

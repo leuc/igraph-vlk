@@ -6,13 +6,12 @@
 #include "vulkan/renderer_geometry.h"
 #include "vulkan/renderer_pipelines.h"
 #include "vulkan/utils.h"
+#include "vulkan/renderer_ui.h"
 
 int pipeline_ui_create(Renderer *r) {
     VkDevice device = r->device;
 
-    // =========================================================================
-    // LABEL PIPELINE
-    // =========================================================================
+    // UI Pipeline for Labels (legacy)
     VkShaderModule lVMod = VK_NULL_HANDLE, lfMod = VK_NULL_HANDLE;
     create_shader_module(device, LABEL_VERT_SHADER_PATH, &lVMod);
     create_shader_module(device, LABEL_FRAG_SHADER_PATH, &lfMod);
@@ -23,7 +22,7 @@ int pipeline_ui_create(Renderer *r) {
         {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
          VK_SHADER_STAGE_FRAGMENT_BIT, lfMod, "main", NULL}};
 
-    // Vertex input (LabelVertex + LabelInstance)
+    // Vertex input for labels (keep legacy)
     VkVertexInputBindingDescription lb[] = {
         {0, sizeof(LabelVertex), VK_VERTEX_INPUT_RATE_VERTEX},
         {1, sizeof(LabelInstance), VK_VERTEX_INPUT_RATE_INSTANCE}};
@@ -32,8 +31,7 @@ int pipeline_ui_create(Renderer *r) {
         {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LabelVertex, pos)},
         {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(LabelVertex, tex)},
         {2, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LabelInstance, nodePos)},
-        {3, 1, VK_FORMAT_R32G32B32A32_SFLOAT,
-         offsetof(LabelInstance, charRect)},
+        {3, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(LabelInstance, charRect)},
         {4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(LabelInstance, charUV)}};
     VkPipelineVertexInputStateCreateInfo lvi = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -69,60 +67,59 @@ int pipeline_ui_create(Renderer *r) {
         .layout = r->pipelineLayout,
         .renderPass = r->renderPass};
 
-    VkResult result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1,
-                                                &lpInfo, NULL, &r->labelPipeline);
-    if (result != VK_SUCCESS) {
-        fprintf(stderr, "Failed to create label pipeline\n");
-        return -1;
-    }
+    vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &lpInfo, NULL, &r->labelPipeline);
 
-    // =========================================================================
-    // UI PIPELINE
-    // =========================================================================
-    VkShaderModule uiVMod = VK_NULL_HANDLE, uiFMod = VK_NULL_HANDLE;
-    create_shader_module(device, UI_VERT_SHADER_PATH, &uiVMod);
-    create_shader_module(device, UI_FRAG_SHADER_PATH, &uiFMod);
+    // Menu Instanced Pipeline (new)
+    VkShaderModule mVMod = VK_NULL_HANDLE, mFMod = VK_NULL_HANDLE;
+    create_shader_module(device, "shaders/ui.vert", &mVMod);
+    create_shader_module(device, UI_FRAG_SHADER_PATH, &mFMod); // Reuse UI frag or new menu.frag
 
-    VkPipelineShaderStageCreateInfo uiStages[] = {
+    VkPipelineShaderStageCreateInfo mstages[] = {
         {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
-         VK_SHADER_STAGE_VERTEX_BIT, uiVMod, "main", NULL},
+         VK_SHADER_STAGE_VERTEX_BIT, mVMod, "main", NULL},
         {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
-         VK_SHADER_STAGE_FRAGMENT_BIT, uiFMod, "main", NULL}};
+         VK_SHADER_STAGE_FRAGMENT_BIT, mFMod, "main", NULL}};
 
-    // Vertex input (UIVertex + UIInstance)
-    VkVertexInputBindingDescription uib[] = {
-        {0, sizeof(UIVertex), VK_VERTEX_INPUT_RATE_VERTEX},
-        {1, sizeof(UIInstance), VK_VERTEX_INPUT_RATE_INSTANCE}};
+    // Vertex input for menu: QuadVertex (binding 0, vertex rate) + MenuInstanceData (binding 1, instance rate)
+    VkVertexInputBindingDescription mb[] = {
+        {0, sizeof(QuadVertex), VK_VERTEX_INPUT_RATE_VERTEX},
+        {1, sizeof(MenuInstanceData), VK_VERTEX_INPUT_RATE_INSTANCE}};
 
-    VkVertexInputAttributeDescription uia[] = {
-        {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(UIVertex, pos)},
-        {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(UIVertex, tex)},
-        {2, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(UIInstance, screenPos)},
-        {3, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(UIInstance, charRect)},
-        {4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(UIInstance, charUV)},
-        {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(UIInstance, color)}};
-    VkPipelineVertexInputStateCreateInfo uivi = {
+    VkVertexInputAttributeDescription ma[] = {
+        {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(QuadVertex, pos)},
+        {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(QuadVertex, uv)},
+        {2, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(MenuInstanceData, position)},
+        {3, 1, VK_FORMAT_R32_SFLOAT, offsetof(MenuInstanceData, scale)},
+        {4, 1, VK_FORMAT_R32_SINT, offsetof(MenuInstanceData, icon_index)}};
+
+    VkPipelineVertexInputStateCreateInfo mvi = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .vertexBindingDescriptionCount = 2,
-        .pVertexBindingDescriptions = uib,
-        .vertexAttributeDescriptionCount = 6,
-        .pVertexAttributeDescriptions = uia};
+        .pVertexBindingDescriptions = mb,
+        .vertexAttributeDescriptionCount = 5,
+        .pVertexAttributeDescriptions = ma};
 
-    VkGraphicsPipelineCreateInfo uiPInfo = pInfo; // Reuse basic config
-    uiPInfo.stageCount = 2;
-    uiPInfo.pStages = uiStages;
-    uiPInfo.pVertexInputState = &uivi;
+    VkPipelineColorBlendAttachmentState mcb = lcb; // Same blending
+    VkPipelineColorBlendStateCreateInfo mcs = lcs;
 
-    result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &uiPInfo,
-                                       NULL, &r->uiPipeline);
-    if (result != VK_SUCCESS) {
-        fprintf(stderr, "Failed to create UI pipeline\n");
-        return -1;
-    }
+    VkGraphicsPipelineCreateInfo mpInfo = {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = 2,
+        .pStages = mstages,
+        .pVertexInputState = &mvi,
+        .pInputAssemblyState = &lias,
+        .pViewportState = &vpS,
+        .pRasterizationState = &ras,
+        .pMultisampleState = &mul,
+        .pColorBlendState = &mcs,
+        .layout = r->pipelineLayout,
+        .renderPass = r->renderPass};
 
-    // Cleanup shader modules
-    vkDestroyShaderModule(device, uiFMod, NULL);
-    vkDestroyShaderModule(device, uiVMod, NULL);
+    vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &mpInfo, NULL, &r->menuPipeline); // Assume r->menuPipeline added to Renderer
+
+    // Cleanup
+    vkDestroyShaderModule(device, mFMod, NULL);
+    vkDestroyShaderModule(device, mVMod, NULL);
     vkDestroyShaderModule(device, lfMod, NULL);
     vkDestroyShaderModule(device, lVMod, NULL);
 

@@ -130,6 +130,9 @@ typedef struct AppContext {
     MenuNode* root_menu;
     MenuNode* active_menu_level;
     
+    // Crosshair hover tracking for immersive menu selection
+    MenuNode* crosshair_hovered_node;
+    
     IgraphCommand* pending_command;
     int selection_step; // How many nodes have we picked so far?
     
@@ -144,7 +147,8 @@ typedef struct AppContext {
 } AppContext;
 
 // Function declarations
-void update_app_state(AppContext* app);
+typedef struct AppState AppState;
+void update_app_state(AppState* state);
 void app_context_init(AppContext* ctx, igraph_t* graph, MenuNode* root_menu);
 void app_context_destroy(AppContext* ctx);
 void handle_menu_selection(AppContext* app, MenuNode* selected_node);
