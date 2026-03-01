@@ -231,6 +231,7 @@ void generate_vulkan_menu_buffers(MenuNode* node, Renderer* r, vec3 spawn_pos, v
         }
     }
     
+    printf("Generated %d menu instances\\n", instance_count);
     free(stack);
     
     if (instance_count > 0) {

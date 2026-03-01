@@ -243,10 +243,25 @@ static void mouse_callback(GLFWwindow *window, double xpos, double ypos) {
     AppState *state = (AppState *)glfwGetWindowUserPointer(window);
     if (!state) return;
     
+    Camera *cam = &state->camera;
     AppContext* app = &state->app_ctx;
     
+    float xoffset = (xpos - cam->last_x) * cam->sensitivity;
+    float yoffset = (cam->last_y - ypos) * cam->sensitivity;
+    
+    cam->last_x = xpos;
+    cam->last_y = ypos;
+    
     if (app->current_state == STATE_GRAPH_VIEW || app->current_state == STATE_MENU_OPEN) {
-        camera_process_mouse(&state->camera, (float)xpos, (float)ypos);
+        cam->yaw += xoffset;
+        cam->pitch += yoffset;
+        
+        if (cam->pitch > 89.0f)
+            cam->pitch = 89.0f;
+        if (cam->pitch < -89.0f)
+            cam->pitch = -89.0f;
+        
+        camera_update_vectors(cam);
     } else if (app->current_state == STATE_AWAITING_INPUT) {
         // Handle slider dragging
         NumericInputWidget* widget = &app->numeric_input;

@@ -320,12 +320,22 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph) {
 	r->menuNodeCount = 0;
 	r->menuQuadIndexCount = 0;
 
-	// Create crosshair vertex buffer (screen-space NDC lines)
+	// Create crosshair as two thin quads (triangle list topology)
 	UIVertex crosshairVertices[] = {
-		{{-0.02f, 0.0f, 0.0f}, {0, 0}},  // Left center
-		{{ 0.02f, 0.0f, 0.0f}, {0, 0}},  // Right center
-		{{ 0.0f, -0.03f, 0.0f}, {0, 0}}, // Top center
-		{{ 0.0f,  0.03f, 0.0f}, {0, 0}}  // Bottom center
+		// Horizontal line quad: thickness 0.01, width 0.04
+		{{-0.02f, -0.005f, 0.0f}, {0.5f, 0.5f}},
+		{{ 0.02f, -0.005f, 0.0f}, {0.5f, 0.5f}},
+		{{-0.02f,  0.005f, 0.0f}, {0.5f, 0.5f}},
+		{{ 0.02f, -0.005f, 0.0f}, {0.5f, 0.5f}},
+		{{ 0.02f,  0.005f, 0.0f}, {0.5f, 0.5f}},
+		{{-0.02f,  0.005f, 0.0f}, {0.5f, 0.5f}},
+		// Vertical line quad: thickness 0.01, height 0.06
+		{{-0.005f, -0.03f, 0.0f}, {0.5f, 0.5f}},
+		{{ 0.005f, -0.03f, 0.0f}, {0.5f, 0.5f}},
+		{{-0.005f,  0.03f, 0.0f}, {0.5f, 0.5f}},
+		{{ 0.005f, -0.03f, 0.0f}, {0.5f, 0.5f}},
+		{{ 0.005f,  0.03f, 0.0f}, {0.5f, 0.5f}},
+		{{-0.005f,  0.03f, 0.0f}, {0.5f, 0.5f}}
 	};
 	createBuffer(r->device, r->physicalDevice, sizeof(crosshairVertices),
 				 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -333,7 +343,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph) {
 					 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 				 &r->crosshairVertexBuffer, &r->crosshairVertexBufferMemory);
 	updateBuffer(r->device, r->crosshairVertexBufferMemory, sizeof(crosshairVertices), crosshairVertices);
-	r->crosshairVertexCount = 4;
+	r->crosshairVertexCount = 12;
 
 	// Create numeric widget quad vertex buffer (static geometry for slider)
 	QuadVertex numericQuadVertices[] = {
@@ -639,10 +649,10 @@ void renderer_draw_frame(Renderer *r) {
 		}
 	}
 
-	// Draw Crosshair (always on top, screen-space NDC)
+	// Draw Crosshair (always on top, screen-space NDC, using UI pipeline for triangle quads)
 	if (r->crosshairVertexCount > 0) {
 		vkCmdBindPipeline(r->commandBuffers[r->currentFrame],
-						  VK_PIPELINE_BIND_POINT_GRAPHICS, r->edgePipeline);
+						  VK_PIPELINE_BIND_POINT_GRAPHICS, r->uiPipeline);
 		VkDeviceSize zero = 0;
 		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1,
 							   &r->crosshairVertexBuffer, &zero);
