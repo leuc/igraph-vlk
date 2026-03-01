@@ -366,17 +366,17 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 					glm_vec3_add(label_pos, down_off, label_pos);
 
 					glm_vec3_copy(label_pos, label_instances[label_count].nodePos);
-					label_instances[label_count].charRect[0] = (x_cursor + ci->x0) * world_text_scale;
-					label_instances[label_count].charRect[1] = ci->y0 * world_text_scale;
-					label_instances[label_count].charRect[2] = (x_cursor + ci->x1) * world_text_scale;
-					label_instances[label_count].charRect[3] = ci->y1 * world_text_scale;
+					label_instances[label_count].charRect[0] = x_cursor + ci->x0;
+					label_instances[label_count].charRect[1] = ci->y0;
+					label_instances[label_count].charRect[2] = x_cursor + ci->x1;
+					label_instances[label_count].charRect[3] = ci->y1;
 					label_instances[label_count].charUV[0] = ci->u0;
 					label_instances[label_count].charUV[1] = ci->v0;
 					label_instances[label_count].charUV[2] = ci->u1;
 					label_instances[label_count].charUV[3] = ci->v1;
-					// Use fixed orientation vectors captured at spawn for correct text billboarding
-					glm_vec3_copy(right, label_instances[label_count].right);
-					glm_vec3_copy(up, label_instances[label_count].up);
+					// Use fixed orientation vectors, scaled by world_text_scale
+					glm_vec3_scale(right, world_text_scale, label_instances[label_count].right);
+					glm_vec3_scale(up, world_text_scale, label_instances[label_count].up);
 
 					x_cursor += ci->xadvance;
 					label_count++;

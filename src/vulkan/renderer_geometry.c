@@ -370,6 +370,12 @@ void renderer_update_graph(Renderer *r, GraphData *graph) {
 				li[k].charUV[1] = ci->v0;
 				li[k].charUV[2] = ci->u1;
 				li[k].charUV[3] = ci->v1;
+
+                // Standard billboard orientation for node labels, scaled to 0.01f
+                float node_text_scale = 0.01f;
+                li[k].right[0] = node_text_scale; li[k].right[1] = 0.0f; li[k].right[2] = 0.0f;
+                li[k].up[0] = 0.0f;    li[k].up[1] = node_text_scale;    li[k].up[2] = 0.0f;
+
 				xoff += ci->xadvance;
 				k++;
 			}

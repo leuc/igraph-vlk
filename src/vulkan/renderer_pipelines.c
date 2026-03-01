@@ -245,12 +245,14 @@ int renderer_create_pipelines(Renderer *r) {
 		{2, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LabelInstance, nodePos)},
 		{3, 1, VK_FORMAT_R32G32B32A32_SFLOAT,
 		 offsetof(LabelInstance, charRect)},
-		{4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(LabelInstance, charUV)}};
+		{4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(LabelInstance, charUV)},
+		{5, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LabelInstance, right)},
+		{6, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LabelInstance, up)}};
 	VkPipelineVertexInputStateCreateInfo lvi = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 		.vertexBindingDescriptionCount = 2,
 		.pVertexBindingDescriptions = lb,
-		.vertexAttributeDescriptionCount = 5,
+		.vertexAttributeDescriptionCount = 7,
 		.pVertexAttributeDescriptions = la};
 	VkPipelineColorBlendAttachmentState lcb = {
 		.colorWriteMask = 0xF,
