@@ -108,6 +108,8 @@ typedef struct {
 	// UI
 	VkBuffer uiBgVertexBuffer;
 	VkDeviceMemory uiBgVertexBufferMemory;
+	VkBuffer uiBgInstanceBuffer;
+	VkDeviceMemory uiBgInstanceBufferMemory;
 	VkBuffer uiTextInstanceBuffer;
 	VkDeviceMemory uiTextInstanceBufferMemory;
 	uint32_t uiTextCharCount;
@@ -119,6 +121,9 @@ typedef struct {
 	VkDeviceMemory menuQuadIndexBufferMemory;
 	VkBuffer menuInstanceBuffer;
 	VkDeviceMemory menuInstanceBufferMemory;
+	VkBuffer menuTextInstanceBuffer;
+	VkDeviceMemory menuTextInstanceBufferMemory;
+	uint32_t menuTextCharCount;
 	uint32_t menuNodeCount;
 	uint32_t menuQuadIndexCount;
 	VkPipeline menuPipeline; // Instanced menu rendering pipeline

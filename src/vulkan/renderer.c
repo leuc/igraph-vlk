@@ -310,6 +310,16 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph) {
 					 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 				 &r->uiTextInstanceBuffer, &r->uiTextInstanceBufferMemory);
 
+	// Dedicated background instance buffer to avoid corrupting text data
+	UIInstance bgInst = {.color = {0, 0, 0, -1.0f}};
+	createBuffer(r->device, r->physicalDevice, sizeof(UIInstance),
+				 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+				 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+					 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				 &r->uiBgInstanceBuffer, &r->uiBgInstanceBufferMemory);
+	updateBuffer(r->device, r->uiBgInstanceBufferMemory, sizeof(UIInstance),
+				 &bgInst);
+
 	// Initialize menu buffers (will be filled when menu is generated)
 	r->menuQuadVertexBuffer = VK_NULL_HANDLE;
 	r->menuQuadVertexBufferMemory = VK_NULL_HANDLE;
@@ -317,33 +327,15 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph) {
 	r->menuQuadIndexBufferMemory = VK_NULL_HANDLE;
 	r->menuInstanceBuffer = VK_NULL_HANDLE;
 	r->menuInstanceBufferMemory = VK_NULL_HANDLE;
+	r->menuTextInstanceBuffer = VK_NULL_HANDLE;
+	r->menuTextInstanceBufferMemory = VK_NULL_HANDLE;
+	r->menuTextCharCount = 0;
 	r->menuNodeCount = 0;
 	r->menuQuadIndexCount = 0;
 
-	// Create crosshair as two thin quads (triangle list topology)
-	UIVertex crosshairVertices[] = {
-		// Horizontal line quad: thickness 0.01, width 0.04
-		{{-0.02f, -0.005f, 0.0f}, {0.5f, 0.5f}},
-		{{ 0.02f, -0.005f, 0.0f}, {0.5f, 0.5f}},
-		{{-0.02f,  0.005f, 0.0f}, {0.5f, 0.5f}},
-		{{ 0.02f, -0.005f, 0.0f}, {0.5f, 0.5f}},
-		{{ 0.02f,  0.005f, 0.0f}, {0.5f, 0.5f}},
-		{{-0.02f,  0.005f, 0.0f}, {0.5f, 0.5f}},
-		// Vertical line quad: thickness 0.01, height 0.06
-		{{-0.005f, -0.03f, 0.0f}, {0.5f, 0.5f}},
-		{{ 0.005f, -0.03f, 0.0f}, {0.5f, 0.5f}},
-		{{-0.005f,  0.03f, 0.0f}, {0.5f, 0.5f}},
-		{{ 0.005f, -0.03f, 0.0f}, {0.5f, 0.5f}},
-		{{ 0.005f,  0.03f, 0.0f}, {0.5f, 0.5f}},
-		{{-0.005f,  0.03f, 0.0f}, {0.5f, 0.5f}}
-	};
-	createBuffer(r->device, r->physicalDevice, sizeof(crosshairVertices),
-				 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-				 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-					 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-				 &r->crosshairVertexBuffer, &r->crosshairVertexBufferMemory);
-	updateBuffer(r->device, r->crosshairVertexBufferMemory, sizeof(crosshairVertices), crosshairVertices);
-	r->crosshairVertexCount = 12;
+	r->crosshairVertexBuffer = VK_NULL_HANDLE;
+	r->crosshairVertexBufferMemory = VK_NULL_HANDLE;
+	r->crosshairVertexCount = 0;
 
 	// Create numeric widget quad vertex buffer (static geometry for slider)
 	QuadVertex numericQuadVertices[] = {
@@ -581,6 +573,20 @@ void renderer_draw_frame(Renderer *r) {
 						 r->menuQuadIndexCount,
 						 r->menuNodeCount,
 						 0, 0, 0);
+
+		// Draw menu text labels if generated
+		if (r->menuTextCharCount > 0 &&
+			r->menuTextInstanceBuffer != VK_NULL_HANDLE) {
+			vkCmdBindPipeline(r->commandBuffers[r->currentFrame],
+							  VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
+			VkBuffer mTextVbs[] = {r->labelVertexBuffer,
+								   r->menuTextInstanceBuffer};
+			VkDeviceSize mTextVos[] = {0, 0};
+			vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2,
+								   mTextVbs, mTextVos);
+			vkCmdDraw(r->commandBuffers[r->currentFrame], 4,
+					  r->menuTextCharCount, 0, 0);
+		}
 	}
 
 	// Draw Numeric Input Widget (if active)
@@ -632,12 +638,10 @@ void renderer_draw_frame(Renderer *r) {
 	if (r->showUI) {
 		vkCmdBindPipeline(r->commandBuffers[r->currentFrame],
 						  VK_PIPELINE_BIND_POINT_GRAPHICS, r->uiPipeline);
-		VkDeviceSize zero = 0;
-		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1,
-							   &r->uiBgVertexBuffer, &zero);
-		UIInstance bgInst = {.color = {0, 0, 0, -1.0f}};
-		updateBuffer(r->device, r->uiTextInstanceBufferMemory,
-					 sizeof(UIInstance), &bgInst);
+		VkBuffer bgUbs[] = {r->uiBgVertexBuffer, r->uiBgInstanceBuffer};
+		VkDeviceSize bgUos[] = {0, 0};
+		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, bgUbs,
+							   bgUos);
 		vkCmdDraw(r->commandBuffers[r->currentFrame], 4, 1, 0, 0);
 		if (r->uiTextCharCount > 0) {
 			VkBuffer ubs[] = {r->labelVertexBuffer, r->uiTextInstanceBuffer};
@@ -647,16 +651,6 @@ void renderer_draw_frame(Renderer *r) {
 			vkCmdDraw(r->commandBuffers[r->currentFrame], 4, r->uiTextCharCount,
 					  0, 0);
 		}
-	}
-
-	// Draw Crosshair (always on top, screen-space NDC, using UI pipeline for triangle quads)
-	if (r->crosshairVertexCount > 0) {
-		vkCmdBindPipeline(r->commandBuffers[r->currentFrame],
-						  VK_PIPELINE_BIND_POINT_GRAPHICS, r->uiPipeline);
-		VkDeviceSize zero = 0;
-		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1,
-							   &r->crosshairVertexBuffer, &zero);
-		vkCmdDraw(r->commandBuffers[r->currentFrame], r->crosshairVertexCount, 1, 0, 0);
 	}
 
 	vkCmdEndRenderPass(r->commandBuffers[r->currentFrame]);
@@ -714,6 +708,11 @@ void renderer_cleanup(Renderer *r) {
 	vkDestroyBuffer(r->device, r->uiTextInstanceBuffer, NULL);
 	vkFreeMemory(r->device, r->uiTextInstanceBufferMemory, NULL);
 
+	if (r->uiBgInstanceBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->uiBgInstanceBuffer, NULL);
+		vkFreeMemory(r->device, r->uiBgInstanceBufferMemory, NULL);
+	}
+
 	// Cleanup crosshair buffer
 	if (r->crosshairVertexBuffer != VK_NULL_HANDLE) {
 		vkDestroyBuffer(r->device, r->crosshairVertexBuffer, NULL);
@@ -732,6 +731,10 @@ void renderer_cleanup(Renderer *r) {
 	if (r->menuInstanceBuffer != VK_NULL_HANDLE) {
 		vkDestroyBuffer(r->device, r->menuInstanceBuffer, NULL);
 		vkFreeMemory(r->device, r->menuInstanceBufferMemory, NULL);
+	}
+	if (r->menuTextInstanceBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->menuTextInstanceBuffer, NULL);
+		vkFreeMemory(r->device, r->menuTextInstanceBufferMemory, NULL);
 	}
 
 	// Cleanup numeric widget buffers
