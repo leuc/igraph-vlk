@@ -21,8 +21,11 @@ void app_context_destroy(AppContext* ctx) {
 void update_app_state(AppState* state) {
     AppContext* app = &state->app_ctx;
     
-    // In menu open state: perform crosshair raycasting to track hover
-    if (app->current_state == STATE_MENU_OPEN) {
+    // Perform crosshair raycasting to track hover in menu-related states
+    if (app->current_state == STATE_MENU_OPEN || 
+        app->current_state == STATE_AWAITING_SELECTION ||
+        app->current_state == STATE_AWAITING_INPUT) {
+        
         // Raycast from camera through screen center (crosshair)
         MenuNode* hovered = raycast_menu_crosshair(state);
         app->crosshair_hovered_node = hovered;
@@ -84,9 +87,9 @@ void update_app_state(AppState* state) {
                     app->has_visual_results = true;
                     app->current_state = STATE_DISPLAY_RESULTS;
                 } else {
-                    // Reset after execution
+                    // Reset after execution but keep menu open
                     app->pending_command = NULL;
-                    app->current_state = STATE_GRAPH_VIEW;
+                    app->current_state = STATE_MENU_OPEN;
                 }
             }
             break;
