@@ -38,6 +38,8 @@ typedef struct {
     int num_params;
     // Callbacks for UI updates
     void (*update_visuals_callback)(void); 
+    // Pointer to full application state for layout updates
+    struct AppState* app_state;
 } ExecutionContext;
 
 // Typedef for the generic wrapper function

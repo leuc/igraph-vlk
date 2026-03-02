@@ -597,7 +597,7 @@ void init_menu_from_definitions(MenuNode* root, const MenuDefinition* definition
         }
     }
 
-    // Second pass: Link children
+    // Link children
     for (int i = 0; i < num_definitions; i++) {
         if (definitions[i].type == NODE_BRANCH && definitions[i].child_ids) {
             int count = 0;
@@ -617,6 +617,39 @@ void init_menu_from_definitions(MenuNode* root, const MenuDefinition* definition
     // Root is the first node in the array
     *root = *nodes[0];
     root->is_expanded = true; // Ensure top level is visible
+    
+    // Assign wrapper functions based on command_id
+    for (int i = 0; i < num_definitions; i++) {
+        if (nodes[i]->command && nodes[i]->command->id_name) {
+            if (strcmp(nodes[i]->command->id_name, "lay_force_fr") == 0) {
+                nodes[i]->command->execute = wrapper_lay_force_fr;
+            } else if (strcmp(nodes[i]->command->id_name, "lay_force_kk") == 0) {
+                nodes[i]->command->execute = wrapper_lay_force_kk;
+            } else if (strcmp(nodes[i]->command->id_name, "lay_force_drl") == 0) {
+                nodes[i]->command->execute = wrapper_lay_force_drl;
+            } else if (strcmp(nodes[i]->command->id_name, "lay_force_gopt") == 0) {
+                nodes[i]->command->execute = wrapper_lay_force_gopt;
+            } else if (strcmp(nodes[i]->command->id_name, "lay_tree_rt") == 0) {
+                nodes[i]->command->execute = wrapper_lay_tree_rt;
+            } else if (strcmp(nodes[i]->command->id_name, "lay_tree_sug") == 0) {
+                nodes[i]->command->execute = wrapper_lay_tree_sug;
+            } else if (strcmp(nodes[i]->command->id_name, "lay_geo_circle") == 0) {
+                nodes[i]->command->execute = wrapper_lay_geo_circle;
+            } else if (strcmp(nodes[i]->command->id_name, "lay_geo_star") == 0) {
+                nodes[i]->command->execute = wrapper_lay_geo_star;
+            } else if (strcmp(nodes[i]->command->id_name, "lay_geo_grid") == 0) {
+                nodes[i]->command->execute = wrapper_lay_geo_grid;
+            } else if (strcmp(nodes[i]->command->id_name, "lay_geo_sphere") == 0) {
+                nodes[i]->command->execute = wrapper_lay_geo_sphere;
+            } else if (strcmp(nodes[i]->command->id_name, "lay_geo_rand") == 0) {
+                nodes[i]->command->execute = wrapper_lay_geo_rand;
+            } else if (strcmp(nodes[i]->command->id_name, "lay_bip_mds") == 0) {
+                nodes[i]->command->execute = wrapper_lay_bip_mds;
+            } else if (strcmp(nodes[i]->command->id_name, "lay_bip_sug") == 0) {
+                nodes[i]->command->execute = wrapper_lay_bip_sug;
+            }
+        }
+    }
     
     // Free the nodes array (pointers are now in the tree)
     free(nodes);

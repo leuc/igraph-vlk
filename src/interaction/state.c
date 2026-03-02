@@ -80,6 +80,7 @@ void update_app_state(AppState* state) {
                     exec_ctx.params = app->pending_command->params;
                     exec_ctx.num_params = app->pending_command->num_params;
                     exec_ctx.update_visuals_callback = NULL; // To be set
+                    exec_ctx.app_state = state; // Pass full app state for layout updates
                     
                     app->pending_command->execute(&exec_ctx);
                     
