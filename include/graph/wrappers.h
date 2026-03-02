@@ -27,4 +27,7 @@ void wrapper_lay_geo_rand(ExecutionContext* ctx);
 void wrapper_lay_bip_mds(ExecutionContext* ctx);
 void wrapper_lay_bip_sug(ExecutionContext* ctx);
 
+// Dimension Reduction / Embedding wrappers
+void wrapper_lay_umap(ExecutionContext* ctx);
+
 #endif // GRAPH_WRAPPERS_H

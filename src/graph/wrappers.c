@@ -605,3 +605,48 @@ void wrapper_lay_bip_sug(ExecutionContext* ctx) {
     apply_layout_to_graph(ctx, &layout);
     igraph_matrix_destroy(&layout);
 }
+
+// ============================================================================
+// Dimension Reduction / Embedding Layout Wrappers
+// ============================================================================
+
+void wrapper_lay_umap(ExecutionContext* ctx) {
+    if (!ctx || !ctx->current_graph) {
+        fprintf(stderr, "[Wrapper] Error: Invalid context for UMAP\n");
+        return;
+    }
+    
+    igraph_integer_t vcount = igraph_vcount(ctx->current_graph);
+    igraph_integer_t ecount = igraph_ecount(ctx->current_graph);
+    
+    igraph_matrix_t layout;
+    if (igraph_matrix_init(&layout, vcount, 3) != IGRAPH_SUCCESS) {
+        fprintf(stderr, "[Wrapper] Error: Failed to initialize layout matrix\n");
+        return;
+    }
+    
+    // UMAP parameters based on documentation
+    igraph_real_t min_dist = 0.5;   // Typical value between 0 and 1
+    igraph_int_t epochs = 300;      // Typical value between 30 and 500
+    igraph_bool_t distances_are_weights = 0;  // Compute weights from distances (default)
+    
+    // For typical use case: NULL distances to assume uniform edge weights
+    igraph_error_t result = igraph_layout_umap_3d(
+        ctx->current_graph,
+        &layout,
+        0,      /* use_seed - random initial layout */
+        NULL,   /* distances - all edges same distance */
+        min_dist,
+        epochs,
+        distances_are_weights
+    );
+    
+    if (result != IGRAPH_SUCCESS) {
+        fprintf(stderr, "[Wrapper] Error: igraph_layout_umap_3d failed\n");
+        igraph_matrix_destroy(&layout);
+        return;
+    }
+    
+    apply_layout_to_graph(ctx, &layout);
+    igraph_matrix_destroy(&layout);
+}

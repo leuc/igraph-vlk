@@ -71,6 +71,7 @@ void init_menu_tree(MenuNode *root) {
         MENU_LAY_TREE, MENU_LAY_TREE_RT, MENU_LAY_TREE_SUG,
         MENU_LAY_GEO, MENU_LAY_GEO_CIRCLE, MENU_LAY_GEO_STAR, MENU_LAY_GEO_GRID, MENU_LAY_GEO_SPHERE, MENU_LAY_GEO_RAND,
         MENU_LAY_BIP, MENU_LAY_BIP_MDS, MENU_LAY_BIP_SUG,
+        MENU_LAY_DIM, MENU_LAY_UMAP,
         // 5. Analysis
         MENU_ANALYSIS,
         MENU_ANA_CENT, MENU_ANA_CENT_DEG, MENU_ANA_CENT_CLO, MENU_ANA_CENT_BTW, MENU_ANA_CENT_EIG, MENU_ANA_CENT_PAGER, MENU_ANA_CENT_HITS,
@@ -134,7 +135,7 @@ void init_menu_tree(MenuNode *root) {
         { "Gabriel Graphs", NODE_LEAF, NULL, "gen_spa_gab", 3 },
 
         // 4. Layout
-        { "Layout", NODE_BRANCH, (int[]){ MENU_LAY_FORCE, MENU_LAY_TREE, MENU_LAY_GEO, MENU_LAY_BIP, -1 }, NULL, 1 },
+        { "Layout", NODE_BRANCH, (int[]){ MENU_LAY_FORCE, MENU_LAY_TREE, MENU_LAY_GEO, MENU_LAY_BIP, MENU_LAY_DIM, -1 }, NULL, 1 },
         { "Force-Directed Layouts", NODE_BRANCH, (int[]){ MENU_LAY_FORCE_FR, MENU_LAY_FORCE_KK, MENU_LAY_FORCE_DRL, MENU_LAY_FORCE_DH, -1 }, NULL, 2 },
         { "Fruchterman-Reingold", NODE_LEAF, NULL, "lay_force_fr", 3 },
         { "Kamada-Kawai", NODE_LEAF, NULL, "lay_force_kk", 3 },
@@ -152,6 +153,8 @@ void init_menu_tree(MenuNode *root) {
         { "Bipartite Layouts", NODE_BRANCH, (int[]){ MENU_LAY_BIP_MDS, MENU_LAY_BIP_SUG, -1 }, NULL, 2 },
         { "MDS", NODE_LEAF, NULL, "lay_bip_mds", 3 },
         { "Sugiyama (Bipartite)", NODE_LEAF, NULL, "lay_bip_sug", 3 },
+        { "Dimension Reduction", NODE_BRANCH, (int[]){ MENU_LAY_UMAP, -1 }, NULL, 2 },
+        { "UMAP 3D", NODE_LEAF, NULL, "lay_umap", 3 },
 
         // 5. Analysis
         { "Analysis", NODE_BRANCH, (int[]){ MENU_ANA_CENT, MENU_ANA_GLOB, MENU_ANA_DIST, MENU_ANA_FLOW, MENU_ANA_EMB, -1 }, NULL, 1 },
@@ -647,6 +650,8 @@ void init_menu_from_definitions(MenuNode* root, const MenuDefinition* definition
                 nodes[i]->command->execute = wrapper_lay_bip_mds;
             } else if (strcmp(nodes[i]->command->id_name, "lay_bip_sug") == 0) {
                 nodes[i]->command->execute = wrapper_lay_bip_sug;
+            } else if (strcmp(nodes[i]->command->id_name, "lay_umap") == 0) {
+                nodes[i]->command->execute = wrapper_lay_umap;
             }
         }
     }
