@@ -81,6 +81,7 @@ typedef struct MenuNode {
     IgraphCommand* command;
 
     bool hovered; // For visual feedback
+    bool is_expanded; // Whether submenu is unfolded
 } MenuNode;
 
 // --- Floating 3D Slider/Dial Widget for Numeric Input ---

@@ -29,6 +29,7 @@ static MenuNode *create_menu_node(const char *label, MenuNodeType type) {
 	node->num_children = 0;
 	node->children = NULL;
 	node->command = NULL;
+	node->is_expanded = false;
 	return node;
 }
 
@@ -131,6 +132,7 @@ void init_menu_tree(MenuNode *root) {
 	main_menu->children = (MenuNode **)malloc(sizeof(MenuNode *) * 2);
 	main_menu->children[0] = analysis_menu;
 	main_menu->children[1] = visualize_menu;
+	main_menu->is_expanded = true;
 
 	// Copy to root (assuming root is pre-allocated)
 	*root = *main_menu;
@@ -192,9 +194,9 @@ static void update_menu_layout_recursive(MenuNode *node, float delta_time, int d
 		for (int i = 0; i < node->num_children; i++) {
 			MenuNode *child = node->children[i];
 
-			// Children only expand if parent is mostly open
+			// Children only expand if parent is mostly open AND expanded
 			child->target_radius =
-				(node->current_radius > 0.5f && node->target_radius > 0.5f) ? 1.0f : 0.0f;
+				(node->current_radius > 0.5f && node->is_expanded) ? 1.0f : 0.0f;
 
 			// Always recurse if parent is visible to ensure children close/open correctly
 			if (node->current_radius > 0.001f) {

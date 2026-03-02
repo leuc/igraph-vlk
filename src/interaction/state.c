@@ -104,6 +104,7 @@ void update_app_state(AppState* state) {
 
 void handle_menu_selection(AppContext* app, MenuNode* selected_node) {
     if (selected_node->type == NODE_BRANCH) {
+        selected_node->is_expanded = !selected_node->is_expanded;
         app->active_menu_level = selected_node;
     } else if (selected_node->type == NODE_LEAF) {
         app->pending_command = selected_node->command;
