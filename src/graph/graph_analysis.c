@@ -15,19 +15,31 @@ void graph_calculate_centrality(GraphData *data, CentralityType type) {
 						igraph_vss_all(), IGRAPH_PAGERANK_ALGO_PRPACK, NULL);
 		break;
 	case CENTRALITY_HUB: {
-		igraph_vector_t a;
-		igraph_vector_init(&a, 0);
-		igraph_hub_and_authority_scores(&data->g, &result, &a, NULL, NULL,
-										NULL);
-		igraph_vector_destroy(&a);
+		// For undirected graphs, hub scores are same as eigenvector centrality
+		if (!igraph_is_directed(&data->g)) {
+			igraph_eigenvector_centrality(&data->g, &result, NULL,
+										  IGRAPH_ALL, NULL, NULL);
+		} else {
+			igraph_vector_t a;
+			igraph_vector_init(&a, 0);
+			igraph_hub_and_authority_scores(&data->g, &result, &a, NULL,
+											NULL, NULL);
+			igraph_vector_destroy(&a);
+		}
 		break;
 	}
 	case CENTRALITY_AUTHORITY: {
-		igraph_vector_t h;
-		igraph_vector_init(&h, 0);
-		igraph_hub_and_authority_scores(&data->g, &h, &result, NULL, NULL,
-										NULL);
-		igraph_vector_destroy(&h);
+		// For undirected graphs, authority scores are same as eigenvector centrality
+		if (!igraph_is_directed(&data->g)) {
+			igraph_eigenvector_centrality(&data->g, &result, NULL,
+										  IGRAPH_ALL, NULL, NULL);
+		} else {
+			igraph_vector_t h;
+			igraph_vector_init(&h, 0);
+			igraph_hub_and_authority_scores(&data->g, &h, &result, NULL,
+											NULL, NULL);
+			igraph_vector_destroy(&h);
+		}
 		break;
 	}
 	case CENTRALITY_BETWEENNESS:
@@ -54,8 +66,8 @@ void graph_calculate_centrality(GraphData *data, CentralityType type) {
 								   IGRAPH_ALL, NULL, 1);
 		break;
 	case CENTRALITY_EIGENVECTOR:
-		igraph_eigenvector_centrality(&data->g, &result, NULL, IGRAPH_DIRECTED,
-									  NULL, NULL);
+		igraph_eigenvector_centrality(&data->g, &result, NULL,
+									  IGRAPH_ALL, NULL, NULL);
 		break;
 	case CENTRALITY_STRENGTH:
 		igraph_strength(&data->g, &result, igraph_vss_all(), IGRAPH_ALL,
