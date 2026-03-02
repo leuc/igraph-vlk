@@ -326,17 +326,14 @@ void wrapper_lay_geo_star(ExecutionContext* ctx) {
         return;
     }
     
-    igraph_vector_int_t order;
-    igraph_vector_int_init(&order, 0);
-    
+    // Use NULL for order to get default vertex ID ordering
+    // (empty vector would cause "Invalid order vector length" error)
     igraph_error_t result = igraph_layout_star(
         ctx->current_graph, 
         &layout, 
         0,  /* center vertex */
-        &order   /* order (empty for default) */
+        NULL   /* order - use default increasing vertex ID order */
     );
-    
-    igraph_vector_int_destroy(&order);
     
     if (result != IGRAPH_SUCCESS) {
         fprintf(stderr, "[Wrapper] Error: igraph_layout_star failed\n");
