@@ -1,13 +1,12 @@
-cmake_minimum_required(VERSION 3.10)
-project(igraph-vlk C)
+cmake_minimum_required(VERSION 3.15)
+project(igraph-vlk C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(IGRAPH REQUIRED igraph)
+find_package(igraph REQUIRED)
 
 find_path(CGLM_INCLUDE_DIR cglm/cglm.h)
 find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
@@ -94,7 +93,7 @@ target_include_directories(igraph-vlk PRIVATE
 target_link_libraries(igraph-vlk PRIVATE
     Vulkan::Vulkan
     glfw
-    ${IGRAPH_LIBRARIES}
+    igraph::igraph
     m
     OpenMP::OpenMP_C
 )
