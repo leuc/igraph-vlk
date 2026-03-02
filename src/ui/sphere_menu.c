@@ -50,95 +50,198 @@ static IgraphCommand *create_command(const char *id_name,
 	return cmd;
 }
 
-// Forward declaration
+// Forward declarations
 static void assign_menu_icons(MenuNode *node);
 
-// Initialize the menu tree
+// Initialize the menu tree with the full requested structure
 void init_menu_tree(MenuNode *root) {
-	// Create main menu
-	MenuNode *main_menu = create_menu_node("Main", NODE_BRANCH);
+    enum {
+        MENU_ROOT,
+        // 1. File
+        MENU_FILE, MENU_FILE_NEW, MENU_FILE_OPEN, MENU_FILE_SAVE, MENU_FILE_EXIT,
+        // 2. Generate
+        MENU_GENERATE,
+        MENU_GEN_DET, MENU_GEN_DET_RING, MENU_GEN_DET_STAR, MENU_GEN_DET_TREE, MENU_GEN_DET_LATTICE, MENU_GEN_DET_FULL, MENU_GEN_DET_CIRCLE, MENU_GEN_DET_NOTABLE,
+        MENU_GEN_STO, MENU_GEN_STO_ER, MENU_GEN_STO_BA, MENU_GEN_STO_WS, MENU_GEN_STO_FF, MENU_GEN_STO_TREE, MENU_GEN_STO_DEG,
+        MENU_GEN_BIP, MENU_GEN_BIP_RAND, MENU_GEN_BIP_PROJ,
+        MENU_GEN_SPA, MENU_GEN_SPA_GEO, MENU_GEN_SPA_GAB,
+        // 4. Layout
+        MENU_LAYOUT,
+        MENU_LAY_FORCE, MENU_LAY_FORCE_FR, MENU_LAY_FORCE_KK, MENU_LAY_FORCE_DRL, MENU_LAY_FORCE_GOPT,
+        MENU_LAY_TREE, MENU_LAY_TREE_RT, MENU_LAY_TREE_SUG,
+        MENU_LAY_GEO, MENU_LAY_GEO_CIRCLE, MENU_LAY_GEO_STAR, MENU_LAY_GEO_GRID, MENU_LAY_GEO_SPHERE, MENU_LAY_GEO_RAND,
+        MENU_LAY_BIP, MENU_LAY_BIP_MDS, MENU_LAY_BIP_SUG,
+        // 5. Analysis
+        MENU_ANALYSIS,
+        MENU_ANA_CENT, MENU_ANA_CENT_DEG, MENU_ANA_CENT_CLO, MENU_ANA_CENT_BTW, MENU_ANA_CENT_EIG, MENU_ANA_CENT_PAGER, MENU_ANA_CENT_HITS,
+        MENU_ANA_GLOB, MENU_ANA_GLOB_DIAM, MENU_ANA_GLOB_RAD, MENU_ANA_GLOB_APL, MENU_ANA_GLOB_ASSORT, MENU_ANA_GLOB_MOD, MENU_ANA_GLOB_DENS, MENU_ANA_GLOB_TRANS,
+        MENU_ANA_DIST, MENU_ANA_DIST_SP, MENU_ANA_DIST_SP_DIJ, MENU_ANA_DIST_SP_BF, MENU_ANA_DIST_SP_ASTAR, MENU_ANA_DIST_SP_JOH, MENU_ANA_DIST_ECC,
+        MENU_ANA_FLOW, MENU_ANA_FLOW_MAX, MENU_ANA_FLOW_MIN, MENU_ANA_FLOW_GOM, MENU_ANA_FLOW_ADH,
+        MENU_ANA_EMB, MENU_ANA_EMB_ADJ, MENU_ANA_EMB_LAP,
+        // 6. Topology & Motifs
+        MENU_TOPOLOGY,
+        MENU_TOP_COMP, MENU_TOP_COMP_CONN, MENU_TOP_COMP_BICON, MENU_TOP_COMP_ART, MENU_TOP_COMP_SEP,
+        MENU_TOP_CLIQ, MENU_TOP_CLIQ_MAXL, MENU_TOP_CLIQ_MAXM, MENU_TOP_CLIQ_IND,
+        MENU_TOP_CYC, MENU_TOP_CYC_EUL, MENU_TOP_CYC_FUND,
+        MENU_TOP_MOT, MENU_TOP_MOT_TRI, MENU_TOP_MOT_DYA, MENU_TOP_MOT_NET,
+        MENU_TOP_ISO, MENU_TOP_ISO_VF2, MENU_TOP_ISO_BLISS,
+        MENU_TOP_COL, MENU_TOP_COL_GREEDY,
+        // 7. Communities
+        MENU_COMMUNITIES,
+        MENU_COM_DET, MENU_COM_DET_LOUV, MENU_COM_DET_WALK, MENU_COM_DET_BTW, MENU_COM_DET_FAST, MENU_COM_DET_INFO, MENU_COM_DET_LAB, MENU_COM_DET_SPIN,
+        MENU_COM_COMP, MENU_COM_COMP_SJ, MENU_COM_COMP_ARI,
+        MENU_COM_GLET, MENU_COM_GLET_BASIS, MENU_COM_GLET_PROJ,
+        MENU_COM_HRG, MENU_COM_HRG_FIT, MENU_COM_HRG_CONS,
+        // 8. Processes & Traversal
+        MENU_PROCESSES,
+        MENU_PRO_SEARCH, MENU_PRO_SEARCH_BFS, MENU_PRO_SEARCH_DFS, MENU_PRO_SEARCH_TOPO,
+        MENU_PRO_PROC, MENU_PRO_PROC_RW, MENU_PRO_PROC_RT,
+        MENU_COUNT
+    };
 
-	// Create Analysis submenu
-	MenuNode *analysis_menu = create_menu_node("Analysis", NODE_BRANCH);
+    const MenuDefinition definitions[] = {
+        { "Main", NODE_BRANCH, (int[]){ MENU_FILE, MENU_GENERATE, MENU_LAYOUT, MENU_ANALYSIS, MENU_TOPOLOGY, MENU_COMMUNITIES, MENU_PROCESSES, -1 }, NULL, 0 },
+        
+        // 1. File
+        { "File", NODE_BRANCH, (int[]){ MENU_FILE_NEW, MENU_FILE_OPEN, MENU_FILE_SAVE, MENU_FILE_EXIT, -1 }, NULL, 1 },
+        { "New Graph", NODE_LEAF, NULL, "file_new", 2 },
+        { "Open Graph", NODE_LEAF, NULL, "file_open", 2 },
+        { "Save Graph", NODE_LEAF, NULL, "file_save", 2 },
+        { "Exit", NODE_LEAF, NULL, "app_exit", 2 },
 
-	// Create Paths submenu
-	MenuNode *paths_menu = create_menu_node("Paths", NODE_BRANCH);
+        // 2. Generate
+        { "Generate", NODE_BRANCH, (int[]){ MENU_GEN_DET, MENU_GEN_STO, MENU_GEN_BIP, MENU_GEN_SPA, -1 }, NULL, 1 },
+        { "Deterministic Graphs", NODE_BRANCH, (int[]){ MENU_GEN_DET_RING, MENU_GEN_DET_STAR, MENU_GEN_DET_TREE, MENU_GEN_DET_LATTICE, MENU_GEN_DET_FULL, MENU_GEN_DET_CIRCLE, MENU_GEN_DET_NOTABLE, -1 }, NULL, 2 },
+        { "Ring", NODE_LEAF, NULL, "gen_det_ring", 3 },
+        { "Star", NODE_LEAF, NULL, "gen_det_star", 3 },
+        { "Tree", NODE_LEAF, NULL, "gen_det_tree", 3 },
+        { "Lattice", NODE_LEAF, NULL, "gen_det_lattice", 3 },
+        { "Full Graph (Clique)", NODE_LEAF, NULL, "gen_det_full", 3 },
+        { "Circle", NODE_LEAF, NULL, "gen_det_circle", 3 },
+        { "Notable Graphs", NODE_LEAF, NULL, "gen_det_notable", 3 },
+        { "Stochastic Graphs", NODE_BRANCH, (int[]){ MENU_GEN_STO_ER, MENU_GEN_STO_BA, MENU_GEN_STO_WS, MENU_GEN_STO_FF, MENU_GEN_STO_TREE, MENU_GEN_STO_DEG, -1 }, NULL, 2 },
+        { "Erdős-Rényi", NODE_LEAF, NULL, "gen_sto_er", 3 },
+        { "Barabási-Albert", NODE_LEAF, NULL, "gen_sto_ba", 3 },
+        { "Watts-Strogatz", NODE_LEAF, NULL, "gen_sto_ws", 3 },
+        { "Forest Fire", NODE_LEAF, NULL, "gen_sto_ff", 3 },
+        { "Random Tree", NODE_LEAF, NULL, "gen_sto_tree", 3 },
+        { "Degree Sequence", NODE_LEAF, NULL, "gen_sto_deg", 3 },
+        { "Bipartite Graphs", NODE_BRANCH, (int[]){ MENU_GEN_BIP_RAND, MENU_GEN_BIP_PROJ, -1 }, NULL, 2 },
+        { "Generate Random Bipartite", NODE_LEAF, NULL, "gen_bip_rand", 3 },
+        { "Create Bipartite Projections", NODE_LEAF, NULL, "gen_bip_proj", 3 },
+        { "Spatial Graphs", NODE_BRANCH, (int[]){ MENU_GEN_SPA_GEO, MENU_GEN_SPA_GAB, -1 }, NULL, 2 },
+        { "Geometric Random Graphs", NODE_LEAF, NULL, "gen_spa_geo", 3 },
+        { "Gabriel Graphs", NODE_LEAF, NULL, "gen_spa_gab", 3 },
 
-	// Create Visualize submenu
-	MenuNode *visualize_menu = create_menu_node("Visualize", NODE_BRANCH);
+        // 4. Layout
+        { "Layout", NODE_BRANCH, (int[]){ MENU_LAY_FORCE, MENU_LAY_TREE, MENU_LAY_GEO, MENU_LAY_BIP, -1 }, NULL, 1 },
+        { "Force-Directed Layouts", NODE_BRANCH, (int[]){ MENU_LAY_FORCE_FR, MENU_LAY_FORCE_KK, MENU_LAY_FORCE_DRL, MENU_LAY_FORCE_GOPT, -1 }, NULL, 2 },
+        { "Fruchterman-Reingold", NODE_LEAF, NULL, "lay_force_fr", 3 },
+        { "Kamada-Kawai", NODE_LEAF, NULL, "lay_force_kk", 3 },
+        { "Distributed Recursive", NODE_LEAF, NULL, "lay_force_drl", 3 },
+        { "GraphOpt", NODE_LEAF, NULL, "lay_force_gopt", 3 },
+        { "Tree & Hierarchical", NODE_BRANCH, (int[]){ MENU_LAY_TREE_RT, MENU_LAY_TREE_SUG, -1 }, NULL, 2 },
+        { "Reingold-Tilford", NODE_LEAF, NULL, "lay_tree_rt", 3 },
+        { "Sugiyama", NODE_LEAF, NULL, "lay_tree_sug", 3 },
+        { "Geometric Layouts", NODE_BRANCH, (int[]){ MENU_LAY_GEO_CIRCLE, MENU_LAY_GEO_STAR, MENU_LAY_GEO_GRID, MENU_LAY_GEO_SPHERE, MENU_LAY_GEO_RAND, -1 }, NULL, 2 },
+        { "Circle", NODE_LEAF, NULL, "lay_geo_circle", 3 },
+        { "Star", NODE_LEAF, NULL, "lay_geo_star", 3 },
+        { "Grid", NODE_LEAF, NULL, "lay_geo_grid", 3 },
+        { "Sphere", NODE_LEAF, NULL, "lay_geo_sphere", 3 },
+        { "Random", NODE_LEAF, NULL, "lay_geo_rand", 3 },
+        { "Bipartite Layouts", NODE_BRANCH, (int[]){ MENU_LAY_BIP_MDS, MENU_LAY_BIP_SUG, -1 }, NULL, 2 },
+        { "MDS", NODE_LEAF, NULL, "lay_bip_mds", 3 },
+        { "Sugiyama (Bipartite)", NODE_LEAF, NULL, "lay_bip_sug", 3 },
 
-	// Create Shortest Path command
-	IgraphCommand *cmd_shortest_path = create_command(
-		"shortest_path", "Shortest Path", wrapper_shortest_path, 2);
-	cmd_shortest_path->params[0] = (CommandParameter){
-		.name = "Source",
-		.type = PARAM_TYPE_NODE_SELECTION,
-		.value.selection_id = -1,
-		.min_val = 0,
-		.max_val = 0};
-	cmd_shortest_path->params[1] = (CommandParameter){
-		.name = "Target",
-		.type = PARAM_TYPE_NODE_SELECTION,
-		.value.selection_id = -1,
-		.min_val = 0,
-		.max_val = 0};
+        // 5. Analysis
+        { "Analysis", NODE_BRANCH, (int[]){ MENU_ANA_CENT, MENU_ANA_GLOB, MENU_ANA_DIST, MENU_ANA_FLOW, MENU_ANA_EMB, -1 }, NULL, 1 },
+        { "Centrality & Roles", NODE_BRANCH, (int[]){ MENU_ANA_CENT_DEG, MENU_ANA_CENT_CLO, MENU_ANA_CENT_BTW, MENU_ANA_CENT_EIG, MENU_ANA_CENT_PAGER, MENU_ANA_CENT_HITS, -1 }, NULL, 2 },
+        { "Degree", NODE_LEAF, NULL, "ana_cent_deg", 3 },
+        { "Closeness", NODE_LEAF, NULL, "ana_cent_clo", 3 },
+        { "Betweenness", NODE_LEAF, NULL, "ana_cent_btw", 3 },
+        { "Eigenvector Centrality", NODE_LEAF, NULL, "ana_cent_eig", 3 },
+        { "PageRank", NODE_LEAF, NULL, "ana_cent_pager", 3 },
+        { "Hubs & Authorities", NODE_LEAF, NULL, "ana_cent_hits", 3 },
+        { "Global Network Properties", NODE_BRANCH, (int[]){ MENU_ANA_GLOB_DIAM, MENU_ANA_GLOB_RAD, MENU_ANA_GLOB_APL, MENU_ANA_GLOB_ASSORT, MENU_ANA_GLOB_MOD, MENU_ANA_GLOB_DENS, MENU_ANA_GLOB_TRANS, -1 }, NULL, 2 },
+        { "Diameter", NODE_LEAF, NULL, "ana_glob_diam", 3 },
+        { "Radius", NODE_LEAF, NULL, "ana_glob_rad", 3 },
+        { "Average Path Length", NODE_LEAF, NULL, "ana_glob_apl", 3 },
+        { "Assortativity", NODE_LEAF, NULL, "ana_glob_assort", 3 },
+        { "Modularity", NODE_LEAF, NULL, "ana_glob_mod", 3 },
+        { "Density", NODE_LEAF, NULL, "ana_glob_dens", 3 },
+        { "Transitivity", NODE_LEAF, NULL, "ana_glob_trans", 3 },
+        { "Distances & Paths", NODE_BRANCH, (int[]){ MENU_ANA_DIST_SP, MENU_ANA_DIST_ECC, -1 }, NULL, 2 },
+        { "Shortest Paths", NODE_BRANCH, (int[]){ MENU_ANA_DIST_SP_DIJ, MENU_ANA_DIST_SP_BF, MENU_ANA_DIST_SP_ASTAR, MENU_ANA_DIST_SP_JOH, -1 }, NULL, 3 },
+        { "Dijkstra", NODE_LEAF, NULL, "ana_dist_sp_dij", 4 },
+        { "Bellman-Ford", NODE_LEAF, NULL, "ana_dist_sp_bf", 4 },
+        { "A*", NODE_LEAF, NULL, "ana_dist_sp_astar", 4 },
+        { "Johnson", NODE_LEAF, NULL, "ana_dist_sp_joh", 4 },
+        { "Eccentricity", NODE_LEAF, NULL, "ana_dist_ecc", 3 },
+        { "Flows & Cuts", NODE_BRANCH, (int[]){ MENU_ANA_FLOW_MAX, MENU_ANA_FLOW_MIN, MENU_ANA_FLOW_GOM, MENU_ANA_FLOW_ADH, -1 }, NULL, 2 },
+        { "Maximum Flow", NODE_LEAF, NULL, "ana_flow_max", 3 },
+        { "Minimum Cut", NODE_LEAF, NULL, "ana_flow_min", 3 },
+        { "Gomory-Hu Tree", NODE_LEAF, NULL, "ana_flow_gom", 3 },
+        { "Adhesion / Cohesion", NODE_LEAF, NULL, "ana_flow_adh", 3 },
+        { "Graph Embedding", NODE_BRANCH, (int[]){ MENU_ANA_EMB_ADJ, MENU_ANA_EMB_LAP, -1 }, NULL, 2 },
+        { "Adjacency Spectral", NODE_LEAF, NULL, "ana_emb_adj", 3 },
+        { "Laplacian Spectral", NODE_LEAF, NULL, "ana_emb_lap", 3 },
 
-	// Create PageRank command
-	IgraphCommand *cmd_pagerank =
-		create_command("pagerank", "PageRank", wrapper_pagerank, 0);
+        // 6. Topology & Motifs
+        { "Topology & Motifs", NODE_BRANCH, (int[]){ MENU_TOP_COMP, MENU_TOP_CLIQ, MENU_TOP_CYC, MENU_TOP_MOT, MENU_TOP_ISO, MENU_TOP_COL, -1 }, NULL, 1 },
+        { "Components & Connectivity", NODE_BRANCH, (int[]){ MENU_TOP_COMP_CONN, MENU_TOP_COMP_BICON, MENU_TOP_COMP_ART, MENU_TOP_COMP_SEP, -1 }, NULL, 2 },
+        { "Connected Components", NODE_LEAF, NULL, "top_comp_conn", 3 },
+        { "Biconnected Components", NODE_LEAF, NULL, "top_comp_bicon", 3 },
+        { "Articulation Points", NODE_LEAF, NULL, "top_comp_art", 3 },
+        { "Vertex Separators", NODE_LEAF, NULL, "top_comp_sep", 3 },
+        { "Cliques & Independent Sets", NODE_BRANCH, (int[]){ MENU_TOP_CLIQ_MAXL, MENU_TOP_CLIQ_MAXM, MENU_TOP_CLIQ_IND, -1 }, NULL, 2 },
+        { "Maximal Cliques", NODE_LEAF, NULL, "top_cliq_maxl", 3 },
+        { "Maximum Cliques", NODE_LEAF, NULL, "top_cliq_maxm", 3 },
+        { "Independent Sets", NODE_LEAF, NULL, "top_cliq_ind", 3 },
+        { "Cycles & Paths", NODE_BRANCH, (int[]){ MENU_TOP_CYC_EUL, MENU_TOP_CYC_FUND, -1 }, NULL, 2 },
+        { "Eulerian Paths", NODE_LEAF, NULL, "top_cyc_eul", 3 },
+        { "Fundamental Cycles", NODE_LEAF, NULL, "top_cyc_fund", 3 },
+        { "Motifs & Censuses", NODE_BRANCH, (int[]){ MENU_TOP_MOT_TRI, MENU_TOP_MOT_DYA, MENU_TOP_MOT_NET, -1 }, NULL, 2 },
+        { "Triad Census", NODE_LEAF, NULL, "top_mot_tri", 3 },
+        { "Dyad Census", NODE_LEAF, NULL, "top_mot_dya", 3 },
+        { "Network Motifs", NODE_LEAF, NULL, "top_mot_net", 3 },
+        { "Graph Isomorphism", NODE_BRANCH, (int[]){ MENU_TOP_ISO_VF2, MENU_TOP_ISO_BLISS, -1 }, NULL, 2 },
+        { "VF2", NODE_LEAF, NULL, "top_iso_vf2", 3 },
+        { "Bliss", NODE_LEAF, NULL, "top_iso_bliss", 3 },
+        { "Graph Coloring", NODE_BRANCH, (int[]){ MENU_TOP_COL_GREEDY, -1 }, NULL, 2 },
+        { "Greedy Coloring", NODE_LEAF, NULL, "top_col_greedy", 3 },
 
-	// Create Betweenness command
-	IgraphCommand *cmd_betweenness =
-		create_command("betweenness", "Betweenness", wrapper_betweenness, 0);
+        // 7. Communities
+        { "Communities", NODE_BRANCH, (int[]){ MENU_COM_DET, MENU_COM_COMP, MENU_COM_GLET, MENU_COM_HRG, -1 }, NULL, 1 },
+        { "Detect Community Structure", NODE_BRANCH, (int[]){ MENU_COM_DET_LOUV, MENU_COM_DET_WALK, MENU_COM_DET_BTW, MENU_COM_DET_FAST, MENU_COM_DET_INFO, MENU_COM_DET_LAB, MENU_COM_DET_SPIN, -1 }, NULL, 2 },
+        { "Louvain Method", NODE_LEAF, NULL, "com_det_louv", 3 },
+        { "Walktrap", NODE_LEAF, NULL, "com_det_walk", 3 },
+        { "Edge Betweenness", NODE_LEAF, NULL, "com_det_btw", 3 },
+        { "Fast Greedy", NODE_LEAF, NULL, "com_det_fast", 3 },
+        { "Infomap", NODE_LEAF, NULL, "com_det_info", 3 },
+        { "Label Propagation", NODE_LEAF, NULL, "com_det_lab", 3 },
+        { "Spinglass", NODE_LEAF, NULL, "com_det_spin", 3 },
+        { "Compare Communities", NODE_BRANCH, (int[]){ MENU_COM_COMP_SJ, MENU_COM_COMP_ARI, -1 }, NULL, 2 },
+        { "Split-join Distance", NODE_LEAF, NULL, "com_comp_sj", 3 },
+        { "Adjusted Rand Index", NODE_LEAF, NULL, "com_comp_ari", 3 },
+        { "Graphlets", NODE_BRANCH, (int[]){ MENU_COM_GLET_BASIS, MENU_COM_GLET_PROJ, -1 }, NULL, 2 },
+        { "Basis", NODE_LEAF, NULL, "com_glet_basis", 3 },
+        { "Projections", NODE_LEAF, NULL, "com_glet_proj", 3 },
+        { "Hierarchical Random Graphs", NODE_BRANCH, (int[]){ MENU_COM_HRG_FIT, MENU_COM_HRG_CONS, -1 }, NULL, 2 },
+        { "Fit", NODE_LEAF, NULL, "com_hrg_fit", 3 },
+        { "Consensus Trees", NODE_LEAF, NULL, "com_hrg_cons", 3 },
 
-	// Create leaf nodes
-	MenuNode *shortest_path_node = create_menu_node("Shortest Path", NODE_LEAF);
-	shortest_path_node->command = cmd_shortest_path;
+        // 8. Processes & Traversal
+        { "Processes & Traversal", NODE_BRANCH, (int[]){ MENU_PRO_SEARCH, MENU_PRO_PROC, -1 }, NULL, 1 },
+        { "Search & Traversal", NODE_BRANCH, (int[]){ MENU_PRO_SEARCH_BFS, MENU_PRO_SEARCH_DFS, MENU_PRO_SEARCH_TOPO, -1 }, NULL, 2 },
+        { "Breadth-First Search", NODE_LEAF, NULL, "pro_search_bfs", 3 },
+        { "Depth-First Search", NODE_LEAF, NULL, "pro_search_dfs", 3 },
+        { "Topological Sorting", NODE_LEAF, NULL, "pro_search_topo", 3 },
+        { "Processes on Graphs", NODE_BRANCH, (int[]){ MENU_PRO_PROC_RW, MENU_PRO_PROC_RT, -1 }, NULL, 2 },
+        { "Simulate Random Walks", NODE_LEAF, NULL, "pro_proc_rw", 3 },
+        { "Rank / Transition", NODE_LEAF, NULL, "pro_proc_rt", 3 },
+    };
 
-	MenuNode *pagerank_node = create_menu_node("PageRank", NODE_LEAF);
-	pagerank_node->command = cmd_pagerank;
-
-	MenuNode *betweenness_node = create_menu_node("Betweenness", NODE_LEAF);
-	betweenness_node->command = cmd_betweenness;
-
-	// Create visualize leaf nodes
-	MenuNode *reset_layout_node = create_menu_node("Reset Layout", NODE_LEAF);
-	reset_layout_node->command = create_command("reset_layout", "Reset Layout", wrapper_reset_layout, 0);
-
-	MenuNode *cycle_colors_node = create_menu_node("Cycle Colors", NODE_LEAF);
-	cycle_colors_node->command = create_command("cycle_colors", "Cycle Colors", wrapper_cycle_colors, 0);
-
-	MenuNode *comm_arrange_node = create_menu_node("Arrangement", NODE_LEAF);
-	comm_arrange_node->command = create_command("comm_arrange", "Arrangement", wrapper_community_arrangement, 0);
-
-	// Build tree structure
-	paths_menu->num_children = 1;
-	paths_menu->children = (MenuNode **)malloc(sizeof(MenuNode *));
-	paths_menu->children[0] = shortest_path_node;
-
-	analysis_menu->num_children = 3;
-	analysis_menu->children = (MenuNode **)malloc(sizeof(MenuNode *) * 3);
-	analysis_menu->children[0] = paths_menu;
-	analysis_menu->children[1] = pagerank_node;
-	analysis_menu->children[2] = betweenness_node;
-
-	visualize_menu->num_children = 3;
-	visualize_menu->children = (MenuNode **)malloc(sizeof(MenuNode *) * 3);
-	visualize_menu->children[0] = reset_layout_node;
-	visualize_menu->children[1] = cycle_colors_node;
-	visualize_menu->children[2] = comm_arrange_node;
-
-	main_menu->num_children = 2;
-	main_menu->children = (MenuNode **)malloc(sizeof(MenuNode *) * 2);
-	main_menu->children[0] = analysis_menu;
-	main_menu->children[1] = visualize_menu;
-	main_menu->is_expanded = true;
-
-	// Copy to root (assuming root is pre-allocated)
-	*root = *main_menu;
-	free(main_menu);
-
-	assign_menu_icons(root);
+    init_menu_from_definitions(root, definitions, MENU_COUNT);
 }
 
 static void assign_menu_icons(MenuNode *node) {
@@ -358,7 +461,8 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 				}
 
 				float x_cursor = 0.0f;
-				x_cursor = -total_w * 0.5f;
+				// x_cursor = -total_w * 0.5f; // old centering
+				x_cursor = (padding_x * 0.4f) / world_text_scale; // Left-aligned with a small margin
 
 				for (int i = 0; i < len; i++) {
 					unsigned char c = current->label[i];
@@ -370,7 +474,7 @@ void generate_vulkan_menu_buffers(MenuNode *node,
 					glm_vec3_copy(world_pos, label_pos);
 					vec3 forward_off, down_off;
 					glm_vec3_scale(cam_front, -0.002f, forward_off); // Move slightly towards camera
-					glm_vec3_scale(up, -0.012f, down_off); // Centering adjustment
+					glm_vec3_scale(up, -0.015f, down_off); // Centering adjustment
 					glm_vec3_add(label_pos, forward_off, label_pos);
 					glm_vec3_add(label_pos, down_off, label_pos);
 
@@ -477,4 +581,45 @@ MenuNode* find_menu_node(MenuNode* root, const char* label) {
         if (res) return res;
     }
     return NULL;
+}
+
+// Data-driven initialization helper
+void init_menu_from_definitions(MenuNode* root, const MenuDefinition* definitions, int num_definitions) {
+    if (num_definitions <= 0) return;
+
+    // First pass: Create all nodes
+    MenuNode** nodes = (MenuNode**)malloc(sizeof(MenuNode*) * num_definitions);
+    for (int i = 0; i < num_definitions; i++) {
+        nodes[i] = create_menu_node(definitions[i].label, definitions[i].type);
+        if (definitions[i].type == NODE_LEAF && definitions[i].command_id) {
+            // Assign placeholder commands
+            nodes[i]->command = create_command(definitions[i].command_id, definitions[i].label, NULL, 0);
+        }
+    }
+
+    // Second pass: Link children
+    for (int i = 0; i < num_definitions; i++) {
+        if (definitions[i].type == NODE_BRANCH && definitions[i].child_ids) {
+            int count = 0;
+            while (definitions[i].child_ids[count] != -1) count++;
+            
+            nodes[i]->num_children = count;
+            nodes[i]->children = (MenuNode**)malloc(sizeof(MenuNode*) * count);
+            for (int j = 0; j < count; j++) {
+                int child_idx = definitions[i].child_ids[j];
+                if (child_idx >= 0 && child_idx < num_definitions) {
+                    nodes[i]->children[j] = nodes[child_idx];
+                }
+            }
+        }
+    }
+
+    // Root is the first node in the array
+    *root = *nodes[0];
+    root->is_expanded = true; // Ensure top level is visible
+    
+    // Free the nodes array (pointers are now in the tree)
+    free(nodes);
+
+    assign_menu_icons(root);
 }

@@ -71,26 +71,34 @@ void update_app_state(AppState* state) {
             break;
             
         case STATE_EXECUTING:
-            if (app->pending_command && app->pending_command->execute) {
-                printf("[State] Executing command: %s\n", app->pending_command->display_name);
-                
-                ExecutionContext exec_ctx;
-                exec_ctx.current_graph = app->target_graph; // Use the graph in AppContext
-                exec_ctx.params = app->pending_command->params;
-                exec_ctx.num_params = app->pending_command->num_params;
-                exec_ctx.update_visuals_callback = NULL; // To be set
-                
-                app->pending_command->execute(&exec_ctx);
-                
-                // Check if this command produced visual results
-                if (app->pending_command->produces_visual_output) {
-                    app->has_visual_results = true;
-                    app->current_state = STATE_DISPLAY_RESULTS;
+            if (app->pending_command) {
+                if (app->pending_command->execute) {
+                    printf("[State] Executing command: %s\n", app->pending_command->display_name);
+                    
+                    ExecutionContext exec_ctx;
+                    exec_ctx.current_graph = app->target_graph; // Use the graph in AppContext
+                    exec_ctx.params = app->pending_command->params;
+                    exec_ctx.num_params = app->pending_command->num_params;
+                    exec_ctx.update_visuals_callback = NULL; // To be set
+                    
+                    app->pending_command->execute(&exec_ctx);
+                    
+                    // Check if this command produced visual results
+                    if (app->pending_command->produces_visual_output) {
+                        app->has_visual_results = true;
+                        app->current_state = STATE_DISPLAY_RESULTS;
+                    } else {
+                        // Reset after execution but keep menu open
+                        app->pending_command = NULL;
+                        app->current_state = STATE_MENU_OPEN;
+                    }
                 } else {
-                    // Reset after execution but keep menu open
+                    printf("[State] Command '%s' has no implementation.\n", app->pending_command->display_name);
                     app->pending_command = NULL;
                     app->current_state = STATE_MENU_OPEN;
                 }
+            } else {
+                app->current_state = STATE_MENU_OPEN;
             }
             break;
             
