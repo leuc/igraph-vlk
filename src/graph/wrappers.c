@@ -6,6 +6,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <igraph_progress.h>
+
+// Custom progress handler for our application
+static igraph_error_t igraph_vlk_progress_handler(const char *message, igraph_real_t percent, void *data) {
+    printf("[Progress] %s: %.1f%%\n", message, percent);
+    return IGRAPH_SUCCESS;
+}
+
+// Helper to set up progress handler for a layout function
+static void setup_progress_handler(void) {
+    igraph_set_progress_handler(igraph_vlk_progress_handler);
+}
+
+// Helper to remove progress handler
+static void cleanup_progress_handler(void) {
+    igraph_set_progress_handler(NULL);
+}
 
 // Helper function to apply a computed layout matrix to the graph and update visualization
 static void apply_layout_to_graph(ExecutionContext* ctx, igraph_matrix_t* layout) {
@@ -146,6 +163,9 @@ void wrapper_lay_force_drl(ExecutionContext* ctx) {
     igraph_layout_drl_options_t options;
     igraph_layout_drl_options_init(&options, IGRAPH_LAYOUT_DRL_DEFAULT);
     
+    // Set up progress handler for DRL layout
+    setup_progress_handler();
+    
     igraph_error_t result = igraph_layout_drl_3d(
         ctx->current_graph, 
         &layout, 
@@ -153,6 +173,9 @@ void wrapper_lay_force_drl(ExecutionContext* ctx) {
         &options,  /* options */
         NULL  /* weights */
     );
+    
+    // Clean up progress handler
+    cleanup_progress_handler();
     
     if (result != IGRAPH_SUCCESS) {
         fprintf(stderr, "[Wrapper] Error: igraph_layout_drl_3d failed\n");
@@ -244,6 +267,9 @@ void wrapper_lay_tree_rt(ExecutionContext* ctx) {
         igraph_vector_int_set(&roots, 0, 0);
     }
     
+    // Set up progress handler for Reingold-Tilford layout
+    setup_progress_handler();
+    
     igraph_error_t result = igraph_layout_reingold_tilford(
         ctx->current_graph, 
         &layout, 
@@ -251,6 +277,9 @@ void wrapper_lay_tree_rt(ExecutionContext* ctx) {
         vcount > 0 ? &roots : NULL,  /* roots */
         NULL   /* rootlevel */
     );
+    
+    // Clean up progress handler
+    cleanup_progress_handler();
     
     igraph_vector_int_destroy(&roots);
     
