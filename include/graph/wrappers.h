@@ -16,7 +16,7 @@ void wrapper_community_arrangement(ExecutionContext* ctx);
 void wrapper_lay_force_fr(ExecutionContext* ctx);
 void wrapper_lay_force_kk(ExecutionContext* ctx);
 void wrapper_lay_force_drl(ExecutionContext* ctx);
-void wrapper_lay_force_gopt(ExecutionContext* ctx);
+void wrapper_lay_force_dh(ExecutionContext* ctx);
 void wrapper_lay_tree_rt(ExecutionContext* ctx);
 void wrapper_lay_tree_sug(ExecutionContext* ctx);
 void wrapper_lay_geo_circle(ExecutionContext* ctx);

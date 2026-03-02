@@ -67,7 +67,7 @@ void init_menu_tree(MenuNode *root) {
         MENU_GEN_SPA, MENU_GEN_SPA_GEO, MENU_GEN_SPA_GAB,
         // 4. Layout
         MENU_LAYOUT,
-        MENU_LAY_FORCE, MENU_LAY_FORCE_FR, MENU_LAY_FORCE_KK, MENU_LAY_FORCE_DRL, MENU_LAY_FORCE_GOPT,
+        MENU_LAY_FORCE, MENU_LAY_FORCE_FR, MENU_LAY_FORCE_KK, MENU_LAY_FORCE_DRL, MENU_LAY_FORCE_DH,
         MENU_LAY_TREE, MENU_LAY_TREE_RT, MENU_LAY_TREE_SUG,
         MENU_LAY_GEO, MENU_LAY_GEO_CIRCLE, MENU_LAY_GEO_STAR, MENU_LAY_GEO_GRID, MENU_LAY_GEO_SPHERE, MENU_LAY_GEO_RAND,
         MENU_LAY_BIP, MENU_LAY_BIP_MDS, MENU_LAY_BIP_SUG,
@@ -135,11 +135,11 @@ void init_menu_tree(MenuNode *root) {
 
         // 4. Layout
         { "Layout", NODE_BRANCH, (int[]){ MENU_LAY_FORCE, MENU_LAY_TREE, MENU_LAY_GEO, MENU_LAY_BIP, -1 }, NULL, 1 },
-        { "Force-Directed Layouts", NODE_BRANCH, (int[]){ MENU_LAY_FORCE_FR, MENU_LAY_FORCE_KK, MENU_LAY_FORCE_DRL, MENU_LAY_FORCE_GOPT, -1 }, NULL, 2 },
+        { "Force-Directed Layouts", NODE_BRANCH, (int[]){ MENU_LAY_FORCE_FR, MENU_LAY_FORCE_KK, MENU_LAY_FORCE_DRL, MENU_LAY_FORCE_DH, -1 }, NULL, 2 },
         { "Fruchterman-Reingold", NODE_LEAF, NULL, "lay_force_fr", 3 },
         { "Kamada-Kawai", NODE_LEAF, NULL, "lay_force_kk", 3 },
         { "Distributed Recursive", NODE_LEAF, NULL, "lay_force_drl", 3 },
-        { "GraphOpt", NODE_LEAF, NULL, "lay_force_gopt", 3 },
+        { "Davidson-Harel", NODE_LEAF, NULL, "lay_force_dh", 3 },
         { "Tree & Hierarchical", NODE_BRANCH, (int[]){ MENU_LAY_TREE_RT, MENU_LAY_TREE_SUG, -1 }, NULL, 2 },
         { "Reingold-Tilford", NODE_LEAF, NULL, "lay_tree_rt", 3 },
         { "Sugiyama", NODE_LEAF, NULL, "lay_tree_sug", 3 },
@@ -627,8 +627,8 @@ void init_menu_from_definitions(MenuNode* root, const MenuDefinition* definition
                 nodes[i]->command->execute = wrapper_lay_force_kk;
             } else if (strcmp(nodes[i]->command->id_name, "lay_force_drl") == 0) {
                 nodes[i]->command->execute = wrapper_lay_force_drl;
-            } else if (strcmp(nodes[i]->command->id_name, "lay_force_gopt") == 0) {
-                nodes[i]->command->execute = wrapper_lay_force_gopt;
+            } else if (strcmp(nodes[i]->command->id_name, "lay_force_dh") == 0) {
+                nodes[i]->command->execute = wrapper_lay_force_dh;
             } else if (strcmp(nodes[i]->command->id_name, "lay_tree_rt") == 0) {
                 nodes[i]->command->execute = wrapper_lay_tree_rt;
             } else if (strcmp(nodes[i]->command->id_name, "lay_tree_sug") == 0) {

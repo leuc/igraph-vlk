@@ -106,7 +106,7 @@ void wrapper_lay_force_kk(ExecutionContext* ctx) {
     igraph_error_t result = igraph_layout_kamada_kawai_3d(
         ctx->current_graph, 
         &layout, 
-        1,  /* use_seed */
+        0,  /* use_seed - start from spherical init for cleaner results */
         vcount * 10,  /* maxiter */
         0.0,  /* epsilon */
         (igraph_real_t)vcount,  /* kkconst */
@@ -164,8 +164,60 @@ void wrapper_lay_force_drl(ExecutionContext* ctx) {
     igraph_matrix_destroy(&layout);
 }
 
-void wrapper_lay_force_gopt(ExecutionContext* ctx) {
-    fprintf(stderr, "[Wrapper] Error: GraphOpt layout is not available in igraph 1.0.1\n");
+void wrapper_lay_force_dh(ExecutionContext* ctx) {
+    if (!ctx || !ctx->current_graph) {
+        fprintf(stderr, "[Wrapper] Error: Invalid context for Davidson-Harel\n");
+        return;
+    }
+    
+    igraph_integer_t vcount = igraph_vcount(ctx->current_graph);
+    igraph_integer_t ecount = igraph_ecount(ctx->current_graph);
+    
+    igraph_matrix_t layout;
+    if (igraph_matrix_init(&layout, vcount, 3) != IGRAPH_SUCCESS) {
+        fprintf(stderr, "[Wrapper] Error: Failed to initialize layout matrix\n");
+        return;
+    }
+    
+    // Calculate graph density for weight parameters
+    igraph_real_t density = 0.0;
+    if (vcount > 1) {
+        density = (2.0 * ecount) / ((vcount * (vcount - 1)));
+    }
+    
+    // Reasonable default values based on documentation
+    double coolfact = 0.75;  // Cooling factor
+    double w_dist = 1.0;     // Node-node distances
+    double w_border = 0.5;   // Distance from border (non-zero to keep nodes inside)
+    double w_edge_len = density / 10.0;  // Edge length weight
+    double w_edge_cross = 1.0 - sqrt(density);  // Edge crossing weight
+    double w_node_edge = (1.0 - density) / 5.0;  // Node-edge distance weight
+    
+    // Fine tuning iterations: max(10, log2(n))
+    igraph_int_t fineiter = (igraph_int_t)fmax(10, (double)log2((double)vcount));
+    
+    igraph_error_t result = igraph_layout_davidson_harel(
+        ctx->current_graph,
+        &layout,
+        0,      // use_seed - start from spherical/init configuration
+        10,     // maxiter - reasonable value for smaller graphs
+        fineiter, // fineiter - fine tuning phase
+        coolfact,
+        w_dist,
+        w_border,
+        w_edge_len,
+        w_edge_cross,
+        w_node_edge
+    );
+    
+    if (result != IGRAPH_SUCCESS) {
+        fprintf(stderr, "[Wrapper] Error: igraph_layout_davidson_haret failed\n");
+        igraph_matrix_destroy(&layout);
+        return;
+    }
+    
+    apply_layout_to_graph(ctx, &layout);
+    igraph_matrix_destroy(&layout);
 }
 
 // ============================================================================
