@@ -74,7 +74,7 @@ void graph_refresh_data(GraphData *data) {
 			has_label ? strdup(VAS(&data->g, "label", i)) : NULL;
 		igraph_vector_int_t neighbors;
 		igraph_vector_int_init(&neighbors, 0);
-		igraph_neighbors(&data->g, &neighbors, i, IGRAPH_ALL);
+		igraph_neighbors(&data->g, &neighbors, i, IGRAPH_ALL, IGRAPH_NO_LOOPS, 1);
 		data->nodes[i].degree = igraph_vector_int_size(&neighbors);
 		igraph_vector_int_destroy(&neighbors);
 		data->nodes[i].coreness = VECTOR(coreness)[i];

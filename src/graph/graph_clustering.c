@@ -66,7 +66,8 @@ void graph_cluster(GraphData *data, ClusterType type) {
 	}
 	case CLUSTER_LABEL_PROP:
 		igraph_community_label_propagation(&data->g, &membership, IGRAPH_ALL,
-										   weights_ptr, NULL, NULL);
+										   weights_ptr, NULL, NULL,
+										   IGRAPH_LPA_FAST);
 		break;
 	case CLUSTER_MULTILEVEL: {
 		igraph_vector_t mo;
@@ -77,9 +78,25 @@ void graph_cluster(GraphData *data, ClusterType type) {
 		break;
 	}
 	case CLUSTER_LEIDEN:
-		igraph_community_leiden(&data->g, weights_ptr, node_weights_ptr,
-								1.0 / (2.0 * data->edge_count), 0.01, false,
-								100, &membership, NULL, NULL);
+		{
+			// Use leiden_simple for undirected graphs to avoid vertex weight errors
+			igraph_int_t nb_clusters;
+			igraph_real_t quality;
+			if (igraph_is_directed(&data->g)) {
+				// For directed graphs, use full leiden with weights
+				igraph_community_leiden(&data->g, weights_ptr, node_weights_ptr,
+										node_weights_ptr,
+										1.0 / (2.0 * data->edge_count), 0.01, 1,
+										100, &membership, &nb_clusters, &quality);
+			} else {
+				// For undirected graphs, use leiden_simple without vertex weights
+				igraph_community_leiden_simple(&data->g, weights_ptr,
+											   IGRAPH_LEIDEN_OBJECTIVE_CPM,
+											   1.0 / (2.0 * data->edge_count),
+											   0.01, 1, 100, &membership,
+											   &nb_clusters, &quality);
+			}
+		}
 		break;
 	default:
 		break;

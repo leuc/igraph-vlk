@@ -168,7 +168,8 @@ static float compute_energy(OpenOrdContext *ctx, GraphData *g, int node_idx,
 
 	igraph_vector_int_t neighbors;
 	igraph_vector_int_init(&neighbors, 0);
-	igraph_neighbors(&g->g, &neighbors, node_idx, IGRAPH_ALL);
+	igraph_neighbors(&g->g, &neighbors, node_idx, IGRAPH_ALL,
+					 IGRAPH_NO_LOOPS, 1);
 
 	for (int i = 0; i < igraph_vector_int_size(&neighbors); i++) {
 		int neighbor_idx = VECTOR(neighbors)[i];
@@ -199,7 +200,8 @@ static void solve_analytic(OpenOrdContext *ctx, GraphData *g, int node_idx,
 
 	igraph_vector_int_t neighbors;
 	igraph_vector_int_init(&neighbors, 0);
-	igraph_neighbors(&g->g, &neighbors, node_idx, IGRAPH_ALL);
+	igraph_neighbors(&g->g, &neighbors, node_idx, IGRAPH_ALL,
+					 IGRAPH_NO_LOOPS, 1);
 
 	for (int i = 0; i < igraph_vector_int_size(&neighbors); i++) {
 		int n_idx = VECTOR(neighbors)[i];

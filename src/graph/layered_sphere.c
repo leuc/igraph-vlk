@@ -123,7 +123,7 @@ double calculate_move_delta_intra(const igraph_t *ig,
 
 	igraph_vector_int_t neis;
 	igraph_vector_int_init(&neis, 0);
-	igraph_incident(ig, &neis, u, IGRAPH_ALL);
+	igraph_incident(ig, &neis, u, IGRAPH_ALL, IGRAPH_NO_LOOPS);
 	for (int i = 0; i < igraph_vector_int_size(&neis); i++) {
 		igraph_integer_t from, to;
 		igraph_edge(ig, VECTOR(neis)[i], &from, &to);
@@ -145,7 +145,7 @@ double calculate_move_delta_intra(const igraph_t *ig,
 
 	if (v != -1) {
 		igraph_vector_int_init(&neis, 0);
-		igraph_incident(ig, &neis, v, IGRAPH_ALL);
+		igraph_incident(ig, &neis, v, IGRAPH_ALL, IGRAPH_NO_LOOPS);
 		for (int i = 0; i < igraph_vector_int_size(&neis); i++) {
 			igraph_integer_t from, to;
 			igraph_edge(ig, VECTOR(neis)[i], &from, &to);
@@ -189,7 +189,7 @@ double calculate_move_delta_inter(const igraph_t *ig,
 
 	igraph_vector_int_t neis;
 	igraph_vector_int_init(&neis, 0);
-	igraph_incident(ig, &neis, u, IGRAPH_ALL);
+	igraph_incident(ig, &neis, u, IGRAPH_ALL, IGRAPH_NO_LOOPS);
 	for (int i = 0; i < igraph_vector_int_size(&neis); i++) {
 		igraph_integer_t from, to;
 		igraph_edge(ig, VECTOR(neis)[i], &from, &to);
@@ -214,7 +214,7 @@ double calculate_move_delta_inter(const igraph_t *ig,
 
 	if (v != -1) {
 		igraph_vector_int_init(&neis, 0);
-		igraph_incident(ig, &neis, v, IGRAPH_ALL);
+		igraph_incident(ig, &neis, v, IGRAPH_ALL, IGRAPH_NO_LOOPS);
 		for (int i = 0; i < igraph_vector_int_size(&neis); i++) {
 			igraph_integer_t from, to;
 			igraph_edge(ig, VECTOR(neis)[i], &from, &to);
@@ -299,13 +299,15 @@ bool layered_sphere_step(LayeredSphereContext *ctx, GraphData *graph) {
 
 		igraph_vector_int_t membership;
 		igraph_vector_int_init(&membership, vcount);
+
 		double graph_density =
-			(vcount > 1) ? (2.0 * ecount) / ((double)vcount * (vcount - 1))
-						 : 0.0;
+				(vcount > 1) ? (2.0 * ecount) / ((double)vcount * (vcount - 1))
+													 : 0.0;
 		double cpm_resolution = fmax(graph_density * 3.0, 0.001);
 
-		igraph_community_leiden(&undirected_ig, NULL, NULL, cpm_resolution,
-								0.01, true, 2, &membership, NULL, NULL);
+		igraph_community_leiden(&undirected_ig, NULL, NULL, NULL,
+								cpm_resolution, 0.01, true, 2, &membership,
+								NULL, NULL);
 
 		int num_communities = get_vector_int_max(&membership) + 1;
 		printf("[DEBUG] Leiden CPM Resolution %.4f. Found %d communities.\n",
@@ -535,9 +537,9 @@ bool layered_sphere_step(LayeredSphereContext *ctx, GraphData *graph) {
 
 			igraph_vector_int_t neis;
 			igraph_vector_int_init(&neis, 0);
-			igraph_incident(ig, &neis, u, IGRAPH_ALL);
+			igraph_incident(ig, &neis, u, IGRAPH_ALL, IGRAPH_NO_LOOPS);
 
-			for (int j = 0; j < igraph_vector_int_size(&neis); j++) {
+			for (int j = 0; j < (int)igraph_vector_int_size(&neis); j++) {
 				igraph_integer_t from, to;
 				igraph_edge(ig, VECTOR(neis)[j], &from, &to);
 				int neighbor = (from == u) ? to : from;
