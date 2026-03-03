@@ -10,16 +10,29 @@
 // Forward declarations of wrapper functions that will run in worker thread
 static void* execute_wrapper_job(WorkerJob* job);
 
+// Thread-local pointer to current job for progress reporting
+static _Thread_local WorkerJob* tls_current_job = NULL;
+
+// igraph progress handler callback
+static igraph_error_t igraph_progress_handler(const char* message, igraph_real_t percent, void* data) {
+    if (tls_current_job) {
+        float p = (float)percent / 100.0f;
+        atomic_store_explicit(&tls_current_job->progress, p, memory_order_release);
+    }
+    return IGRAPH_SUCCESS;
+}
+
 // Worker thread function
 static void* worker_thread_func(void* arg) {
     WorkerThreadContext* context = (WorkerThreadContext*)arg;
     
-    // Initialize thread-local RNG to avoid "Insufficient memory to initialize vector" crash
+    // Initialize thread-local RNG
     igraph_rng_t thread_rng;
     igraph_rng_init(&thread_rng, &igraph_rngtype_mt19937);
     igraph_rng_set_default(&thread_rng);
-    // Optionally seed with time for different results each run
-    // igraph_rng_seed(&thread_rng, (unsigned int)time(NULL));
+    
+    // Set progress handler for this thread
+    igraph_set_progress_handler(igraph_progress_handler);
     
     while (context->running) {
         pthread_mutex_lock(&context->queue_mutex);
@@ -42,12 +55,18 @@ static void* worker_thread_func(void* arg) {
         
         pthread_mutex_unlock(&context->queue_mutex);
         
+        // Store in TLS for progress reporting
+        tls_current_job = job;
+        
         // Update job status to RUNNING - using atomic store for non-blocking polling
         atomic_store_explicit(&job->status, JOB_STATUS_RUNNING, memory_order_release);
         atomic_store_explicit(&job->progress, 0.0f, memory_order_release);
         
         // Execute the job WITHOUT holding queue_mutex or job->mutex
         execute_wrapper_job(job);
+        
+        // Clear TLS
+        tls_current_job = NULL;
         
         // Update job status based on outcome if not already set by execute_wrapper_job
         if (atomic_load_explicit(&job->status, memory_order_acquire) == JOB_STATUS_RUNNING) {
