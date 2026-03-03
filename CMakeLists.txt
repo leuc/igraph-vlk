@@ -68,6 +68,7 @@ add_executable(igraph-vlk
     src/graph/layered_sphere.c
     src/graph/graph_actions.c
     src/graph/wrappers.c
+    src/graph/worker_thread.c
 
     # Interaction modules
     src/interaction/camera.c

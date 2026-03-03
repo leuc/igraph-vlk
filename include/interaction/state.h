@@ -127,6 +127,7 @@ typedef enum {
     STATE_AWAITING_SELECTION, // User must pick nodes/edges with the mouse/laser
     STATE_AWAITING_INPUT,     // Floating 3D form (sliders/text)
     STATE_EXECUTING,          // Calculating (blocks input or shows progress bar)
+    STATE_JOB_IN_PROGRESS,    // Long-running operation in worker thread
     STATE_DISPLAY_RESULTS     // Showing execution results (overlays, histograms, etc.)
 } AppInteractionState;
 

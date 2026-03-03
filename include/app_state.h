@@ -10,6 +10,7 @@
 #include "vulkan/animation_manager.h"
 #include "graph/graph_core.h"
 #include "graph/graph_types.h"
+#include "graph/worker_thread.h"
 #include "interaction/camera.h"
 #include "interaction/state.h"
 
@@ -50,5 +51,14 @@ typedef struct AppState {
 
     /* FSM Menu System */
     AppContext app_ctx;
+    
+    /* Worker thread for long-running operations */
+    WorkerThreadContext worker_ctx;
+    
+    /* Job tracking */
+    WorkerJob* current_worker_job;
+    bool job_in_progress;
+    char job_status_message[256];
+    float job_progress;
 } AppState;
 

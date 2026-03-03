@@ -124,6 +124,22 @@ int main(int argc, char **argv) {
     init_menu_tree(root_menu);
     app_context_init(&app.app_ctx, &app.current_graph.g, root_menu);
     app.renderer.app_ctx_ptr = &app.app_ctx;
+    
+    // Initialize worker thread for long-running operations
+    if (worker_thread_init(&app.worker_ctx, 10) != 0) {
+        fprintf(stderr, "Failed to initialize worker thread\n");
+        destroy_menu_tree(root_menu);
+        graph_free_data(&app.current_graph);
+        animation_manager_cleanup(&app.anim_manager);
+        renderer_cleanup(&app.renderer);
+        glfwDestroyWindow(app.window);
+        glfwTerminate();
+        return EXIT_FAILURE;
+    }
+    app.current_worker_job = NULL;
+    app.job_in_progress = false;
+    app.job_progress = 0.0f;
+    strcpy(app.job_status_message, "Ready");
 
     // Initialize timing
     float lastFrame = 0.0f;
@@ -180,6 +196,7 @@ int main(int argc, char **argv) {
     }
 
     // Cleanup
+    worker_thread_cleanup(&app.worker_ctx);
     app_context_destroy(&app.app_ctx);
     destroy_menu_tree(root_menu);
     graph_free_data(&app.current_graph);
