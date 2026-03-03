@@ -3,6 +3,7 @@
 
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 #include "interaction/state.h"
 
 // Job types for worker thread
@@ -26,18 +27,19 @@ typedef enum {
     JOB_STATUS_RUNNING,
     JOB_STATUS_COMPLETED,
     JOB_STATUS_FAILED,
-    JOB_STATUS_CANCELLED
+    JOB_STATUS_CANCELLED,
+    JOB_STATUS_NONE
 } WorkerJobStatus;
 
 // Job structure
 typedef struct {
     WorkerJobType type;
-    WorkerJobStatus status;
+    _Atomic WorkerJobStatus status;
     ExecutionContext* ctx;
     void* result_data;
     igraph_matrix_t* result_matrix;  // Store layout result from worker
     char error_message[256];
-    float progress; // 0.0 to 1.0
+    _Atomic float progress; // 0.0 to 1.0
     pthread_mutex_t mutex;
 } WorkerJob;
 

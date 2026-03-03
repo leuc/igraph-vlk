@@ -42,22 +42,18 @@ static void* worker_thread_func(void* arg) {
         
         pthread_mutex_unlock(&context->queue_mutex);
         
-        // Update job status and execute
-        pthread_mutex_lock(&job->mutex);
-        job->status = JOB_STATUS_RUNNING;
-        job->progress = 0.0f;
-        pthread_mutex_unlock(&job->mutex);
+        // Update job status to RUNNING - using atomic store for non-blocking polling
+        atomic_store_explicit(&job->status, JOB_STATUS_RUNNING, memory_order_release);
+        atomic_store_explicit(&job->progress, 0.0f, memory_order_release);
         
-        // Execute the job
+        // Execute the job WITHOUT holding queue_mutex or job->mutex
         execute_wrapper_job(job);
         
-        // Update job as completed
-        pthread_mutex_lock(&job->mutex);
-        if (job->status == JOB_STATUS_RUNNING) {
-            job->status = JOB_STATUS_COMPLETED;
-            job->progress = 1.0f;
+        // Update job status based on outcome if not already set by execute_wrapper_job
+        if (atomic_load_explicit(&job->status, memory_order_acquire) == JOB_STATUS_RUNNING) {
+            atomic_store_explicit(&job->progress, 1.0f, memory_order_release);
+            atomic_store_explicit(&job->status, JOB_STATUS_COMPLETED, memory_order_release);
         }
-        pthread_mutex_unlock(&job->mutex);
         
         // Clear current job
         pthread_mutex_lock(&context->queue_mutex);
@@ -155,9 +151,9 @@ WorkerJob* worker_thread_submit_job(WorkerThreadContext* context,
     
     memset(job, 0, sizeof(WorkerJob));
     job->type = type;
-    job->status = JOB_STATUS_PENDING;
+    atomic_init(&job->status, JOB_STATUS_PENDING);
     job->ctx = ctx_copy;  // Store heap-allocated copy
-    job->progress = 0.0f;
+    atomic_init(&job->progress, 0.0f);
     job->result_matrix = NULL;
     
     if (pthread_mutex_init(&job->mutex, NULL) != 0) {
@@ -187,15 +183,16 @@ bool worker_thread_cancel_job(WorkerThreadContext* context, WorkerJob* job) {
         return false;
     }
     
-    pthread_mutex_lock(&job->mutex);
-    if (job->status == JOB_STATUS_RUNNING) {
-        job->status = JOB_STATUS_CANCELLED;
+    WorkerJobStatus status = atomic_load_explicit(&job->status, memory_order_acquire);
+    if (status == JOB_STATUS_RUNNING || status == JOB_STATUS_PENDING) {
+        atomic_store_explicit(&job->status, JOB_STATUS_CANCELLED, memory_order_release);
+        pthread_mutex_lock(&job->mutex);
         strncpy(job->error_message, "Job cancelled by user", sizeof(job->error_message) - 1);
+        pthread_mutex_unlock(&job->mutex);
         
         // TODO: Implement actual cancellation mechanism
         // This would require cooperative cancellation in igraph functions
     }
-    pthread_mutex_unlock(&job->mutex);
     
     return true;
 }
@@ -203,16 +200,14 @@ bool worker_thread_cancel_job(WorkerThreadContext* context, WorkerJob* job) {
 // Get job status and progress
 WorkerJobStatus worker_thread_get_job_status(WorkerJob* job, float* progress) {
     if (!job) {
-        return JOB_STATUS_FAILED;
+        return JOB_STATUS_NONE;
     }
     
-    WorkerJobStatus status;
-    pthread_mutex_lock(&job->mutex);
-    status = job->status;
+    // Non-blocking polling using atomics
+    WorkerJobStatus status = atomic_load_explicit(&job->status, memory_order_acquire);
     if (progress) {
-        *progress = job->progress;
+        *progress = atomic_load_explicit(&job->progress, memory_order_acquire);
     }
-    pthread_mutex_unlock(&job->mutex);
     
     return status;
 }
@@ -227,9 +222,7 @@ WorkerJobStatus worker_thread_wait_for_job(WorkerJob* job) {
     WorkerJobStatus status;
     do {
         usleep(10000); // 10ms
-        pthread_mutex_lock(&job->mutex);
-        status = job->status;
-        pthread_mutex_unlock(&job->mutex);
+        status = atomic_load_explicit(&job->status, memory_order_acquire);
     } while (status == JOB_STATUS_PENDING || status == JOB_STATUS_RUNNING);
     
     return status;
@@ -337,25 +330,22 @@ static void* execute_wrapper_job(WorkerJob* job) {
     igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
     if (!result) {
         pthread_mutex_lock(&job->mutex);
-        job->status = JOB_STATUS_FAILED;
         strncpy(job->error_message, "Failed to allocate result matrix", sizeof(job->error_message) - 1);
         pthread_mutex_unlock(&job->mutex);
+        atomic_store_explicit(&job->status, JOB_STATUS_FAILED, memory_order_release);
         return NULL;
     }
     
     if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
         free(result);
         pthread_mutex_lock(&job->mutex);
-        job->status = JOB_STATUS_FAILED;
         strncpy(job->error_message, "Failed to initialize result matrix", sizeof(job->error_message) - 1);
         pthread_mutex_unlock(&job->mutex);
+        atomic_store_explicit(&job->status, JOB_STATUS_FAILED, memory_order_release);
         return NULL;
     }
     
-    // Set job as running
-    pthread_mutex_lock(&job->mutex);
-    job->status = JOB_STATUS_RUNNING;
-    pthread_mutex_unlock(&job->mutex);
+    // Status is already set to JOB_STATUS_RUNNING by the worker thread loop
     
     igraph_error_t result_code = IGRAPH_SUCCESS;
     
@@ -493,9 +483,9 @@ static void* execute_wrapper_job(WorkerJob* job) {
             igraph_matrix_t dist_matrix;
             if (igraph_matrix_init(&dist_matrix, vcount, vcount) != IGRAPH_SUCCESS) {
                 pthread_mutex_lock(&job->mutex);
-                job->status = JOB_STATUS_FAILED;
                 strncpy(job->error_message, "Failed to allocate distance matrix", sizeof(job->error_message) - 1);
                 pthread_mutex_unlock(&job->mutex);
+                atomic_store_explicit(&job->status, JOB_STATUS_FAILED, memory_order_release);
                 return NULL;
             }
             
@@ -516,10 +506,10 @@ static void* execute_wrapper_job(WorkerJob* job) {
             if (dist_result != IGRAPH_SUCCESS) {
                 igraph_matrix_destroy(&dist_matrix);
                 pthread_mutex_lock(&job->mutex);
-                job->status = JOB_STATUS_FAILED;
                 snprintf(job->error_message, sizeof(job->error_message), 
                          "igraph_distances_dijkstra failed with code %d", dist_result);
                 pthread_mutex_unlock(&job->mutex);
+                atomic_store_explicit(&job->status, JOB_STATUS_FAILED, memory_order_release);
                 return NULL;
             }
             
@@ -534,30 +524,40 @@ static void* execute_wrapper_job(WorkerJob* job) {
             break;
         }
             
+        case JOB_TYPE_LAYOUT_UMAP:
+            result_code = igraph_layout_umap_3d(
+                graph,
+                result,
+                1,  /* use_seed */
+                NULL, /* distances */
+                0.1, /* min_dist */
+                300, /* iterations */
+                0 /* fast_approximate */
+            );
+            break;
+            
         default:
             // Unknown job type
             pthread_mutex_lock(&job->mutex);
-            job->status = JOB_STATUS_FAILED;
             snprintf(job->error_message, sizeof(job->error_message), 
                      "Unknown job type: %d", (int)job->type);
             pthread_mutex_unlock(&job->mutex);
+            atomic_store_explicit(&job->status, JOB_STATUS_FAILED, memory_order_release);
             break;
     }
     
     // Store result in job if successful
     if (result_code == IGRAPH_SUCCESS) {
-        pthread_mutex_lock(&job->mutex);
         job->result_matrix = result;
-        job->status = JOB_STATUS_COMPLETED;
-        job->progress = 1.0f;
-        pthread_mutex_unlock(&job->mutex);
+        atomic_store_explicit(&job->progress, 1.0f, memory_order_release);
+        atomic_store_explicit(&job->status, JOB_STATUS_COMPLETED, memory_order_release);
     } else {
-        free(result);
         igraph_matrix_destroy(result);
+        free(result);
         pthread_mutex_lock(&job->mutex);
-        job->status = JOB_STATUS_FAILED;
         snprintf(job->error_message, sizeof(job->error_message), "igraph layout failed with error code %d", result_code);
         pthread_mutex_unlock(&job->mutex);
+        atomic_store_explicit(&job->status, JOB_STATUS_FAILED, memory_order_release);
     }
     
     return NULL;
