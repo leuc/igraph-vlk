@@ -1,15 +1,16 @@
 #ifndef COMMAND_REGISTRY_H
 #define COMMAND_REGISTRY_H
 #include <igraph.h>
+#include "interaction/state.h"
 
 // Forward declare for the apply function (bridge to UI)
-struct ExecutionContext;
+// ExecutionContext is already defined in state.h
 
 // 1. Pure math function. Returns allocated result (e.g., igraph_matrix_t*)
 typedef void* (*IgraphWorkerFunc)(igraph_t* graph);
 
 // 2. Main thread function to sync result to the visualization state
-typedef void (*IgraphApplyFunc)(struct ExecutionContext* ctx, void* result_data);
+typedef void (*IgraphApplyFunc)(ExecutionContext* ctx, void* result_data);
 
 // 3. Cleanup function to free the result_data
 typedef void (*IgraphFreeFunc)(void* result_data);
