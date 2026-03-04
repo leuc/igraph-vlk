@@ -49,8 +49,6 @@ static void apply_layout_to_graph(AppState* state, igraph_matrix_t* layout) {
 }
 
 // Forward declarations for helper functions
-static bool should_use_worker_thread(const IgraphCommand* cmd);
-static WorkerJobType map_command_to_job_type(const IgraphCommand* cmd);
 static void handle_command_completion(AppContext* app, AppState* state);
 
 void app_context_init(AppContext* ctx, igraph_t* graph, MenuNode* root_menu) {
@@ -132,9 +130,9 @@ void update_app_state(AppState* state) {
                     exec_ctx.update_visuals_callback = NULL;
                     exec_ctx.app_state = state;
                     
-                    // Submit dynamic job to worker thread
+                    // Submit job to worker thread
                     if (state->worker_ctx.thread_running) {
-                        state->current_worker_job = worker_thread_submit_dynamic_job(
+                        state->current_worker_job = worker_thread_submit_job(
                             &state->worker_ctx, 
                             (CommandDef*)app->pending_command->cmd_def, 
                             &exec_ctx);
@@ -192,7 +190,7 @@ void update_app_state(AppState* state) {
                 if (status == JOB_STATUS_COMPLETED) {
                     printf("[State] Job completed successfully\n");
                     
-                    // Safely apply layout on main thread from worker's result matrix
+                    // Safely apply layout on main thread from worker's result
                     WorkerJob* job = state->current_worker_job;
                     if (job) {
                         // Apply dynamic result if available
@@ -205,11 +203,6 @@ void update_app_state(AppState* state) {
                             job->free_func(job->result_data);
                         }
                         
-                        // Also check for legacy result_matrix
-                        if (job->result_matrix) {
-                            apply_layout_to_graph(state, job->result_matrix);
-                        }
-                        
                         // Cleanup job and its resources
                         pthread_mutex_lock(&state->worker_ctx.queue_mutex);
                         if (state->worker_ctx.current_job == job) {
@@ -218,10 +211,6 @@ void update_app_state(AppState* state) {
                         pthread_mutex_unlock(&state->worker_ctx.queue_mutex);
                         
                         pthread_mutex_destroy(&job->mutex);
-                        if (job->result_matrix) {
-                            igraph_matrix_destroy(job->result_matrix);
-                            free(job->result_matrix);
-                        }
                         if (job->ctx) {
                             free(job->ctx);
                         }
@@ -252,10 +241,6 @@ void update_app_state(AppState* state) {
                         pthread_mutex_unlock(&state->worker_ctx.queue_mutex);
                         
                         pthread_mutex_destroy(&job->mutex);
-                        if (job->result_matrix) {
-                            igraph_matrix_destroy(job->result_matrix);
-                            free(job->result_matrix);
-                        }
                         if (job->ctx) {
                             free(job->ctx);
                         }
@@ -304,25 +289,6 @@ static bool should_use_worker_thread(const IgraphCommand* cmd) {
     }
     
     return false;
-}
-
-// Map command to job type
-static WorkerJobType map_command_to_job_type(const IgraphCommand* cmd) {
-    if (!cmd || !cmd->id_name) {
-        return JOB_TYPE_LAYOUT_FR;
-    }
-    
-    if (strcmp(cmd->id_name, "lay_force_fr") == 0) return JOB_TYPE_LAYOUT_FR;
-    if (strcmp(cmd->id_name, "lay_force_kk") == 0) return JOB_TYPE_LAYOUT_KK;
-    if (strcmp(cmd->id_name, "lay_force_drl") == 0) return JOB_TYPE_LAYOUT_DRL;
-    if (strcmp(cmd->id_name, "lay_force_dh") == 0) return JOB_TYPE_LAYOUT_DH;
-    if (strcmp(cmd->id_name, "lay_tree_rt") == 0) return JOB_TYPE_LAYOUT_RT;
-    if (strcmp(cmd->id_name, "lay_tree_sug") == 0) return JOB_TYPE_LAYOUT_SUG;
-    if (strcmp(cmd->id_name, "lay_umap") == 0) return JOB_TYPE_LAYOUT_UMAP;
-    if (strcmp(cmd->id_name, "lay_bip_mds") == 0) return JOB_TYPE_LAYOUT_MDS;
-    if (strcmp(cmd->id_name, "lay_bip_sug") == 0) return JOB_TYPE_LAYOUT_SUG;
-    
-    return JOB_TYPE_LAYOUT_FR;
 }
 
 // Handle command completion (synchronous execution path)
