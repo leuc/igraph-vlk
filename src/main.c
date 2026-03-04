@@ -7,7 +7,7 @@
 #include "vulkan/renderer.h"
 #include "vulkan/animation_manager.h"
 #include "interaction/state.h"
-#include "ui/sphere_menu.h"
+#include "ui/menu.h"
 #include <GLFW/glfw3.h>
 
 

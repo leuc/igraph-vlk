@@ -120,7 +120,46 @@ void update_app_state(AppState* state) {
             
         case STATE_EXECUTING:
             if (app->pending_command) {
-                if (app->pending_command->execute) {
+                // Check if this is a data-driven command with cmd_def
+                if (app->pending_command->cmd_def) {
+                    printf("[State] Executing data-driven command: %s\n", app->pending_command->display_name);
+                    
+                    // Create execution context
+                    ExecutionContext exec_ctx;
+                    exec_ctx.current_graph = app->target_graph;
+                    exec_ctx.params = app->pending_command->params;
+                    exec_ctx.num_params = app->pending_command->num_params;
+                    exec_ctx.update_visuals_callback = NULL;
+                    exec_ctx.app_state = state;
+                    
+                    // Submit dynamic job
+                    if (state->worker_ctx.thread_running) {
+                        state->current_worker_job = worker_thread_submit_dynamic_job(
+                            &state->worker_ctx, 
+                            (CommandDef*)app->pending_command->cmd_def, 
+                            &exec_ctx);
+                        
+                        if (state->current_worker_job) {
+                            state->job_in_progress = true;
+                            state->job_progress = 0.0f;
+                            snprintf(state->job_status_message, sizeof(state->job_status_message), 
+                                     "Processing %s...", app->pending_command->display_name);
+                            app->current_state = STATE_JOB_IN_PROGRESS;
+                            printf("[State] Submitted dynamic job to worker thread: %s\n", app->pending_command->display_name);
+                        } else {
+                            // Fall back - shouldn't happen with data-driven commands
+                            printf("[State] Dynamic job submission failed\n");
+                            app->pending_command = NULL;
+                            app->current_state = STATE_MENU_OPEN;
+                        }
+                    } else {
+                        // No worker thread - shouldn't happen for data-driven commands
+                        printf("[State] Worker thread not available for data-driven command\n");
+                        app->pending_command = NULL;
+                        app->current_state = STATE_MENU_OPEN;
+                    }
+                } else if (app->pending_command->execute) {
+                    // Legacy command with direct execute function
                     printf("[State] Executing command: %s\n", app->pending_command->display_name);
                     
                     // Create execution context
@@ -178,6 +217,17 @@ void update_app_state(AppState* state) {
                     // Safely apply layout on main thread from worker's result matrix
                     WorkerJob* job = state->current_worker_job;
                     if (job) {
+                        // Apply dynamic result if available
+                        if (job->apply_func && job->result_data) {
+                            job->apply_func(job->ctx, job->result_data);
+                        }
+                        
+                        // Free dynamic result if available
+                        if (job->free_func && job->result_data) {
+                            job->free_func(job->result_data);
+                        }
+                        
+                        // Also check for legacy result_matrix
                         if (job->result_matrix) {
                             apply_layout_to_graph(state, job->result_matrix);
                         }
