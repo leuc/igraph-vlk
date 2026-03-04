@@ -8,7 +8,7 @@ To configure and compile the project, run the following from the root:
 
 ```bash
 rm -rf build/
-cmake -S . -B build -Digraph_ROOT=../igraph-1.0.1/local_install/
+cmake -S . -B build -Digraph_ROOT=../igraph-1.0.1/local_install/ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build build/ --parallel
 ```
 
@@ -53,6 +53,44 @@ No unit/integration tests (no `test/` dir, no CTest targets).
 - **Single Test**: N/A; add via CMake `add_test` if implementing.
 - **Visual/Perf**: FPS in HUD; stress large graphs (>10k nodes).
 
+## Adding Menu Items
+
+The menu is a 3D spherical UI built dynamically from `src/graph/command_registry.c:g_command_registry[]`.
+
+### Process
+1. **Define Worker Function** (`src/graph/wrappers_layout.c` for layouts):
+   - `void* compute_new_lay(igraph_t *graph)`: Offloaded CPU compute. Return `igraph_matrix_t*` for layouts (positions), or other data. Check `igraph_error_t != IGRAPH_SUCCESS`, cleanup/free on fail, return NULL.
+   - Decl in `include/graph/wrappers_layout.h`.
+   - Example: `igraph_layout_circle(graph, result, order);`
+
+2. **Define Apply/Free Functions**:
+   - Use existing `apply_layout_matrix` (updates `GraphData.nodes` positions from matrix, calls `renderer_update_graph`).
+   - `free_layout_matrix`: `igraph_matrix_destroy/free(ptr)`.
+
+3. **Register in `g_command_registry[]`** (`src/graph/command_registry.c`):
+   ```
+   {\"Category/Subcategory\", \"unique_id\", \"Display Name\", compute_new_lay, apply_layout_matrix, free_layout_matrix},
+   ```
+   - `category_path`: / separated folders (creates tree).
+   - `command_id`: Unique ID for lookup.
+   - Auto-sorted by registry order.
+
+4. **Menu Auto-Builds** (`src/ui/menu.c:init_menu_tree`):
+   - Parses registry, creates `MenuNode` tree (branches/folders, leaves/commands).
+   - Renders instanced quads + labels bill boarded to camera.
+   - Hover/expand animation.
+
+5. **Execution Flow**:
+   - Select leaf -> `node->command->cmd_def` -> `worker_thread_submit_job` queues `worker_func` (compute).
+   - Complete -> `apply_func` updates state -> renderer refresh.
+   - Background thread prevents UI freeze.
+
+### Examples
+- Layouts: `lay_force_fr` -> `compute_lay_force_fr`.
+- Analysis: Stub `NULL` for quick (no worker).
+
+Rebuild & run to see menu update.
+
 ## Code Style Guidelines
 
 Mimic existing patterns strictly. Run `clang-format` after edits.
@@ -71,45 +109,24 @@ Mimic existing patterns strictly. Run `clang-format` after edits.
 - **Globals**: Avoid; use `AppContext` state.
 
 ### Comments
-- File headers: `/** Doxygen */`.
 - Inline: `// comment`.
 - Sections: `// ============================================================================`.
-- Todos: `// TODO: desc` (sparse: state.c:262 dismissal, 349 numeric input).
+- Todos: `// TODO: desc` (sparse).
 
 ### Includes
-- Order: Local quoted (`\"graph_core.h\"`, subsystem-grouped) > C std (`<stdio.h>`) > extern (`<igraph.h>`, `<glfw3.h>`). Not alpha.
-- No unused; forward-decl where possible.
+- Order: Local quoted > C std > extern. Not alpha.
 
 ### Error Handling
-- Funcs: `int` 0=success, <0=fail; early `return`.
-- Print: `fprintf(stderr, \"[Module] Error: msg\\n\");`.
-- Vulkan: `VK_CHECK(call, \"msg\")` macro (in vulkan/*.c).
-- igraph: `if (igraph_call(...) != IGRAPH_SUCCESS) { err; cleanup; return; }`.
-- Resources: Manual RAII (destroy on err paths).
+- `int` 0=success/<0=fail; `fprintf(stderr)` + cleanup/return.
+- Vulkan: `VK_CHECK`.
+- igraph: `!= IGRAPH_SUCCESS`.
 
-### Vulkan/igraph Patterns
-- Vulkan: Boilerplate (device/swapchain/renderpass/commands); update via `renderer_update_*`.
-- igraph: Thread-safe (`IGRAPH_ENABLE_TLS`); progress handlers; worker threads for heavy ops (layouts).
-- Threads: pthreads, atomics for status/progress; queue for jobs.
-- GPU: Node/edge buffers; compute shaders (routing).
-
-### General
-- **Security**: No secrets/logs; validate inputs (node/edge counts).
-- **Perf**: Offload CPU (worker_thread); GPU compute where possible.
-- **Conventions**: Match neighbors (e.g., no new libs w/o pkg-config/CMake); Vulkan no validation prod.
-- **Prohibited**: No C++; no auto libs (check package.json equiv: CMakeLists.txt).
-- **When Editing**: Read neighbors; run lint/format/build; verify no regressions (layouts/UI).
-
----
+### When Editing
+- Mimic neighbors; lint/format/build; no regressions.
 
 ## Code Overview (Architecture Map)
 
-[existing full from previous, ~70 lines]
-
-### Additional Notes
-- Entry: `main.c` -> `app_state.h`.
-- Graph: igraph core + custom layouts (openord, sphere).
-- Render: Modular Vulkan (renderer_* dispatch).
-- UI/Interaction: Overlay HUD/menu; ray-picking.
-
-Total ~150 lines.
+- **Entry**: main.c -> app_state.h.
+- **Graph**: igraph core + layouts (openord, sphere).
+- **Render**: Vulkan modular (renderer_*).
+- **UI**: HUD/menu; ray-picking.
