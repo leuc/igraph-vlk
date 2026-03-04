@@ -71,13 +71,9 @@ void init_menu_tree(MenuNode *root) {
 	root->hovered = false;
 
 	// We'll build a tree structure: category path segments become nested branches
-	// Use a simple dynamic array to collect children at each level before assigning
 	
-	// First, count commands and allocate space for children at root
+	// First, count commands
 	int num_commands = g_command_registry_size;
-	MenuNode ***level_pointers = NULL; // Array of pointers to child arrays at each depth
-	int *level_counts = NULL;
-	int *level_capacities = NULL;
 	int max_depth = 0;
 	
 	// Temporary storage: for each command, store the path segments and leaf node
@@ -117,23 +113,7 @@ void init_menu_tree(MenuNode *root) {
 		leaf_nodes[i] = leaf;
 	}
 	
-	// Allocate level tracking arrays (depth 0 = root's children, depth 1 = grandchildren, etc.)
-	level_pointers = (MenuNode ***)malloc(sizeof(MenuNode**) * max_depth);
-	level_counts = (int *)calloc(max_depth, sizeof(int));
-	level_capacities = (int *)malloc(sizeof(int) * max_depth);
-	
-	// For each depth, allocate an array to hold child pointers
-	for (int d = 0; d < max_depth; d++) {
-		level_capacities[d] = 8;
-		level_pointers[d] = (MenuNode **)malloc(sizeof(MenuNode*) * level_capacities[d]);
-	}
-	
-	// Helper: find or create a branch node with given label at a given depth
-	// We'll store branches in the level_pointers arrays as we build them
-	// Actually, we need a way to map (depth, label) -> branch node
-	// We'll build a tree by processing commands in order and walking the partial tree
-	
-	// For simplicity: build the tree by iterating commands and building path incrementally
+	// Build the tree by iterating commands and building path incrementally
 	// We'll start with root and for each command, traverse/create branch nodes for each segment
 	
 	for (int i = 0; i < num_commands; i++) {
@@ -144,17 +124,12 @@ void init_menu_tree(MenuNode *root) {
 			const char *seg_label = path_segments[i][seg];
 			
 			// If this is the last segment, we're attaching the leaf
-			if (seg == segment_counts[i] - 1) {
-				// Attach leaf node
-				// Ensure parent has capacity
-				if (current_parent->num_children >= level_capacities[0]) { // Actually use parent's capacity
-					int old_cap = current_parent->num_children;
-					int new_cap = old_cap * 2 + 1;
-					current_parent->children = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode*) * new_cap);
-				}
-				current_parent->children[current_parent->num_children] = leaf_nodes[i];
-				current_parent->num_children++;
-			} else {
+		if (seg == segment_counts[i] - 1) {
+			// Attach leaf node
+			current_parent->children = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode*) * (current_parent->num_children + 1));
+			current_parent->children[current_parent->num_children] = leaf_nodes[i];
+			current_parent->num_children++;
+		} else {
 				// This segment should be a branch - find or create it
 				MenuNode *branch = NULL;
 				// Search existing children for matching label
@@ -167,17 +142,14 @@ void init_menu_tree(MenuNode *root) {
 				}
 				
 				if (branch == NULL) {
-					// Create new branch node
-					branch = create_menu_node(seg_label, NODE_BRANCH);
-					// Add to parent
-					if (current_parent->num_children >= level_capacities[0]) {
-						int old_cap = current_parent->num_children;
-						int new_cap = old_cap * 2 + 1;
-						current_parent->children = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode*) * new_cap);
-					}
-					current_parent->children[current_parent->num_children] = branch;
-					current_parent->num_children++;
-				}
+				// Create new branch node
+				branch = create_menu_node(seg_label, NODE_BRANCH);
+				
+				// Add to parent
+				current_parent->children = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode*) * (current_parent->num_children + 1));
+				current_parent->children[current_parent->num_children] = branch;
+				current_parent->num_children++;
+			}
 				
 				// Move to this branch for next segment
 				current_parent = branch;
@@ -195,14 +167,6 @@ void init_menu_tree(MenuNode *root) {
 	free(path_segments);
 	free(segment_counts);
 	free(leaf_nodes);
-	
-	// Also free level arrays (not used anymore)
-	for (int d = 0; d < max_depth; d++) {
-		free(level_pointers[d]);
-	}
-	free(level_pointers);
-	free(level_counts);
-	free(level_capacities);
 	
 	// Assign icons to all nodes
 	assign_menu_icons(root);
