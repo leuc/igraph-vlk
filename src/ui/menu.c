@@ -56,157 +56,71 @@ static void assign_menu_icons(MenuNode *node);
 
 // Initialize the menu tree from the command registry
 void init_menu_tree(MenuNode *root) {
-	// Initialize root as a branch node named "Main"
-	root->label = strdup("Main");
-	root->type = NODE_BRANCH;
-	root->icon_texture_id = -1;
-	root->target_phi = 0.0f;
-	root->target_theta = 0.0f;
-	root->current_radius = 0.0f;
-	root->target_radius = 1.0f; // Root is fully open
-	root->num_children = 0;
-	root->children = (MenuNode**)malloc(0); // Initialize as empty array
-	root->command = NULL;
-	root->is_expanded = true;
-	root->hovered = false;
+    // Initialize root
+    root->label = strdup("Main");
+    root->type = NODE_BRANCH;
+    root->icon_texture_id = -1;
+    root->target_phi = 0.0f;
+    root->target_theta = 0.0f;
+    root->current_radius = 0.0f;
+    root->target_radius = 1.0f;
+    root->num_children = 0;
+    root->children = NULL;
+    root->command = NULL;
+    root->is_expanded = true;
+    root->hovered = false;
 
-	// We'll build a tree structure: category path segments become nested branches
-	
-	// First, count commands
-	int num_commands = g_command_registry_size;
-	int max_depth = 0;
-	
-	// Temporary storage: for each command, store the path segments and leaf node
-	char ***path_segments = (char ***)malloc(sizeof(char**) * num_commands);
-	int *segment_counts = (int *)malloc(sizeof(int) * num_commands);
-	MenuNode **leaf_nodes = (MenuNode **)malloc(sizeof(MenuNode*) * num_commands);
-	
-	// Parse each command's category_path
-	for (int i = 0; i < num_commands; i++) {
-		const CommandDef *cmd_def = &g_command_registry[i];
-		const char *path = cmd_def->category_path;
-		
-		// Count segments: empty path = 0, otherwise count '/' + 1
-		int count = 0;
-		if (path[0] != '\0') {
-			for (const char *p = path; *p; p++) {
-				if (*p == '/') count++;
-			}
-			count++; // +1 for the first segment
-		}
-		segment_counts[i] = count;
-		if (count > max_depth) max_depth = count;
-		
-		// Allocate and tokenize
-		path_segments[i] = (char **)malloc(sizeof(char*) * count);
-		if (count > 0) {
-			char *path_copy = strdup(path);
-			char *token = strtok(path_copy, "/");
-			int seg = 0;
-			while (token != NULL && seg < count) {
-				path_segments[i][seg] = strdup(token);
-				seg++;
-				token = strtok(NULL, "/");
-			}
-			free(path_copy);
-		}
-		
-		// Only create leaf node if this is NOT a branch definition (has a valid worker_func)
-		// For entries that are branches (empty path or branch-only entries), we handle them differently
-		if (cmd_def->worker_func != NULL || (cmd_def->command_id && strncmp(cmd_def->command_id, "menu_", 5) != 0)) {
-			MenuNode *leaf = create_menu_node(cmd_def->display_name, NODE_LEAF);
-			leaf->command = create_command(cmd_def->command_id, cmd_def->display_name, NULL, 0);
-			leaf->command->cmd_def = cmd_def;
-			leaf_nodes[i] = leaf;
-		} else {
-			// This is a branch category node - mark for special handling
-			leaf_nodes[i] = NULL;
-		}
-	}
-	
-	// Build the tree by iterating commands and building path incrementally
-	// We'll start with root and for each command, traverse/create branch nodes for each segment
-	
-	for (int i = 0; i < num_commands; i++) {
-		// Get the display name - either from leaf or from command def
-		const char *label = leaf_nodes[i] ? leaf_nodes[i]->label : g_command_registry[i].display_name;
-		
-		// If segment_counts == 0, this is a top-level category (like "File")
-		// Create a BRANCH and attach directly to root
-		if (segment_counts[i] == 0) {
-			// Check if branch already exists under root
-			MenuNode *existing = NULL;
-			for (int c = 0; c < root->num_children; c++) {
-				if (root->children[c]->type == NODE_BRANCH &&
-					strcmp(root->children[c]->label, label) == 0) {
-					existing = root->children[c];
-					break;
-				}
-			}
-			if (existing == NULL) {
-				// Create branch
-				MenuNode *branch = create_menu_node(label, NODE_BRANCH);
-				root->children = (MenuNode **)realloc(root->children, sizeof(MenuNode*) * (root->num_children + 1));
-				root->children[root->num_children] = branch;
-				root->num_children++;
-			}
-			continue; // Skip to next entry
-		}
-		
-		// Skip entries that are branch definitions (no leaf)
-		if (leaf_nodes[i] == NULL) {
-			continue;
-		}
-		
-		// For entries with path segments: navigate to deepest branch, then attach leaf
-		MenuNode *current_parent = root;
-		
-		// 1. Process EVERY path segment as a branch folder
-		for (int seg = 0; seg < segment_counts[i]; seg++) {
-			const char *seg_label = path_segments[i][seg];
-			
-			MenuNode *branch = NULL;
-			// Search existing children for a matching folder
-			for (int c = 0; c < current_parent->num_children; c++) {
-				if (current_parent->children[c]->type == NODE_BRANCH &&
-					strcmp(current_parent->children[c]->label, seg_label) == 0) {
-					branch = current_parent->children[c];
-					break;
-				}
-			}
-			
-			if (branch == NULL) {
-				// Create new branch folder
-				branch = create_menu_node(seg_label, NODE_BRANCH);
-				// Add to parent
-				current_parent->children = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode*) * (current_parent->num_children + 1));
-				current_parent->children[current_parent->num_children] = branch;
-				current_parent->num_children++;
-			}
-			
-			// Navigate down into this folder for the next segment
-			current_parent = branch;
-		}
-		
-		// 2. Path navigation complete. Attach the actual leaf node inside the deepest folder.
-		current_parent->children = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode*) * (current_parent->num_children + 1));
-		current_parent->children[current_parent->num_children] = leaf_nodes[i];
-		current_parent->num_children++;
-	}
-	
-	// Cleanup temporary arrays
-	for (int i = 0; i < num_commands; i++) {
-		for (int s = 0; s < segment_counts[i]; s++) {
-			free(path_segments[i][s]);
-		}
-		free(path_segments[i]);
-	}
-	free(path_segments);
-	free(segment_counts);
-	free(leaf_nodes);
-	
-	// Assign icons to all nodes
-	assign_menu_icons(root);
+
+    for (int i = 0; i < g_command_registry_size; i++) {
+        const CommandDef *cmd_def = &g_command_registry[i];
+        
+        MenuNode *current_parent = root;
+        
+        // 1. Process Path (Create/Traverse Folders)
+        if (cmd_def->category_path && strlen(cmd_def->category_path) > 0) {
+            char path_copy[256];
+            strncpy(path_copy, cmd_def->category_path, sizeof(path_copy) - 1);
+            path_copy[255] = '\0';
+            
+            char *token = strtok(path_copy, "/");
+            while (token != NULL) {
+                MenuNode *branch = NULL;
+                
+                // Search for existing folder
+                for (int c = 0; c < current_parent->num_children; c++) {
+                    if (current_parent->children[c]->type == NODE_BRANCH &&
+                        strcmp(current_parent->children[c]->label, token) == 0) {
+                        branch = current_parent->children[c];
+                        break;
+                    }
+                }
+                
+                // Create folder if it doesn't exist
+                if (branch == NULL) {
+                    branch = create_menu_node(token, NODE_BRANCH);
+                    current_parent->children = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode*) * (current_parent->num_children + 1));
+                    current_parent->children[current_parent->num_children] = branch;
+                    current_parent->num_children++;
+                }
+                
+                // Move down into the folder
+                current_parent = branch;
+                token = strtok(NULL, "/");
+            }
+        }
+        
+        // 2. Path complete. Attach the Leaf Node.
+        MenuNode *leaf = create_menu_node(cmd_def->display_name, NODE_LEAF);
+        leaf->command = create_command(cmd_def->command_id, cmd_def->display_name, NULL, 0);
+        leaf->command->cmd_def = cmd_def;
+        
+        current_parent->children = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode*) * (current_parent->num_children + 1));
+        current_parent->children[current_parent->num_children] = leaf;
+        current_parent->num_children++;
+    }
+    
+    // Assign icons globally
+    assign_menu_icons(root);
 }
 
 // Destroy the menu tree recursively
