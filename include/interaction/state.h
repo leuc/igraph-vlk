@@ -5,6 +5,9 @@
 #include <stdbool.h>
 #include <cglm/cglm.h>
 
+// Forward declaration to avoid circular dependency with command_registry.h
+struct CommandDef;
+
 // --- Parameter Types required by igraph functions ---
 typedef enum {
     PARAM_TYPE_INT,
@@ -54,7 +57,12 @@ typedef struct {
     int num_params;
     CommandParameter* params;  // Array of required parameters
     
+    // Old execution method
     IgraphWrapperFunc execute; // The actual C function that calls igraph
+    
+    // New data-driven method
+    const struct CommandDef* cmd_def; // Pointer to command definition in registry
+    
     bool produces_visual_output; // If true, shows results overlay before returning to graph
 } IgraphCommand;
 

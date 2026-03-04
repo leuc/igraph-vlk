@@ -81,7 +81,7 @@ add_executable(igraph-vlk
 
     # UI modules
     src/ui/hud.c
-    src/ui/sphere_menu.c
+    src/ui/menu.c
 
     ${SPIRV_SHADERS}
 )

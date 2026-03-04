@@ -15,10 +15,10 @@ typedef void (*IgraphApplyFunc)(ExecutionContext* ctx, void* result_data);
 // 3. Cleanup function to free the result_data
 typedef void (*IgraphFreeFunc)(void* result_data);
 
-typedef struct {
-    const char* category_path;  // e.g., "Layout/Force-Directed"
-    const char* command_id;     // e.g., "lay_force_fr"
-    const char* display_name;   // e.g., "Fruchterman-Reingold"
+typedef struct CommandDef {
+    const char* category_path;  // e.g. "Layout/Force-Directed"
+    const char* command_id;     // e.g. "lay_force_fr"
+    const char* display_name;   // e.g. "Fruchterman-Reingold"
     IgraphWorkerFunc worker_func;
     IgraphApplyFunc apply_func;
     IgraphFreeFunc free_func;
