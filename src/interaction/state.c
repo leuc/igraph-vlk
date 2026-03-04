@@ -120,7 +120,7 @@ void update_app_state(AppState* state) {
             
         case STATE_EXECUTING:
             if (app->pending_command) {
-                // Check if this is a data-driven command with cmd_def
+                // Check if this is a data-driven command with cmd_def (background worker)
                 if (app->pending_command->cmd_def) {
                     printf("[State] Executing data-driven command: %s\n", app->pending_command->display_name);
                     
@@ -132,7 +132,7 @@ void update_app_state(AppState* state) {
                     exec_ctx.update_visuals_callback = NULL;
                     exec_ctx.app_state = state;
                     
-                    // Submit dynamic job
+                    // Submit dynamic job to worker thread
                     if (state->worker_ctx.thread_running) {
                         state->current_worker_job = worker_thread_submit_dynamic_job(
                             &state->worker_ctx, 
@@ -147,55 +147,33 @@ void update_app_state(AppState* state) {
                             app->current_state = STATE_JOB_IN_PROGRESS;
                             printf("[State] Submitted dynamic job to worker thread: %s\n", app->pending_command->display_name);
                         } else {
-                            // Fall back - shouldn't happen with data-driven commands
                             printf("[State] Dynamic job submission failed\n");
                             app->pending_command = NULL;
                             app->current_state = STATE_MENU_OPEN;
                         }
                     } else {
-                        // No worker thread - shouldn't happen for data-driven commands
                         printf("[State] Worker thread not available for data-driven command\n");
                         app->pending_command = NULL;
                         app->current_state = STATE_MENU_OPEN;
                     }
                 } else if (app->pending_command->execute) {
-                    // Legacy command with direct execute function
-                    printf("[State] Executing command: %s\n", app->pending_command->display_name);
+                    // Instant main-thread UI action (File > Open, Save, Exit, etc.)
+                    printf("[State] Executing instant UI action: %s\n", app->pending_command->display_name);
                     
                     // Create execution context
                     ExecutionContext exec_ctx;
-                    exec_ctx.current_graph = app->target_graph; // Use the graph in AppContext
+                    exec_ctx.current_graph = app->target_graph;
                     exec_ctx.params = app->pending_command->params;
                     exec_ctx.num_params = app->pending_command->num_params;
-                    exec_ctx.update_visuals_callback = NULL; // To be set
-                    exec_ctx.app_state = state; // Pass full app state for layout updates
+                    exec_ctx.update_visuals_callback = NULL;
+                    exec_ctx.app_state = state;
                     
-                    // Check if this is a long-running operation that should use worker thread
-                    bool use_worker_thread = should_use_worker_thread(app->pending_command);
+                    // Execute immediately on main thread
+                    app->pending_command->execute(&exec_ctx);
                     
-                    if (use_worker_thread && state->worker_ctx.thread_running) {
-                        // Submit to worker thread
-                        WorkerJobType job_type = map_command_to_job_type(app->pending_command);
-                        state->current_worker_job = worker_thread_submit_job(&state->worker_ctx, job_type, &exec_ctx);
-                        
-                        if (state->current_worker_job) {
-                            state->job_in_progress = true;
-                            state->job_progress = 0.0f;
-                            snprintf(state->job_status_message, sizeof(state->job_status_message), 
-                                     "Processing %s...", app->pending_command->display_name);
-                            app->current_state = STATE_JOB_IN_PROGRESS;
-                            printf("[State] Submitted job to worker thread: %s\n", app->pending_command->display_name);
-                        } else {
-                            // Fall back to synchronous execution if worker thread submission fails
-                            printf("[State] Worker thread submission failed, executing synchronously\n");
-                            app->pending_command->execute(&exec_ctx);
-                            handle_command_completion(app, state);
-                        }
-                    } else {
-                        // Execute synchronously (fast operations or worker thread not available)
-                        app->pending_command->execute(&exec_ctx);
-                        handle_command_completion(app, state);
-                    }
+                    // Reset and return to menu
+                    app->pending_command = NULL;
+                    app->current_state = STATE_MENU_OPEN;
                 } else {
                     printf("[State] Command '%s' has no implementation.\n", app->pending_command->display_name);
                     app->pending_command = NULL;
