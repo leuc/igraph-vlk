@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdatomic.h>
 #include "interaction/state.h"
+#include "graph/command_registry.h"
 
 // Job types for worker thread
 typedef enum {
@@ -41,6 +42,11 @@ typedef struct {
     char error_message[256];
     _Atomic float progress; // 0.0 to 1.0
     pthread_mutex_t mutex;
+    
+    // New dynamic job fields
+    IgraphWorkerFunc worker_func;
+    IgraphApplyFunc apply_func;
+    IgraphFreeFunc free_func;
 } WorkerJob;
 
 // Worker thread context
@@ -67,6 +73,11 @@ int worker_thread_init(WorkerThreadContext* context, int max_queue_size);
 WorkerJob* worker_thread_submit_job(WorkerThreadContext* context, 
                                    WorkerJobType type, 
                                    ExecutionContext* ctx);
+
+// Submit a dynamic job using CommandDef
+WorkerJob* worker_thread_submit_dynamic_job(WorkerThreadContext* context, 
+                                           CommandDef* cmd, 
+                                           ExecutionContext* ctx);
 
 // Cancel a running job
 bool worker_thread_cancel_job(WorkerThreadContext* context, WorkerJob* job);

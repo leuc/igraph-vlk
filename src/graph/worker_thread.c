@@ -1,5 +1,6 @@
 #include "graph/worker_thread.h"
 #include "graph/wrappers.h"
+#include "graph/command_registry.h"
 #include <igraph.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,7 +64,18 @@ static void* worker_thread_func(void* arg) {
         atomic_store_explicit(&job->progress, 0.0f, memory_order_release);
         
         // Execute the job WITHOUT holding queue_mutex or job->mutex
-        execute_wrapper_job(job);
+        if (job->worker_func) {
+            // New dynamic path
+            job->result_data = job->worker_func(job->ctx->current_graph);
+            if (job->result_data) {
+                atomic_store_explicit(&job->status, JOB_STATUS_COMPLETED, memory_order_release);
+            } else {
+                atomic_store_explicit(&job->status, JOB_STATUS_FAILED, memory_order_release);
+            }
+        } else {
+            // Legacy path
+            execute_wrapper_job(job);
+        }
         
         // Clear TLS
         tls_current_job = NULL;
@@ -196,6 +208,74 @@ WorkerJob* worker_thread_submit_job(WorkerThreadContext* context,
     return job;
 }
 
+// Submit a dynamic job using CommandDef
+WorkerJob* worker_thread_submit_dynamic_job(WorkerThreadContext* context, 
+                                           CommandDef* cmd, 
+                                           ExecutionContext* ctx) {
+    if (!context || !cmd || !ctx) {
+        return NULL;
+    }
+    
+    pthread_mutex_lock(&context->queue_mutex);
+    
+    // Check if queue is full
+    int next_tail = (context->queue_tail + 1) % context->max_queue_size;
+    if (next_tail == context->queue_head) {
+        pthread_mutex_unlock(&context->queue_mutex);
+        fprintf(stderr, "[Worker] Job queue is full\n");
+        return NULL;
+    }
+    
+    // Create new job
+    WorkerJob* job = (WorkerJob*)malloc(sizeof(WorkerJob));
+    if (!job) {
+        pthread_mutex_unlock(&context->queue_mutex);
+        return NULL;
+    }
+    
+    // Allocate and copy execution context on the heap (avoid dangling stack pointer)
+    ExecutionContext* ctx_copy = malloc(sizeof(ExecutionContext));
+    if (!ctx_copy) {
+        free(job);
+        pthread_mutex_unlock(&context->queue_mutex);
+        return NULL;
+    }
+    *ctx_copy = *ctx;  // Shallow copy is fine; pointed-to data outlives job
+    
+    memset(job, 0, sizeof(WorkerJob));
+    job->type = JOB_TYPE_LAYOUT_FR; // Default type for backward compatibility
+    atomic_init(&job->status, JOB_STATUS_PENDING);
+    job->ctx = ctx_copy;  // Store heap-allocated copy
+    atomic_init(&job->progress, 0.0f);
+    job->result_data = NULL;
+    job->result_matrix = NULL;
+    
+    // Store dynamic function pointers
+    job->worker_func = cmd->worker_func;
+    job->apply_func = cmd->apply_func;
+    job->free_func = cmd->free_func;
+    
+    if (pthread_mutex_init(&job->mutex, NULL) != 0) {
+        free(ctx_copy);
+        free(job);
+        pthread_mutex_unlock(&context->queue_mutex);
+        return NULL;
+    }
+    
+    // Add job to queue
+    context->job_queue[context->queue_tail] = job;
+    context->queue_tail = next_tail;
+    context->queue_size++;
+    
+    pthread_mutex_unlock(&context->queue_mutex);
+    
+    // Signal worker thread
+    pthread_cond_signal(&context->queue_cond);
+    
+    printf("[Worker] Submitted dynamic job '%s' to queue\n", cmd->display_name);
+    return job;
+}
+
 // Cancel a running job
 bool worker_thread_cancel_job(WorkerThreadContext* context, WorkerJob* job) {
     if (!context || !job) {
@@ -271,10 +351,14 @@ void worker_thread_cleanup(WorkerThreadContext* context) {
          i = (i + 1) % context->max_queue_size) {
         WorkerJob* job = context->job_queue[i];
         if (job) {
-            // Free result matrix if present
+            // Free result matrix if present (legacy path)
             if (job->result_matrix) {
                 igraph_matrix_destroy(job->result_matrix);
                 free(job->result_matrix);
+            }
+            // Free result data if present (new dynamic path)
+            if (job->result_data && job->free_func) {
+                job->free_func(job->result_data);
             }
             // Free execution context copy if present
             if (job->ctx) {
@@ -286,10 +370,14 @@ void worker_thread_cleanup(WorkerThreadContext* context) {
     }
     
     if (context->current_job) {
-        // Free result matrix if present
+        // Free result matrix if present (legacy path)
         if (context->current_job->result_matrix) {
             igraph_matrix_destroy(context->current_job->result_matrix);
             free(context->current_job->result_matrix);
+        }
+        // Free result data if present (new dynamic path)
+        if (context->current_job->result_data && context->current_job->free_func) {
+            context->current_job->free_func(context->current_job->result_data);
         }
         // Free execution context copy if present
         if (context->current_job->ctx) {
