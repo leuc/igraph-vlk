@@ -42,6 +42,7 @@ typedef struct AppState {
     /* Interaction State */
     int last_picked_node;
     int last_picked_edge;
+    int prev_left_mouse_button;
 
     /* Timing */
     float last_frame_time;

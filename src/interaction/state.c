@@ -77,10 +77,15 @@ void update_app_state(AppState* state) {
         app->crosshair_hovered_node = hovered;
         
         // Check for activation trigger (left mouse button press)
-        if (hovered && glfwGetMouseButton(state->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+        int current_left_button = glfwGetMouseButton(state->window, GLFW_MOUSE_BUTTON_LEFT);
+        bool mouse_just_pressed = (current_left_button == GLFW_PRESS && state->prev_left_mouse_button == GLFW_RELEASE);
+        
+        if (hovered && mouse_just_pressed) {
             printf("[DEBUG] Triggered menu option: %s\n", hovered->label);
             handle_menu_selection(app, hovered);
         }
+        
+        state->prev_left_mouse_button = current_left_button;
     }
     
     switch (app->current_state) {
