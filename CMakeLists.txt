@@ -67,7 +67,6 @@ add_executable(igraph-vlk
     src/graph/layout_openord.c
     src/graph/layered_sphere.c
     src/graph/graph_actions.c
-    src/graph/wrappers.c
     src/graph/wrappers_layout.c
     src/graph/worker_thread.c
 
