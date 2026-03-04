@@ -15,11 +15,6 @@ static igraph_error_t igraph_vlk_progress_handler(const char *message, igraph_re
 	return IGRAPH_SUCCESS;
 }
 
-// Helper to set up progress handler for a layout function
-static void setup_progress_handler(void)
-{
-	igraph_set_progress_handler(igraph_vlk_progress_handler);
-}
 
 // Helper to remove progress handler
 static void cleanup_progress_handler(void)
@@ -33,13 +28,6 @@ static void apply_layout_to_graph(ExecutionContext *ctx, igraph_matrix_t *layout
 	if (!ctx || !ctx->app_state || !ctx->current_graph)
 		return;
 
-	GraphData *data = &ctx->app_state->current_graph;
-	Renderer *renderer = &ctx->app_state->renderer;
-
-	if (!data->graph_initialized) {
-		fprintf(stderr, "[Wrapper] Error: Graph not initialized\n");
-		return;
-	}
 
 	// Check if layout dimensions match
 	if (layout->nrow != data->node_count || layout->ncol < 2) {
@@ -106,45 +94,6 @@ void wrapper_lay_force_fr(ExecutionContext *ctx)
 	apply_layout_to_graph(ctx, &layout);
 	igraph_matrix_destroy(&layout);
 }
-
-void wrapper_lay_force_kk(ExecutionContext *ctx)
-{
-	if (!ctx || !ctx->current_graph) {
-		fprintf(stderr, "[Wrapper] Error: Invalid context for Kamada-Kawai\n");
-		return;
-	}
-
-	igraph_integer_t vcount = igraph_vcount(ctx->current_graph);
-
-	igraph_matrix_t layout;
-	if (igraph_matrix_init(&layout, vcount, 3) != IGRAPH_SUCCESS) {
-		fprintf(stderr, "[Wrapper] Error: Failed to initialize layout matrix\n");
-		return;
-	}
-
-	igraph_error_t result = igraph_layout_kamada_kawai_3d(ctx->current_graph, &layout, 0, /* use_seed - start from spherical init for cleaner results */
-														  vcount * 10,					  /* maxiter */
-														  0.0,							  /* epsilon */
-														  (igraph_real_t)vcount,		  /* kkconst */
-														  NULL,							  /* weights */
-														  NULL,							  /* minx */
-														  NULL,							  /* maxx */
-														  NULL,							  /* miny */
-														  NULL,							  /* maxy */
-														  NULL,							  /* minz */
-														  NULL							  /* maxz */
-	);
-
-	if (result != IGRAPH_SUCCESS) {
-		fprintf(stderr, "[Wrapper] Error: igraph_layout_kamada_kawai_3d failed\n");
-		igraph_matrix_destroy(&layout);
-		return;
-	}
-
-	apply_layout_to_graph(ctx, &layout);
-	igraph_matrix_destroy(&layout);
-}
-
 void wrapper_lay_force_drl(ExecutionContext *ctx)
 {
 	if (!ctx || !ctx->current_graph) {

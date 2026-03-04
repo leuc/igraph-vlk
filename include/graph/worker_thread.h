@@ -50,22 +50,10 @@ int worker_thread_init(WorkerThreadContext *context, int max_queue_size);
 // Submit a job to worker thread
 WorkerJob *worker_thread_submit_job(WorkerThreadContext *context, CommandDef *cmd, ExecutionContext *ctx);
 
-// Cancel a running job
-bool worker_thread_cancel_job(WorkerThreadContext *context, WorkerJob *job);
-
 // Get job status and progress
 WorkerJobStatus worker_thread_get_job_status(WorkerJob *job, float *progress);
 
-// Wait for job completion (blocking)
-WorkerJobStatus worker_thread_wait_for_job(WorkerJob *job);
-
 // Clean up worker thread system
 void worker_thread_cleanup(WorkerThreadContext *context);
-
-// Check if worker thread is busy
-bool worker_thread_is_busy(WorkerThreadContext *context);
-
-// Get current job if any
-WorkerJob *worker_thread_get_current_job(WorkerThreadContext *context);
 
 #endif // WORKER_THREAD_H

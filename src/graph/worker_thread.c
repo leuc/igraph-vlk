@@ -200,24 +200,6 @@ WorkerJob *worker_thread_submit_job(WorkerThreadContext *context, CommandDef *cm
 	return job;
 }
 
-// Cancel a running job
-bool worker_thread_cancel_job(WorkerThreadContext *context, WorkerJob *job)
-{
-	if (!context || !job) {
-		return false;
-	}
-
-	WorkerJobStatus status = atomic_load_explicit(&job->status, memory_order_acquire);
-	if (status == JOB_STATUS_RUNNING || status == JOB_STATUS_PENDING) {
-		atomic_store_explicit(&job->status, JOB_STATUS_CANCELLED, memory_order_release);
-		pthread_mutex_lock(&job->mutex);
-		strncpy(job->error_message, "Job cancelled by user", sizeof(job->error_message) - 1);
-		pthread_mutex_unlock(&job->mutex);
-	}
-
-	return true;
-}
-
 // Get job status and progress
 WorkerJobStatus worker_thread_get_job_status(WorkerJob *job, float *progress)
 {
@@ -234,21 +216,6 @@ WorkerJobStatus worker_thread_get_job_status(WorkerJob *job, float *progress)
 }
 
 // Wait for job completion (blocking)
-WorkerJobStatus worker_thread_wait_for_job(WorkerJob *job)
-{
-	if (!job) {
-		return JOB_STATUS_FAILED;
-	}
-
-	WorkerJobStatus status;
-	do {
-		usleep(10000); // 10ms
-		status = atomic_load_explicit(&job->status, memory_order_acquire);
-	} while (status == JOB_STATUS_PENDING || status == JOB_STATUS_RUNNING);
-
-	return status;
-}
-
 // Clean up worker thread system
 void worker_thread_cleanup(WorkerThreadContext *context)
 {
@@ -304,31 +271,4 @@ void worker_thread_cleanup(WorkerThreadContext *context)
 }
 
 // Check if worker thread is busy
-bool worker_thread_is_busy(WorkerThreadContext *context)
-{
-	if (!context) {
-		return false;
-	}
-
-	bool busy = false;
-	pthread_mutex_lock(&context->queue_mutex);
-	busy = (context->queue_head != context->queue_tail) || (context->current_job != NULL);
-	pthread_mutex_unlock(&context->queue_mutex);
-
-	return busy;
-}
-
 // Get current job if any
-WorkerJob *worker_thread_get_current_job(WorkerThreadContext *context)
-{
-	if (!context) {
-		return NULL;
-	}
-
-	WorkerJob *job = NULL;
-	pthread_mutex_lock(&context->queue_mutex);
-	job = context->current_job;
-	pthread_mutex_unlock(&context->queue_mutex);
-
-	return job;
-}
