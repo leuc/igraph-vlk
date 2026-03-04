@@ -2,429 +2,433 @@
 #include "app_state.h"
 #include "interaction/state.h"
 #include "vulkan/renderer.h"
-#include <stdio.h>
-#include <stdlib.h>
 #include <igraph.h>
 #include <igraph_progress.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 // Pure worker function - no UI or state dependencies
-void* compute_lay_force_fr(igraph_t* graph) {
-    igraph_integer_t vcount = igraph_vcount(graph);
-    igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
-    if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-        free(result);
-        return NULL;
-    }
-    
-    igraph_error_t code = igraph_layout_fruchterman_reingold_3d(
-        graph, result, 1, 300, (igraph_real_t)vcount, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-        
-    if (code != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    return result;
+void *compute_lay_force_fr(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_fruchterman_reingold_3d(graph, result, 1, 300, (igraph_real_t)vcount, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
 }
 
 // Kamada-Kawai layout
-void* compute_lay_force_kk(igraph_t* graph) {
-    igraph_integer_t vcount = igraph_vcount(graph);
-    igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
-    if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-        free(result);
-        return NULL;
-    }
-    
-    igraph_error_t code = igraph_layout_kamada_kawai_3d(
-        graph, result, 0, vcount * 10, 0.0, (igraph_real_t)vcount, 
-        NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-        
-    if (code != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    return result;
+void *compute_lay_force_kk(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_kamada_kawai_3d(graph, result, 0, vcount * 10, 0.0, (igraph_real_t)vcount, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
 }
 
 // DRL layout
-void* compute_lay_force_drl(igraph_t* graph) {
-    igraph_integer_t vcount = igraph_vcount(graph);
-    igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
-    if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-        free(result);
-        return NULL;
-    }
-    
-    igraph_layout_drl_options_t options;
-    igraph_layout_drl_options_init(&options, IGRAPH_LAYOUT_DRL_DEFAULT);
-    
-    igraph_error_t code = igraph_layout_drl_3d(graph, result, 0, &options, NULL);
-    
-    if (code != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    return result;
+void *compute_lay_force_drl(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_layout_drl_options_t options;
+	igraph_layout_drl_options_init(&options, IGRAPH_LAYOUT_DRL_DEFAULT);
+
+	igraph_error_t code = igraph_layout_drl_3d(graph, result, 0, &options, NULL);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
 }
 
 // Davidson-Harel layout
-void* compute_lay_force_dh(igraph_t* graph) {
-    igraph_integer_t vcount = igraph_vcount(graph);
-    igraph_integer_t ecount = igraph_ecount(graph);
-    igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
-    if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-        free(result);
-        return NULL;
-    }
-    
-    igraph_real_t density = (vcount > 1) ? (2.0 * ecount) / ((igraph_real_t)(vcount * (vcount - 1))) : 0.0;
-    igraph_int_t fineiter = (igraph_int_t)fmax(10.0, (igraph_real_t)log2((igraph_real_t)vcount));
-    igraph_real_t coolfact = 0.75;
-    igraph_real_t w_dist = 1.0;
-    igraph_real_t w_border = 0.5;
-    igraph_real_t w_edge_len = density / 10.0;
-    igraph_real_t w_edge_cross = 1.0 - sqrt(density);
-    igraph_real_t w_node_edge = (1.0 - density) / 5.0;
-    
-    igraph_error_t code = igraph_layout_davidson_harel(
-        graph, result, 0, 10, fineiter, coolfact, w_dist, w_border,
-        w_edge_len, w_edge_cross, w_node_edge);
-        
-    if (code != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    return result;
+void *compute_lay_force_dh(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_integer_t ecount = igraph_ecount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_real_t density = (vcount > 1) ? (2.0 * ecount) / ((igraph_real_t)(vcount * (vcount - 1))) : 0.0;
+	igraph_int_t fineiter = (igraph_int_t)fmax(10.0, (igraph_real_t)log2((igraph_real_t)vcount));
+	igraph_real_t coolfact = 0.75;
+	igraph_real_t w_dist = 1.0;
+	igraph_real_t w_border = 0.5;
+	igraph_real_t w_edge_len = density / 10.0;
+	igraph_real_t w_edge_cross = 1.0 - sqrt(density);
+	igraph_real_t w_node_edge = (1.0 - density) / 5.0;
+
+	igraph_error_t code = igraph_layout_davidson_harel(graph, result, 0, 10, fineiter, coolfact, w_dist, w_border, w_edge_len, w_edge_cross, w_node_edge);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
 }
 
 // Reingold-Tilford tree layout
-void* compute_lay_tree_rt(igraph_t* graph) {
-    igraph_integer_t vcount = igraph_vcount(graph);
-    igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
-    if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-        free(result);
-        return NULL;
-    }
-    
-    igraph_vector_int_t roots;
-    igraph_vector_int_init(&roots, vcount > 0 ? 1 : 0);
-    if (vcount > 0) {
-        igraph_vector_int_set(&roots, 0, 0);
-    }
-    
-    igraph_error_t code = igraph_layout_reingold_tilford(
-        graph, result, IGRAPH_ALL, vcount > 0 ? &roots : NULL, NULL);
-    
-    igraph_vector_int_destroy(&roots);
-        
-    if (code != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    
-    // Convert 2D to 3D if needed
-    if (result->ncol < 3) {
-        igraph_matrix_resize(result, vcount, 3);
-        for (igraph_integer_t i = 0; i < vcount; i++) {
-            igraph_matrix_set(result, i, 2, 0.0);
-        }
-    }
-    return result;
+void *compute_lay_tree_rt(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_vector_int_t roots;
+	igraph_vector_int_init(&roots, vcount > 0 ? 1 : 0);
+	if (vcount > 0) {
+		igraph_vector_int_set(&roots, 0, 0);
+	}
+
+	igraph_error_t code = igraph_layout_reingold_tilford(graph, result, IGRAPH_ALL, vcount > 0 ? &roots : NULL, NULL);
+
+	igraph_vector_int_destroy(&roots);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+
+	// Convert 2D to 3D if needed
+	if (result->ncol < 3) {
+		igraph_matrix_resize(result, vcount, 3);
+		for (igraph_integer_t i = 0; i < vcount; i++) {
+			igraph_matrix_set(result, i, 2, 0.0);
+		}
+	}
+	return result;
 }
 
 // Sugiyama layout
-void* compute_lay_tree_sug(igraph_t* graph) {
-    igraph_integer_t vcount = igraph_vcount(graph);
-    igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
-    if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-        free(result);
-        return NULL;
-    }
-    
-    igraph_matrix_list_t routing;
-    igraph_matrix_list_init(&routing, 0);
-    
-    igraph_vector_int_t layers;
-    igraph_vector_int_init(&layers, vcount);
-    
-    igraph_error_t code = igraph_layout_sugiyama(
-        graph, result, &routing, &layers, 1.0, 1.0, 100, NULL);
-    
-    igraph_matrix_list_destroy(&routing);
-    igraph_vector_int_destroy(&layers);
-        
-    if (code != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    return result;
+void *compute_lay_tree_sug(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_matrix_list_t routing;
+	igraph_matrix_list_init(&routing, 0);
+
+	igraph_vector_int_t layers;
+	igraph_vector_int_init(&layers, vcount);
+
+	igraph_error_t code = igraph_layout_sugiyama(graph, result, &routing, &layers, 1.0, 1.0, 100, NULL);
+
+	igraph_matrix_list_destroy(&routing);
+	igraph_vector_int_destroy(&layers);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
 }
 
 // Circle layout
-void* compute_lay_geo_circle(igraph_t* graph) {
-    igraph_integer_t vcount = igraph_vcount(graph);
-    igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
-    if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-        free(result);
-        return NULL;
-    }
-    
-    igraph_vs_t order;
-    igraph_vs_all(&order);
-    
-    igraph_error_t code = igraph_layout_circle(graph, result, order);
-    igraph_vs_destroy(&order);
-        
-    if (code != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    
-    // Convert 2D to 3D
-    for (igraph_integer_t i = 0; i < vcount; i++) {
-        igraph_matrix_set(result, i, 2, 0.0);
-    }
-    return result;
+void *compute_lay_geo_circle(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_vs_t order;
+	igraph_vs_all(&order);
+
+	igraph_error_t code = igraph_layout_circle(graph, result, order);
+	igraph_vs_destroy(&order);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+
+	// Convert 2D to 3D
+	for (igraph_integer_t i = 0; i < vcount; i++) {
+		igraph_matrix_set(result, i, 2, 0.0);
+	}
+	return result;
 }
 
 // Star layout
-void* compute_lay_geo_star(igraph_t* graph) {
-    igraph_integer_t vcount = igraph_vcount(graph);
-    igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
-    if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-        free(result);
-        return NULL;
-    }
-    
-    igraph_error_t code = igraph_layout_star(graph, result, 0, NULL);
-        
-    if (code != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    
-    // Convert 2D to 3D
-    for (igraph_integer_t i = 0; i < vcount; i++) {
-        igraph_matrix_set(result, i, 2, 0.0);
-    }
-    return result;
+void *compute_lay_geo_star(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_star(graph, result, 0, NULL);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+
+	// Convert 2D to 3D
+	for (igraph_integer_t i = 0; i < vcount; i++) {
+		igraph_matrix_set(result, i, 2, 0.0);
+	}
+	return result;
 }
 
 // Grid layout
-void* compute_lay_geo_grid(igraph_t* graph) {
-    igraph_integer_t vcount = igraph_vcount(graph);
-    igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
-    if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-        free(result);
-        return NULL;
-    }
-    
-    int side = (int)ceil(pow((double)vcount, 1.0 / 3.0));
-    
-    igraph_error_t code = igraph_layout_grid_3d(
-        graph, result, (igraph_integer_t)side, (igraph_integer_t)side);
-        
-    if (code != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    return result;
+void *compute_lay_geo_grid(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	int side = (int)ceil(pow((double)vcount, 1.0 / 3.0));
+
+	igraph_error_t code = igraph_layout_grid_3d(graph, result, (igraph_integer_t)side, (igraph_integer_t)side);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
 }
 
 // Sphere layout
-void* compute_lay_geo_sphere(igraph_t* graph) {
-    igraph_integer_t vcount = igraph_vcount(graph);
-    igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
-    if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-        free(result);
-        return NULL;
-    }
-    
-    igraph_error_t code = igraph_layout_sphere(graph, result);
-        
-    if (code != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    return result;
+void *compute_lay_geo_sphere(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_sphere(graph, result);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
 }
 
 // Random layout
-void* compute_lay_geo_rand(igraph_t* graph) {
-    igraph_integer_t vcount = igraph_vcount(graph);
-    igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
-    if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-        free(result);
-        return NULL;
-    }
-    
-    igraph_error_t code = igraph_layout_random_3d(graph, result);
-        
-    if (code != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    return result;
+void *compute_lay_geo_rand(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_random_3d(graph, result);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
 }
 
 // MDS layout
-void* compute_lay_bip_mds(igraph_t* graph) {
-    igraph_integer_t vcount = igraph_vcount(graph);
-    igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
-    if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-        free(result);
-        return NULL;
-    }
-    
-    // Compute distances first
-    igraph_matrix_t dist_matrix;
-    if (igraph_matrix_init(&dist_matrix, vcount, vcount) != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    
-    igraph_vs_t all_vs;
-    igraph_vs_all(&all_vs);
-    
-    igraph_error_t dist_result = igraph_distances_dijkstra(
-        graph, &dist_matrix, all_vs, all_vs, NULL, IGRAPH_UNDIRECTED);
-    
-    igraph_vs_destroy(&all_vs);
-    
-    if (dist_result != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(&dist_matrix);
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    
-    igraph_error_t code = igraph_layout_mds(graph, result, &dist_matrix, 3);
-    igraph_matrix_destroy(&dist_matrix);
-        
-    if (code != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    return result;
+void *compute_lay_bip_mds(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	// Compute distances first
+	igraph_matrix_t dist_matrix;
+	if (igraph_matrix_init(&dist_matrix, vcount, vcount) != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+
+	igraph_vs_t all_vs;
+	igraph_vs_all(&all_vs);
+
+	igraph_error_t dist_result = igraph_distances_dijkstra(graph, &dist_matrix, all_vs, all_vs, NULL, IGRAPH_UNDIRECTED);
+
+	igraph_vs_destroy(&all_vs);
+
+	if (dist_result != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(&dist_matrix);
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_mds(graph, result, &dist_matrix, 3);
+	igraph_matrix_destroy(&dist_matrix);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
 }
 
 // Bipartite layout
-void* compute_lay_bip_sug(igraph_t* graph) {
-    igraph_integer_t vcount = igraph_vcount(graph);
-    igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
-    if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-        free(result);
-        return NULL;
-    }
-    
-    igraph_vector_bool_t types;
-    igraph_vector_bool_init(&types, vcount);
-    
-    for (igraph_integer_t i = 0; i < vcount; i++) {
-        igraph_vector_bool_set(&types, i, (i % 2 == 0));
-    }
-    
-    igraph_error_t code = igraph_layout_bipartite(graph, &types, result, 1.0, 1.0, 100);
-    
-    igraph_vector_bool_destroy(&types);
-        
-    if (code != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    
-    // Ensure 3D with Z=0 if needed
-    if (result->ncol == 2) {
-        igraph_matrix_resize(result, vcount, 3);
-        for (igraph_integer_t i = 0; i < vcount; i++) {
-            igraph_matrix_set(result, i, 2, 0.0);
-        }
-    }
-    return result;
+void *compute_lay_bip_sug(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_vector_bool_t types;
+	igraph_vector_bool_init(&types, vcount);
+
+	for (igraph_integer_t i = 0; i < vcount; i++) {
+		igraph_vector_bool_set(&types, i, (i % 2 == 0));
+	}
+
+	igraph_error_t code = igraph_layout_bipartite(graph, &types, result, 1.0, 1.0, 100);
+
+	igraph_vector_bool_destroy(&types);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+
+	// Ensure 3D with Z=0 if needed
+	if (result->ncol == 2) {
+		igraph_matrix_resize(result, vcount, 3);
+		for (igraph_integer_t i = 0; i < vcount; i++) {
+			igraph_matrix_set(result, i, 2, 0.0);
+		}
+	}
+	return result;
 }
 
 // UMAP layout
-void* compute_lay_umap(igraph_t* graph) {
-    igraph_integer_t vcount = igraph_vcount(graph);
-    igraph_matrix_t* result = malloc(sizeof(igraph_matrix_t));
-    if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-        free(result);
-        return NULL;
-    }
-    
-    igraph_error_t code = igraph_layout_umap_3d(
-        graph, result, 1, NULL, 0.1, 300, 0);
-        
-    if (code != IGRAPH_SUCCESS) {
-        igraph_matrix_destroy(result);
-        free(result);
-        return NULL;
-    }
-    return result;
+void *compute_lay_umap(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_umap_3d(graph, result, 1, NULL, 0.1, 300, 0);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
 }
 
-void free_layout_matrix(void* result_data) {
-    if (result_data) {
-        igraph_matrix_destroy((igraph_matrix_t*)result_data);
-        free(result_data);
-    }
+void free_layout_matrix(void *result_data)
+{
+	if (result_data) {
+		igraph_matrix_destroy((igraph_matrix_t *)result_data);
+		free(result_data);
+	}
 }
 
 // Apply function - bridge to update graph state
-void apply_layout_matrix(ExecutionContext* ctx, void* result_data) {
-    if (!ctx || !ctx->app_state || !ctx->current_graph || !result_data) {
-        fprintf(stderr, "[apply_layout_matrix] Error: Invalid parameters\n");
-        return;
-    }
-    
-    AppState* state = ctx->app_state;
-    GraphData* data = &state->current_graph;
-    Renderer* renderer = &state->renderer;
-    igraph_matrix_t* layout = (igraph_matrix_t*)result_data;
-    
-    if (!data->graph_initialized) {
-        fprintf(stderr, "[apply_layout_matrix] Error: Graph not initialized\n");
-        return;
-    }
-    
-    // Check if layout dimensions match
-    if (layout->nrow != data->node_count || layout->ncol < 2) {
-        fprintf(stderr, "[apply_layout_matrix] Error: Layout dimensions don't match node count\n");
-        return;
-    }
-    
-    // Destroy old layout and replace with new one
-    igraph_matrix_destroy(&data->current_layout);
-    igraph_matrix_init_copy(&data->current_layout, layout);
-    
-    // Sync node positions from the layout matrix
-    if (data->nodes) {
-        for (igraph_integer_t i = 0; i < data->node_count; i++) {
-            data->nodes[i].position[0] = (float)MATRIX(data->current_layout, i, 0);
-            data->nodes[i].position[1] = (float)MATRIX(data->current_layout, i, 1);
-            data->nodes[i].position[2] = (igraph_matrix_ncol(&data->current_layout) > 2)
-                ? (float)MATRIX(data->current_layout, i, 2)
-                : 0.0f;
-        }
-    }
-    
-    // Trigger renderer update to display new layout
-    renderer_update_graph(renderer, data);
-    
-    printf("[apply_layout_matrix] Layout applied and renderer refreshed\n");
+void apply_layout_matrix(ExecutionContext *ctx, void *result_data)
+{
+	if (!ctx || !ctx->app_state || !ctx->current_graph || !result_data) {
+		fprintf(stderr, "[apply_layout_matrix] Error: Invalid parameters\n");
+		return;
+	}
+
+	AppState *state = ctx->app_state;
+	GraphData *data = &state->current_graph;
+	Renderer *renderer = &state->renderer;
+	igraph_matrix_t *layout = (igraph_matrix_t *)result_data;
+
+	if (!data->graph_initialized) {
+		fprintf(stderr, "[apply_layout_matrix] Error: Graph not initialized\n");
+		return;
+	}
+
+	// Check if layout dimensions match
+	if (layout->nrow != data->node_count || layout->ncol < 2) {
+		fprintf(stderr, "[apply_layout_matrix] Error: Layout dimensions don't match node count\n");
+		return;
+	}
+
+	// Destroy old layout and replace with new one
+	igraph_matrix_destroy(&data->current_layout);
+	igraph_matrix_init_copy(&data->current_layout, layout);
+
+	// Sync node positions from the layout matrix
+	if (data->nodes) {
+		for (igraph_integer_t i = 0; i < data->node_count; i++) {
+			data->nodes[i].position[0] = (float)MATRIX(data->current_layout, i, 0);
+			data->nodes[i].position[1] = (float)MATRIX(data->current_layout, i, 1);
+			data->nodes[i].position[2] = (igraph_matrix_ncol(&data->current_layout) > 2) ? (float)MATRIX(data->current_layout, i, 2) : 0.0f;
+		}
+	}
+
+	// Trigger renderer update to display new layout
+	renderer_update_graph(renderer, data);
+
+	printf("[apply_layout_matrix] Layout applied and renderer refreshed\n");
 }

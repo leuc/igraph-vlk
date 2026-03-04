@@ -1,7 +1,7 @@
 #pragma once
 
-#include <stdbool.h>
 #include "app_state.h"
+#include <stdbool.h>
 
 /**
  * Initialize the HUD system.
@@ -14,4 +14,3 @@ void ui_hud_init(void);
  * @param fps Current frames per second
  */
 void ui_hud_update(AppState *state, float fps);
-

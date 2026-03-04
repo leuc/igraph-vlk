@@ -9,18 +9,19 @@
 #include "graph/graph_types.h"
 
 // Helper structure for community arrangement
-typedef struct {
-    int start_idx;
-    int end_idx;
+typedef struct
+{
+	int start_idx;
+	int end_idx;
 } CommBlock;
 
-void graph_cluster(GraphData *data, ClusterType type) {
+void graph_cluster(GraphData *data, ClusterType type)
+{
 	igraph_vector_int_t membership;
 	igraph_vector_int_init(&membership, igraph_vcount(&data->g));
 	igraph_vector_t weights_vec;
 	igraph_vector_t node_weights_vec;
-	bool use_weights = (data->edges != NULL && data->edge_attr_name != NULL &&
-						strcmp(data->edge_attr_name, "") != 0);
+	bool use_weights = (data->edges != NULL && data->edge_attr_name != NULL && strcmp(data->edge_attr_name, "") != 0);
 	if (use_weights) {
 		igraph_vector_init(&weights_vec, data->edge_count);
 		for (int i = 0; i < data->edge_count; i++) {
@@ -30,16 +31,14 @@ void graph_cluster(GraphData *data, ClusterType type) {
 		igraph_vector_init(&node_weights_vec, data->node_count);
 		igraph_vector_int_t degrees;
 		igraph_vector_int_init(&degrees, data->node_count);
-		igraph_degree(&data->g, &degrees, igraph_vss_all(), IGRAPH_ALL,
-					  IGRAPH_LOOPS);
+		igraph_degree(&data->g, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS);
 		for (int i = 0; i < data->node_count; i++) {
 			VECTOR(node_weights_vec)[i] = (igraph_real_t)VECTOR(degrees)[i];
 		}
 		igraph_vector_int_destroy(&degrees);
 	}
 	const igraph_vector_t *weights_ptr = use_weights ? &weights_vec : NULL;
-	const igraph_vector_t *node_weights_ptr =
-		use_weights ? &node_weights_vec : NULL;
+	const igraph_vector_t *node_weights_ptr = use_weights ? &node_weights_vec : NULL;
 
 	switch (type) {
 	case CLUSTER_FASTGREEDY: {
@@ -47,8 +46,7 @@ void graph_cluster(GraphData *data, ClusterType type) {
 		igraph_vector_t mo;
 		igraph_matrix_int_init(&m, 0, 0);
 		igraph_vector_init(&mo, 0);
-		igraph_community_fastgreedy(&data->g, weights_ptr, &m, &mo,
-									&membership);
+		igraph_community_fastgreedy(&data->g, weights_ptr, &m, &mo, &membership);
 		igraph_matrix_int_destroy(&m);
 		igraph_vector_destroy(&mo);
 		break;
@@ -58,46 +56,33 @@ void graph_cluster(GraphData *data, ClusterType type) {
 		igraph_vector_t mo;
 		igraph_matrix_int_init(&m, 0, 0);
 		igraph_vector_init(&mo, 0);
-		igraph_community_walktrap(&data->g, weights_ptr, 4, &m, &mo,
-								  &membership);
+		igraph_community_walktrap(&data->g, weights_ptr, 4, &m, &mo, &membership);
 		igraph_matrix_int_destroy(&m);
 		igraph_vector_destroy(&mo);
 		break;
 	}
 	case CLUSTER_LABEL_PROP:
-		igraph_community_label_propagation(&data->g, &membership, IGRAPH_ALL,
-										   weights_ptr, NULL, NULL,
-										   IGRAPH_LPA_FAST);
+		igraph_community_label_propagation(&data->g, &membership, IGRAPH_ALL, weights_ptr, NULL, NULL, IGRAPH_LPA_FAST);
 		break;
 	case CLUSTER_MULTILEVEL: {
 		igraph_vector_t mo;
 		igraph_vector_init(&mo, 0);
-		igraph_community_multilevel(&data->g, weights_ptr, 1.0, &membership,
-									NULL, &mo);
+		igraph_community_multilevel(&data->g, weights_ptr, 1.0, &membership, NULL, &mo);
 		igraph_vector_destroy(&mo);
 		break;
 	}
-	case CLUSTER_LEIDEN:
-		{
-			// Use leiden_simple for undirected graphs to avoid vertex weight errors
-			igraph_int_t nb_clusters;
-			igraph_real_t quality;
-			if (igraph_is_directed(&data->g)) {
-				// For directed graphs, use full leiden with weights
-				igraph_community_leiden(&data->g, weights_ptr, node_weights_ptr,
-										node_weights_ptr,
-										1.0 / (2.0 * data->edge_count), 0.01, 1,
-										100, &membership, &nb_clusters, &quality);
-			} else {
-				// For undirected graphs, use leiden_simple without vertex weights
-				igraph_community_leiden_simple(&data->g, weights_ptr,
-											   IGRAPH_LEIDEN_OBJECTIVE_CPM,
-											   1.0 / (2.0 * data->edge_count),
-											   0.01, 1, 100, &membership,
-											   &nb_clusters, &quality);
-			}
+	case CLUSTER_LEIDEN: {
+		// Use leiden_simple for undirected graphs to avoid vertex weight errors
+		igraph_int_t nb_clusters;
+		igraph_real_t quality;
+		if (igraph_is_directed(&data->g)) {
+			// For directed graphs, use full leiden with weights
+			igraph_community_leiden(&data->g, weights_ptr, node_weights_ptr, node_weights_ptr, 1.0 / (2.0 * data->edge_count), 0.01, 1, 100, &membership, &nb_clusters, &quality);
+		} else {
+			// For undirected graphs, use leiden_simple without vertex weights
+			igraph_community_leiden_simple(&data->g, weights_ptr, IGRAPH_LEIDEN_OBJECTIVE_CPM, 1.0 / (2.0 * data->edge_count), 0.01, 1, 100, &membership, &nb_clusters, &quality);
 		}
-		break;
+	} break;
 	default:
 		break;
 	}
@@ -123,10 +108,7 @@ void graph_cluster(GraphData *data, ClusterType type) {
 	for (int i = 0; i < data->node_count; i++) {
 		int c_idx = VECTOR(membership)[i];
 		memcpy(data->nodes[i].color, colors[c_idx], 12);
-		data->nodes[i].glow =
-			(max_cluster_size > 0)
-				? (float)cluster_sizes[c_idx] / (float)max_cluster_size
-				: 0.0f;
+		data->nodes[i].glow = (max_cluster_size > 0) ? (float)cluster_sizes[c_idx] / (float)max_cluster_size : 0.0f;
 	}
 	if (use_weights) {
 		igraph_vector_destroy(&node_weights_vec);
@@ -137,203 +119,217 @@ void graph_cluster(GraphData *data, ClusterType type) {
 	igraph_vector_int_destroy(&membership);
 }
 
-void graph_apply_community_arrangement(GraphData *data, CommunityArrangementMode mode) {
-    if (!data->graph_initialized || mode == COMMUNITY_ARRANGEMENT_NONE) return;
+void graph_apply_community_arrangement(GraphData *data, CommunityArrangementMode mode)
+{
+	if (!data->graph_initialized || mode == COMMUNITY_ARRANGEMENT_NONE)
+		return;
 
-    // Backup current layout positions so we can safely compute local community centroids
-    vec3 *old_pos = malloc(sizeof(vec3) * data->node_count);
-    for(int i = 0; i < data->node_count; i++) {
-        old_pos[i][0] = MATRIX(data->current_layout, i, 0);
-        old_pos[i][1] = MATRIX(data->current_layout, i, 1);
-        old_pos[i][2] = MATRIX(data->current_layout, i, 2);
-    }
+	// Backup current layout positions so we can safely compute local community centroids
+	vec3 *old_pos = malloc(sizeof(vec3) * data->node_count);
+	for (int i = 0; i < data->node_count; i++) {
+		old_pos[i][0] = MATRIX(data->current_layout, i, 0);
+		old_pos[i][1] = MATRIX(data->current_layout, i, 1);
+		old_pos[i][2] = MATRIX(data->current_layout, i, 2);
+	}
 
-    // 1. Sort nodes by community color to group them
-    int *indices = malloc(sizeof(int) * data->node_count);
-    for (int i = 0; i < data->node_count; i++) indices[i] = i;
+	// 1. Sort nodes by community color to group them
+	int *indices = malloc(sizeof(int) * data->node_count);
+	for (int i = 0; i < data->node_count; i++)
+		indices[i] = i;
 
-    for (int i = 0; i < data->node_count - 1; i++) {
-        for (int j = i + 1; j < data->node_count; j++) {
-            float sum_i = data->nodes[indices[i]].color[0] + data->nodes[indices[i]].color[1]*10 + data->nodes[indices[i]].color[2]*100;
-            float sum_j = data->nodes[indices[j]].color[0] + data->nodes[indices[j]].color[1]*10 + data->nodes[indices[j]].color[2]*100;
-            if (sum_j < sum_i) {
-                int temp = indices[i];
-                indices[i] = indices[j];
-                indices[j] = temp;
-            }
-        }
-    }
+	for (int i = 0; i < data->node_count - 1; i++) {
+		for (int j = i + 1; j < data->node_count; j++) {
+			float sum_i = data->nodes[indices[i]].color[0] + data->nodes[indices[i]].color[1] * 10 + data->nodes[indices[i]].color[2] * 100;
+			float sum_j = data->nodes[indices[j]].color[0] + data->nodes[indices[j]].color[1] * 10 + data->nodes[indices[j]].color[2] * 100;
+			if (sum_j < sum_i) {
+				int temp = indices[i];
+				indices[i] = indices[j];
+				indices[j] = temp;
+			}
+		}
+	}
 
-    // 2. Map out the start and end indices of each distinct community
-    CommBlock *blocks = malloc(sizeof(CommBlock) * data->node_count);
-    int num_blocks = 0;
-    int current_start = 0;
+	// 2. Map out the start and end indices of each distinct community
+	CommBlock *blocks = malloc(sizeof(CommBlock) * data->node_count);
+	int num_blocks = 0;
+	int current_start = 0;
 
-    while (current_start < data->node_count) {
-        int current_end = current_start;
-        float current_sum = data->nodes[indices[current_start]].color[0] + 
-                            data->nodes[indices[current_start]].color[1]*10 + 
-                            data->nodes[indices[current_start]].color[2]*100;
-                            
-        while (current_end < data->node_count) {
-            float sum = data->nodes[indices[current_end]].color[0] + 
-                        data->nodes[indices[current_end]].color[1]*10 + 
-                        data->nodes[indices[current_end]].color[2]*100;
-            if (fabs(sum - current_sum) > 0.01f) break;
-            current_end++;
-        }
-        
-        blocks[num_blocks].start_idx = current_start;
-        blocks[num_blocks].end_idx = current_end;
-        num_blocks++;
-        current_start = current_end;
-    }
+	while (current_start < data->node_count) {
+		int current_end = current_start;
+		float current_sum = data->nodes[indices[current_start]].color[0] + data->nodes[indices[current_start]].color[1] * 10 + data->nodes[indices[current_start]].color[2] * 100;
 
-    // Use smaller spacing so the local communities don't expand into each other
-    float primary_spacing = 0.5f; 
-    float secondary_spacing = 0.5f;
-    float grid_spacing = 0.5f;
+		while (current_end < data->node_count) {
+			float sum = data->nodes[indices[current_end]].color[0] + data->nodes[indices[current_end]].color[1] * 10 + data->nodes[indices[current_end]].color[2] * 100;
+			if (fabs(sum - current_sum) > 0.01f)
+				break;
+			current_end++;
+		}
 
-    // 3. Process each community locally in PARALLEL
-    #pragma omp parallel for
-    for (int b = 0; b < num_blocks; b++) {
-        int s_idx = blocks[b].start_idx;
-        int e_idx = blocks[b].end_idx;
-        int comm_size = e_idx - s_idx;
+		blocks[num_blocks].start_idx = current_start;
+		blocks[num_blocks].end_idx = current_end;
+		num_blocks++;
+		current_start = current_end;
+	}
 
-        // Calculate the physical centroid of this community in the current layout
-        vec3 centroid = {0, 0, 0};
-        for (int i = s_idx; i < e_idx; i++) {
-            glm_vec3_add(centroid, old_pos[indices[i]], centroid);
-        }
-        glm_vec3_scale(centroid, 1.0f / comm_size, centroid);
+	// Use smaller spacing so the local communities don't expand into each other
+	float primary_spacing = 0.5f;
+	float secondary_spacing = 0.5f;
+	float grid_spacing = 0.5f;
 
-        // --- KECECI SEQUENCES ---
-        if (mode == COMMUNITY_ARRANGEMENT_KECECI_2D || mode == COMMUNITY_ARRANGEMENT_KECECI_TETRA_3D) {
-            for (int i = 0; i < comm_size; i++) {
-                int node_idx = indices[s_idx + i];
-                // Center the sequence on the X axis relative to the centroid
-                float x = (i - comm_size / 2.0f) * primary_spacing;
-                float y = 0.0f, z = 0.0f;
+// 3. Process each community locally in PARALLEL
+#pragma omp parallel for
+	for (int b = 0; b < num_blocks; b++) {
+		int s_idx = blocks[b].start_idx;
+		int e_idx = blocks[b].end_idx;
+		int comm_size = e_idx - s_idx;
 
-                if (mode == COMMUNITY_ARRANGEMENT_KECECI_2D) {
-                    y = (i % 2 == 0) ? secondary_spacing : -secondary_spacing;
-                } else {
-                    int mod = i % 4;
-                    if (mod == 0) { y = secondary_spacing; z = secondary_spacing; }
-                    else if (mod == 1) { y = -secondary_spacing; z = -secondary_spacing; }
-                    else if (mod == 2) { y = secondary_spacing; z = -secondary_spacing; }
-                    else if (mod == 3) { y = -secondary_spacing; z = secondary_spacing; }
-                }
+		// Calculate the physical centroid of this community in the current layout
+		vec3 centroid = {0, 0, 0};
+		for (int i = s_idx; i < e_idx; i++) {
+			glm_vec3_add(centroid, old_pos[indices[i]], centroid);
+		}
+		glm_vec3_scale(centroid, 1.0f / comm_size, centroid);
 
-                MATRIX(data->current_layout, node_idx, 0) = centroid[0] + x;
-                MATRIX(data->current_layout, node_idx, 1) = centroid[1] + y;
-                MATRIX(data->current_layout, node_idx, 2) = centroid[2] + z;
-            }
-        } 
-        // --- COMPACT ORTHOGONAL GRIDS ---
-        else if (mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_2D || mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_3D) {
-            bool is_3d = (mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_3D);
-            int grid_size = is_3d ? (int)ceil(cbrt(comm_size)) : (int)ceil(sqrt(comm_size));
-            if (grid_size < 1) grid_size = 1;
+		// --- KECECI SEQUENCES ---
+		if (mode == COMMUNITY_ARRANGEMENT_KECECI_2D || mode == COMMUNITY_ARRANGEMENT_KECECI_TETRA_3D) {
+			for (int i = 0; i < comm_size; i++) {
+				int node_idx = indices[s_idx + i];
+				// Center the sequence on the X axis relative to the centroid
+				float x = (i - comm_size / 2.0f) * primary_spacing;
+				float y = 0.0f, z = 0.0f;
 
-            vec3 *grid_pos = malloc(sizeof(vec3) * comm_size);
-            vec3 *target_pos = malloc(sizeof(vec3) * comm_size);
+				if (mode == COMMUNITY_ARRANGEMENT_KECECI_2D) {
+					y = (i % 2 == 0) ? secondary_spacing : -secondary_spacing;
+				} else {
+					int mod = i % 4;
+					if (mod == 0) {
+						y = secondary_spacing;
+						z = secondary_spacing;
+					} else if (mod == 1) {
+						y = -secondary_spacing;
+						z = -secondary_spacing;
+					} else if (mod == 2) {
+						y = secondary_spacing;
+						z = -secondary_spacing;
+					} else if (mod == 3) {
+						y = -secondary_spacing;
+						z = secondary_spacing;
+					}
+				}
 
-            // Initialize local grid layout
-            for (int i = 0; i < comm_size; i++) {
-                if (is_3d) {
-                    grid_pos[i][0] = (i % grid_size);
-                    grid_pos[i][1] = ((i / grid_size) % grid_size);
-                    grid_pos[i][2] = (i / (grid_size * grid_size));
-                } else {
-                    grid_pos[i][0] = (i % grid_size);
-                    grid_pos[i][1] = (i / grid_size);
-                    grid_pos[i][2] = 0.0f;
-                }
-            }
+				MATRIX(data->current_layout, node_idx, 0) = centroid[0] + x;
+				MATRIX(data->current_layout, node_idx, 1) = centroid[1] + y;
+				MATRIX(data->current_layout, node_idx, 2) = centroid[2] + z;
+			}
+		}
+		// --- COMPACT ORTHOGONAL GRIDS ---
+		else if (mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_2D || mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_3D)
+		{
+			bool is_3d = (mode == COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_3D);
+			int grid_size = is_3d ? (int)ceil(cbrt(comm_size)) : (int)ceil(sqrt(comm_size));
+			if (grid_size < 1)
+				grid_size = 1;
 
-            // Local Simulated Annealing
-            float temperature = 10.0f;
-            float cooling_rate = 0.95f;
-            int iterations = 50;
+			vec3 *grid_pos = malloc(sizeof(vec3) * comm_size);
+			vec3 *target_pos = malloc(sizeof(vec3) * comm_size);
 
-            for (int iter = 0; iter < iterations && temperature > 0.2f; iter++) {
-                for (int i = 0; i < comm_size; i++) {
-                    int u = indices[s_idx + i];
-                    vec3 desired_pos = {0};
-                    int neighbor_count = 0;
+			// Initialize local grid layout
+			for (int i = 0; i < comm_size; i++) {
+				if (is_3d) {
+					grid_pos[i][0] = (i % grid_size);
+					grid_pos[i][1] = ((i / grid_size) % grid_size);
+					grid_pos[i][2] = (i / (grid_size * grid_size));
+				} else {
+					grid_pos[i][0] = (i % grid_size);
+					grid_pos[i][1] = (i / grid_size);
+					grid_pos[i][2] = 0.0f;
+				}
+			}
 
-                    // Find internal neighbors within the same community block
-                    for (uint32_t e = 0; e < data->edge_count; e++) {
-                        int v_global = -1;
-                        if (data->edges[e].from == u) v_global = data->edges[e].to;
-                        else if (data->edges[e].to == u) v_global = data->edges[e].from;
+			// Local Simulated Annealing
+			float temperature = 10.0f;
+			float cooling_rate = 0.95f;
+			int iterations = 50;
 
-                        if (v_global != -1) {
-                            int v_local = -1;
-                            for(int j = 0; j < comm_size; j++) {
-                                if(indices[s_idx + j] == v_global) {
-                                    v_local = j; break;
-                                }
-                            }
-                            if(v_local != -1) {
-                                desired_pos[0] += grid_pos[v_local][0];
-                                desired_pos[1] += grid_pos[v_local][1];
-                                desired_pos[2] += grid_pos[v_local][2];
-                                neighbor_count++;
-                            }
-                        }
-                    }
+			for (int iter = 0; iter < iterations && temperature > 0.2f; iter++) {
+				for (int i = 0; i < comm_size; i++) {
+					int u = indices[s_idx + i];
+					vec3 desired_pos = {0};
+					int neighbor_count = 0;
 
-                    if (neighbor_count > 0) {
-                        desired_pos[0] = roundf(desired_pos[0] / neighbor_count);
-                        desired_pos[1] = roundf(desired_pos[1] / neighbor_count);
-                        desired_pos[2] = is_3d ? roundf(desired_pos[2] / neighbor_count) : 0.0f;
-                        glm_vec3_copy(desired_pos, target_pos[i]);
-                    } else {
-                        glm_vec3_copy(grid_pos[i], target_pos[i]);
-                    }
-                }
+					// Find internal neighbors within the same community block
+					for (uint32_t e = 0; e < data->edge_count; e++) {
+						int v_global = -1;
+						if (data->edges[e].from == u)
+							v_global = data->edges[e].to;
+						else if (data->edges[e].to == u)
+							v_global = data->edges[e].from;
 
-                // Resolve Collisions
-                for (int i = 0; i < comm_size; i++) {
-                    int swap_target = -1;
-                    for (int j = 0; j < comm_size; j++) {
-                        if (i != j && grid_pos[j][0] == target_pos[i][0] &&
-                            grid_pos[j][1] == target_pos[i][1] && grid_pos[j][2] == target_pos[i][2]) {
-                            swap_target = j; break;
-                        }
-                    }
-                    if (swap_target != -1) {
-                        vec3 temp;
-                        glm_vec3_copy(grid_pos[i], temp);
-                        glm_vec3_copy(grid_pos[swap_target], grid_pos[i]);
-                        glm_vec3_copy(temp, grid_pos[swap_target]);
-                    } else {
-                        glm_vec3_copy(target_pos[i], grid_pos[i]);
-                    }
-                }
-                temperature *= cooling_rate;
-            }
+						if (v_global != -1) {
+							int v_local = -1;
+							for (int j = 0; j < comm_size; j++) {
+								if (indices[s_idx + j] == v_global) {
+									v_local = j;
+									break;
+								}
+							}
+							if (v_local != -1) {
+								desired_pos[0] += grid_pos[v_local][0];
+								desired_pos[1] += grid_pos[v_local][1];
+								desired_pos[2] += grid_pos[v_local][2];
+								neighbor_count++;
+							}
+						}
+					}
 
-            // Offset the compacted grid exactly to the community's physical centroid
-            vec3 grid_center = { (grid_size - 1) / 2.0f, (grid_size - 1) / 2.0f, is_3d ? (grid_size - 1) / 2.0f : 0.0f };
+					if (neighbor_count > 0) {
+						desired_pos[0] = roundf(desired_pos[0] / neighbor_count);
+						desired_pos[1] = roundf(desired_pos[1] / neighbor_count);
+						desired_pos[2] = is_3d ? roundf(desired_pos[2] / neighbor_count) : 0.0f;
+						glm_vec3_copy(desired_pos, target_pos[i]);
+					} else {
+						glm_vec3_copy(grid_pos[i], target_pos[i]);
+					}
+				}
 
-            for (int i = 0; i < comm_size; i++) {
-                int node_idx = indices[s_idx + i];
-                MATRIX(data->current_layout, node_idx, 0) = centroid[0] + (grid_pos[i][0] - grid_center[0]) * grid_spacing;
-                MATRIX(data->current_layout, node_idx, 1) = centroid[1] + (grid_pos[i][1] - grid_center[1]) * grid_spacing;
-                MATRIX(data->current_layout, node_idx, 2) = centroid[2] + (grid_pos[i][2] - grid_center[2]) * grid_spacing;
-            }
+				// Resolve Collisions
+				for (int i = 0; i < comm_size; i++) {
+					int swap_target = -1;
+					for (int j = 0; j < comm_size; j++) {
+						if (i != j && grid_pos[j][0] == target_pos[i][0] && grid_pos[j][1] == target_pos[i][1] && grid_pos[j][2] == target_pos[i][2]) {
+							swap_target = j;
+							break;
+						}
+					}
+					if (swap_target != -1) {
+						vec3 temp;
+						glm_vec3_copy(grid_pos[i], temp);
+						glm_vec3_copy(grid_pos[swap_target], grid_pos[i]);
+						glm_vec3_copy(temp, grid_pos[swap_target]);
+					} else {
+						glm_vec3_copy(target_pos[i], grid_pos[i]);
+					}
+				}
+				temperature *= cooling_rate;
+			}
 
-            free(grid_pos);
-            free(target_pos);
-        }
-    }
+			// Offset the compacted grid exactly to the community's physical centroid
+			vec3 grid_center = {(grid_size - 1) / 2.0f, (grid_size - 1) / 2.0f, is_3d ? (grid_size - 1) / 2.0f : 0.0f};
 
-    free(blocks);
-    free(old_pos);
-    free(indices);
-    graph_sync_node_positions(data); 
+			for (int i = 0; i < comm_size; i++) {
+				int node_idx = indices[s_idx + i];
+				MATRIX(data->current_layout, node_idx, 0) = centroid[0] + (grid_pos[i][0] - grid_center[0]) * grid_spacing;
+				MATRIX(data->current_layout, node_idx, 1) = centroid[1] + (grid_pos[i][1] - grid_center[1]) * grid_spacing;
+				MATRIX(data->current_layout, node_idx, 2) = centroid[2] + (grid_pos[i][2] - grid_center[2]) * grid_spacing;
+			}
+
+			free(grid_pos);
+			free(target_pos);
+		}
+	}
+
+	free(blocks);
+	free(old_pos);
+	free(indices);
+	graph_sync_node_positions(data);
 }

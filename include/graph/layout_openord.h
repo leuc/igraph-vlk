@@ -7,7 +7,8 @@
 #include "graph/graph_types.h"
 
 // OpenOrd parameters
-typedef struct {
+typedef struct
+{
 	int iterations;
 	float temperature;
 	float attraction;
@@ -20,7 +21,8 @@ typedef struct {
 	float min_edges;
 } OpenOrdStage;
 
-typedef struct OpenOrdContext {
+typedef struct OpenOrdContext
+{
 	int stage_id; // 0:Liquid, 1:Expansion, 2:Cooldown, 3:Crunch, 4:Simmer,
 				  // 5:Done
 	int current_iter;

@@ -4,7 +4,8 @@
 #include "renderer.h"
 
 // Compute shader data structures (forward declarations for public API)
-typedef struct {
+typedef struct
+{
 	vec3 position;
 	float pad1;
 	vec3 color;
@@ -13,7 +14,8 @@ typedef struct {
 	int pad2, pad3, pad4;
 } CompNode;
 
-typedef struct {
+typedef struct
+{
 	int sourceId;
 	int targetId;
 	int elevationLevel;
@@ -25,20 +27,21 @@ typedef struct {
 	int pad;
 } CompEdge;
 
-typedef struct {
+typedef struct
+{
 	float position[3];
 	float pad;
 } CompHub;
 
 /**
  * Dispatch edge routing computation on the GPU.
- * 
+ *
  * This function runs the compute shader to calculate curved edge paths
  * between graph nodes using spherical PCB routing or 3D hub-spoke routing.
- * 
+ *
  * @param r           The renderer instance
  * @param graph       The graph data containing nodes, edges, and hubs
- * @param edgeResults Output buffer to receive computed edge paths (must be sized 
+ * @param edgeResults Output buffer to receive computed edge paths (must be sized
  *                    for graph->edge_count elements)
  * @return VK_SUCCESS on success, Vulkan error code on failure
  */

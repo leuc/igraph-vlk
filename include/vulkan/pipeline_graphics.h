@@ -10,7 +10,6 @@
 // Forward declare Renderer to access needed fields
 typedef struct Renderer Renderer;
 
-void pipeline_graphics_create(Renderer *r, VulkanCore *core,
-							   VulkanSwapchain *swap, VkRenderPass renderPass);
+void pipeline_graphics_create(Renderer *r, VulkanCore *core, VulkanSwapchain *swap, VkRenderPass renderPass);
 
 #endif // PIPELINE_GRAPHICS_H

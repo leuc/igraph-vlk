@@ -7,7 +7,8 @@
 
 #define MAX_FRAMES_IN_FLIGHT 2
 
-typedef struct {
+typedef struct
+{
 	VkCommandPool commandPool;
 	VkCommandBuffer *commandBuffers;
 	VkSemaphore *imageAvailableSemaphores;
@@ -16,8 +17,7 @@ typedef struct {
 	uint32_t currentFrame;
 } VulkanCommands;
 
-void vulkan_commands_create(VulkanCommands *cmds, VulkanCore *core,
-							 uint32_t imageCount);
+void vulkan_commands_create(VulkanCommands *cmds, VulkanCore *core, uint32_t imageCount);
 void vulkan_commands_destroy(VulkanCommands *cmds, VkDevice device);
 
 #endif // VULKAN_COMMANDS_H

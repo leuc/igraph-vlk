@@ -1,7 +1,7 @@
 #pragma once
 
-#include <stdbool.h>
 #include "app_state.h"
+#include <stdbool.h>
 
 /**
  * Run one iteration of the current layout algorithm.
@@ -84,4 +84,3 @@ void graph_action_cycle_centrality(AppState *state);
  * @param state Pointer to the application state
  */
 void graph_action_cycle_community_arrangement(AppState *state);
-

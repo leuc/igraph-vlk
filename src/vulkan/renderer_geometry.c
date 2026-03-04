@@ -6,14 +6,15 @@
 #include <string.h>
 
 #include "graph/layered_sphere.h"
-#include "vulkan/text.h"
-#include "vulkan/utils.h"
 #include "interaction/camera.h"
 #include "interaction/state.h"
+#include "vulkan/text.h"
+#include "vulkan/utils.h"
 
 extern FontAtlas globalAtlas;
 
-void renderer_update_graph(Renderer *r, GraphData *graph) {
+void renderer_update_graph(Renderer *r, GraphData *graph)
+{
 	vkDeviceWaitIdle(r->device);
 	r->nodeCount = graph->node_count;
 	r->edgeCount = graph->edge_count;
@@ -49,8 +50,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph) {
 	}
 
 	// Generate Sphere Backgrounds if Layered Layout
-	if (graph->active_layout == LAYOUT_LAYERED_SPHERE &&
-		graph->layered_sphere && graph->layered_sphere->initialized) {
+	if (graph->active_layout == LAYOUT_LAYERED_SPHERE && graph->layered_sphere && graph->layered_sphere->initialized) {
 		LayeredSphereContext *ctx = graph->layered_sphere;
 		r->numSpheres = ctx->num_spheres;
 		r->sphereIndexCounts = malloc(sizeof(uint32_t) * r->numSpheres);
@@ -74,18 +74,8 @@ void renderer_update_graph(Renderer *r, GraphData *graph) {
 		}
 
 		// Create buffers
-		createBuffer(r->device, r->physicalDevice,
-					 sizeof(Vertex) * totalVertices,
-					 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-					 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-						 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-					 &r->sphereVertexBuffer, &r->sphereVertexBufferMemory);
-		createBuffer(r->device, r->physicalDevice,
-					 sizeof(uint32_t) * totalIndices,
-					 VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-					 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-						 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-					 &r->sphereIndexBuffer, &r->sphereIndexBufferMemory);
+		createBuffer(r->device, r->physicalDevice, sizeof(Vertex) * totalVertices, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->sphereVertexBuffer, &r->sphereVertexBufferMemory);
+		createBuffer(r->device, r->physicalDevice, sizeof(uint32_t) * totalIndices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->sphereIndexBuffer, &r->sphereIndexBufferMemory);
 
 		Vertex *allVerts = malloc(sizeof(Vertex) * totalVertices);
 		uint32_t *allIndices = malloc(sizeof(uint32_t) * totalIndices);
@@ -160,30 +150,19 @@ void renderer_update_graph(Renderer *r, GraphData *graph) {
 			r->sphereIndexCounts[s] = indexCount;
 		}
 
-		updateBuffer(r->device, r->sphereVertexBufferMemory,
-					 sizeof(Vertex) * totalVertices, allVerts);
-		updateBuffer(r->device, r->sphereIndexBufferMemory,
-					 sizeof(uint32_t) * totalIndices, allIndices);
+		updateBuffer(r->device, r->sphereVertexBufferMemory, sizeof(Vertex) * totalVertices, allVerts);
+		updateBuffer(r->device, r->sphereIndexBufferMemory, sizeof(uint32_t) * totalIndices, allIndices);
 		free(allVerts);
 		free(allIndices);
 	} else {
 		r->numSpheres = 0;
 	}
 
-	createBuffer(r->device, r->physicalDevice, sizeof(Node) * r->nodeCount,
-				 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-				 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-					 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-				 &r->instanceBuffer, &r->instanceBufferMemory);
+	createBuffer(r->device, r->physicalDevice, sizeof(Node) * r->nodeCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->instanceBuffer, &r->instanceBufferMemory);
 
 	int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
 	r->edgeVertexCount = graph->edge_count * segments * 2;
-	createBuffer(r->device, r->physicalDevice,
-				 sizeof(EdgeVertex) * r->edgeVertexCount,
-				 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-				 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-					 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-				 &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
+	createBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex) * r->edgeVertexCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
 
 	Node *sorted = malloc(sizeof(Node) * graph->node_count);
 	uint32_t currentOffset = 0;
@@ -205,9 +184,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph) {
 				pt = PLATONIC_ICOSAHEDRON;
 			if (pt == (PlatonicType)t) {
 				sorted[currentOffset + count] = graph->nodes[i];
-				glm_vec3_scale(sorted[currentOffset + count].position,
-							   r->layoutScale,
-							   sorted[currentOffset + count].position);
+				glm_vec3_scale(sorted[currentOffset + count].position, r->layoutScale, sorted[currentOffset + count].position);
 				if (sorted[currentOffset + count].size < 0.1f)
 					sorted[currentOffset + count].size = 0.1f;
 				count++;
@@ -216,8 +193,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph) {
 		r->platonicDrawCalls[t].count = count;
 		currentOffset += count;
 	}
-	updateBuffer(r->device, r->instanceBufferMemory,
-				 sizeof(Node) * graph->node_count, sorted);
+	updateBuffer(r->device, r->instanceBufferMemory, sizeof(Node) * graph->node_count, sorted);
 	EdgeVertex *evs = malloc(sizeof(EdgeVertex) * r->edgeVertexCount);
 	uint32_t idx = 0;
 	// Dispatch edge routing compute shader if needed
@@ -268,31 +244,23 @@ void renderer_update_graph(Renderer *r, GraphData *graph) {
 				}
 
 				memcpy(evs[idx].pos, cEdges[i].path[p], 12);
-				memcpy(evs[idx].color, graph->nodes[graph->edges[i].from].color,
-					   12);
+				memcpy(evs[idx].color, graph->nodes[graph->edges[i].from].color, 12);
 				evs[idx].size = graph->edges[i].size;
 				evs[idx].selected = graph->edges[i].selected;
-				evs[idx].animation_progress =
-					graph->edges[i].animation_progress;
-				evs[idx].animation_direction =
-					graph->edges[i].animation_direction;
+				evs[idx].animation_progress = graph->edges[i].animation_progress;
+				evs[idx].animation_direction = graph->edges[i].animation_direction;
 				evs[idx].is_animating = graph->edges[i].is_animating;
-				evs[idx].normalized_pos =
-					current_segment_start_len / total_length;
+				evs[idx].normalized_pos = current_segment_start_len / total_length;
 				idx++;
 
 				memcpy(evs[idx].pos, cEdges[i].path[p + 1], 12);
-				memcpy(evs[idx].color, graph->nodes[graph->edges[i].to].color,
-					   12);
+				memcpy(evs[idx].color, graph->nodes[graph->edges[i].to].color, 12);
 				evs[idx].size = graph->edges[i].size;
 				evs[idx].selected = graph->edges[i].selected;
-				evs[idx].animation_progress =
-					graph->edges[i].animation_progress;
-				evs[idx].animation_direction =
-					graph->edges[i].animation_direction;
+				evs[idx].animation_progress = graph->edges[i].animation_progress;
+				evs[idx].animation_direction = graph->edges[i].animation_direction;
 				evs[idx].is_animating = graph->edges[i].is_animating;
-				evs[idx].normalized_pos =
-					(current_segment_start_len + segment_length) / total_length;
+				evs[idx].normalized_pos = (current_segment_start_len + segment_length) / total_length;
 				idx++;
 				current_segment_start_len += segment_length;
 			}
@@ -301,13 +269,10 @@ void renderer_update_graph(Renderer *r, GraphData *graph) {
 	} else {
 		for (uint32_t i = 0; i < graph->edge_count; i++) {
 			vec3 p1, p2;
-			glm_vec3_scale(graph->nodes[graph->edges[i].from].position,
-						   r->layoutScale, p1);
-			glm_vec3_scale(graph->nodes[graph->edges[i].to].position,
-						   r->layoutScale, p2);
+			glm_vec3_scale(graph->nodes[graph->edges[i].from].position, r->layoutScale, p1);
+			glm_vec3_scale(graph->nodes[graph->edges[i].to].position, r->layoutScale, p2);
 			memcpy(evs[idx].pos, p1, 12);
-			memcpy(evs[idx].color, graph->nodes[graph->edges[i].from].color,
-				   12);
+			memcpy(evs[idx].color, graph->nodes[graph->edges[i].from].color, 12);
 			evs[idx].size = graph->edges[i].size;
 			evs[idx].selected = graph->edges[i].selected;
 			evs[idx].animation_progress = graph->edges[i].animation_progress;
@@ -331,8 +296,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph) {
 
 	// PREVENT 0-byte memory maps which crash Vulkan
 	if (r->edgeVertexCount > 0) {
-		updateBuffer(r->device, r->edgeVertexBufferMemory,
-					 sizeof(EdgeVertex) * r->edgeVertexCount, evs);
+		updateBuffer(r->device, r->edgeVertexBufferMemory, sizeof(EdgeVertex) * r->edgeVertexCount, evs);
 	}
 	free(evs);
 
@@ -342,11 +306,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph) {
 			tc += strlen(graph->nodes[i].label);
 	r->labelCharCount = tc;
 	if (tc > 0) {
-		createBuffer(r->device, r->physicalDevice, sizeof(LabelInstance) * tc,
-					 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-					 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-						 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-					 &r->labelInstanceBuffer, &r->labelInstanceBufferMemory);
+		createBuffer(r->device, r->physicalDevice, sizeof(LabelInstance) * tc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->labelInstanceBuffer, &r->labelInstanceBufferMemory);
 		LabelInstance *li = malloc(sizeof(LabelInstance) * r->labelCharCount);
 		uint32_t k = 0;
 		for (uint32_t i = 0; i < graph->node_count; i++) {
@@ -358,8 +318,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph) {
 			glm_vec3_scale(graph->nodes[i].position, r->layoutScale, pos);
 			for (int j = 0; j < len; j++) {
 				unsigned char c = graph->nodes[i].label[j];
-				CharInfo *ci =
-					(c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
+				CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
 				memcpy(li[k].nodePos, pos, 12);
 				li[k].nodePos[1] += (0.5f * graph->nodes[i].size) + 0.3f;
 				li[k].charRect[0] = xoff + ci->x0;
@@ -371,17 +330,20 @@ void renderer_update_graph(Renderer *r, GraphData *graph) {
 				li[k].charUV[2] = ci->u1;
 				li[k].charUV[3] = ci->v1;
 
-                // Standard billboard orientation for node labels, scaled to 0.01f
-                float node_text_scale = 0.01f;
-                li[k].right[0] = node_text_scale; li[k].right[1] = 0.0f; li[k].right[2] = 0.0f;
-                li[k].up[0] = 0.0f;    li[k].up[1] = node_text_scale;    li[k].up[2] = 0.0f;
+				// Standard billboard orientation for node labels, scaled to 0.01f
+				float node_text_scale = 0.01f;
+				li[k].right[0] = node_text_scale;
+				li[k].right[1] = 0.0f;
+				li[k].right[2] = 0.0f;
+				li[k].up[0] = 0.0f;
+				li[k].up[1] = node_text_scale;
+				li[k].up[2] = 0.0f;
 
 				xoff += ci->xadvance;
 				k++;
 			}
 		}
-		updateBuffer(r->device, r->labelInstanceBufferMemory,
-					 sizeof(LabelInstance) * r->labelCharCount, li);
+		updateBuffer(r->device, r->labelInstanceBufferMemory, sizeof(LabelInstance) * r->labelCharCount, li);
 		free(li);
 	} else {
 		r->labelInstanceBuffer = VK_NULL_HANDLE;
@@ -389,13 +351,13 @@ void renderer_update_graph(Renderer *r, GraphData *graph) {
 	free(sorted);
 }
 
-
-
-void renderer_update_numeric_widget(Renderer *r, NumericInputWidget *widget, Camera *cam) {
+void renderer_update_numeric_widget(Renderer *r, NumericInputWidget *widget, Camera *cam)
+{
 	// Generate instances for slider track (index 0) and thumb (index 1)
 	// Position the widget in front of the camera at a fixed distance
 	MenuInstance *instances = malloc(sizeof(MenuInstance) * 2);
-	if (!instances) return;
+	if (!instances)
+		return;
 
 	// World position: in front of camera, slightly down from center
 	vec3 track_pos;
@@ -410,30 +372,30 @@ void renderer_update_numeric_widget(Renderer *r, NumericInputWidget *widget, Cam
 	instances[0].worldPos[0] = track_pos[0];
 	instances[0].worldPos[1] = track_pos[1];
 	instances[0].worldPos[2] = track_pos[2];
-	instances[0].texCoord[0] = 0.0f; instances[0].texCoord[1] = 0.0f;
-	instances[0].texId = -1.0f; // Use solid color (no texture)
-	instances[0].scale[0] = 0.5f;   // width
-	instances[0].scale[1] = 0.02f;  // height
+	instances[0].texCoord[0] = 0.0f;
+	instances[0].texCoord[1] = 0.0f;
+	instances[0].texId = -1.0f;	   // Use solid color (no texture)
+	instances[0].scale[0] = 0.5f;  // width
+	instances[0].scale[1] = 0.02f; // height
 	instances[0].scale[2] = 1.0f;
-	        glm_quat_identity(instances[0].rotation); // billboard, no rotation
+	glm_quat_identity(instances[0].rotation); // billboard, no rotation
 	// Thumb: vertical square, size 0.05m
 	// Compute thumb position based on normalized value (0..1) along track width
 	float track_left = track_pos[0] - 0.25f;
 	float normalized_value;
 	if (widget->param_type == PARAM_TYPE_FLOAT) {
 		// Normalize from [min,max] to [0,1]
-		normalized_value = (widget->current.float_val - widget->constraints.float_range.min_val) /
-		                  (widget->constraints.float_range.max_val - widget->constraints.float_range.min_val);
+		normalized_value = (widget->current.float_val - widget->constraints.float_range.min_val) / (widget->constraints.float_range.max_val - widget->constraints.float_range.min_val);
 	} else {
-		normalized_value = (float)(widget->current.int_val - widget->constraints.int_range.min_val) /
-		                  (float)(widget->constraints.int_range.max_val - widget->constraints.int_range.min_val);
+		normalized_value = (float)(widget->current.int_val - widget->constraints.int_range.min_val) / (float)(widget->constraints.int_range.max_val - widget->constraints.int_range.min_val);
 	}
 	float thumb_x = track_left + normalized_value * 0.5f;
 
 	instances[1].worldPos[0] = thumb_x;
 	instances[1].worldPos[1] = track_pos[1];
 	instances[1].worldPos[2] = track_pos[2];
-	instances[1].texCoord[0] = 0.0f; instances[1].texCoord[1] = 0.0f;
+	instances[1].texCoord[0] = 0.0f;
+	instances[1].texCoord[1] = 0.0f;
 	instances[1].texId = -2.0f; // Different solid color
 	instances[1].scale[0] = 0.05f;
 	instances[1].scale[1] = 0.05f;
@@ -446,13 +408,8 @@ void renderer_update_numeric_widget(Renderer *r, NumericInputWidget *widget, Cam
 		vkFreeMemory(r->device, r->numericInstanceBufferMemory, NULL);
 		vkDestroyBuffer(r->device, r->numericInstanceBuffer, NULL);
 	}
-	createBuffer(r->device, r->physicalDevice, sizeof(MenuInstance) * 2,
-				 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-				 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-					 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-				 &r->numericInstanceBuffer, &r->numericInstanceBufferMemory);
-	updateBuffer(r->device, r->numericInstanceBufferMemory,
-				 sizeof(MenuInstance) * 2, instances);
+	createBuffer(r->device, r->physicalDevice, sizeof(MenuInstance) * 2, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->numericInstanceBuffer, &r->numericInstanceBufferMemory);
+	updateBuffer(r->device, r->numericInstanceBufferMemory, sizeof(MenuInstance) * 2, instances);
 	r->numericInstanceCount = 2;
 
 	// Format numeric value string for HUD display

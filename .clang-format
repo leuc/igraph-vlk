@@ -1,0 +1,34 @@
+---
+Language: Cpp
+
+# Set to a massive number to FORCE unwrapping of existing multi-line statements
+ColumnLimit: 9999
+
+# Prevent clang-format from breaking long strings (like your fprintf usage)
+BreakStringLiterals: false
+
+# Pack arguments onto the same line
+BinPackArguments: true
+BinPackParameters: true
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+
+# Use tabs for indentation
+UseTab: Always
+TabWidth: 4
+IndentWidth: 4
+
+# Ensure control flow does not get squashed into a single line
+AllowShortBlocksOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+
+# Standard brace breaking to keep control flow readable
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterControlStatement: MultiLine
+  AfterFunction: true
+  AfterClass: true
+  AfterNamespace: true
+  AfterStruct: true

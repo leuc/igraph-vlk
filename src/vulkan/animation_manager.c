@@ -4,9 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-void animation_manager_init(AnimationManager *am, Renderer *r, GraphData *gd) {
-	am->animations =
-		(EdgeAnimation *)malloc(sizeof(EdgeAnimation) * MAX_ANIMATIONS);
+void animation_manager_init(AnimationManager *am, Renderer *r, GraphData *gd)
+{
+	am->animations = (EdgeAnimation *)malloc(sizeof(EdgeAnimation) * MAX_ANIMATIONS);
 	if (!am->animations) {
 		fprintf(stderr, "Failed to allocate memory for EdgeAnimation array.\n");
 		am->num_animations = 0;
@@ -19,13 +19,13 @@ void animation_manager_init(AnimationManager *am, Renderer *r, GraphData *gd) {
 	am->graph_data_ptr = gd;
 }
 
-void animation_manager_cleanup(AnimationManager *am) {
+void animation_manager_cleanup(AnimationManager *am)
+{
 	if (am->animations) {
 		// Before freeing, ensure all edges are marked as not animating
 		for (uint32_t i = 0; i < am->num_animations; ++i) {
 			if (am->animations[i].is_active) {
-				am->graph_data_ptr->edges[am->animations[i].edge_id]
-					.is_animating = false;
+				am->graph_data_ptr->edges[am->animations[i].edge_id].is_animating = false;
 			}
 		}
 		free(am->animations);
@@ -37,21 +37,20 @@ void animation_manager_cleanup(AnimationManager *am) {
 	am->graph_data_ptr = NULL;
 }
 
-static void resize_animations_array(AnimationManager *am) {
+static void resize_animations_array(AnimationManager *am)
+{
 	uint32_t new_capacity = am->max_animations * 2;
-	EdgeAnimation *new_array = (EdgeAnimation *)realloc(
-		am->animations, sizeof(EdgeAnimation) * new_capacity);
+	EdgeAnimation *new_array = (EdgeAnimation *)realloc(am->animations, sizeof(EdgeAnimation) * new_capacity);
 	if (!new_array) {
-		fprintf(stderr,
-				"Failed to reallocate memory for EdgeAnimation array.\n");
+		fprintf(stderr, "Failed to reallocate memory for EdgeAnimation array.\n");
 		return;
 	}
 	am->animations = new_array;
 	am->max_animations = new_capacity;
 }
 
-void animation_manager_add_edge(AnimationManager *am, uint32_t edge_id,
-								int direction) {
+void animation_manager_add_edge(AnimationManager *am, uint32_t edge_id, int direction)
+{
 	if (am->num_animations >= am->max_animations) {
 		resize_animations_array(am);
 	}
@@ -67,8 +66,7 @@ void animation_manager_add_edge(AnimationManager *am, uint32_t edge_id,
 			am->animations[i].is_active = true;
 			edge_to_animate->is_animating = true;
 			edge_to_animate->animation_direction = direction;
-			edge_to_animate->animation_progress =
-				(direction == 1) ? 0.0f : 1.0f;
+			edge_to_animate->animation_progress = (direction == 1) ? 0.0f : 1.0f;
 			return;
 		}
 	}
@@ -87,7 +85,8 @@ void animation_manager_add_edge(AnimationManager *am, uint32_t edge_id,
 	am->num_animations++;
 }
 
-void animation_manager_remove_edge(AnimationManager *am, uint32_t edge_id) {
+void animation_manager_remove_edge(AnimationManager *am, uint32_t edge_id)
+{
 	for (uint32_t i = 0; i < am->num_animations; ++i) {
 		if (am->animations[i].edge_id == edge_id) {
 			am->animations[i].is_active = false;
@@ -100,8 +99,8 @@ void animation_manager_remove_edge(AnimationManager *am, uint32_t edge_id) {
 	}
 }
 
-void animation_manager_toggle_edge(AnimationManager *am, uint32_t edge_id,
-								   int direction) {
+void animation_manager_toggle_edge(AnimationManager *am, uint32_t edge_id, int direction)
+{
 	// Find the edge in the active animations
 	for (uint32_t i = 0; i < am->num_animations; ++i) {
 		if (am->animations[i].edge_id == edge_id) {
@@ -116,8 +115,7 @@ void animation_manager_toggle_edge(AnimationManager *am, uint32_t edge_id,
 				animated_edge->is_animating = true;
 				animated_edge->animation_direction *= -1;
 				// Reset progress to start or end based on new direction
-				animated_edge->animation_progress =
-					(animated_edge->animation_direction == 1) ? 0.0f : 1.0f;
+				animated_edge->animation_progress = (animated_edge->animation_direction == 1) ? 0.0f : 1.0f;
 			}
 			return;
 		}
@@ -126,17 +124,16 @@ void animation_manager_toggle_edge(AnimationManager *am, uint32_t edge_id,
 	animation_manager_add_edge(am, edge_id, direction);
 }
 
-void animation_manager_update(AnimationManager *am, float deltaTime) {
+void animation_manager_update(AnimationManager *am, float deltaTime)
+{
 	for (uint32_t i = 0; i < am->num_animations; ++i) {
 		EdgeAnimation *anim = &am->animations[i];
 		if (anim->is_active) {
 			Edge *animated_edge = &am->graph_data_ptr->edges[anim->edge_id];
 
 			// 1. Get the 3D positions of the start and end nodes
-			vec3 *pos_from =
-				&am->graph_data_ptr->nodes[animated_edge->from].position;
-			vec3 *pos_to =
-				&am->graph_data_ptr->nodes[animated_edge->to].position;
+			vec3 *pos_from = &am->graph_data_ptr->nodes[animated_edge->from].position;
+			vec3 *pos_to = &am->graph_data_ptr->nodes[animated_edge->to].position;
 
 			// 2. Calculate the physical length of the edge
 			float edge_length = glm_vec3_distance(*pos_from, *pos_to);
@@ -149,9 +146,7 @@ void animation_manager_update(AnimationManager *am, float deltaTime) {
 			}
 
 			// 4. Apply the normalized speed
-			animated_edge->animation_progress +=
-				animated_edge->animation_direction * normalized_speed *
-				deltaTime;
+			animated_edge->animation_progress += animated_edge->animation_direction * normalized_speed * deltaTime;
 
 			if (animated_edge->animation_progress < 0.0f) {
 				animated_edge->animation_progress = 0.0f;

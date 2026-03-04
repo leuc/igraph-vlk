@@ -8,9 +8,8 @@
 
 #include "graph/graph_core.h"
 
-int graph_load_graphml(const char *filename, GraphData *data,
-					   LayoutType layout_type, const char *node_attr,
-					   const char *edge_attr) {
+int graph_load_graphml(const char *filename, GraphData *data, LayoutType layout_type, const char *node_attr, const char *edge_attr)
+{
 	igraph_set_attribute_table(&igraph_cattribute_table);
 	FILE *fp = fopen(filename, "r");
 	if (!fp)
@@ -23,8 +22,7 @@ int graph_load_graphml(const char *filename, GraphData *data,
 	igraph_simplify(&data->g, 1, 1, NULL);
 	data->graph_initialized = true;
 	data->node_attr_name = node_attr ? strdup(node_attr) : strdup("pagerank");
-	data->edge_attr_name =
-		edge_attr ? strdup(edge_attr) : strdup("betweenness");
+	data->edge_attr_name = edge_attr ? strdup(edge_attr) : strdup("betweenness");
 	data->nodes = NULL;
 	data->edges = NULL;
 	data->hubs = NULL;

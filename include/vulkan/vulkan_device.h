@@ -3,7 +3,8 @@
 
 #include <vulkan/vulkan.h>
 
-typedef struct {
+typedef struct
+{
 	VkInstance instance;
 	VkPhysicalDevice physicalDevice;
 	VkDevice device;

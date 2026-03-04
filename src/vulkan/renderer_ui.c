@@ -8,7 +8,8 @@
 
 extern FontAtlas globalAtlas;
 
-void renderer_update_ui(Renderer *r, const char *text) {
+void renderer_update_ui(Renderer *r, const char *text)
+{
 	// Max text characters (reserve space for crosshair and optional numeric value)
 	int max_text_len = 1024 - 1; // total 1024 instances, reserve last for crosshair
 	int total_len = 0;
@@ -23,8 +24,7 @@ void renderer_update_ui(Renderer *r, const char *text) {
 		len = max_text_len;
 	for (int i = 0; i < len; i++) {
 		unsigned char c = text[i];
-		CharInfo *ci =
-			(c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
+		CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
 		instances[total_len].screenPos[0] = xoff;
 		instances[total_len].screenPos[1] = 0.95f;
 		instances[total_len].charRect[0] = ci->x0 * scale;
@@ -94,6 +94,5 @@ void renderer_update_ui(Renderer *r, const char *text) {
 	total_len++;
 
 	r->uiTextCharCount = total_len;
-	updateBuffer(r->device, r->uiTextInstanceBufferMemory,
-				 sizeof(UIInstance) * r->uiTextCharCount, instances);
+	updateBuffer(r->device, r->uiTextInstanceBufferMemory, sizeof(UIInstance) * r->uiTextCharCount, instances);
 }

@@ -3,13 +3,15 @@
 
 #include <stdint.h>
 
-typedef struct {
+typedef struct
+{
 	float x0, y0, x1, y1; // Quad bounds
 	float u0, v0, u1, v1; // Texture coordinates
 	float xadvance;
 } CharInfo;
 
-typedef struct {
+typedef struct
+{
 	uint8_t *atlasData;
 	int width, height;
 	CharInfo chars[128];

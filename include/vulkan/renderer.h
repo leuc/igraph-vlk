@@ -10,20 +10,17 @@
 
 struct AppContext;
 
-typedef enum {
-	ROUTING_MODE_STRAIGHT = 0,
-	ROUTING_MODE_SPHERICAL_PCB = 1,
-	ROUTING_MODE_3D_HUB_SPOKE = 2,
-	ROUTING_MODE_3D_VOXEL = 3
-} EdgeRoutingMode;
+typedef enum { ROUTING_MODE_STRAIGHT = 0, ROUTING_MODE_SPHERICAL_PCB = 1, ROUTING_MODE_3D_HUB_SPOKE = 2, ROUTING_MODE_3D_VOXEL = 3 } EdgeRoutingMode;
 
-typedef struct {
+typedef struct
+{
 	mat4 model;
 	mat4 view;
 	mat4 proj;
 } UniformBufferObject;
 
-typedef struct {
+typedef struct
+{
 	GLFWwindow *window;
 	VkInstance instance;
 	VkDevice device;
@@ -67,7 +64,8 @@ typedef struct {
 	VkDeviceMemory indexBufferMemories[PLATONIC_COUNT];
 	uint32_t platonicIndexCounts[PLATONIC_COUNT];
 
-	struct {
+	struct
+	{
 		uint32_t count;
 		uint32_t firstInstance;
 	} platonicDrawCalls[PLATONIC_COUNT];
@@ -152,7 +150,7 @@ typedef struct {
 	bool showResultsMessage;
 
 	// App context pointer for state checking
-	struct AppContext* app_ctx_ptr;
+	struct AppContext *app_ctx_ptr;
 
 	// Layered Spheres (Transparent)
 	VkBuffer sphereVertexBuffer;

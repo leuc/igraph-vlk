@@ -12,8 +12,6 @@
  * @param edge_attr Name of the edge attribute to use for sizing (or NULL for default)
  * @return 0 on success, -1 on failure
  */
-int graph_load_graphml(const char *filename, GraphData *data,
-					   LayoutType layout_type, const char *node_attr,
-					   const char *edge_attr);
+int graph_load_graphml(const char *filename, GraphData *data, LayoutType layout_type, const char *node_attr, const char *edge_attr);
 
 #endif // GRAPH_IO_H

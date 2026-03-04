@@ -23,7 +23,8 @@ static const int VALIDATION_LAYER_COUNT = 1;
 static const char *DEVICE_EXTENSIONS[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 static const int DEVICE_EXTENSION_COUNT = 1;
 
-static int rate_device_suitability(VkPhysicalDevice device) {
+static int rate_device_suitability(VkPhysicalDevice device)
+{
 	VkPhysicalDeviceProperties props;
 	VkPhysicalDeviceFeatures features;
 	vkGetPhysicalDeviceProperties(device, &props);
@@ -41,20 +42,18 @@ static int rate_device_suitability(VkPhysicalDevice device) {
 	return score;
 }
 
-static int check_device_extension_support(VkPhysicalDevice device) {
+static int check_device_extension_support(VkPhysicalDevice device)
+{
 	uint32_t extensionCount;
 	vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, NULL);
 
-	VkExtensionProperties *available =
-		malloc(sizeof(VkExtensionProperties) * extensionCount);
-	vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount,
-										  available);
+	VkExtensionProperties *available = malloc(sizeof(VkExtensionProperties) * extensionCount);
+	vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, available);
 
 	int found = 0;
 	for (int i = 0; i < DEVICE_EXTENSION_COUNT; i++) {
 		for (uint32_t j = 0; j < extensionCount; j++) {
-			if (strcmp(DEVICE_EXTENSIONS[i], available[j].extensionName) ==
-				0) {
+			if (strcmp(DEVICE_EXTENSIONS[i], available[j].extensionName) == 0) {
 				found++;
 				break;
 			}
@@ -64,17 +63,15 @@ static int check_device_extension_support(VkPhysicalDevice device) {
 	return found == DEVICE_EXTENSION_COUNT;
 }
 
-static VkQueueFamilyInfo find_queue_families(VkPhysicalDevice device,
-											  VkSurfaceKHR surface) {
+static VkQueueFamilyInfo find_queue_families(VkPhysicalDevice device, VkSurfaceKHR surface)
+{
 	VkQueueFamilyInfo info = {.graphicsFamily = -1, .presentFamily = -1};
 
 	uint32_t queueFamilyCount = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, NULL);
 
-	VkQueueFamilyProperties *queueFamilies =
-		malloc(sizeof(VkQueueFamilyProperties) * queueFamilyCount);
-	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount,
-											  queueFamilies);
+	VkQueueFamilyProperties *queueFamilies = malloc(sizeof(VkQueueFamilyProperties) * queueFamilyCount);
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies);
 
 	int i = 0;
 	for (queueFamilies; i < queueFamilyCount; i++) {
@@ -93,7 +90,8 @@ static VkQueueFamilyInfo find_queue_families(VkPhysicalDevice device,
 	return info;
 }
 
-void vulkan_device_create(VulkanCore *core, GLFWwindow *window) {
+void vulkan_device_create(VulkanCore *core, GLFWwindow *window)
+{
 	// Initialize to NULL for proper cleanup on error
 	core->instance = VK_NULL_HANDLE;
 	core->device = VK_NULL_HANDLE;
@@ -102,33 +100,17 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window) {
 	core->presentQueue = VK_NULL_HANDLE;
 
 	// Create Vulkan instance
-	VkApplicationInfo appInfo = {VK_STRUCTURE_TYPE_APPLICATION_INFO,
-								 .pApplicationName = "igraph-vlk",
-								 .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
-								 .pEngineName = "No Engine",
-								 .engineVersion = VK_MAKE_VERSION(1, 0, 0),
-								 .apiVersion = VK_API_VERSION_1_0};
+	VkApplicationInfo appInfo = {VK_STRUCTURE_TYPE_APPLICATION_INFO, .pApplicationName = "igraph-vlk", .applicationVersion = VK_MAKE_VERSION(1, 0, 0), .pEngineName = "No Engine", .engineVersion = VK_MAKE_VERSION(1, 0, 0), .apiVersion = VK_API_VERSION_1_0};
 
 	uint32_t glfwExtensionCount = 0;
-	const char **glfwExtensions =
-		glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+	const char **glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-	VkInstanceCreateInfo createInfo = {
-		VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-		NULL,
-		0,
-		&appInfo,
-		VALIDATION_LAYER_COUNT,
-		VALIDATION_LAYERS,
-		glfwExtensionCount,
-		glfwExtensions};
+	VkInstanceCreateInfo createInfo = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, NULL, 0, &appInfo, VALIDATION_LAYER_COUNT, VALIDATION_LAYERS, glfwExtensionCount, glfwExtensions};
 
-	VK_CHECK(vkCreateInstance(&createInfo, NULL, &core->instance),
-			 "Failed to create Vulkan instance");
+	VK_CHECK(vkCreateInstance(&createInfo, NULL, &core->instance), "Failed to create Vulkan instance");
 
 	// Create window surface
-	VK_CHECK(glfwCreateWindowSurface(core->instance, window, NULL, &core->surface),
-			 "Failed to create window surface");
+	VK_CHECK(glfwCreateWindowSurface(core->instance, window, NULL, &core->surface), "Failed to create window surface");
 
 	// Select physical device
 	uint32_t deviceCount = 0;
@@ -159,54 +141,28 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window) {
 		exit_with_error("Missing required device extensions");
 
 	// Find queue families
-	VkQueueFamilyInfo queueInfo =
-		find_queue_families(core->physicalDevice, core->surface);
+	VkQueueFamilyInfo queueInfo = find_queue_families(core->physicalDevice, core->surface);
 	if (queueInfo.graphicsFamily == -1 || queueInfo.presentFamily == -1)
 		exit_with_error("Failed to find required queue families");
 
 	// Create logical device
 	float queuePriority = 1.0f;
 	VkDeviceQueueCreateInfo queueCreateInfos[2] = {{0}};
-	queueCreateInfos[0] = (VkDeviceQueueCreateInfo){
-		VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-		NULL,
-		0,
-		queueInfo.graphicsFamily,
-		1,
-		&queuePriority};
-	queueCreateInfos[1] = (VkDeviceQueueCreateInfo){
-		VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-		NULL,
-		0,
-		queueInfo.presentFamily,
-		1,
-		&queuePriority};
+	queueCreateInfos[0] = (VkDeviceQueueCreateInfo){VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, NULL, 0, queueInfo.graphicsFamily, 1, &queuePriority};
+	queueCreateInfos[1] = (VkDeviceQueueCreateInfo){VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, NULL, 0, queueInfo.presentFamily, 1, &queuePriority};
 
 	VkPhysicalDeviceFeatures deviceFeatures = {.geometryShader = VK_TRUE};
 
-	VkDeviceCreateInfo deviceCreateInfo = {
-		VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-		NULL,
-		0,
-		(queueInfo.graphicsFamily == queueInfo.presentFamily) ? 1 : 2,
-		queueCreateInfos,
-		VALIDATION_LAYER_COUNT,
-		VALIDATION_LAYERS,
-		DEVICE_EXTENSION_COUNT,
-		DEVICE_EXTENSIONS,
-		&deviceFeatures};
+	VkDeviceCreateInfo deviceCreateInfo = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, NULL, 0, (queueInfo.graphicsFamily == queueInfo.presentFamily) ? 1 : 2, queueCreateInfos, VALIDATION_LAYER_COUNT, VALIDATION_LAYERS, DEVICE_EXTENSION_COUNT, DEVICE_EXTENSIONS, &deviceFeatures};
 
-	VK_CHECK(vkCreateDevice(core->physicalDevice, &deviceCreateInfo, NULL,
-							&core->device),
-			 "Failed to create logical device");
+	VK_CHECK(vkCreateDevice(core->physicalDevice, &deviceCreateInfo, NULL, &core->device), "Failed to create logical device");
 
-	vkGetDeviceQueue(core->device, queueInfo.graphicsFamily, 0,
-					 &core->graphicsQueue);
-	vkGetDeviceQueue(core->device, queueInfo.presentFamily, 0,
-					 &core->presentQueue);
+	vkGetDeviceQueue(core->device, queueInfo.graphicsFamily, 0, &core->graphicsQueue);
+	vkGetDeviceQueue(core->device, queueInfo.presentFamily, 0, &core->presentQueue);
 }
 
-void vulkan_device_destroy(VulkanCore *core) {
+void vulkan_device_destroy(VulkanCore *core)
+{
 	if (core->device != VK_NULL_HANDLE)
 		vkDestroyDevice(core->device, NULL);
 	if (core->surface != VK_NULL_HANDLE)

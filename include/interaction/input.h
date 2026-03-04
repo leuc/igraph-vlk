@@ -1,7 +1,7 @@
 #pragma once
 
-#include <stdbool.h>
 #include "app_state.h"
+#include <stdbool.h>
 
 /**
  * Initialize input handling (register callbacks).
@@ -22,5 +22,4 @@ void interaction_process_continuous_input(AppState *state, float delta_time);
  * @param window GLFW window
  * @return Pointer to the monitor to use
  */
-GLFWmonitor* interaction_get_current_monitor(GLFWwindow *window);
-
+GLFWmonitor *interaction_get_current_monitor(GLFWwindow *window);

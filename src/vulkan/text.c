@@ -5,7 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int text_generate_atlas(const char *fontPath, FontAtlas *atlas) {
+int text_generate_atlas(const char *fontPath, FontAtlas *atlas)
+{
 	FILE *fp = fopen(fontPath, "rb");
 	if (!fp)
 		return -1;
@@ -21,8 +22,7 @@ int text_generate_atlas(const char *fontPath, FontAtlas *atlas) {
 	atlas->atlasData = malloc(atlas->width * atlas->height);
 
 	stbtt_bakedchar baked[96]; // ASCII 32..126
-	stbtt_BakeFontBitmap(fontBuffer, 0, 32.0, atlas->atlasData, atlas->width,
-						 atlas->height, 32, 96, baked);
+	stbtt_BakeFontBitmap(fontBuffer, 0, 32.0, atlas->atlasData, atlas->width, atlas->height, 32, 96, baked);
 
 	for (int i = 0; i < 128; i++) {
 		if (i >= 32 && i < 128) {
@@ -45,4 +45,7 @@ int text_generate_atlas(const char *fontPath, FontAtlas *atlas) {
 	return 0;
 }
 
-void text_free_atlas(FontAtlas *atlas) { free(atlas->atlasData); }
+void text_free_atlas(FontAtlas *atlas)
+{
+	free(atlas->atlasData);
+}

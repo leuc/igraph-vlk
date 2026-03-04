@@ -18,7 +18,8 @@
 
 static float fall_off[RADIUS * 2 + 1][RADIUS * 2 + 1][RADIUS * 2 + 1];
 
-static void init_falloff() {
+static void init_falloff()
+{
 	static bool initialized = false;
 	if (initialized)
 		return;
@@ -26,15 +27,15 @@ static void init_falloff() {
 		for (int j = -RADIUS; j <= RADIUS; j++) {
 			for (int k = -RADIUS; k <= RADIUS; k++) {
 				float dist = sqrtf(i * i + j * j + k * k);
-				fall_off[i + RADIUS][j + RADIUS][k + RADIUS] =
-					(float)((RADIUS - fminf(dist, RADIUS)) / RADIUS);
+				fall_off[i + RADIUS][j + RADIUS][k + RADIUS] = (float)((RADIUS - fminf(dist, RADIUS)) / RADIUS);
 			}
 		}
 	}
 	initialized = true;
 }
 
-const char *openord_get_stage_name(int stage_id) {
+const char *openord_get_stage_name(int stage_id)
+{
 	switch (stage_id) {
 	case 0:
 		return "Liquid";
@@ -53,7 +54,8 @@ const char *openord_get_stage_name(int stage_id) {
 	}
 }
 
-void openord_init(OpenOrdContext *ctx, int node_count, int grid_size) {
+void openord_init(OpenOrdContext *ctx, int node_count, int grid_size)
+{
 	memset(ctx, 0, sizeof(OpenOrdContext));
 	init_falloff();
 
@@ -94,13 +96,15 @@ void openord_init(OpenOrdContext *ctx, int node_count, int grid_size) {
 	ctx->num_threads = omp_get_max_threads();
 }
 
-void openord_cleanup(OpenOrdContext *ctx) {
+void openord_cleanup(OpenOrdContext *ctx)
+{
 	if (ctx->density_grid)
 		free(ctx->density_grid);
 	ctx->initialized = false;
 }
 
-static inline int get_grid_idx(float x, float y, float z) {
+static inline int get_grid_idx(float x, float y, float z)
+{
 	int gx = (int)((x + HALF_VIEW) * VIEW_TO_GRID);
 	int gy = (int)((y + HALF_VIEW) * VIEW_TO_GRID);
 	int gz = (int)((z + HALF_VIEW) * VIEW_TO_GRID);
@@ -121,7 +125,8 @@ static inline int get_grid_idx(float x, float y, float z) {
 	return gz * GRID_DIM * GRID_DIM + gy * GRID_DIM + gx;
 }
 
-static void update_density(OpenOrdContext *ctx, vec3 pos, float sign) {
+static void update_density(OpenOrdContext *ctx, vec3 pos, float sign)
+{
 	int gx = (int)((pos[0] + HALF_VIEW) * VIEW_TO_GRID);
 	int gy = (int)((pos[1] + HALF_VIEW) * VIEW_TO_GRID);
 	int gz = (int)((pos[2] + HALF_VIEW) * VIEW_TO_GRID);
@@ -133,25 +138,23 @@ static void update_density(OpenOrdContext *ctx, vec3 pos, float sign) {
 				int dy = gy + j;
 				int dz = gz + k;
 
-				if (dx >= 0 && dx < GRID_DIM && dy >= 0 && dy < GRID_DIM &&
-					dz >= 0 && dz < GRID_DIM) {
+				if (dx >= 0 && dx < GRID_DIM && dy >= 0 && dy < GRID_DIM && dz >= 0 && dz < GRID_DIM) {
 					int idx = dz * GRID_DIM * GRID_DIM + dy * GRID_DIM + dx;
 #pragma omp atomic
-					ctx->density_grid[idx] +=
-						sign * fall_off[i + RADIUS][j + RADIUS][k + RADIUS];
+					ctx->density_grid[idx] += sign * fall_off[i + RADIUS][j + RADIUS][k + RADIUS];
 				}
 			}
 		}
 	}
 }
 
-static float get_density(OpenOrdContext *ctx, vec3 pos) {
+static float get_density(OpenOrdContext *ctx, vec3 pos)
+{
 	int gx = (int)((pos[0] + HALF_VIEW) * VIEW_TO_GRID);
 	int gy = (int)((pos[1] + HALF_VIEW) * VIEW_TO_GRID);
 	int gz = (int)((pos[2] + HALF_VIEW) * VIEW_TO_GRID);
 
-	if (gx < 0 || gx >= GRID_DIM || gy < 0 || gy >= GRID_DIM || gz < 0 ||
-		gz >= GRID_DIM)
+	if (gx < 0 || gx >= GRID_DIM || gy < 0 || gy >= GRID_DIM || gz < 0 || gz >= GRID_DIM)
 		return 10000.0f;
 
 	int idx = gz * GRID_DIM * GRID_DIM + gy * GRID_DIM + gx;
@@ -159,17 +162,15 @@ static float get_density(OpenOrdContext *ctx, vec3 pos) {
 								   // is often fine for 3D repulsion
 }
 
-static float compute_energy(OpenOrdContext *ctx, GraphData *g, int node_idx,
-							vec3 pos) {
+static float compute_energy(OpenOrdContext *ctx, GraphData *g, int node_idx, vec3 pos)
+{
 	float energy = 0.0f;
 	float attraction = ctx->stages[ctx->stage_id].attraction;
-	float attraction_factor = attraction * attraction * attraction *
-							  attraction * 2e-2f; // From original
+	float attraction_factor = attraction * attraction * attraction * attraction * 2e-2f; // From original
 
 	igraph_vector_int_t neighbors;
 	igraph_vector_int_init(&neighbors, 0);
-	igraph_neighbors(&g->g, &neighbors, node_idx, IGRAPH_ALL,
-					 IGRAPH_NO_LOOPS, 1);
+	igraph_neighbors(&g->g, &neighbors, node_idx, IGRAPH_ALL, IGRAPH_NO_LOOPS, 1);
 
 	for (int i = 0; i < igraph_vector_int_size(&neighbors); i++) {
 		int neighbor_idx = VECTOR(neighbors)[i];
@@ -193,15 +194,14 @@ static float compute_energy(OpenOrdContext *ctx, GraphData *g, int node_idx,
 	return energy;
 }
 
-static void solve_analytic(OpenOrdContext *ctx, GraphData *g, int node_idx,
-						   vec3 out_pos) {
+static void solve_analytic(OpenOrdContext *ctx, GraphData *g, int node_idx, vec3 out_pos)
+{
 	vec3 centroid = {0, 0, 0};
 	float total_weight = 0.0f;
 
 	igraph_vector_int_t neighbors;
 	igraph_vector_int_init(&neighbors, 0);
-	igraph_neighbors(&g->g, &neighbors, node_idx, IGRAPH_ALL,
-					 IGRAPH_NO_LOOPS, 1);
+	igraph_neighbors(&g->g, &neighbors, node_idx, IGRAPH_ALL, IGRAPH_NO_LOOPS, 1);
 
 	for (int i = 0; i < igraph_vector_int_size(&neighbors); i++) {
 		int n_idx = VECTOR(neighbors)[i];
@@ -214,16 +214,15 @@ static void solve_analytic(OpenOrdContext *ctx, GraphData *g, int node_idx,
 	if (total_weight > 0.0f) {
 		glm_vec3_divs(centroid, total_weight, centroid);
 		float damping = 1.0f - ctx->stages[ctx->stage_id].damping_mult;
-		vec3 current = {g->nodes[node_idx].position[0],
-						g->nodes[node_idx].position[1],
-						g->nodes[node_idx].position[2]};
+		vec3 current = {g->nodes[node_idx].position[0], g->nodes[node_idx].position[1], g->nodes[node_idx].position[2]};
 		glm_vec3_lerp(centroid, current, damping, out_pos);
 	} else {
 		glm_vec3_copy(g->nodes[node_idx].position, out_pos);
 	}
 }
 
-bool openord_step(OpenOrdContext *ctx, GraphData *graph) {
+bool openord_step(OpenOrdContext *ctx, GraphData *graph)
+{
 	if (ctx->stage_id >= 5)
 		return false;
 

@@ -8,13 +8,15 @@
 #include "graph/graph_types.h"
 
 // Define a physical grid slot on a sphere
-typedef struct {
+typedef struct
+{
 	double x, y, z;
 	int hilbert_dist;
 } SpherePoint;
 
 // Manages the sparse grid for a single sphere layer
-typedef struct {
+typedef struct
+{
 	int max_slots;
 	int num_occupants;
 	double radius;
@@ -22,14 +24,10 @@ typedef struct {
 	int *slot_occupant; // -1 if empty, Node ID if occupied
 } SphereGrid;
 
-typedef enum {
-	PHASE_INIT = 0,
-	PHASE_INTRA_SPHERE = 1,
-	PHASE_INTER_SPHERE = 2,
-	PHASE_DONE = 3
-} LayoutPhase;
+typedef enum { PHASE_INIT = 0, PHASE_INTRA_SPHERE = 1, PHASE_INTER_SPHERE = 2, PHASE_DONE = 3 } LayoutPhase;
 
-typedef struct LayeredSphereContext {
+typedef struct LayeredSphereContext
+{
 	bool initialized;
 	LayoutPhase phase;
 	int current_iter;

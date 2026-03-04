@@ -6,60 +6,60 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "vulkan/renderer.h"
-#include "vulkan/animation_manager.h"
 #include "graph/graph_core.h"
 #include "graph/graph_types.h"
 #include "graph/worker_thread.h"
 #include "interaction/camera.h"
 #include "interaction/state.h"
+#include "vulkan/animation_manager.h"
+#include "vulkan/renderer.h"
 
 /**
  * Central application state that glues together all modules.
  * This replaces all global variables previously in main.c.
  */
-typedef struct AppState {
-    /* Core Subsystems */
-    Renderer renderer;
-    GraphData current_graph;
-    AnimationManager anim_manager;
-    Camera camera;
+typedef struct AppState
+{
+	/* Core Subsystems */
+	Renderer renderer;
+	GraphData current_graph;
+	AnimationManager anim_manager;
+	Camera camera;
 
-    /* Window / System State */
-    GLFWwindow *window;
-    bool is_fullscreen;
-    int win_x, win_y, win_w, win_h;
+	/* Window / System State */
+	GLFWwindow *window;
+	bool is_fullscreen;
+	int win_x, win_y, win_w, win_h;
 
-    /* Application Logic State */
-    char *current_filename;
-    LayoutType current_layout;
-    ClusterType current_cluster;
-    CentralityType current_centrality;
-    CommunityArrangementMode current_comm_arrangement;
-    char *node_attr;
-    char *edge_attr;
+	/* Application Logic State */
+	char *current_filename;
+	LayoutType current_layout;
+	ClusterType current_cluster;
+	CentralityType current_centrality;
+	CommunityArrangementMode current_comm_arrangement;
+	char *node_attr;
+	char *edge_attr;
 
-    /* Interaction State */
-    int last_picked_node;
-    int last_picked_edge;
-    int prev_left_mouse_button;
+	/* Interaction State */
+	int last_picked_node;
+	int last_picked_edge;
+	int prev_left_mouse_button;
 
-    /* Timing */
-    float last_frame_time;
-    float fps_timer;
-    int frame_count;
-    float current_fps;
+	/* Timing */
+	float last_frame_time;
+	float fps_timer;
+	int frame_count;
+	float current_fps;
 
-    /* FSM Menu System */
-    AppContext app_ctx;
-    
-    /* Worker thread for long-running operations */
-    WorkerThreadContext worker_ctx;
-    
-    /* Job tracking */
-    WorkerJob* current_worker_job;
-    bool job_in_progress;
-    char job_status_message[256];
-    float job_progress;
+	/* FSM Menu System */
+	AppContext app_ctx;
+
+	/* Worker thread for long-running operations */
+	WorkerThreadContext worker_ctx;
+
+	/* Job tracking */
+	WorkerJob *current_worker_job;
+	bool job_in_progress;
+	char job_status_message[256];
+	float job_progress;
 } AppState;
-

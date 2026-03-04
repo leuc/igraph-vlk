@@ -8,15 +8,15 @@
 
 #include "graph/graph_core.h"
 
-void graph_filter_degree(GraphData *data, int min_degree) {
+void graph_filter_degree(GraphData *data, int min_degree)
+{
 	if (!data->graph_initialized)
 		return;
 	igraph_vector_int_t vids;
 	igraph_vector_int_init(&vids, 0);
 	igraph_vector_int_t degrees;
 	igraph_vector_int_init(&degrees, 0);
-	igraph_degree(&data->g, &degrees, igraph_vss_all(), IGRAPH_ALL,
-				  IGRAPH_LOOPS);
+	igraph_degree(&data->g, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS);
 
 	for (int i = 0; i < igraph_vector_int_size(&degrees); i++) {
 		if (VECTOR(degrees)[i] < min_degree) {
@@ -25,8 +25,7 @@ void graph_filter_degree(GraphData *data, int min_degree) {
 	}
 
 	if (igraph_vector_int_size(&vids) > 0) {
-		printf("Filtering nodes with degree < %d. Removing %d nodes...\n",
-			   min_degree, (int)igraph_vector_int_size(&vids));
+		printf("Filtering nodes with degree < %d. Removing %d nodes...\n", min_degree, (int)igraph_vector_int_size(&vids));
 		igraph_delete_vertices(&data->g, igraph_vss_vector(&vids));
 
 		// Cleanup graph
@@ -43,7 +42,8 @@ void graph_filter_degree(GraphData *data, int min_degree) {
 	igraph_vector_int_destroy(&degrees);
 }
 
-void graph_filter_coreness(GraphData *data, int min_coreness) {
+void graph_filter_coreness(GraphData *data, int min_coreness)
+{
 	if (!data->graph_initialized)
 		return;
 	igraph_vector_int_t vids;
@@ -59,8 +59,7 @@ void graph_filter_coreness(GraphData *data, int min_coreness) {
 	}
 
 	if (igraph_vector_int_size(&vids) > 0) {
-		printf("Filtering nodes with coreness < %d. Removing %d nodes...\n",
-			   min_coreness, (int)igraph_vector_int_size(&vids));
+		printf("Filtering nodes with coreness < %d. Removing %d nodes...\n", min_coreness, (int)igraph_vector_int_size(&vids));
 		igraph_delete_vertices(&data->g, igraph_vss_vector(&vids));
 		igraph_simplify(&data->g, 1, 1, NULL);
 		data->props.coreness_filter = min_coreness;
@@ -79,8 +78,7 @@ void graph_filter_coreness(GraphData *data, int min_coreness) {
 				max_core = data->nodes[i].coreness;
 		for (int i = 0; i < data->node_count; i++) {
 			if (max_core > 0)
-				data->nodes[i].glow =
-					(float)data->nodes[i].coreness / (float)max_core;
+				data->nodes[i].glow = (float)data->nodes[i].coreness / (float)max_core;
 			else
 				data->nodes[i].glow = 0.5f;
 		}
@@ -89,7 +87,8 @@ void graph_filter_coreness(GraphData *data, int min_coreness) {
 	igraph_vector_int_destroy(&coreness);
 }
 
-void graph_highlight_infrastructure(GraphData *data) {
+void graph_highlight_infrastructure(GraphData *data)
+{
 	if (!data->graph_initialized)
 		return;
 
@@ -130,7 +129,8 @@ void graph_highlight_infrastructure(GraphData *data) {
 	igraph_vector_int_destroy(&bridges);
 }
 
-void graph_generate_hubs(GraphData *data, int num_hubs) {
+void graph_generate_hubs(GraphData *data, int num_hubs)
+{
 	if (data->edge_count == 0)
 		return;
 	data->hub_count = num_hubs;
@@ -139,8 +139,7 @@ void graph_generate_hubs(GraphData *data, int num_hubs) {
 	// Init hubs randomly to node positions
 	for (int i = 0; i < num_hubs; i++) {
 		int n = rand() % data->node_count;
-		memcpy(data->hubs[i].position, data->nodes[n].position,
-			   sizeof(float) * 3);
+		memcpy(data->hubs[i].position, data->nodes[n].position, sizeof(float) * 3);
 	}
 
 	// K-Means Clustering on Edge Midpoints (10 Iterations)
@@ -152,15 +151,7 @@ void graph_generate_hubs(GraphData *data, int num_hubs) {
 		memset(sums, 0, sizeof(float) * num_hubs * 3);
 
 		for (uint32_t i = 0; i < data->edge_count; i++) {
-			float mid[3] = {(data->nodes[data->edges[i].from].position[0] +
-							 data->nodes[data->edges[i].to].position[0]) *
-								0.5f,
-							(data->nodes[data->edges[i].from].position[1] +
-							 data->nodes[data->edges[i].to].position[1]) *
-								0.5f,
-							(data->nodes[data->edges[i].from].position[2] +
-							 data->nodes[data->edges[i].to].position[2]) *
-								0.5f};
+			float mid[3] = {(data->nodes[data->edges[i].from].position[0] + data->nodes[data->edges[i].to].position[0]) * 0.5f, (data->nodes[data->edges[i].from].position[1] + data->nodes[data->edges[i].to].position[1]) * 0.5f, (data->nodes[data->edges[i].from].position[2] + data->nodes[data->edges[i].to].position[2]) * 0.5f};
 			int best_hub = 0;
 			float best_dist = 1e9f;
 			for (int h = 0; h < num_hubs; h++) {

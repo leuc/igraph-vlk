@@ -6,28 +6,28 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "graph/layout_openord.h"
 #include "graph/layered_sphere.h"
+#include "graph/layout_openord.h"
 
-void graph_init(GraphData *data) {
+void graph_init(GraphData *data)
+{
 	memset(data, 0, sizeof(GraphData));
 	igraph_matrix_init(&data->current_layout, 0, 0);
 }
 
-void graph_sync_node_positions(GraphData *data) {
+void graph_sync_node_positions(GraphData *data)
+{
 	if (!data->nodes)
 		return;
 	for (int i = 0; i < data->node_count; i++) {
 		data->nodes[i].position[0] = (float)MATRIX(data->current_layout, i, 0);
 		data->nodes[i].position[1] = (float)MATRIX(data->current_layout, i, 1);
-		data->nodes[i].position[2] =
-			(igraph_matrix_ncol(&data->current_layout) > 2)
-				? (float)MATRIX(data->current_layout, i, 2)
-				: 0.0f;
+		data->nodes[i].position[2] = (igraph_matrix_ncol(&data->current_layout) > 2) ? (float)MATRIX(data->current_layout, i, 2) : 0.0f;
 	}
 }
 
-void graph_refresh_data(GraphData *data) {
+void graph_refresh_data(GraphData *data)
+{
 	data->node_count = igraph_vcount(&data->g);
 	data->edge_count = igraph_ecount(&data->g);
 
@@ -45,10 +45,8 @@ void graph_refresh_data(GraphData *data) {
 		free(data->edges);
 
 	data->nodes = malloc(sizeof(Node) * data->node_count);
-	bool has_node_attr = igraph_cattribute_has_attr(
-		&data->g, IGRAPH_ATTRIBUTE_VERTEX, data->node_attr_name);
-	bool has_label =
-		igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, "label");
+	bool has_node_attr = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, data->node_attr_name);
+	bool has_label = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, "label");
 	float max_n_val = 0.0f;
 	if (has_node_attr) {
 		for (int i = 0; i < data->node_count; i++) {
@@ -66,12 +64,8 @@ void graph_refresh_data(GraphData *data) {
 		data->nodes[i].color[0] = (float)rand() / RAND_MAX;
 		data->nodes[i].color[1] = (float)rand() / RAND_MAX;
 		data->nodes[i].color[2] = (float)rand() / RAND_MAX;
-		data->nodes[i].size =
-			(has_node_attr && max_n_val > 0)
-				? (float)VAN(&data->g, data->node_attr_name, i) / max_n_val
-				: 1.0f;
-		data->nodes[i].label =
-			has_label ? strdup(VAS(&data->g, "label", i)) : NULL;
+		data->nodes[i].size = (has_node_attr && max_n_val > 0) ? (float)VAN(&data->g, data->node_attr_name, i) / max_n_val : 1.0f;
+		data->nodes[i].label = has_label ? strdup(VAS(&data->g, "label", i)) : NULL;
 		igraph_vector_int_t neighbors;
 		igraph_vector_int_init(&neighbors, 0);
 		igraph_neighbors(&data->g, &neighbors, i, IGRAPH_ALL, IGRAPH_NO_LOOPS, 1);
@@ -83,8 +77,7 @@ void graph_refresh_data(GraphData *data) {
 	igraph_vector_int_destroy(&coreness);
 	graph_sync_node_positions(data);
 
-	bool has_edge_attr = igraph_cattribute_has_attr(
-		&data->g, IGRAPH_ATTRIBUTE_EDGE, data->edge_attr_name);
+	bool has_edge_attr = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_EDGE, data->edge_attr_name);
 	float max_e_val = 0.0f;
 	if (has_edge_attr) {
 		for (int i = 0; i < data->edge_count; i++) {
@@ -99,14 +92,12 @@ void graph_refresh_data(GraphData *data) {
 		igraph_edge(&data->g, i, &from, &to);
 		data->edges[i].from = (uint32_t)from;
 		data->edges[i].to = (uint32_t)to;
-		data->edges[i].size =
-			(has_edge_attr && max_e_val > 0)
-				? (float)EAN(&data->g, data->edge_attr_name, i) / max_e_val
-				: 1.0f;
+		data->edges[i].size = (has_edge_attr && max_e_val > 0) ? (float)EAN(&data->g, data->edge_attr_name, i) / max_e_val : 1.0f;
 	}
 }
 
-void graph_free_data(GraphData *data) {
+void graph_free_data(GraphData *data)
+{
 	if (data->graph_initialized) {
 		igraph_destroy(&data->g);
 		igraph_matrix_destroy(&data->current_layout);
