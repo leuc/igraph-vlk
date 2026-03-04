@@ -70,6 +70,8 @@ add_executable(igraph-vlk
     src/graph/wrappers.c
     src/graph/worker_thread.c
 
+    src/graph/command_registry.c
+
     # Interaction modules
     src/interaction/camera.c
     src/interaction/input.c
@@ -85,6 +87,7 @@ add_executable(igraph-vlk
 
 target_include_directories(igraph-vlk PRIVATE
     ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/graph
     ${Vulkan_INCLUDE_DIRS}
     ${CGLM_INCLUDE_DIR}
     ${IGRAPH_INCLUDE_DIRS}
