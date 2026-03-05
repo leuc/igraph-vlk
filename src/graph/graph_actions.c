@@ -1,5 +1,4 @@
 #include "graph/graph_actions.h"
-#include "graph/graph_analysis.h"
 #include "graph/graph_clustering.h"
 #include "graph/graph_core.h"
 #include "graph/graph_filter.h"
@@ -20,12 +19,6 @@ void graph_action_update_layout(AppState *state)
 void graph_action_run_clustering(AppState *state)
 {
 	graph_cluster(&state->current_graph, state->current_cluster);
-	renderer_update_graph(&state->renderer, &state->current_graph);
-}
-
-void graph_action_run_centrality(AppState *state)
-{
-	graph_calculate_centrality(&state->current_graph, state->current_centrality);
 	renderer_update_graph(&state->renderer, &state->current_graph);
 }
 
@@ -89,12 +82,6 @@ void graph_action_cycle_cluster(AppState *state)
 {
 	state->current_cluster = (state->current_cluster + 1) % CLUSTER_COUNT;
 	graph_action_run_clustering(state);
-}
-
-void graph_action_cycle_centrality(AppState *state)
-{
-	state->current_centrality = (state->current_centrality + 1) % CENTRALITY_COUNT;
-	graph_action_run_centrality(state);
 }
 
 void graph_action_cycle_community_arrangement(AppState *state)

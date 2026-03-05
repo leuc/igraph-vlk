@@ -35,7 +35,6 @@ typedef struct AppState
 	char *current_filename;
 	LayoutType current_layout;
 	ClusterType current_cluster;
-	CentralityType current_centrality;
 	CommunityArrangementMode current_comm_arrangement;
 	char *node_attr;
 	char *edge_attr;

@@ -123,9 +123,6 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 	case GLFW_KEY_C:
 		graph_action_cycle_cluster(state);
 		break;
-	case GLFW_KEY_U:
-		graph_action_cycle_centrality(state);
-		break;
 	case GLFW_KEY_M:
 		// Cycle through edge routing modes
 		state->renderer.currentRoutingMode = (state->renderer.currentRoutingMode + 1) % EDGE_ROUTING_COUNT;
