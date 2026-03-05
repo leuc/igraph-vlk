@@ -58,7 +58,7 @@ const CommandDef g_command_registry[] = {
 	{"Layout/Force-Directed", "lay_force_dh", "Davidson-Harel", compute_lay_force_dh, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "lay_force_go", "GraphOpt", compute_lay_force_go, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "lay_force_lgl", "Large Graph Layout (LGL)", compute_lay_force_lgl, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Force-Directed", "lay_force_gem", "GEM", compute_lay_force_gem, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Force-Directed", "lay_force_gem", "GEM", compute_lay_force_gem, apply_layout_matrix_centered, free_layout_matrix},
 
 	// =========================================================================
 	// Layout menu - Tree & Hierarchical
