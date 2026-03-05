@@ -1,4 +1,5 @@
 #include "command_registry.h"
+#include "graph/wrappers_community.h"
 #include "graph/wrappers_layout.h"
 
 const CommandDef g_command_registry[] = {
@@ -174,13 +175,18 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Communities menu - Detection
 	// =========================================================================
-	{"Communities/Detection", "com_det_louv", "Louvain Method (Multilevel)", NULL, NULL, NULL},
-	{"Communities/Detection", "com_det_walk", "Walktrap (Random walks)", NULL, NULL, NULL},
-	{"Communities/Detection", "com_det_btw", "Edge Betweenness (Girvan-Newman)", NULL, NULL, NULL},
-	{"Communities/Detection", "com_det_fast", "Fast Greedy", NULL, NULL, NULL},
-	{"Communities/Detection", "com_det_info", "Infomap", NULL, NULL, NULL},
-	{"Communities/Detection", "com_det_lab", "Label Propagation", NULL, NULL, NULL},
-	{"Communities/Detection", "com_det_spin", "Spinglass", NULL, NULL, NULL},
+	{"Communities/Detection", "com_det_louv", "Louvain Method (Multilevel)", compute_com_multilevel, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "com_det_leiden", "Leiden", compute_com_leiden, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "com_det_walk", "Walktrap (Random walks)", compute_com_walktrap, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "com_det_btw", "Edge Betweenness (Girvan-Newman)", compute_com_edge_betweenness, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "com_det_fast", "Fast Greedy", compute_com_fastgreedy, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "com_det_info", "Infomap", compute_com_infomap, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "com_det_lab", "Label Propagation", compute_com_label_prop, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "com_det_spin", "Spinglass", compute_com_spinglass, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "com_det_eig", "Leading Eigenvector", compute_com_leading_eigenvector, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "com_det_opt", "Optimal Modularity", compute_com_optimal_modularity, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "com_det_vor", "Voronoi", compute_com_voronoi, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "com_det_fluid", "Fluid Communities", compute_com_fluid, apply_community_membership, free_community_membership},
 
 	// =========================================================================
 	// Communities menu - Compare
