@@ -382,6 +382,251 @@ void *compute_lay_umap(igraph_t *graph)
 	return result;
 }
 
+// Fruchterman-Reingold layout (2D)
+void *compute_lay_force_fr_2d(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_fruchterman_reingold(graph, result, 0, 500, 50.0, IGRAPH_LAYOUT_AUTOGRID, NULL, NULL, NULL, NULL, NULL);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
+}
+
+// Kamada-Kawai layout (2D)
+void *compute_lay_force_kk_2d(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_kamada_kawai(graph, result, 0, vcount * 10, 0.0, (igraph_real_t)vcount, NULL, NULL, NULL, NULL, NULL);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
+}
+
+// DRL layout (2D)
+void *compute_lay_force_drl_2d(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_layout_drl_options_t options;
+	igraph_layout_drl_options_init(&options, IGRAPH_LAYOUT_DRL_DEFAULT);
+
+	igraph_error_t code = igraph_layout_drl(graph, result, 0, &options, NULL);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
+}
+
+// Random layout (2D)
+void *compute_lay_geo_rand_2d(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_random(graph, result);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
+}
+
+// Grid layout (2D)
+void *compute_lay_geo_grid_2d(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_grid(graph, result, 0);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
+}
+
+// Circle layout (2D)
+void *compute_lay_geo_circle_2d(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_vs_t order;
+	igraph_vs_all(&order);
+
+	igraph_error_t code = igraph_layout_circle(graph, result, order);
+	igraph_vs_destroy(&order);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
+}
+
+// UMAP layout (2D)
+void *compute_lay_umap_2d(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_umap(graph, result, 1, NULL, 0.1, 300, 0);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
+}
+
+// GraphOpt layout (2D)
+void *compute_lay_force_go(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_graphopt(graph, result, 500, 0.001, 30.0, 0.0, 1.0, 5.0, 0);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
+}
+
+// Large Graph Layout (LGL)
+void *compute_lay_force_lgl(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_int_t maxiter = 500;
+	igraph_real_t maxdelta = 1.0;
+	igraph_real_t area = (igraph_real_t)vcount * 10.0;
+	igraph_real_t coolexp = 0.5;
+	igraph_real_t repulserad = area / 50.0;
+	igraph_real_t cellsize = area / 100.0;
+	igraph_int_t root = -1;
+
+	igraph_error_t code = igraph_layout_lgl(graph, result, maxiter, maxdelta, area, coolexp, repulserad, cellsize, root);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
+}
+
+// GEM layout
+void *compute_lay_force_gem(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_gem(graph, result, 0, 500, 1.0, 0.01, 0.1);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+	return result;
+}
+
+// Simple bipartite layout
+void *compute_lay_bip_simple(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_vector_bool_t types;
+	igraph_vector_bool_init(&types, vcount);
+	for (igraph_integer_t i = 0; i < vcount; i++) {
+		igraph_vector_bool_set(&types, i, (i % 2 == 0));
+	}
+
+	igraph_error_t code = igraph_layout_bipartite(graph, &types, result, 1.0, 1.0, 100);
+
+	igraph_vector_bool_destroy(&types);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+
+	// This returns 2D; apply_layout_matrix will handle Z=0 if needed.
+	return result;
+}
+
 void free_layout_matrix(void *result_data)
 {
 	if (result_data) {

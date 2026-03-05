@@ -46,11 +46,16 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Layout menu - Force-Directed
 	// =========================================================================
-	{"Layout/Force-Directed", "lay_force_fr", "Fruchterman-Reingold", compute_lay_force_fr, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Force-Directed", "lay_force_kk", "Kamada-Kawai", compute_lay_force_kk, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Force-Directed", "lay_force_drl", "Distributed Recursive Layout (DrL)", compute_lay_force_drl, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Force-Directed", "lay_force_fr", "Fruchterman-Reingold (3D)", compute_lay_force_fr, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Force-Directed", "lay_force_fr_2d", "Fruchterman-Reingold (2D)", compute_lay_force_fr_2d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Force-Directed", "lay_force_kk", "Kamada-Kawai (3D)", compute_lay_force_kk, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Force-Directed", "lay_force_kk_2d", "Kamada-Kawai (2D)", compute_lay_force_kk_2d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Force-Directed", "lay_force_drl", "Distributed Recursive Layout (DrL) (3D)", compute_lay_force_drl, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Force-Directed", "lay_force_drl_2d", "Distributed Recursive Layout (DrL) (2D)", compute_lay_force_drl_2d, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "lay_force_dh", "Davidson-Harel", compute_lay_force_dh, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Force-Directed", "lay_force_go", "GraphOpt", NULL, NULL, NULL},
+	{"Layout/Force-Directed", "lay_force_go", "GraphOpt", compute_lay_force_go, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Force-Directed", "lay_force_lgl", "Large Graph Layout (LGL)", compute_lay_force_lgl, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Force-Directed", "lay_force_gem", "GEM", compute_lay_force_gem, apply_layout_matrix, free_layout_matrix},
 
 	// =========================================================================
 	// Layout menu - Tree & Hierarchical
@@ -61,17 +66,27 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Layout menu - Geometric
 	// =========================================================================
-	{"Layout/Geometric", "lay_geo_circle", "Circle", compute_lay_geo_circle, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Geometric", "lay_geo_circle", "Circle (3D)", compute_lay_geo_circle, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Geometric", "lay_geo_circle_2d", "Circle (2D)", compute_lay_geo_circle_2d, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Geometric", "lay_geo_star", "Star", compute_lay_geo_star, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Geometric", "lay_geo_grid", "Grid", compute_lay_geo_grid, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Geometric", "lay_geo_grid", "Grid (3D)", compute_lay_geo_grid, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Geometric", "lay_geo_grid_2d", "Grid (2D)", compute_lay_geo_grid_2d, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Geometric", "lay_geo_sphere", "Sphere", compute_lay_geo_sphere, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Geometric", "lay_geo_rand", "Random", compute_lay_geo_rand, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Geometric", "lay_geo_rand", "Random (3D)", compute_lay_geo_rand, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Geometric", "lay_geo_rand_2d", "Random (2D)", compute_lay_geo_rand_2d, apply_layout_matrix, free_layout_matrix},
 
 	// =========================================================================
-	// Layout menu - Bipartite
+	// Layout menu - Bipartite Layouts
 	// =========================================================================
 	{"Layout/Bipartite Layouts", "lay_bip_mds", "MDS", compute_lay_bip_mds, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Bipartite Layouts", "lay_bip_sug", "Sugiyama (Bipartite)", compute_lay_bip_sug, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Bipartite Layouts", "lay_bip_simple", "Bipartite (Simple)", compute_lay_bip_simple, apply_layout_matrix, free_layout_matrix},
+
+	// =========================================================================
+	// Layout menu - Graph Embedding
+	// =========================================================================
+	{"Layout/Graph Embedding", "lay_emb_umap_2d", "UMAP (2D)", compute_lay_umap_2d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Graph Embedding", "lay_emb_umap_3d", "UMAP (3D)", compute_lay_umap, apply_layout_matrix, free_layout_matrix},
 
 	// =========================================================================
 	// Analysis menu - Centrality & Roles
@@ -198,5 +213,4 @@ const CommandDef g_command_registry[] = {
 	{"Processes & Traversal/Processes on Graphs", "pro_proc_rw", "Simulate Random Walks", NULL, NULL, NULL},
 	{"Processes & Traversal/Processes on Graphs", "pro_proc_rt", "Rank / transition behaviors", NULL, NULL, NULL},
 };
-
 const int g_command_registry_size = sizeof(g_command_registry) / sizeof(g_command_registry[0]);
