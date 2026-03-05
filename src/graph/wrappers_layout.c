@@ -282,7 +282,7 @@ void *compute_lay_geo_rand(igraph_t *graph)
 	return result;
 }
 
-// MDS layout
+// MDS layout (2D)
 void *compute_lay_bip_mds(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
@@ -303,7 +303,7 @@ void *compute_lay_bip_mds(igraph_t *graph)
 	igraph_vs_t all_vs;
 	igraph_vs_all(&all_vs);
 
-	igraph_error_t dist_result = igraph_distances_dijkstra(graph, &dist_matrix, all_vs, all_vs, NULL, IGRAPH_UNDIRECTED);
+	igraph_error_t dist_result = igraph_distances_dijkstra(graph, &dist_matrix, all_vs, all_vs, NULL, IGRAPH_ALL);
 
 	igraph_vs_destroy(&all_vs);
 
@@ -314,7 +314,8 @@ void *compute_lay_bip_mds(igraph_t *graph)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_layout_mds(graph, result, &dist_matrix, 3);
+	// Compute MDS in 2D (fills only first 2 columns of the 3D matrix)
+	igraph_error_t code = igraph_layout_mds(graph, result, &dist_matrix, 2);
 	igraph_matrix_destroy(&dist_matrix);
 
 	if (code != IGRAPH_SUCCESS) {
@@ -322,6 +323,12 @@ void *compute_lay_bip_mds(igraph_t *graph)
 		free(result);
 		return NULL;
 	}
+
+	// Set Z coordinate to 0 to convert 2D to 3D
+	for (igraph_integer_t i = 0; i < vcount; i++) {
+		igraph_matrix_set(result, i, 2, 0.0);
+	}
+
 	return result;
 }
 

@@ -113,17 +113,28 @@ void graph_free_data(GraphData *data)
 		free(data->layered_sphere);
 		data->layered_sphere = NULL;
 	}
-	if (data->node_attr_name)
+	if (data->node_attr_name) {
 		free(data->node_attr_name);
-	if (data->edge_attr_name)
+		data->node_attr_name = NULL;
+	}
+	if (data->edge_attr_name) {
 		free(data->edge_attr_name);
+		data->edge_attr_name = NULL;
+	}
 	if (data->hubs) {
 		free(data->hubs);
 		data->hubs = NULL;
 	}
-	for (uint32_t i = 0; i < data->node_count; i++)
-		if (data->nodes[i].label)
+	for (uint32_t i = 0; i < data->node_count; i++) {
+		if (data->nodes && data->nodes[i].label)
 			free(data->nodes[i].label);
-	free(data->nodes);
-	free(data->edges);
+	}
+	if (data->nodes) {
+		free(data->nodes);
+		data->nodes = NULL;
+	}
+	if (data->edges) {
+		free(data->edges);
+		data->edges = NULL;
+	}
 }

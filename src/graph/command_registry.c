@@ -1,6 +1,7 @@
 #include "command_registry.h"
 #include "graph/wrappers_centrality.h"
 #include "graph/wrappers_community.h"
+#include "graph/wrappers_constructors.h"
 #include "graph/wrappers_layout.h"
 
 const CommandDef g_command_registry[] = {
@@ -15,35 +16,35 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Generate menu - Deterministic Graphs
 	// =========================================================================
-	{"Generate/Deterministic Graphs", "gen_det_ring", "Ring", NULL, NULL, NULL},
-	{"Generate/Deterministic Graphs", "gen_det_star", "Star", NULL, NULL, NULL},
-	{"Generate/Deterministic Graphs", "gen_det_tree", "Tree", NULL, NULL, NULL},
-	{"Generate/Deterministic Graphs", "gen_det_lattice", "Lattice", NULL, NULL, NULL},
-	{"Generate/Deterministic Graphs", "gen_det_full", "Full Graph (Clique)", NULL, NULL, NULL},
-	{"Generate/Deterministic Graphs", "gen_det_circle", "Circle", NULL, NULL, NULL},
-	{"Generate/Deterministic Graphs", "gen_det_notable", "Notable Graphs", NULL, NULL, NULL},
+	{"Generate/Deterministic Graphs", "gen_det_ring", "Ring", compute_gen_ring, apply_new_graph, free_new_graph},
+	{"Generate/Deterministic Graphs", "gen_det_star", "Star", compute_gen_star, apply_new_graph, free_new_graph},
+	{"Generate/Deterministic Graphs", "gen_det_tree", "Tree", compute_gen_tree, apply_new_graph, free_new_graph},
+	{"Generate/Deterministic Graphs", "gen_det_lattice", "Lattice", compute_gen_lattice, apply_new_graph, free_new_graph},
+	{"Generate/Deterministic Graphs", "gen_det_full", "Full Graph (Clique)", compute_gen_full, apply_new_graph, free_new_graph},
+	{"Generate/Deterministic Graphs", "gen_det_circle", "Circle", compute_gen_circle, apply_new_graph, free_new_graph},
+	{"Generate/Deterministic Graphs", "gen_det_notable", "Notable Graphs", compute_gen_notable, apply_new_graph, free_new_graph},
 
 	// =========================================================================
 	// Generate menu - Stochastic Graphs
 	// =========================================================================
-	{"Generate/Stochastic Graphs", "gen_sto_er", "Erdős-Rényi (GNP / GNM)", NULL, NULL, NULL},
-	{"Generate/Stochastic Graphs", "gen_sto_ba", "Barabási-Albert (Preferential attachment)", NULL, NULL, NULL},
-	{"Generate/Stochastic Graphs", "gen_sto_ws", "Watts-Strogatz (Small-world)", NULL, NULL, NULL},
-	{"Generate/Stochastic Graphs", "gen_sto_ff", "Forest Fire", NULL, NULL, NULL},
-	{"Generate/Stochastic Graphs", "gen_sto_tree", "Random Tree", NULL, NULL, NULL},
-	{"Generate/Stochastic Graphs", "gen_sto_deg", "Degree Sequence", NULL, NULL, NULL},
+	{"Generate/Stochastic Graphs", "gen_sto_er", "Erdős-Rényi (GNP / GNM)", compute_gen_er, apply_new_graph, free_new_graph},
+	{"Generate/Stochastic Graphs", "gen_sto_ba", "Barabási-Albert (Preferential attachment)", compute_gen_ba, apply_new_graph, free_new_graph},
+	{"Generate/Stochastic Graphs", "gen_sto_ws", "Watts-Strogatz (Small-world)", compute_gen_ws, apply_new_graph, free_new_graph},
+	{"Generate/Stochastic Graphs", "gen_sto_ff", "Forest Fire", compute_gen_forest_fire, apply_new_graph, free_new_graph},
+	{"Generate/Stochastic Graphs", "gen_sto_tree", "Random Tree", compute_gen_random_tree, apply_new_graph, free_new_graph},
+	{"Generate/Stochastic Graphs", "gen_sto_deg", "Degree Sequence", compute_gen_degree_seq, apply_new_graph, free_new_graph},
 
 	// =========================================================================
 	// Generate menu - Bipartite
 	// =========================================================================
-	{"Generate/Bipartite (Two-Mode) Graphs", "gen_bip_rand", "Generate Random Bipartite", NULL, NULL, NULL},
-	{"Generate/Bipartite (Two-Mode) Graphs", "gen_bip_proj", "Create Bipartite Projections", NULL, NULL, NULL},
+	{"Generate/Bipartite (Two-Mode) Graphs", "gen_bip_rand", "Generate Random Bipartite", compute_gen_bipartite_random, apply_new_graph, free_new_graph},
+	{"Generate/Bipartite (Two-Mode) Graphs", "gen_bip_proj", "Create Bipartite Projections", compute_gen_bipartite_projection, apply_new_graph, free_new_graph},
 
 	// =========================================================================
 	// Generate menu - Spatial
 	// =========================================================================
-	{"Generate/Spatial Graphs", "gen_spa_geo", "Geometric random graphs", NULL, NULL, NULL},
-	{"Generate/Spatial Graphs", "gen_spa_gab", "Gabriel graphs", NULL, NULL, NULL},
+	{"Generate/Spatial Graphs", "gen_spa_geo", "Geometric random graphs", compute_gen_geometric, apply_new_graph, free_new_graph},
+	{"Generate/Spatial Graphs", "gen_spa_gab", "Gabriel graphs", compute_gen_gabriel, apply_new_graph, free_new_graph},
 
 	// =========================================================================
 	// Layout menu - Force-Directed
