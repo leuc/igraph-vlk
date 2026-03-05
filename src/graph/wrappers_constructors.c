@@ -2,6 +2,7 @@
 #include "app_state.h"
 #include "graph/graph_io.h"
 #include "interaction/state.h"
+#include "vulkan/animation_manager.h"
 #include "vulkan/renderer.h"
 #include <igraph.h>
 #include <math.h>
@@ -421,6 +422,9 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 		return;
 	}
 
+	// Clear any active animations before replacing the graph
+	animation_manager_cleanup(&state->anim_manager);
+
 	// Free current graph data (nodes, edges, layout, igraph_t, etc.)
 	graph_free_data(data);
 
@@ -432,7 +436,7 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 	}
 	data->graph_initialized = true;
 
-	// Compute a sphere layout for the new graph
+	// Compute a sphere layout for the new graph BEFORE refreshing data
 	igraph_matrix_t *layout = malloc(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(layout, data->node_count, 3) == IGRAPH_SUCCESS) {
 		if (igraph_layout_sphere(&data->g, layout) == IGRAPH_SUCCESS) {
@@ -445,7 +449,11 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 	}
 
 	// Refresh all derived data structures (nodes, edges, etc.)
+	// This will sync node positions from data->current_layout
 	graph_refresh_data(data);
+
+	// Reinitialize animation manager with new graph data
+	animation_manager_init(&state->anim_manager, renderer, data);
 
 	// Refresh renderer
 	renderer_update_graph(renderer, data);
