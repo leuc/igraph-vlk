@@ -223,7 +223,9 @@ void *compute_com_spinglass(igraph_t *graph)
 	igraph_vector_int_init(&csize, 0);
 
 	// Parameters: weights, modularity, temperature, membership, csize, spins, parupdate, starttemp, stoptemp, coolfact, update_rule, gamma, implementation, gamma_minus
-	igraph_error_t code = igraph_community_spinglass(graph, NULL, &modularity, &temperature, membership, &csize, 0, 0, 0.01, 0.5, 0.5, IGRAPH_SPINCOMM_UPDATE_SIMPLE, 1.0, IGRAPH_SPINCOMM_IMP_ORIG, 0.5);
+	// Use number of vertices as number of spins, must be at least 2
+	igraph_int_t spins = vcount > 2 ? vcount : 2;
+	igraph_error_t code = igraph_community_spinglass(graph, NULL, &modularity, &temperature, membership, &csize, spins, 0, 1.0, 0.01, 0.5, IGRAPH_SPINCOMM_UPDATE_SIMPLE, 1.0, IGRAPH_SPINCOMM_IMP_ORIG, 0.5);
 
 	igraph_vector_int_destroy(&csize);
 
