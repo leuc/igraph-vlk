@@ -379,7 +379,7 @@ void *compute_lay_umap(igraph_t *graph)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_layout_umap_3d(graph, result, 1, NULL, 0.1, 300, 0);
+	igraph_error_t code = igraph_layout_umap_3d(graph, result, 0, NULL, 0.5, 500, 0);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);
@@ -526,7 +526,7 @@ void *compute_lay_umap_2d(igraph_t *graph)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_layout_umap(graph, result, 1, NULL, 0.1, 300, 0);
+	igraph_error_t code = igraph_layout_umap(graph, result, 0, NULL, 0.5, 500, 0);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);
@@ -594,13 +594,24 @@ void *compute_lay_force_gem(igraph_t *graph)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_layout_gem(graph, result, 0, 500, 1.0, 0.01, 0.1);
+	// Default parameters according to igraph documentation:
+	// maxiter: 40 * n * n (as per paper, but can be lowered for speed)
+	// temp_max: number of vertices
+	// temp_min: 0.1
+	// temp_init: sqrt(number of vertices)
+	igraph_int_t maxiter = 40 * vcount * vcount;
+	igraph_real_t temp_max = (igraph_real_t)vcount;
+	igraph_real_t temp_min = 0.1;
+	igraph_real_t temp_init = sqrt((igraph_real_t)vcount);
+
+	igraph_error_t code = igraph_layout_gem(graph, result, /*use_seed=*/0, maxiter, temp_max, temp_min, temp_init);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);
 		free(result);
 		return NULL;
 	}
+
 	return result;
 }
 
