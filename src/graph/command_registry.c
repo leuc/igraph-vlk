@@ -1,4 +1,5 @@
 #include "command_registry.h"
+#include "graph/wrappers_centrality.h"
 #include "graph/wrappers_community.h"
 #include "graph/wrappers_layout.h"
 
@@ -92,12 +93,15 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Analysis menu - Centrality & Roles
 	// =========================================================================
-	{"Analysis/Centrality & Roles", "ana_cent_deg", "Degree", NULL, NULL, NULL},
-	{"Analysis/Centrality & Roles", "ana_cent_clo", "Closeness", NULL, NULL, NULL},
-	{"Analysis/Centrality & Roles", "ana_cent_btw", "Betweenness (Node & Edge)", NULL, NULL, NULL},
-	{"Analysis/Centrality & Roles", "ana_cent_eig", "Eigenvector Centrality", NULL, NULL, NULL},
-	{"Analysis/Centrality & Roles", "ana_cent_pager", "PageRank", NULL, NULL, NULL},
-	{"Analysis/Centrality & Roles", "ana_cent_hits", "Hubs & Authorities (HITS)", NULL, NULL, NULL},
+	{"Analysis/Centrality & Roles", "ana_cent_deg", "Degree", compute_cent_degree, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "ana_cent_clo", "Closeness", compute_cent_closeness, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "ana_cent_btw", "Betweenness", compute_cent_betweenness, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "ana_cent_eig", "Eigenvector Centrality", compute_cent_eigenvector, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "ana_cent_pager", "PageRank", compute_cent_pagerank, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "ana_cent_hits", "HITS (Hub)", compute_cent_hits, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "ana_cent_harm", "Harmonic", compute_cent_harmonic, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "ana_cent_strength", "Strength (Weighted Degree)", compute_cent_strength, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "ana_cent_constraint", "Constraint (Structural Holes)", compute_cent_constraint, apply_centrality_scores, free_centrality_scores},
 
 	// =========================================================================
 	// Analysis menu - Global Network Properties
