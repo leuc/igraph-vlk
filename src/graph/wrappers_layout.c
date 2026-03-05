@@ -154,6 +154,39 @@ void *compute_lay_tree_sug(igraph_t *graph)
 	igraph_vector_int_t layers;
 	igraph_vector_int_init(&layers, vcount);
 
+	// Compute layers by BFS from vertex 0
+	if (vcount > 0) {
+		igraph_vector_int_t queue;
+		igraph_vector_int_init(&queue, vcount);
+		igraph_vector_bool_t visited;
+		igraph_vector_bool_init(&visited, vcount);
+		igraph_vector_bool_fill(&visited, 0);
+
+		// Start from vertex 0
+		igraph_vector_int_push_back(&queue, 0);
+		igraph_vector_bool_set(&visited, 0, 1);
+		igraph_vector_int_set(&layers, 0, 0);
+
+		for (igraph_integer_t read_idx = 0; read_idx < igraph_vector_int_size(&queue); read_idx++) {
+			igraph_integer_t v = VECTOR(queue)[read_idx];
+			igraph_vector_int_t neigh;
+			igraph_vector_int_init(&neigh, 0);
+			igraph_neighbors(graph, &neigh, v, IGRAPH_ALL, 0, 0);
+			for (igraph_integer_t i = 0; i < igraph_vector_int_size(&neigh); i++) {
+				igraph_integer_t u = VECTOR(neigh)[i];
+				if (!igraph_vector_bool_get(&visited, u)) {
+					igraph_vector_bool_set(&visited, u, 1);
+					igraph_vector_int_set(&layers, u, VECTOR(layers)[v] + 1);
+					igraph_vector_int_push_back(&queue, u);
+				}
+			}
+			igraph_vector_int_destroy(&neigh);
+		}
+
+		igraph_vector_int_destroy(&queue);
+		igraph_vector_bool_destroy(&visited);
+	}
+
 	igraph_error_t code = igraph_layout_sugiyama(graph, result, &routing, &layers, 1.0, 1.0, 100, NULL);
 
 	igraph_matrix_list_destroy(&routing);
