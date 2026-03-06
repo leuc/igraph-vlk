@@ -225,7 +225,7 @@ static void update_nextstep_layout_recursive(MenuNode *node, vec3 top_left_ancho
 		for (int i = 0; i < node->num_children; i++) {
 			MenuNode *child = node->children[i];
 
-			if (node->current_radius > 0.001f) {
+			if (node->is_expanded) {
 				child->box_width = node->card_width;
 				child->box_height = MENU_ITEM_HEIGHT;
 
@@ -262,30 +262,8 @@ static void update_nextstep_layout_recursive(MenuNode *node, vec3 top_left_ancho
 				glm_vec3_add(submenu_top_left, submenu_offset, submenu_top_left);
 
 				update_nextstep_layout_recursive(child, submenu_top_left);
-			} else {
-				child->box_width = node->card_width;
-				child->box_height = MENU_ITEM_HEIGHT;
 			}
 		}
-	}
-}
-
-void update_menu_animation(MenuNode *node, float delta_time)
-{
-	if (node == NULL)
-		return;
-
-	float speed = 8.0f;
-	float diff = node->target_radius - node->current_radius;
-	if (fabsf(diff) < 0.001f) {
-		node->current_radius = node->target_radius;
-	} else {
-		node->current_radius += diff * speed * delta_time;
-	}
-
-	for (int i = 0; i < node->num_children; i++) {
-		node->children[i]->target_radius = (node->current_radius > 0.5f && node->is_expanded) ? 1.0f : 0.0f;
-		update_menu_animation(node->children[i], delta_time);
 	}
 }
 

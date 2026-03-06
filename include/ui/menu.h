@@ -27,11 +27,7 @@ typedef struct
 // Function declarations
 void init_menu_tree(MenuNode *root);
 void destroy_menu_tree(MenuNode *node);
-void update_menu_animation(MenuNode *node, float delta_time);
 void update_menu_transforms(MenuNode *node, const SpatialBasis *basis);
 MenuNode *find_menu_node(MenuNode *root, char const *label);
-
-// Data-driven initialization helper
-void init_menu_from_definitions(MenuNode *root, const MenuDefinition *definitions, int num_definitions);
 
 #endif // UI_MENU_H

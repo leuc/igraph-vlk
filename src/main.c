@@ -164,14 +164,16 @@ int main(int argc, char **argv)
 		// Update HUD text
 		ui_hud_update(&app, currentFps);
 
-		// Update App FSM and Menu animations
+		// Update App FSM and Menu transforms
 		update_app_state(&app);
-		update_menu_animation(app.app_ctx.root_menu, deltaTime);
 		update_menu_transforms(app.app_ctx.root_menu, &app.app_ctx.menu_spawn_basis);
 
-		// Generate menu buffers if menu is open OR still animating (closing)
-		if (app.app_ctx.current_state == STATE_MENU_OPEN || app.app_ctx.root_menu->current_radius > 0.01f) {
+		// Generate menu buffers if menu is open, otherwise explicitly clear the render counts
+		if (app.app_ctx.current_state == STATE_MENU_OPEN) {
 			generate_vulkan_menu_buffers(app.app_ctx.root_menu, &app.renderer);
+		} else {
+			app.renderer.menuNodeCount = 0;
+			app.renderer.menuTextCharCount = 0;
 		}
 
 		// Update animations

@@ -47,7 +47,7 @@ static void render_text_at_position(MenuNode *node, const char *text, vec3 base_
 		(*label_instances)[*label_count].charUV[2] = ci->u1;
 		(*label_instances)[*label_count].charUV[3] = ci->v1;
 
-		float dynamic_scale = world_text_scale * node->current_radius;
+		float dynamic_scale = world_text_scale;
 		glm_vec3_scale(node->right_vec, dynamic_scale, (*label_instances)[*label_count].right);
 		glm_vec3_scale(node->up_vec, dynamic_scale, (*label_instances)[*label_count].up);
 
@@ -60,12 +60,6 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r)
 {
 	if (node == NULL)
 		return;
-
-	if (node->target_radius == 0.0f && node->current_radius < 0.005f) {
-		r->menuNodeCount = 0;
-		r->menuTextCharCount = 0;
-		return;
-	}
 
 	int capacity = 128;
 	MenuInstance *instances = (MenuInstance *)malloc(sizeof(MenuInstance) * capacity);
@@ -81,7 +75,7 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r)
 
 	while (stack_top > 0) {
 		MenuNode *current = stack[--stack_top];
-		if (current == NULL || current->current_radius <= 0.01f)
+		if (current == NULL)
 			continue;
 
 		// 1. Draw as a list item if it's not the root
@@ -95,8 +89,8 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r)
 			instances[instance_count].texCoord[0] = 0.0f;
 			instances[instance_count].texCoord[1] = 0.0f;
 			instances[instance_count].texId = (float)current->icon_texture_id;
-			instances[instance_count].scale[0] = current->box_width * current->current_radius;
-			instances[instance_count].scale[1] = current->box_height * current->current_radius;
+			instances[instance_count].scale[0] = current->box_width;
+			instances[instance_count].scale[1] = current->box_height;
 			instances[instance_count].scale[2] = 1.0f;
 			instances[instance_count].hovered = current->hovered ? 1.0f : 0.0f;
 			memcpy(instances[instance_count].rotation, current->rotation, sizeof(versor));
@@ -140,11 +134,9 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r)
 			instance_count++;
 		}
 
-		// 2. Draw Submenu Card Background and Title ONLY if it has visible children
+		// 2. Draw Submenu Card Background and Title ONLY if expanded
 		if (current->type == NODE_BRANCH && current->num_children > 0) {
-			float submenu_radius = current->children[0]->current_radius;
-
-			if (submenu_radius > 0.01f || current == node) {
+			if (current->is_expanded) {
 				if (instance_count >= capacity) {
 					capacity *= 2;
 					instances = (MenuInstance *)realloc(instances, sizeof(MenuInstance) * capacity);
@@ -155,9 +147,8 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r)
 				instances[instance_count].texCoord[1] = 0.0f;
 				instances[instance_count].texId = -1.0f;
 
-				float anim_scale = (current == node) ? current->current_radius : submenu_radius;
-				instances[instance_count].scale[0] = current->card_width * anim_scale;
-				instances[instance_count].scale[1] = current->card_height * anim_scale;
+				instances[instance_count].scale[0] = current->card_width;
+				instances[instance_count].scale[1] = current->card_height;
 				instances[instance_count].scale[2] = 1.0f;
 				instances[instance_count].hovered = 0.0f;
 
@@ -177,10 +168,11 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r)
 
 					render_text_at_position(current, current->label, title_pos, &label_count, &label_instances, &label_capacity);
 				}
-			}
 
-			for (int i = 0; i < current->num_children; i++) {
-				stack[stack_top++] = current->children[i];
+				// Traverse into submenus
+				for (int i = 0; i < current->num_children; i++) {
+					stack[stack_top++] = current->children[i];
+				}
 			}
 		}
 	}

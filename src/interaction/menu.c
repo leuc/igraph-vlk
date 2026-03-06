@@ -7,26 +7,25 @@
 
 static MenuNode *pick_menu_recursive(MenuNode *node, float *ray_ori, float *ray_dir, float *min_t)
 {
-	if (node == NULL || node->current_radius < 0.1f)
+	if (node == NULL)
 		return NULL;
 
 	MenuNode *best_hit = NULL;
 
-	float box_width = node->box_width * node->current_radius;
-	float box_height = node->box_height * node->current_radius;
-
 	float t;
-	if (picking_ray_quad_intersection(ray_ori, ray_dir, node->quad_center_pos, node->right_vec, node->up_vec, box_width, box_height, &t)) {
+	if (picking_ray_quad_intersection(ray_ori, ray_dir, node->quad_center_pos, node->right_vec, node->up_vec, node->box_width, node->box_height, &t)) {
 		if (t > 0 && t < *min_t) {
 			*min_t = t;
 			best_hit = node;
 		}
 	}
 
-	for (int i = 0; i < node->num_children; i++) {
-		MenuNode *child_hit = pick_menu_recursive(node->children[i], ray_ori, ray_dir, min_t);
-		if (child_hit) {
-			best_hit = child_hit;
+	if (node->is_expanded) {
+		for (int i = 0; i < node->num_children; i++) {
+			MenuNode *child_hit = pick_menu_recursive(node->children[i], ray_ori, ray_dir, min_t);
+			if (child_hit) {
+				best_hit = child_hit;
+			}
 		}
 	}
 
