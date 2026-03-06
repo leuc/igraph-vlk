@@ -154,6 +154,28 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 				memcpy(instances[instance_count].rotation, current->rotation, sizeof(versor));
 				instance_count++;
 
+				// --- NEW: Draw Title Bar Background ---
+				if (instance_count >= capacity) {
+					capacity *= 2;
+					instances = (MenuInstance *)realloc(instances, sizeof(MenuInstance) * capacity);
+				}
+				vec3 title_bg_pos;
+				glm_vec3_copy(current->card_bg_pos, title_bg_pos);
+				vec3 title_up_shift;
+				glm_vec3_scale(current->up_vec, (current->card_height * 0.5f) - 0.05f, title_up_shift);
+				glm_vec3_add(title_bg_pos, title_up_shift, title_bg_pos);
+
+				glm_vec3_copy(title_bg_pos, instances[instance_count].worldPos);
+				instances[instance_count].texCoord[0] = 0.0f;
+				instances[instance_count].texCoord[1] = 0.0f;
+				instances[instance_count].texId = -2.0f; // -2.0f = Title Bar Color
+				instances[instance_count].scale[0] = current->card_width;
+				instances[instance_count].scale[1] = 0.10f; // TITLE_BAR_HEIGHT
+				instances[instance_count].scale[2] = 1.0f;
+				instances[instance_count].hovered = 0.0f;
+				memcpy(instances[instance_count].rotation, current->rotation, sizeof(versor));
+				instance_count++;
+
 				if (current->label) {
 					vec3 title_pos;
 					glm_vec3_copy(current->card_bg_pos, title_pos);
@@ -193,26 +215,35 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 
 		VkDeviceSize bufferSize = sizeof(MenuInstance) * instance_count;
 
-		// --- Draw Detached Info Card ---
+		// --- NEW: Draw Detached Info Card ---
 		if (ctx->info_card.is_visible && ctx->active_menu_level) {
 			float card_w = 0.8f;
-			float card_h = 0.10f + (ctx->info_card.num_pairs * 0.09f);
+			float card_h = 0.10f + (ctx->info_card.num_pairs * 0.09f); // TITLE_BAR_HEIGHT + (items * MENU_ITEM_HEIGHT)
 
-			if (instance_count >= capacity) {
+			if (instance_count + 2 >= capacity) {
 				capacity *= 2;
 				instances = (MenuInstance *)realloc(instances, sizeof(MenuInstance) * capacity);
 			}
 
+			// Anchor the info card to the right of the active menu branch AND Top-Align it
 			vec3 card_pos;
 			glm_vec3_copy(ctx->active_menu_level->card_bg_pos, card_pos);
-			vec3 right_shift;
-			glm_vec3_scale(ctx->active_menu_level->right_vec, (ctx->active_menu_level->card_width * 0.5f) + (card_w * 0.5f) + 0.05f, right_shift);
-			glm_vec3_add(card_pos, right_shift, card_pos);
 
+			vec3 right_shift, up_shift;
+			glm_vec3_scale(node->right_vec, (ctx->active_menu_level->card_width * 0.5f) + (card_w * 0.5f) + 0.05f, right_shift);
+
+			// Top Alignment Shift: (ActiveCardHeight/2) - (InfoCardHeight/2)
+			float align_y = (ctx->active_menu_level->card_height * 0.5f) - (card_h * 0.5f);
+			glm_vec3_scale(node->up_vec, align_y, up_shift);
+
+			glm_vec3_add(card_pos, right_shift, card_pos);
+			glm_vec3_add(card_pos, up_shift, card_pos);
+
+			// 1. Draw Info Card Background Quad
 			glm_vec3_copy(card_pos, instances[instance_count].worldPos);
 			instances[instance_count].texCoord[0] = 0.0f;
 			instances[instance_count].texCoord[1] = 0.0f;
-			instances[instance_count].texId = -1.0f;
+			instances[instance_count].texId = -3.0f; // -3.0 = Info Card Color
 			instances[instance_count].scale[0] = card_w;
 			instances[instance_count].scale[1] = card_h;
 			instances[instance_count].scale[2] = 1.0f;
@@ -220,16 +251,37 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 			memcpy(instances[instance_count].rotation, node->rotation, sizeof(versor));
 			instance_count++;
 
+			// 1.5 Draw Info Card Title Bar Background Quad
+			vec3 info_title_bg;
+			glm_vec3_copy(card_pos, info_title_bg);
+			vec3 info_title_up;
+			glm_vec3_scale(node->up_vec, (card_h * 0.5f) - 0.05f, info_title_up);
+			glm_vec3_add(info_title_bg, info_title_up, info_title_bg);
+
+			glm_vec3_copy(info_title_bg, instances[instance_count].worldPos);
+			instances[instance_count].texCoord[0] = 0.0f;
+			instances[instance_count].texCoord[1] = 0.0f;
+			instances[instance_count].texId = -2.0f; // -2.0 = Title Bar Color
+			instances[instance_count].scale[0] = card_w;
+			instances[instance_count].scale[1] = 0.10f; // TITLE_BAR_HEIGHT
+			instances[instance_count].scale[2] = 1.0f;
+			instances[instance_count].hovered = 0.0f;
+			memcpy(instances[instance_count].rotation, node->rotation, sizeof(versor));
+			instance_count++;
+
+			// Calculate Top-Left Anchor for Text
 			vec3 title_pos;
 			glm_vec3_copy(card_pos, title_pos);
-			vec3 up_shift, left_shift;
-			glm_vec3_scale(node->up_vec, card_h * 0.5f - 0.05f, up_shift);
+			vec3 title_up_shift, left_shift;
+			glm_vec3_scale(node->up_vec, card_h * 0.5f - 0.05f, title_up_shift);
 			glm_vec3_scale(node->right_vec, -card_w * 0.5f + 0.05f, left_shift);
-			glm_vec3_add(title_pos, up_shift, title_pos);
+			glm_vec3_add(title_pos, title_up_shift, title_pos);
 			glm_vec3_add(title_pos, left_shift, title_pos);
 
+			// 2. Draw Title Text
 			render_text_at_position(node, ctx->info_card.title, title_pos, &label_count, &label_instances, &label_capacity);
 
+			// 3. Draw Generic Key-Value Columns
 			for (int i = 0; i < ctx->info_card.num_pairs; i++) {
 				vec3 row_pos;
 				glm_vec3_copy(title_pos, row_pos);
@@ -237,12 +289,14 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 				glm_vec3_scale(node->up_vec, -(0.10f + i * 0.09f), row_down);
 				glm_vec3_add(row_pos, row_down, row_pos);
 
+				// Key (Left Column)
 				render_text_at_position(node, ctx->info_card.pairs[i].key, row_pos, &label_count, &label_instances, &label_capacity);
 
+				// Value (Right Column)
 				vec3 val_pos;
 				glm_vec3_copy(row_pos, val_pos);
 				vec3 val_right;
-				glm_vec3_scale(node->right_vec, card_w * 0.5f, val_right);
+				glm_vec3_scale(node->right_vec, card_w * 0.5f, val_right); // Shift halfway across card
 				glm_vec3_add(val_pos, val_right, val_pos);
 				render_text_at_position(node, ctx->info_card.pairs[i].value, val_pos, &label_count, &label_instances, &label_capacity);
 			}
