@@ -8,7 +8,8 @@ layout(location = 2) in float isText;
 
 layout(location = 0) out vec4 outColor;
 
-void main() {
+void main()
+{
 	if (isText > 0.5) {
 		float alpha = texture(texSampler, fragTexCoord).r;
 		if (alpha < 0.1)

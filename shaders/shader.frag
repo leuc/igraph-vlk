@@ -1,6 +1,9 @@
 #version 450
 
-layout(push_constant) uniform Constants { float alpha; }
+layout(push_constant) uniform Constants
+{
+	float alpha;
+}
 pc;
 
 layout(binding = 1) uniform sampler2D texSampler;
@@ -14,11 +17,11 @@ layout(location = 5) in float fragSelected;
 
 layout(location = 0) out vec4 outColor;
 
-void main() {
+void main()
+{
 	// 1. SDF Math for N-gon based on Node Degree
 	vec2 uv = fragTexCoord;
-	int N = max(
-		3, min(fragDegree, 12)); // Cap at 12 to maintain readable angularity
+	int N = max(3, min(fragDegree, 12)); // Cap at 12 to maintain readable angularity
 
 	float a = atan(uv.x, uv.y) + 3.1415926535;
 	float r = 6.2831853071 / float(N);

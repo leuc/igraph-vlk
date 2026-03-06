@@ -12,7 +12,6 @@
 
 extern FontAtlas globalAtlas;
 
-const float MENU_CARD_WIDTH = 0.7f;
 const float MENU_ITEM_HEIGHT = 0.09f;
 const float TITLE_BAR_HEIGHT = 0.10f;
 const float TEXT_PADDING = 0.05f;
@@ -150,19 +149,58 @@ void destroy_menu_tree(MenuNode *node)
 	}
 }
 
+static float measure_text_width(const char *text)
+{
+	if (!text)
+		return 0.0f;
+	float world_text_scale = 0.003f;
+	float total_w = 0.0f;
+	int len = strlen(text);
+	for (int i = 0; i < len; i++) {
+		unsigned char c = text[i];
+		CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
+		total_w += ci->xadvance;
+	}
+	return (total_w * world_text_scale);
+}
+
 static void calculate_card_dimensions(MenuNode *node)
 {
 	if (!node)
 		return;
 
 	if (node->type == NODE_BRANCH && node->num_children > 0) {
-		node->card_width = MENU_CARD_WIDTH;
-		node->card_height = TITLE_BAR_HEIGHT + (node->num_children * MENU_ITEM_HEIGHT);
+		float max_width = measure_text_width(node->label);
+
 		for (int i = 0; i < node->num_children; i++) {
-			calculate_card_dimensions(node->children[i]);
+			MenuNode *child = node->children[i];
+			float child_w = measure_text_width(child->label);
+
+			if (child->type == NODE_INFO_DISPLAY && child->info_value) {
+				float info_w = measure_text_width(child->info_value);
+				if (info_w > child_w)
+					child_w = info_w;
+			} else if (child->type == NODE_INPUT_TEXT && child->input_buffer[0]) {
+				float input_w = measure_text_width(child->input_buffer);
+				if (input_w > child_w)
+					child_w = input_w;
+			}
+
+			if (child->type == NODE_BRANCH) {
+				child_w += 0.15f;
+			}
+
+			if (child_w > max_width) {
+				max_width = child_w;
+			}
+
+			calculate_card_dimensions(child);
 		}
+
+		node->card_width = max_width + 0.2f;
+		node->card_height = TITLE_BAR_HEIGHT + (node->num_children * MENU_ITEM_HEIGHT);
 	} else {
-		node->card_width = MENU_CARD_WIDTH;
+		node->card_width = measure_text_width(node->label) + 0.2f;
 		node->card_height = MENU_ITEM_HEIGHT;
 	}
 }
@@ -178,7 +216,7 @@ static void update_nextstep_layout_recursive(MenuNode *node, vec3 top_left_ancho
 	if (node->type == NODE_BRANCH && node->num_children > 0) {
 		vec3 card_bg_pos;
 		vec3 right_offset, up_offset;
-		glm_vec3_scale(node->right_vec, MENU_CARD_WIDTH * 0.5f, right_offset);
+		glm_vec3_scale(node->right_vec, node->card_width * 0.5f, right_offset);
 		glm_vec3_scale(node->up_vec, node->card_height * 0.5f, up_offset);
 		glm_vec3_add(top_left_anchor, right_offset, card_bg_pos);
 		glm_vec3_sub(card_bg_pos, up_offset, card_bg_pos);
@@ -188,7 +226,7 @@ static void update_nextstep_layout_recursive(MenuNode *node, vec3 top_left_ancho
 			MenuNode *child = node->children[i];
 
 			if (node->current_radius > 0.001f) {
-				child->box_width = MENU_CARD_WIDTH;
+				child->box_width = node->card_width;
 				child->box_height = MENU_ITEM_HEIGHT;
 
 				vec3 child_top_left;
@@ -200,7 +238,7 @@ static void update_nextstep_layout_recursive(MenuNode *node, vec3 top_left_ancho
 				vec3 quad_center;
 				glm_vec3_copy(child_top_left, quad_center);
 				vec3 center_right, center_down;
-				glm_vec3_scale(node->right_vec, MENU_CARD_WIDTH * 0.5f, center_right);
+				glm_vec3_scale(node->right_vec, node->card_width * 0.5f, center_right);
 				glm_vec3_scale(node->up_vec, MENU_ITEM_HEIGHT * 0.5f, center_down);
 				glm_vec3_add(quad_center, center_right, quad_center);
 				glm_vec3_sub(quad_center, center_down, quad_center);
@@ -220,12 +258,12 @@ static void update_nextstep_layout_recursive(MenuNode *node, vec3 top_left_ancho
 				vec3 submenu_top_left;
 				glm_vec3_copy(top_left_anchor, submenu_top_left);
 				vec3 submenu_offset;
-				glm_vec3_scale(node->right_vec, MENU_CARD_WIDTH, submenu_offset);
+				glm_vec3_scale(node->right_vec, node->card_width, submenu_offset);
 				glm_vec3_add(submenu_top_left, submenu_offset, submenu_top_left);
 
 				update_nextstep_layout_recursive(child, submenu_top_left);
 			} else {
-				child->box_width = MENU_CARD_WIDTH;
+				child->box_width = node->card_width;
 				child->box_height = MENU_ITEM_HEIGHT;
 			}
 		}

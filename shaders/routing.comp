@@ -2,7 +2,8 @@
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
-struct Node {
+struct Node
+{
 	vec3 position;
 	float pad1;
 	vec3 color;
@@ -11,9 +12,13 @@ struct Node {
 	int pad2, pad3, pad4;
 };
 
-layout(std430, binding = 0) readonly buffer NodeBuffer { Node nodes[]; };
+layout(std430, binding = 0) readonly buffer NodeBuffer
+{
+	Node nodes[];
+};
 
-struct Edge {
+struct Edge
+{
 	int sourceId;
 	int targetId;
 	int elevationLevel;
@@ -30,15 +35,20 @@ struct Edge {
 	int pad;
 };
 
-layout(std430, binding = 1) buffer EdgeBuffer { Edge edges[]; };
+layout(std430, binding = 1) buffer EdgeBuffer
+{
+	Edge edges[];
+};
 
-layout(push_constant) uniform Constants {
+layout(push_constant) uniform Constants
+{
 	int maxEdges;
 	float baseRadius;
 }
 pc;
 
-void main() {
+void main()
+{
 	uint idx = gl_GlobalInvocationID.x;
 	if (idx >= pc.maxEdges)
 		return;
@@ -60,9 +70,7 @@ void main() {
 	// --- ELEVATION CONTROL ---
 	// Change this to -1.0 if you want inter-sphere lines to tunnel inward!
 	float ELEVATION_DIR = 3.0;
-	float highwayRadius =
-		srcRadius +
-		(elevation > 0 ? (ELEVATION_DIR * float(elevation) * 0.4) : 0.005);
+	float highwayRadius = srcRadius + (elevation > 0 ? (ELEVATION_DIR * float(elevation) * 0.4) : 0.005);
 
 	vec3 srcNorm = normalize(srcPos);
 	vec3 dstNorm = normalize(dstPos);
@@ -105,14 +113,12 @@ void main() {
 	edges[idx].path[2] = vec4(p2, 1.0);
 
 	// Route Longitude (Sweep around the Y-axis)
-	vec3 p3Norm =
-		vec3(sin(srcLat) * cos(dstLon), cos(srcLat), sin(srcLat) * sin(dstLon));
+	vec3 p3Norm = vec3(sin(srcLat) * cos(dstLon), cos(srcLat), sin(srcLat) * sin(dstLon));
 	vec3 p3 = normalize(p3Norm) * highwayRadius;
 	edges[idx].path[3] = vec4(p3, 1.0);
 
 	// Route Latitude (Sweep up/down the Y-axis)
-	vec3 p4Norm =
-		vec3(sin(dstLat) * cos(dstLon), cos(dstLat), sin(dstLat) * sin(dstLon));
+	vec3 p4Norm = vec3(sin(dstLat) * cos(dstLon), cos(dstLat), sin(dstLat) * sin(dstLon));
 	vec3 p4 = normalize(p4Norm) * highwayRadius;
 	edges[idx].path[4] = vec4(p4, 1.0);
 

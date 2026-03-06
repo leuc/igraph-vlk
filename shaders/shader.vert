@@ -1,6 +1,7 @@
 #version 450
 
-layout(binding = 0) uniform UniformBufferObject {
+layout(binding = 0) uniform UniformBufferObject
+{
 	mat4 model;
 	mat4 view;
 	mat4 proj;
@@ -24,7 +25,8 @@ layout(location = 3) out float fragGlow;
 layout(location = 4) out flat int fragDegree;
 layout(location = 5) out float fragSelected;
 
-void main() {
+void main()
+{
 	float finalSize = 0.5 * instanceSize;
 
 	// Orient the tile flat on the surface of the layout sphere
@@ -45,10 +47,8 @@ void main() {
 
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(worldPos, 1.0);
 
-	fragNormal = normal; // Normal always faces exactly outward from the sphere
-	fragTexCoord =
-		inPosition
-			.xy; // Pass the local flattened X/Y coordinates to the SDF cutter
+	fragNormal = normal;		  // Normal always faces exactly outward from the sphere
+	fragTexCoord = inPosition.xy; // Pass the local flattened X/Y coordinates to the SDF cutter
 	fragColor = instanceColor;
 	fragGlow = instanceGlow;
 	fragDegree = instanceDegree;

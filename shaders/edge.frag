@@ -9,7 +9,8 @@ layout(location = 5) in float fragNormalizedPos;
 
 layout(location = 0) out vec4 outColor;
 
-void main() {
+void main()
+{
 	float alpha = 0.8;
 	vec3 finalColor = fragColor;
 
@@ -20,19 +21,14 @@ void main() {
 	// "Subway" animation effect
 	if (fragIsAnimating > 0) {
 		float max_tube_length = 0.15;
-		float tube_segment_length =
-			min(max_tube_length,
-				min(fragAnimationProgress, 1.0 - fragAnimationProgress) * 2.0);
+		float tube_segment_length = min(max_tube_length, min(fragAnimationProgress, 1.0 - fragAnimationProgress) * 2.0);
 		float tube_glow_intensity = 1.0; // How bright the tube segment is
-		float start_segment_pos =
-			fragAnimationProgress - tube_segment_length * 0.5;
-		float end_segment_pos =
-			fragAnimationProgress + tube_segment_length * 0.5;
+		float start_segment_pos = fragAnimationProgress - tube_segment_length * 0.5;
+		float end_segment_pos = fragAnimationProgress + tube_segment_length * 0.5;
 
 		// Check if the current fragment position is within the animating tube
 		// segment
-		if (fragNormalizedPos >= start_segment_pos &&
-			fragNormalizedPos <= end_segment_pos) {
+		if (fragNormalizedPos >= start_segment_pos && fragNormalizedPos <= end_segment_pos) {
 			vec3 inverseColor = vec3(1.0) - fragColor;
 			finalColor = finalColor + (inverseColor * tube_glow_intensity);
 			alpha = 1.0;
