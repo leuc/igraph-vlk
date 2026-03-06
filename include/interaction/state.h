@@ -107,10 +107,12 @@ typedef struct MenuNode
 	vec3 card_bg_pos;  // Position of the card background quad center
 
 	// Input Handling
-	bool is_focused;		// Tracks keyboard focus for input fields
-	char input_buffer[256]; // User-typed text for input fields
-	bool toggle_state;		// Boolean state for toggle inputs
-	const char *info_value; // Read-only value for info displays
+	bool is_focused;												  // Tracks keyboard focus for input fields
+	char input_buffer[256];											  // User-typed text for input fields
+	bool toggle_state;												  // Boolean state for toggle inputs
+	const char *info_value;											  // Read-only value for info displays
+	char info_buffer[256];											  // Buffer for dynamic info display content
+	void (*poll_info)(igraph_t *graph, char *buffer, size_t max_len); // Callback to refresh info display
 
 	// For Branches
 	int num_children;

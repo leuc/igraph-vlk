@@ -166,6 +166,7 @@ int main(int argc, char **argv)
 
 		// Update App FSM and Menu transforms
 		update_app_state(&app);
+		update_menu_info_displays(app.app_ctx.root_menu, app.app_ctx.target_graph);
 		update_menu_transforms(app.app_ctx.root_menu, &app.app_ctx.menu_spawn_basis);
 
 		// Generate menu buffers if menu is open or processing

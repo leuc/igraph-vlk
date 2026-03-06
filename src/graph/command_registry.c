@@ -3,6 +3,7 @@
 #include "graph/wrappers_community.h"
 #include "graph/wrappers_constructors.h"
 #include "graph/wrappers_layout.h"
+#include "graph/wrappers_paths.h"
 
 const CommandDef g_command_registry[] = {
 	// =========================================================================
@@ -107,7 +108,7 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Analysis menu - Global Network Properties
 	// =========================================================================
-	{"Analysis/Global Network Properties", "ana_glob_diam", "Diameter", NULL, NULL, NULL},
+	{.category_path = "Analysis/Global Network Properties", .command_id = "ana_glob_diam", .display_name = "Diameter", .worker_func = NULL, .apply_func = NULL, .free_func = NULL, .node_type = NODE_INFO_DISPLAY, .poll_func = poll_info_diameter},
 	{"Analysis/Global Network Properties", "ana_glob_rad", "Radius", NULL, NULL, NULL},
 	{"Analysis/Global Network Properties", "ana_glob_apl", "Average Path Length", NULL, NULL, NULL},
 	{"Analysis/Global Network Properties", "ana_glob_assort", "Assortativity", NULL, NULL, NULL},
