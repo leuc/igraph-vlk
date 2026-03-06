@@ -1,7 +1,6 @@
 #include "interaction/picking.h"
 #include "graph/graph_core.h"
 #include "vulkan/animation_manager.h"
-#include "vulkan/text.h"
 #include <cglm/cglm.h>
 #include <float.h>
 #include <math.h>
