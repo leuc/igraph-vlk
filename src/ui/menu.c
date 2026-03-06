@@ -12,7 +12,11 @@
 
 extern FontAtlas globalAtlas;
 
-// Helper function to create a menu node
+const float MENU_CARD_WIDTH = 0.7f;
+const float MENU_ITEM_HEIGHT = 0.09f;
+const float TITLE_BAR_HEIGHT = 0.10f;
+const float TEXT_PADDING = 0.05f;
+
 static MenuNode *create_menu_node(const char *label, MenuNodeType type)
 {
 	MenuNode *node = (MenuNode *)malloc(sizeof(MenuNode));
@@ -146,63 +150,98 @@ void destroy_menu_tree(MenuNode *node)
 	}
 }
 
-static float measure_text_width(const char *text)
-{
-	if (!text)
-		return 0.0f;
-	float world_text_scale = 0.003f;
-	float total_w = 0.0f;
-	int len = strlen(text);
-	for (int i = 0; i < len; i++) {
-		unsigned char c = text[i];
-		CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
-		total_w += ci->xadvance;
-	}
-	return (total_w * world_text_scale);
-}
-
 static void calculate_card_dimensions(MenuNode *node)
 {
 	if (!node)
 		return;
 
-	const float item_height = 0.09f;
-	const float padding = 0.08f;
-	const float title_bar_height = 0.10f;
-
 	if (node->type == NODE_BRANCH && node->num_children > 0) {
-		float max_child_width = 0.0f;
-		float total_content_height = 0.0f;
-
+		node->card_width = MENU_CARD_WIDTH;
+		node->card_height = TITLE_BAR_HEIGHT + (node->num_children * MENU_ITEM_HEIGHT);
 		for (int i = 0; i < node->num_children; i++) {
-			MenuNode *child = node->children[i];
-			calculate_card_dimensions(child);
-
-			float child_width = child->card_width;
-			if (child_width > max_child_width)
-				max_child_width = child_width;
-
-			if (child->current_radius > 0.01f) {
-				total_content_height += item_height * child->current_radius;
-			}
+			calculate_card_dimensions(node->children[i]);
 		}
-
-		float title_width = measure_text_width(node->label);
-		node->card_width = fmaxf(max_child_width, title_width) + padding * 2.0f;
-		node->card_height = title_bar_height + total_content_height + padding;
 	} else {
-		node->card_width = measure_text_width(node->label) + padding * 2.0f;
-		node->card_height = item_height;
-	}
-
-	for (int i = 0; i < node->num_children; i++) {
-		calculate_card_dimensions(node->children[i]);
+		node->card_width = MENU_CARD_WIDTH;
+		node->card_height = MENU_ITEM_HEIGHT;
 	}
 }
 
-static void update_nextstep_layout_recursive(MenuNode *node, float delta_time, const vec3 parent_card_origin, float parent_top_y)
+static void update_nextstep_layout_recursive(MenuNode *node, const vec3 top_left_anchor)
 {
 	if (!node)
+		return;
+
+	node->target_phi = 0.0f;
+	node->target_theta = 0.0f;
+
+	if (node->type == NODE_BRANCH && node->num_children > 0) {
+		vec3 card_bg_pos;
+		vec3 right_offset, up_offset;
+		glm_vec3_scale(node->right_vec, MENU_CARD_WIDTH * 0.5f, right_offset);
+		glm_vec3_scale(node->up_vec, node->card_height * 0.5f, up_offset);
+		glm_vec3_add(top_left_anchor, right_offset, card_bg_pos);
+		glm_vec3_sub(card_bg_pos, up_offset, card_bg_pos);
+		glm_vec3_copy(card_bg_pos, node->card_bg_pos);
+
+		for (int i = 0; i < node->num_children; i++) {
+			MenuNode *child = node->children[i];
+
+			if (node->current_radius > 0.001f) {
+				child->box_width = MENU_CARD_WIDTH;
+				child->box_height = MENU_ITEM_HEIGHT;
+
+				vec3 child_top_left;
+				glm_vec3_copy(top_left_anchor, child_top_left);
+				vec3 down_offset;
+				glm_vec3_scale(node->up_vec, TITLE_BAR_HEIGHT + i * MENU_ITEM_HEIGHT, down_offset);
+				glm_vec3_sub(child_top_left, down_offset, child_top_left);
+
+				vec3 quad_center;
+				glm_vec3_copy(child_top_left, quad_center);
+				vec3 center_right, center_down;
+				glm_vec3_scale(node->right_vec, MENU_CARD_WIDTH * 0.5f, center_right);
+				glm_vec3_scale(node->up_vec, MENU_ITEM_HEIGHT * 0.5f, center_down);
+				glm_vec3_add(quad_center, center_right, quad_center);
+				glm_vec3_sub(quad_center, center_down, quad_center);
+				glm_vec3_copy(quad_center, child->quad_center_pos);
+
+				vec3 text_anchor;
+				glm_vec3_copy(child_top_left, text_anchor);
+				vec3 text_right, text_down;
+				glm_vec3_scale(node->right_vec, TEXT_PADDING, text_right);
+				glm_vec3_scale(node->up_vec, MENU_ITEM_HEIGHT * 0.5f, text_down);
+				glm_vec3_add(text_anchor, text_right, text_anchor);
+				glm_vec3_sub(text_anchor, text_down, text_anchor);
+				glm_vec3_copy(text_anchor, child->text_anchor_pos);
+
+				glm_vec3_copy(quad_center, child->world_pos);
+
+				vec3 submenu_top_left;
+				glm_vec3_copy(top_left_anchor, submenu_top_left);
+				vec3 submenu_offset;
+				glm_vec3_scale(node->right_vec, MENU_CARD_WIDTH, submenu_offset);
+				glm_vec3_add(submenu_top_left, submenu_offset, submenu_top_left);
+
+				update_nextstep_layout_recursive(child, submenu_top_left);
+			} else {
+				child->box_width = MENU_CARD_WIDTH;
+				child->box_height = MENU_ITEM_HEIGHT;
+			}
+		}
+	} else {
+		node->box_width = MENU_CARD_WIDTH;
+		node->box_height = MENU_ITEM_HEIGHT;
+
+		glm_vec3_copy(top_left_anchor, node->text_anchor_pos);
+		glm_vec3_copy(top_left_anchor, node->quad_center_pos);
+		glm_vec3_copy(top_left_anchor, node->world_pos);
+	}
+}
+
+void update_menu_animation(MenuNode *node, float delta_time)
+{
+	if (node == NULL)
 		return;
 
 	float speed = 8.0f;
@@ -213,75 +252,22 @@ static void update_nextstep_layout_recursive(MenuNode *node, float delta_time, c
 		node->current_radius += diff * speed * delta_time;
 	}
 
-	const float item_height = 0.09f;
-	const float title_bar_height = 0.10f;
-
-	node->target_phi = 0.0f;
-	node->target_theta = 0.0f;
-
-	if (node->type == NODE_BRANCH && node->num_children > 0) {
-		vec3 card_pos;
-		glm_vec3_copy(parent_card_origin, card_pos);
-		glm_vec3_copy(card_pos, node->card_bg_pos);
-
-		float current_y = parent_top_y - title_bar_height;
-
-		for (int i = 0; i < node->num_children; i++) {
-			MenuNode *child = node->children[i];
-
-			child->target_radius = (node->current_radius > 0.5f && node->is_expanded) ? 1.0f : 0.0f;
-
-			if (node->current_radius > 0.001f) {
-				vec3 child_pos;
-				glm_vec3_copy(parent_card_origin, child_pos);
-
-				float x_offset = node->card_width * 0.5f + 0.02f;
-				vec3 right_offset;
-				glm_vec3_scale(node->right_vec, x_offset, right_offset);
-				glm_vec3_add(child_pos, right_offset, child_pos);
-
-				float y_offset = current_y - (item_height * 0.5f);
-				vec3 up_offset;
-				glm_vec3_scale(node->up_vec, y_offset, up_offset);
-				glm_vec3_add(child_pos, up_offset, child_pos);
-
-				glm_vec3_copy(child_pos, child->text_anchor_pos);
-				glm_vec3_copy(child_pos, child->quad_center_pos);
-				glm_vec3_copy(child_pos, child->world_pos);
-
-				current_y -= item_height * child->current_radius;
-
-				vec3 subcard_origin;
-				glm_vec3_copy(parent_card_origin, subcard_origin);
-				vec3 sub_offset;
-				glm_vec3_scale(node->right_vec, node->card_width, sub_offset);
-				glm_vec3_add(subcard_origin, sub_offset, subcard_origin);
-
-				update_nextstep_layout_recursive(child, delta_time, subcard_origin, parent_top_y);
-			} else {
-				child->current_radius = 0.0f;
-				child->target_radius = 0.0f;
-			}
-		}
-	} else {
-		glm_vec3_copy(parent_card_origin, node->text_anchor_pos);
-		glm_vec3_copy(parent_card_origin, node->quad_center_pos);
-		glm_vec3_copy(parent_card_origin, node->world_pos);
-
-		node->box_width = node->card_width;
-		node->box_height = node->card_height;
+	for (int i = 0; i < node->num_children; i++) {
+		node->children[i]->target_radius = (node->current_radius > 0.5f && node->is_expanded) ? 1.0f : 0.0f;
+		update_menu_animation(node->children[i], delta_time);
 	}
 }
 
-void update_menu_animation(MenuNode *node, float delta_time)
+static void copy_basis_recursive(MenuNode *node, const SpatialBasis *basis)
 {
-	if (node == NULL)
+	if (!node)
 		return;
-
-	calculate_card_dimensions(node);
-
-	vec3 origin = {0.0f, 0.0f, 2.5f};
-	update_nextstep_layout_recursive(node, delta_time, origin, 0.0f);
+	memcpy(node->right_vec, basis->right, sizeof(vec3));
+	memcpy(node->up_vec, basis->up, sizeof(vec3));
+	memcpy(node->rotation, basis->rotation, sizeof(versor));
+	for (int i = 0; i < node->num_children; i++) {
+		copy_basis_recursive(node->children[i], basis);
+	}
 }
 
 void update_menu_transforms(MenuNode *node, const SpatialBasis *basis)
@@ -289,38 +275,13 @@ void update_menu_transforms(MenuNode *node, const SpatialBasis *basis)
 	if (node == NULL)
 		return;
 
-	MenuNode **stack = (MenuNode **)malloc(sizeof(MenuNode *) * 256);
-	int stack_top = 0;
-	stack[stack_top++] = node;
+	calculate_card_dimensions(node);
+	copy_basis_recursive(node, basis);
 
-	while (stack_top > 0) {
-		MenuNode *current = stack[--stack_top];
-		if (current == NULL)
-			continue;
+	vec3 root_top_left;
+	spatial_resolve_position(basis, -0.6f, 0.4f, 2.5f, root_top_left);
 
-		memcpy(current->right_vec, basis->right, sizeof(vec3));
-		memcpy(current->up_vec, basis->up, sizeof(vec3));
-		memcpy(current->rotation, basis->rotation, sizeof(versor));
-
-		if (current->current_radius > 0.01f) {
-			vec3 offset;
-			glm_vec3_scale(current->right_vec, current->card_width * 0.5f, offset);
-			glm_vec3_add(current->text_anchor_pos, offset, current->quad_center_pos);
-
-			glm_vec3_copy(current->quad_center_pos, current->world_pos);
-
-			glm_vec3_copy(current->text_anchor_pos, current->card_bg_pos);
-			vec3 card_offset;
-			glm_vec3_scale(current->right_vec, current->card_width * 0.5f, card_offset);
-			glm_vec3_add(current->card_bg_pos, card_offset, current->card_bg_pos);
-		}
-
-		for (int i = 0; i < current->num_children; i++) {
-			stack[stack_top++] = current->children[i];
-		}
-	}
-
-	free(stack);
+	update_nextstep_layout_recursive(node, root_top_left);
 }
 
 MenuNode *find_menu_node(MenuNode *root, const char *label)

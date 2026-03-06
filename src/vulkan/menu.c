@@ -109,12 +109,13 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r)
 			if (current->label) {
 				vec3 title_pos;
 				glm_vec3_copy(current->card_bg_pos, title_pos);
-				vec3 up_offset;
-				glm_vec3_scale(current->up_vec, current->card_height * 0.5f - 0.05f, up_offset);
-				glm_vec3_sub(title_pos, up_offset, title_pos);
-				vec3 left_offset;
-				glm_vec3_scale(current->right_vec, -current->card_width * 0.5f + 0.04f, left_offset);
-				glm_vec3_add(title_pos, left_offset, title_pos);
+				vec3 up_shift, right_shift;
+
+				glm_vec3_scale(current->up_vec, current->card_height * 0.5f - 0.05f, up_shift);
+				glm_vec3_scale(current->right_vec, -current->card_width * 0.5f + 0.05f, right_shift);
+
+				glm_vec3_add(title_pos, up_shift, title_pos);
+				glm_vec3_add(title_pos, right_shift, title_pos);
 
 				render_text_at_position(current, current->label, title_pos, &label_count, &label_instances, &label_capacity);
 			}
@@ -128,17 +129,12 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r)
 				instances = (MenuInstance *)realloc(instances, sizeof(MenuInstance) * capacity);
 			}
 
-			float bg_scale = 0.0f;
-			if (current->type == NODE_INPUT_TEXT || current->type == NODE_INPUT_TOGGLE) {
-				bg_scale = 1.0f;
-			}
-
 			glm_vec3_copy(current->quad_center_pos, instances[instance_count].worldPos);
 			instances[instance_count].texCoord[0] = 0.0f;
 			instances[instance_count].texCoord[1] = 0.0f;
 			instances[instance_count].texId = (float)current->icon_texture_id;
 
-			instances[instance_count].scale[0] = current->box_width * current->current_radius * bg_scale;
+			instances[instance_count].scale[0] = current->box_width * current->current_radius;
 			instances[instance_count].scale[1] = current->box_height * current->current_radius;
 			instances[instance_count].scale[2] = 1.0f;
 			instances[instance_count].hovered = current->hovered ? 1.0f : 0.0f;
