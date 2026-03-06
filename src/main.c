@@ -171,7 +171,7 @@ int main(int argc, char **argv)
 
 		// Generate menu buffers if menu is open OR still animating (closing)
 		if (app.app_ctx.current_state == STATE_MENU_OPEN || app.app_ctx.root_menu->current_radius > 0.01f) {
-			generate_vulkan_menu_buffers(app.app_ctx.root_menu, &app.renderer, &app.app_ctx.menu_spawn_basis);
+			generate_vulkan_menu_buffers(app.app_ctx.root_menu, &app.renderer);
 		}
 
 		// Update animations

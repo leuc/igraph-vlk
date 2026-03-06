@@ -220,6 +220,7 @@ void update_menu_transforms(MenuNode *node, const SpatialBasis *basis)
 
 		memcpy(current->right_vec, basis->right, sizeof(vec3));
 		memcpy(current->up_vec, basis->up, sizeof(vec3));
+		memcpy(current->rotation, basis->rotation, sizeof(versor));
 
 		float x_off = current->target_phi - 0.8f;
 		float y_off = current->target_theta;
@@ -249,6 +250,8 @@ void update_menu_transforms(MenuNode *node, const SpatialBasis *basis)
 			glm_vec3_scale(current->right_vec, current->box_width * 0.5f, offset);
 			glm_vec3_add(current->quad_center_pos, offset, current->quad_center_pos);
 		}
+
+		glm_vec3_copy(current->quad_center_pos, current->world_pos);
 
 		for (int i = 0; i < current->num_children; i++) {
 			stack[stack_top++] = current->children[i];

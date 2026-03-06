@@ -91,6 +91,8 @@ typedef struct MenuNode
 	// Cached spatial data (computed once during layout, reused for rendering/picking)
 	vec3 text_anchor_pos; // The 3D position where left-aligned text starts
 	vec3 quad_center_pos; // The 3D position of the background quad's exact center
+	vec3 world_pos;		  // Cached world position (same as quad_center_pos)
+	versor rotation;	  // Cached rotation quaternion for the quad
 	vec3 right_vec;		  // Orthonormal right vector for the billboard
 	vec3 up_vec;		  // Orthonormal up vector for the billboard
 	float box_width;	  // The unscaled width of the menu node (at 100%)

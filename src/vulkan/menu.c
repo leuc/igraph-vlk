@@ -7,7 +7,7 @@
 
 extern FontAtlas globalAtlas;
 
-void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r, const SpatialBasis *basis)
+void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r)
 {
 	if (node == NULL)
 		return;
@@ -41,7 +41,7 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r, const SpatialBasi
 				instances = (MenuInstance *)realloc(instances, sizeof(MenuInstance) * capacity);
 			}
 
-			glm_vec3_copy(current->quad_center_pos, instances[instance_count].worldPos);
+			glm_vec3_copy(current->world_pos, instances[instance_count].worldPos);
 			instances[instance_count].texCoord[0] = 0.0f;
 			instances[instance_count].texCoord[1] = 0.0f;
 			instances[instance_count].texId = (float)current->icon_texture_id;
@@ -51,13 +51,7 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r, const SpatialBasi
 			instances[instance_count].scale[2] = 1.0f;
 			instances[instance_count].hovered = current->hovered ? 1.0f : 0.0f;
 
-			mat3 rot_mat;
-			vec3 front_copy, neg_front;
-			memcpy(front_copy, basis->front, sizeof(vec3));
-			glm_vec3_negate_to(front_copy, neg_front);
-			glm_mat3_identity(rot_mat);
-			glm_mat3_copy((mat3){{current->right_vec[0], current->right_vec[1], current->right_vec[2]}, {current->up_vec[0], current->up_vec[1], current->up_vec[2]}, {neg_front[0], neg_front[1], neg_front[2]}}, rot_mat);
-			glm_mat3_quat(rot_mat, instances[instance_count].rotation);
+			memcpy(instances[instance_count].rotation, current->rotation, sizeof(versor));
 
 			if (current->label) {
 				int len = strlen(current->label);
@@ -69,6 +63,9 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r, const SpatialBasi
 				float world_text_scale = 0.003f;
 				float x_cursor = (0.08f * 0.4f) / world_text_scale;
 
+				vec3 front;
+				glm_vec3_cross(current->up_vec, current->right_vec, front);
+
 				for (int i = 0; i < len; i++) {
 					unsigned char c = current->label[i];
 					CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
@@ -76,7 +73,7 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r, const SpatialBasi
 					vec3 label_pos;
 					glm_vec3_copy(current->text_anchor_pos, label_pos);
 					vec3 forward_off, down_off;
-					glm_vec3_scale(front_copy, -0.002f, forward_off);
+					glm_vec3_scale(front, -0.002f, forward_off);
 					glm_vec3_scale(current->up_vec, -0.015f, down_off);
 					glm_vec3_add(label_pos, forward_off, label_pos);
 					glm_vec3_add(label_pos, down_off, label_pos);
