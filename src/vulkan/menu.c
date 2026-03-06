@@ -81,49 +81,11 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r)
 
 	while (stack_top > 0) {
 		MenuNode *current = stack[--stack_top];
-		if (current == NULL)
+		if (current == NULL || current->current_radius <= 0.01f)
 			continue;
 
-		if (current->current_radius <= 0.01f)
-			continue;
-
-		if (current->type == NODE_BRANCH && current->num_children > 0) {
-			if (instance_count + 2 >= capacity) {
-				capacity *= 2;
-				instances = (MenuInstance *)realloc(instances, sizeof(MenuInstance) * capacity);
-			}
-
-			glm_vec3_copy(current->card_bg_pos, instances[instance_count].worldPos);
-			instances[instance_count].texCoord[0] = 0.0f;
-			instances[instance_count].texCoord[1] = 0.0f;
-			instances[instance_count].texId = -1.0f;
-
-			instances[instance_count].scale[0] = current->card_width * current->current_radius;
-			instances[instance_count].scale[1] = current->card_height * current->current_radius;
-			instances[instance_count].scale[2] = 1.0f;
-			instances[instance_count].hovered = 0.0f;
-
-			memcpy(instances[instance_count].rotation, current->rotation, sizeof(versor));
-			instance_count++;
-
-			if (current->label) {
-				vec3 title_pos;
-				glm_vec3_copy(current->card_bg_pos, title_pos);
-				vec3 up_shift, right_shift;
-
-				glm_vec3_scale(current->up_vec, current->card_height * 0.5f - 0.05f, up_shift);
-				glm_vec3_scale(current->right_vec, -current->card_width * 0.5f + 0.05f, right_shift);
-
-				glm_vec3_add(title_pos, up_shift, title_pos);
-				glm_vec3_add(title_pos, right_shift, title_pos);
-
-				render_text_at_position(current, current->label, title_pos, &label_count, &label_instances, &label_capacity);
-			}
-
-			for (int i = 0; i < current->num_children; i++) {
-				stack[stack_top++] = current->children[i];
-			}
-		} else {
+		// 1. Draw as a list item if it's not the root
+		if (current != node) {
 			if (instance_count >= capacity) {
 				capacity *= 2;
 				instances = (MenuInstance *)realloc(instances, sizeof(MenuInstance) * capacity);
@@ -133,43 +95,93 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r)
 			instances[instance_count].texCoord[0] = 0.0f;
 			instances[instance_count].texCoord[1] = 0.0f;
 			instances[instance_count].texId = (float)current->icon_texture_id;
-
 			instances[instance_count].scale[0] = current->box_width * current->current_radius;
 			instances[instance_count].scale[1] = current->box_height * current->current_radius;
 			instances[instance_count].scale[2] = 1.0f;
 			instances[instance_count].hovered = current->hovered ? 1.0f : 0.0f;
-
 			memcpy(instances[instance_count].rotation, current->rotation, sizeof(versor));
 
-			if (current->label || (current->type == NODE_INPUT_TEXT && current->input_buffer[0]) || (current->type == NODE_INFO_DISPLAY && current->info_value)) {
-				const char *display_text = current->label;
-				char input_display[300] = {0};
+			const char *display_text = current->label;
+			char input_display[300] = {0};
 
-				if (current->type == NODE_INPUT_TEXT) {
-					if (current->input_buffer[0]) {
-						strncpy(input_display, current->input_buffer, sizeof(input_display) - 1);
-						if (current->is_focused) {
-							size_t len = strlen(input_display);
-							if (len < sizeof(input_display) - 2) {
-								input_display[len] = '_';
-								input_display[len + 1] = '\0';
-							}
+			if (current->type == NODE_INPUT_TEXT) {
+				if (current->input_buffer[0]) {
+					strncpy(input_display, current->input_buffer, sizeof(input_display) - 1);
+					if (current->is_focused) {
+						size_t len = strlen(input_display);
+						if (len < sizeof(input_display) - 2) {
+							input_display[len] = '_';
+							input_display[len + 1] = '\0';
 						}
-					} else if (current->is_focused) {
-						input_display[0] = '_';
-						input_display[1] = '\0';
 					}
-					display_text = input_display;
-				} else if (current->type == NODE_INFO_DISPLAY && current->info_value) {
-					display_text = current->info_value;
+				} else if (current->is_focused) {
+					input_display[0] = '_';
+					input_display[1] = '\0';
 				}
+				display_text = input_display;
+			} else if (current->type == NODE_INFO_DISPLAY && current->info_value) {
+				display_text = current->info_value;
+			}
 
-				if (display_text && display_text[0]) {
-					render_text_at_position(current, display_text, current->text_anchor_pos, &label_count, &label_instances, &label_capacity);
-				}
+			if (display_text && display_text[0]) {
+				render_text_at_position(current, display_text, current->text_anchor_pos, &label_count, &label_instances, &label_capacity);
+			}
+
+			// Draw ">" arrow for branches to indicate submenus
+			if (current->type == NODE_BRANCH) {
+				vec3 arrow_pos;
+				glm_vec3_copy(current->text_anchor_pos, arrow_pos);
+				vec3 right_shift;
+				glm_vec3_scale(current->right_vec, current->box_width - 0.15f, right_shift);
+				glm_vec3_add(arrow_pos, right_shift, arrow_pos);
+				render_text_at_position(current, ">", arrow_pos, &label_count, &label_instances, &label_capacity);
 			}
 
 			instance_count++;
+		}
+
+		// 2. Draw Submenu Card Background and Title ONLY if it has visible children
+		if (current->type == NODE_BRANCH && current->num_children > 0) {
+			float submenu_radius = current->children[0]->current_radius;
+
+			if (submenu_radius > 0.01f || current == node) {
+				if (instance_count >= capacity) {
+					capacity *= 2;
+					instances = (MenuInstance *)realloc(instances, sizeof(MenuInstance) * capacity);
+				}
+
+				glm_vec3_copy(current->card_bg_pos, instances[instance_count].worldPos);
+				instances[instance_count].texCoord[0] = 0.0f;
+				instances[instance_count].texCoord[1] = 0.0f;
+				instances[instance_count].texId = -1.0f;
+
+				float anim_scale = (current == node) ? current->current_radius : submenu_radius;
+				instances[instance_count].scale[0] = current->card_width * anim_scale;
+				instances[instance_count].scale[1] = current->card_height * anim_scale;
+				instances[instance_count].scale[2] = 1.0f;
+				instances[instance_count].hovered = 0.0f;
+
+				memcpy(instances[instance_count].rotation, current->rotation, sizeof(versor));
+				instance_count++;
+
+				if (current->label) {
+					vec3 title_pos;
+					glm_vec3_copy(current->card_bg_pos, title_pos);
+					vec3 up_shift, right_shift;
+
+					glm_vec3_scale(current->up_vec, current->card_height * 0.5f - 0.05f, up_shift);
+					glm_vec3_scale(current->right_vec, -current->card_width * 0.5f + 0.05f, right_shift);
+
+					glm_vec3_add(title_pos, up_shift, title_pos);
+					glm_vec3_add(title_pos, right_shift, title_pos);
+
+					render_text_at_position(current, current->label, title_pos, &label_count, &label_instances, &label_capacity);
+				}
+			}
+
+			for (int i = 0; i < current->num_children; i++) {
+				stack[stack_top++] = current->children[i];
+			}
 		}
 	}
 
