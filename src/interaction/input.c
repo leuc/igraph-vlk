@@ -3,6 +3,7 @@
 #include "interaction/camera.h"
 #include "interaction/menu.h"
 #include "interaction/picking.h"
+#include "interaction/spatial.h"
 #include <GLFW/glfw3.h>
 #include <getopt.h>
 #include <stdio.h>
@@ -140,10 +141,7 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 			state->app_ctx.current_state = STATE_MENU_OPEN;
 			state->app_ctx.root_menu->target_radius = 1.0f;
 
-			// Capture the full camera transform at this moment
-			glm_vec3_copy(state->camera.pos, state->app_ctx.menu_spawn_pos);
-			glm_vec3_copy(state->camera.front, state->app_ctx.menu_spawn_front);
-			glm_vec3_copy(state->camera.up, state->app_ctx.menu_spawn_up);
+			spatial_calculate_basis(state->camera.pos, state->camera.front, state->camera.up, &state->app_ctx.menu_spawn_basis);
 
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 			// Keep cursor disabled to maintain camera lock for crosshair selection

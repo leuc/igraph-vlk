@@ -2,6 +2,7 @@
 #define UI_MENU_H
 
 #include "interaction/camera.h"
+#include "interaction/spatial.h"
 #include "interaction/state.h" // For MenuNode, MenuNodeType, IgraphCommand, etc.
 
 // ============================================================================
@@ -26,7 +27,7 @@ typedef struct
 void init_menu_tree(MenuNode *root);
 void destroy_menu_tree(MenuNode *node);
 void update_menu_animation(MenuNode *node, float delta_time);
-void update_menu_transforms(MenuNode *node, vec3 spawn_pos, vec3 spawn_front, vec3 spawn_up);
+void update_menu_transforms(MenuNode *node, const SpatialBasis *basis);
 MenuNode *find_menu_node(MenuNode *root, char const *label);
 
 // Data-driven initialization helper

@@ -7,10 +7,8 @@
 
 extern FontAtlas globalAtlas;
 
-void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r, vec3 cam_pos, vec3 cam_front, vec3 cam_up)
+void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r, const SpatialBasis *basis)
 {
-	(void)cam_pos;
-
 	if (node == NULL)
 		return;
 
@@ -54,8 +52,9 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r, vec3 cam_pos, vec
 			instances[instance_count].hovered = current->hovered ? 1.0f : 0.0f;
 
 			mat3 rot_mat;
-			vec3 neg_front;
-			glm_vec3_negate_to(cam_front, neg_front);
+			vec3 front_copy, neg_front;
+			memcpy(front_copy, basis->front, sizeof(vec3));
+			glm_vec3_negate_to(front_copy, neg_front);
 			glm_mat3_identity(rot_mat);
 			glm_mat3_copy((mat3){{current->right_vec[0], current->right_vec[1], current->right_vec[2]}, {current->up_vec[0], current->up_vec[1], current->up_vec[2]}, {neg_front[0], neg_front[1], neg_front[2]}}, rot_mat);
 			glm_mat3_quat(rot_mat, instances[instance_count].rotation);
@@ -77,7 +76,7 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r, vec3 cam_pos, vec
 					vec3 label_pos;
 					glm_vec3_copy(current->text_anchor_pos, label_pos);
 					vec3 forward_off, down_off;
-					glm_vec3_scale(cam_front, -0.002f, forward_off);
+					glm_vec3_scale(front_copy, -0.002f, forward_off);
 					glm_vec3_scale(current->up_vec, -0.015f, down_off);
 					glm_vec3_add(label_pos, forward_off, label_pos);
 					glm_vec3_add(label_pos, down_off, label_pos);

@@ -167,11 +167,11 @@ int main(int argc, char **argv)
 		// Update App FSM and Menu animations
 		update_app_state(&app);
 		update_menu_animation(app.app_ctx.root_menu, deltaTime);
-		update_menu_transforms(app.app_ctx.root_menu, app.app_ctx.menu_spawn_pos, app.app_ctx.menu_spawn_front, app.app_ctx.menu_spawn_up);
+		update_menu_transforms(app.app_ctx.root_menu, &app.app_ctx.menu_spawn_basis);
 
 		// Generate menu buffers if menu is open OR still animating (closing)
 		if (app.app_ctx.current_state == STATE_MENU_OPEN || app.app_ctx.root_menu->current_radius > 0.01f) {
-			generate_vulkan_menu_buffers(app.app_ctx.root_menu, &app.renderer, app.app_ctx.menu_spawn_pos, app.app_ctx.menu_spawn_front, app.app_ctx.menu_spawn_up);
+			generate_vulkan_menu_buffers(app.app_ctx.root_menu, &app.renderer, &app.app_ctx.menu_spawn_basis);
 		}
 
 		// Update animations

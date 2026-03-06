@@ -1,6 +1,7 @@
 #ifndef INTERACTION_STATE_H
 #define INTERACTION_STATE_H
 
+#include "interaction/spatial.h"
 #include <cglm/cglm.h>
 #include <igraph.h>
 #include <stdbool.h>
@@ -176,9 +177,7 @@ typedef struct AppContext
 	NumericInputWidget numeric_input;
 
 	// Menu world-space anchor (captured when menu opens)
-	vec3 menu_spawn_pos;
-	vec3 menu_spawn_front;
-	vec3 menu_spawn_up;
+	SpatialBasis menu_spawn_basis;
 } AppContext;
 
 // Function declarations

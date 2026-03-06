@@ -204,16 +204,10 @@ void update_menu_animation(MenuNode *node, float delta_time)
 }
 
 // Calculate and cache spatial transforms for ALL nodes in the menu tree
-void update_menu_transforms(MenuNode *node, vec3 spawn_pos, vec3 spawn_front, vec3 spawn_up)
+void update_menu_transforms(MenuNode *node, const SpatialBasis *basis)
 {
 	if (node == NULL)
 		return;
-
-	vec3 right, up;
-	glm_vec3_cross(spawn_front, spawn_up, right);
-	glm_vec3_normalize(right);
-	glm_vec3_cross(right, spawn_front, up);
-	glm_vec3_normalize(up);
 
 	MenuNode **stack = (MenuNode **)malloc(sizeof(MenuNode *) * 256);
 	int stack_top = 0;
@@ -224,25 +218,13 @@ void update_menu_transforms(MenuNode *node, vec3 spawn_pos, vec3 spawn_front, ve
 		if (current == NULL)
 			continue;
 
-		glm_vec3_copy(right, current->right_vec);
-		glm_vec3_copy(up, current->up_vec);
+		memcpy(current->right_vec, basis->right, sizeof(vec3));
+		memcpy(current->up_vec, basis->up, sizeof(vec3));
 
 		float x_off = current->target_phi - 0.8f;
 		float y_off = current->target_theta;
 
-		vec3 text_anchor;
-		glm_vec3_copy(spawn_pos, text_anchor);
-
-		vec3 f_part, r_part, u_part;
-		glm_vec3_scale(spawn_front, 2.5f, f_part);
-		glm_vec3_scale(right, x_off, r_part);
-		glm_vec3_scale(up, y_off, u_part);
-
-		glm_vec3_add(text_anchor, f_part, text_anchor);
-		glm_vec3_add(text_anchor, r_part, text_anchor);
-		glm_vec3_add(text_anchor, u_part, text_anchor);
-
-		glm_vec3_copy(text_anchor, current->text_anchor_pos);
+		spatial_resolve_position(basis, x_off, y_off, 2.5f, current->text_anchor_pos);
 
 		float world_text_scale = 0.003f;
 		float padding_x = 0.08f;
@@ -261,10 +243,10 @@ void update_menu_transforms(MenuNode *node, vec3 spawn_pos, vec3 spawn_front, ve
 		current->box_width = (total_w * world_text_scale) + padding_x;
 		current->box_height = fixed_height;
 
-		glm_vec3_copy(text_anchor, current->quad_center_pos);
+		glm_vec3_copy(current->text_anchor_pos, current->quad_center_pos);
 		if (current->label) {
 			vec3 offset;
-			glm_vec3_scale(right, current->box_width * 0.5f, offset);
+			glm_vec3_scale(current->right_vec, current->box_width * 0.5f, offset);
 			glm_vec3_add(current->quad_center_pos, offset, current->quad_center_pos);
 		}
 
