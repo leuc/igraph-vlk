@@ -56,8 +56,9 @@ static void render_text_at_position(MenuNode *node, const char *text, vec3 base_
 	}
 }
 
-void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r)
+void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 {
+	MenuNode *node = ctx->root_menu;
 	if (node == NULL)
 		return;
 
@@ -113,8 +114,6 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r)
 					input_display[1] = '\0';
 				}
 				display_text = input_display;
-			} else if (current->type == NODE_INFO_DISPLAY && current->info_value) {
-				display_text = current->info_value;
 			}
 
 			if (display_text && display_text[0]) {
@@ -193,6 +192,62 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r)
 		}
 
 		VkDeviceSize bufferSize = sizeof(MenuInstance) * instance_count;
+
+		// --- Draw Detached Info Card ---
+		if (ctx->info_card.is_visible && ctx->active_menu_level) {
+			float card_w = 0.8f;
+			float card_h = 0.10f + (ctx->info_card.num_pairs * 0.09f);
+
+			if (instance_count >= capacity) {
+				capacity *= 2;
+				instances = (MenuInstance *)realloc(instances, sizeof(MenuInstance) * capacity);
+			}
+
+			vec3 card_pos;
+			glm_vec3_copy(ctx->active_menu_level->card_bg_pos, card_pos);
+			vec3 right_shift;
+			glm_vec3_scale(ctx->active_menu_level->right_vec, (ctx->active_menu_level->card_width * 0.5f) + (card_w * 0.5f) + 0.05f, right_shift);
+			glm_vec3_add(card_pos, right_shift, card_pos);
+
+			glm_vec3_copy(card_pos, instances[instance_count].worldPos);
+			instances[instance_count].texCoord[0] = 0.0f;
+			instances[instance_count].texCoord[1] = 0.0f;
+			instances[instance_count].texId = -1.0f;
+			instances[instance_count].scale[0] = card_w;
+			instances[instance_count].scale[1] = card_h;
+			instances[instance_count].scale[2] = 1.0f;
+			instances[instance_count].hovered = 0.0f;
+			memcpy(instances[instance_count].rotation, node->rotation, sizeof(versor));
+			instance_count++;
+
+			vec3 title_pos;
+			glm_vec3_copy(card_pos, title_pos);
+			vec3 up_shift, left_shift;
+			glm_vec3_scale(node->up_vec, card_h * 0.5f - 0.05f, up_shift);
+			glm_vec3_scale(node->right_vec, -card_w * 0.5f + 0.05f, left_shift);
+			glm_vec3_add(title_pos, up_shift, title_pos);
+			glm_vec3_add(title_pos, left_shift, title_pos);
+
+			render_text_at_position(node, ctx->info_card.title, title_pos, &label_count, &label_instances, &label_capacity);
+
+			for (int i = 0; i < ctx->info_card.num_pairs; i++) {
+				vec3 row_pos;
+				glm_vec3_copy(title_pos, row_pos);
+				vec3 row_down;
+				glm_vec3_scale(node->up_vec, -(0.10f + i * 0.09f), row_down);
+				glm_vec3_add(row_pos, row_down, row_pos);
+
+				render_text_at_position(node, ctx->info_card.pairs[i].key, row_pos, &label_count, &label_instances, &label_capacity);
+
+				vec3 val_pos;
+				glm_vec3_copy(row_pos, val_pos);
+				vec3 val_right;
+				glm_vec3_scale(node->right_vec, card_w * 0.5f, val_right);
+				glm_vec3_add(val_pos, val_right, val_pos);
+				render_text_at_position(node, ctx->info_card.pairs[i].value, val_pos, &label_count, &label_instances, &label_capacity);
+			}
+		}
+
 		if (r->menuInstanceBuffer != VK_NULL_HANDLE) {
 			vkDeviceWaitIdle(r->device);
 			vkDestroyBuffer(r->device, r->menuInstanceBuffer, NULL);

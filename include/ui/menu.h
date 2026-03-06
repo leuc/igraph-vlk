@@ -29,6 +29,5 @@ void init_menu_tree(MenuNode *root);
 void destroy_menu_tree(MenuNode *node);
 void update_menu_transforms(MenuNode *node, const SpatialBasis *basis);
 MenuNode *find_menu_node(MenuNode *root, char const *label);
-void update_menu_info_displays(MenuNode *node, igraph_t *graph);
 
 #endif // UI_MENU_H

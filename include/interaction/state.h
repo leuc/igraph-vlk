@@ -74,7 +74,6 @@ typedef struct
 typedef enum {
 	NODE_BRANCH,	   // Opens a submenu card
 	NODE_LEAF_COMMAND, // Standard clickable action button
-	NODE_INFO_DISPLAY, // Read-only text/data display
 	NODE_INPUT_TEXT,   // Text input field
 	NODE_INPUT_TOGGLE  // Checkbox/boolean toggle
 } MenuNodeType;
@@ -107,12 +106,9 @@ typedef struct MenuNode
 	vec3 card_bg_pos;  // Position of the card background quad center
 
 	// Input Handling
-	bool is_focused;												  // Tracks keyboard focus for input fields
-	char input_buffer[256];											  // User-typed text for input fields
-	bool toggle_state;												  // Boolean state for toggle inputs
-	const char *info_value;											  // Read-only value for info displays
-	char info_buffer[256];											  // Buffer for dynamic info display content
-	void (*poll_info)(igraph_t *graph, char *buffer, size_t max_len); // Callback to refresh info display
+	bool is_focused;		// Tracks keyboard focus for input fields
+	char input_buffer[256]; // User-typed text for input fields
+	bool toggle_state;		// Boolean state for toggle inputs
 
 	// For Branches
 	int num_children;
@@ -162,6 +158,30 @@ typedef struct
 	char *label;		 // e.g., "Probability: 0.45"
 } NumericInputWidget;
 
+// --- Generic Info Card Data ---
+typedef struct
+{
+	char key[32];
+	char value[64];
+} InfoKeyValuePair;
+
+// Data passed from the worker thread back to main thread
+typedef struct
+{
+	char title[64];
+	int num_pairs;
+	InfoKeyValuePair pairs[8];
+} InfoCardData;
+
+// State held by the UI
+typedef struct
+{
+	bool is_visible;
+	char title[64];
+	int num_pairs;
+	InfoKeyValuePair pairs[8];
+} InfoCardState;
+
 // --- Application State Machine ---
 typedef enum {
 	STATE_GRAPH_VIEW,		  // Freely navigating the graph
@@ -193,6 +213,9 @@ typedef struct AppContext
 
 	// Numeric input widget state
 	NumericInputWidget numeric_input;
+
+	// Info card state (generic inspector panel)
+	InfoCardState info_card;
 
 	// Menu world-space anchor (captured when menu opens)
 	SpatialBasis menu_spawn_basis;

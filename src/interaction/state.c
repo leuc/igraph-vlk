@@ -340,6 +340,8 @@ void handle_menu_selection(AppContext *app, MenuNode *selected_node)
 	if (!selected_node)
 		return;
 
+	app->info_card.is_visible = false;
+
 	enforce_single_open_branch(app->root_menu, selected_node);
 
 	if (selected_node->type == NODE_BRANCH) {
@@ -363,7 +365,6 @@ void handle_menu_selection(AppContext *app, MenuNode *selected_node)
 		}
 	} else if (selected_node->type == NODE_INPUT_TOGGLE) {
 		selected_node->toggle_state = !selected_node->toggle_state;
-	} else if (selected_node->type == NODE_INFO_DISPLAY) {
 	}
 }
 

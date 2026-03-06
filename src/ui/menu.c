@@ -34,9 +34,6 @@ static MenuNode *create_menu_node(const char *label, MenuNodeType type)
 	node->hovered = false;
 	node->is_focused = false;
 	node->toggle_state = false;
-	node->info_value = NULL;
-	memset(node->info_buffer, 0, sizeof(node->info_buffer));
-	node->poll_info = NULL;
 	node->card_width = 0.0f;
 	node->card_height = 0.0f;
 	memset(node->input_buffer, 0, sizeof(node->input_buffer));
@@ -75,7 +72,6 @@ void init_menu_tree(MenuNode *root)
 	root->hovered = false;
 	root->is_focused = false;
 	root->toggle_state = false;
-	root->info_value = NULL;
 	root->card_width = 0.0f;
 	root->card_height = 0.0f;
 	memset(root->input_buffer, 0, sizeof(root->input_buffer));
@@ -112,17 +108,9 @@ void init_menu_tree(MenuNode *root)
 			}
 		}
 
-		MenuNodeType type = (cmd_def->node_type != 0) ? cmd_def->node_type : NODE_LEAF_COMMAND;
-		MenuNode *leaf = create_menu_node(cmd_def->display_name, type);
-
-		if (type == NODE_INFO_DISPLAY) {
-			leaf->poll_info = cmd_def->poll_func;
-			memset(leaf->info_buffer, 0, sizeof(leaf->info_buffer));
-			leaf->info_value = leaf->info_buffer;
-		} else {
-			leaf->command = create_command(cmd_def->command_id, cmd_def->display_name, NULL, 0);
-			leaf->command->cmd_def = cmd_def;
-		}
+		MenuNode *leaf = create_menu_node(cmd_def->display_name, NODE_LEAF_COMMAND);
+		leaf->command = create_command(cmd_def->command_id, cmd_def->display_name, NULL, 0);
+		leaf->command->cmd_def = cmd_def;
 
 		current_parent->children = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode *) * (current_parent->num_children + 1));
 		current_parent->children[current_parent->num_children] = leaf;
@@ -187,11 +175,7 @@ static void calculate_card_dimensions(MenuNode *node)
 			MenuNode *child = node->children[i];
 			float child_w = measure_text_width(child->label);
 
-			if (child->type == NODE_INFO_DISPLAY && child->info_value) {
-				float info_w = measure_text_width(child->info_value);
-				if (info_w > child_w)
-					child_w = info_w;
-			} else if (child->type == NODE_INPUT_TEXT && child->input_buffer[0]) {
+			if (child->type == NODE_INPUT_TEXT && child->input_buffer[0]) {
 				float input_w = measure_text_width(child->input_buffer);
 				if (input_w > child_w)
 					child_w = input_w;
@@ -316,22 +300,6 @@ MenuNode *find_menu_node(MenuNode *root, const char *label)
 			return res;
 	}
 	return NULL;
-}
-
-void update_menu_info_displays(MenuNode *node, igraph_t *graph)
-{
-	if (!node)
-		return;
-
-	if (node->type == NODE_INFO_DISPLAY && node->poll_info) {
-		node->poll_info(graph, node->info_buffer, sizeof(node->info_buffer));
-	}
-
-	if (node->is_expanded) {
-		for (int i = 0; i < node->num_children; i++) {
-			update_menu_info_displays(node->children[i], graph);
-		}
-	}
 }
 
 static void assign_menu_icons(MenuNode *node)

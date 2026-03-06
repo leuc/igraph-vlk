@@ -4,7 +4,7 @@
 #include <igraph.h>
 
 // Forward declare for the apply function (bridge to UI)
-// ExecutionContext is already defined in state.h
+struct AppContext;
 
 // 1. Pure math function. Returns allocated result (e.g., igraph_matrix_t*)
 typedef void *(*IgraphWorkerFunc)(igraph_t *graph);
@@ -15,9 +15,6 @@ typedef void (*IgraphApplyFunc)(ExecutionContext *ctx, void *result_data);
 // 3. Cleanup function to free the result_data
 typedef void (*IgraphFreeFunc)(void *result_data);
 
-// 4. Polling function for info displays
-typedef void (*IgraphPollInfoFunc)(igraph_t *graph, char *buffer, size_t max_len);
-
 typedef struct CommandDef
 {
 	const char *category_path; // e.g. "Layout/Force-Directed"
@@ -26,8 +23,6 @@ typedef struct CommandDef
 	IgraphWorkerFunc worker_func;
 	IgraphApplyFunc apply_func;
 	IgraphFreeFunc free_func;
-	MenuNodeType node_type;
-	IgraphPollInfoFunc poll_func;
 } CommandDef;
 
 extern const CommandDef g_command_registry[];
