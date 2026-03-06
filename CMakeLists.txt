@@ -80,6 +80,7 @@ add_executable(igraph-vlk
     src/interaction/input.c
     src/interaction/menu.c
     src/interaction/picking.c
+    src/interaction/spatial.c
     src/interaction/state.c
 
     # UI modules
