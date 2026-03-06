@@ -8,6 +8,24 @@
 
 extern FontAtlas globalAtlas;
 
+static float calculate_text_width(const char *text)
+{
+	if (!text)
+		return 0.0f;
+
+	int len = strlen(text);
+	float x_cursor = 0.0f;
+
+	for (int i = 0; i < len; i++) {
+		unsigned char c = text[i];
+		CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
+		x_cursor += ci->xadvance;
+	}
+
+	float world_text_scale = 0.003f;
+	return x_cursor * world_text_scale;
+}
+
 static void render_text_at_position(MenuNode *node, const char *text, vec3 base_pos, int *label_count, LabelInstance **label_instances, int *label_capacity)
 {
 	if (!text)
@@ -292,11 +310,13 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 				// Key (Left Column)
 				render_text_at_position(node, ctx->info_card.pairs[i].key, row_pos, &label_count, &label_instances, &label_capacity);
 
-				// Value (Right Column)
+				// Value (Right Column) - positioned relative to key width
+				float key_width = calculate_text_width(ctx->info_card.pairs[i].key);
+				float value_offset = key_width + 0.02f; // key width + padding
 				vec3 val_pos;
 				glm_vec3_copy(row_pos, val_pos);
 				vec3 val_right;
-				glm_vec3_scale(node->right_vec, card_w * 0.5f, val_right); // Shift halfway across card
+				glm_vec3_scale(node->right_vec, value_offset, val_right);
 				glm_vec3_add(val_pos, val_right, val_pos);
 				render_text_at_position(node, ctx->info_card.pairs[i].value, val_pos, &label_count, &label_instances, &label_capacity);
 			}
