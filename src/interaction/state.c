@@ -305,19 +305,46 @@ static void handle_command_completion(AppContext *app, AppState *state)
 	}
 }
 
+static bool enforce_single_open_branch(MenuNode *node, MenuNode *target)
+{
+	if (!node)
+		return false;
+
+	if (node == target) {
+		return true;
+	}
+
+	bool found_in_subtree = false;
+	MenuNode *child_containing_target = NULL;
+
+	for (int i = 0; i < node->num_children; i++) {
+		if (enforce_single_open_branch(node->children[i], target)) {
+			found_in_subtree = true;
+			child_containing_target = node->children[i];
+		}
+	}
+
+	if (found_in_subtree) {
+		for (int i = 0; i < node->num_children; i++) {
+			if (node->children[i] != child_containing_target) {
+				node->children[i]->is_expanded = false;
+			}
+		}
+	}
+
+	return found_in_subtree;
+}
+
 void handle_menu_selection(AppContext *app, MenuNode *selected_node)
 {
 	if (!selected_node)
 		return;
 
+	enforce_single_open_branch(app->root_menu, selected_node);
+
 	if (selected_node->type == NODE_BRANCH) {
 		selected_node->is_expanded = !selected_node->is_expanded;
 		app->active_menu_level = selected_node;
-		for (int i = 0; i < selected_node->num_children; i++) {
-			if (selected_node->children[i] != app->active_menu_level) {
-				selected_node->children[i]->is_expanded = false;
-			}
-		}
 	} else if (selected_node->type == NODE_LEAF_COMMAND) {
 		app->pending_command = selected_node->command;
 		app->selection_step = 0;
