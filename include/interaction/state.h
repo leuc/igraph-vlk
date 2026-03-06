@@ -88,11 +88,12 @@ typedef struct MenuNode
 	float target_radius;
 
 	// Cached spatial data (computed once during layout, reused for rendering/picking)
-	vec3 world_pos;
-	vec3 right_vec;
-	vec3 up_vec;
-	float box_width;
-	float box_height;
+	vec3 text_anchor_pos; // The 3D position where left-aligned text starts
+	vec3 quad_center_pos; // The 3D position of the background quad's exact center
+	vec3 right_vec;		  // Orthonormal right vector for the billboard
+	vec3 up_vec;		  // Orthonormal up vector for the billboard
+	float box_width;	  // The unscaled width of the menu node (at 100%)
+	float box_height;	  // The unscaled height of the menu node (at 100%)
 
 	// For Branches
 	int num_children;

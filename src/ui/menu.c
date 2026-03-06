@@ -207,9 +207,87 @@ void update_menu_animation(MenuNode *node, float delta_time)
 	update_menu_layout_recursive(node, delta_time, 1, &start_y);
 }
 
+// Calculate and cache spatial transforms for ALL nodes in the menu tree
+void update_menu_transforms(MenuNode *node, vec3 spawn_pos, vec3 spawn_front, vec3 spawn_up)
+{
+	if (node == NULL)
+		return;
+
+	vec3 right, up;
+	glm_vec3_cross(spawn_front, spawn_up, right);
+	glm_vec3_normalize(right);
+	glm_vec3_cross(right, spawn_front, up);
+	glm_vec3_normalize(up);
+
+	MenuNode **stack = (MenuNode **)malloc(sizeof(MenuNode *) * 256);
+	int stack_top = 0;
+	stack[stack_top++] = node;
+
+	while (stack_top > 0) {
+		MenuNode *current = stack[--stack_top];
+		if (current == NULL)
+			continue;
+
+		glm_vec3_copy(right, current->right_vec);
+		glm_vec3_copy(up, current->up_vec);
+
+		float x_off = current->target_phi - 0.8f;
+		float y_off = current->target_theta;
+
+		vec3 text_anchor;
+		glm_vec3_copy(spawn_pos, text_anchor);
+
+		vec3 f_part, r_part, u_part;
+		glm_vec3_scale(spawn_front, 2.5f, f_part);
+		glm_vec3_scale(right, x_off, r_part);
+		glm_vec3_scale(up, y_off, u_part);
+
+		glm_vec3_add(text_anchor, f_part, text_anchor);
+		glm_vec3_add(text_anchor, r_part, text_anchor);
+		glm_vec3_add(text_anchor, u_part, text_anchor);
+
+		glm_vec3_copy(text_anchor, current->text_anchor_pos);
+
+		float world_text_scale = 0.003f;
+		float padding_x = 0.08f;
+		float fixed_height = 0.09f;
+
+		float total_w = 0.0f;
+		if (current->label) {
+			int label_len = strlen(current->label);
+			for (int i = 0; i < label_len; i++) {
+				unsigned char c = current->label[i];
+				CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
+				total_w += ci->xadvance;
+			}
+		}
+
+		current->box_width = (total_w * world_text_scale) + padding_x;
+		current->box_height = fixed_height;
+
+		glm_vec3_copy(text_anchor, current->quad_center_pos);
+		if (current->label) {
+			vec3 offset;
+			glm_vec3_scale(right, current->box_width * 0.5f, offset);
+			glm_vec3_add(current->quad_center_pos, offset, current->quad_center_pos);
+		}
+
+		for (int i = 0; i < current->num_children; i++) {
+			stack[stack_top++] = current->children[i];
+		}
+	}
+
+	free(stack);
+}
+
 // Generate Vulkan menu buffers (instanced rendering)
+// Uses cached spatial values from update_menu_transforms
 void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r, vec3 cam_pos, vec3 cam_front, vec3 cam_up)
 {
+	(void)cam_pos;
+	(void)cam_front;
+	(void)cam_up;
+
 	if (node == NULL)
 		return;
 
@@ -235,113 +313,59 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r, vec3 cam_pos, vec
 	int stack_top = 0;
 	stack[stack_top++] = node;
 
-	// Basis vectors for billboarding (using cam_front as camera front)
-	vec3 right, up;
-	glm_vec3_cross(cam_front, cam_up, right);
-	glm_vec3_normalize(right);
-	glm_vec3_cross(right, cam_front, up);
-	glm_vec3_normalize(up);
-
 	while (stack_top > 0) {
 		MenuNode *current = stack[--stack_top];
 		if (current == NULL)
 			continue;
 
-		// Render every visible node except the root container if it's at (0,0)
+		// Prevent artifacts: only process nodes that are visible
 		if (current->current_radius > 0.01f) {
 			if (instance_count >= capacity) {
 				capacity *= 2;
 				instances = (MenuInstance *)realloc(instances, sizeof(MenuInstance) * capacity);
 			}
 
-			// Simple billboard position: cam_pos + distance*front + x*right + y*up
-			// Offset adjusted to be a bit more centered (-0.8m) and further away (2.5m)
-			float x_off = current->target_phi - 0.8f;
-			float y_off = current->target_theta;
-
-			vec3 world_pos;
-			glm_vec3_copy(cam_pos, world_pos);
-
-			vec3 f_part, r_part, u_part;
-			glm_vec3_scale(cam_front, 2.5f, f_part); // 2.5 meters away
-			glm_vec3_scale(right, x_off, r_part);
-			glm_vec3_scale(up, y_off, u_part);
-
-			glm_vec3_add(world_pos, f_part, world_pos);
-			glm_vec3_add(world_pos, r_part, world_pos);
-			glm_vec3_add(world_pos, u_part, world_pos);
-
-			// 2D tree layout - no spherical scaling needed
-			// world_pos already contains the correct flat position
-
-			glm_vec3_copy(world_pos, instances[instance_count].worldPos);
+			// Use cached quad center position (already shifted by box_width * 0.5f)
+			glm_vec3_copy(current->quad_center_pos, instances[instance_count].worldPos);
 			instances[instance_count].texCoord[0] = 0.0f;
 			instances[instance_count].texCoord[1] = 0.0f;
 			instances[instance_count].texId = (float)current->icon_texture_id;
 
-			// Dynamic box sizing based on text - Tightened to match font
-			float world_text_scale = 0.003f; // Font bake size (32px) to world units
-			float padding_x = 0.08f;		 // Tight padding
-			float fixed_height = 0.09f;		 // Consistent height
-
-			// Calculate total width for dynamic sizing (even if no label)
-			float total_w = 0.0f;
-			int label_len = 0;
-			if (current->label) {
-				label_len = strlen(current->label);
-				for (int i = 0; i < label_len; i++) {
-					unsigned char c = current->label[i];
-					CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
-					total_w += ci->xadvance;
-				}
-			}
-
-			// Use dynamic bounds: width based on text + padding, height fixed
-			float box_width = (total_w * world_text_scale) + padding_x;
-			instances[instance_count].scale[0] = box_width * current->current_radius;
-			instances[instance_count].scale[1] = fixed_height * current->current_radius;
+			// Use cached box dimensions scaled by current_radius
+			instances[instance_count].scale[0] = current->box_width * current->current_radius;
+			instances[instance_count].scale[1] = current->box_height * current->current_radius;
 			instances[instance_count].scale[2] = 1.0f;
 			instances[instance_count].hovered = current->hovered ? 1.0f : 0.0f;
 
-			// Center the background quad around the text anchor
-			if (current->label) {
-				vec3 offset;
-				glm_vec3_scale(right, box_width * 0.5f, offset);
-				glm_vec3_add(instances[instance_count].worldPos, offset, instances[instance_count].worldPos);
-			}
-
-			// Calculate rotation quaternion to align quad (default XY plane) with camera
-			// Camera orientation: front is Z (backwards), right is X, up is Y
-			// We want the quad's +Z to face the camera's -front
+			// Calculate rotation quaternion using cached right/up vectors
 			mat3 rot_mat;
 			vec3 neg_front;
 			glm_vec3_negate_to(cam_front, neg_front);
 			glm_mat3_identity(rot_mat);
-			glm_mat3_copy((mat3){{right[0], right[1], right[2]}, {up[0], up[1], up[2]}, {neg_front[0], neg_front[1], neg_front[2]}}, rot_mat);
+			glm_mat3_copy((mat3){{current->right_vec[0], current->right_vec[1], current->right_vec[2]}, {current->up_vec[0], current->up_vec[1], current->up_vec[2]}, {neg_front[0], neg_front[1], neg_front[2]}}, rot_mat);
 			glm_mat3_quat(rot_mat, instances[instance_count].rotation);
 
-			// Generate label instances
-			if (current->label && current->current_radius > 0.01f) { // Render text as long as node is visible
+			// Generate label instances using cached text anchor position
+			if (current->label) {
 				int len = strlen(current->label);
 				if (label_count + len >= label_capacity) {
 					label_capacity *= 2;
 					label_instances = (LabelInstance *)realloc(label_instances, sizeof(LabelInstance) * label_capacity);
 				}
 
-				float x_cursor = 0.0f;
-				// x_cursor = -total_w * 0.5f; // old centering
-				x_cursor = (padding_x * 0.4f) / world_text_scale; // Left-aligned with a small margin
+				float world_text_scale = 0.003f;
+				float x_cursor = (0.08f * 0.4f) / world_text_scale; // Left-aligned margin
 
 				for (int i = 0; i < len; i++) {
 					unsigned char c = current->label[i];
 					CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
 
-					// Offset text forward from the quad slightly to prevent z-fighting
+					// Use cached text anchor position
 					vec3 label_pos;
-					glm_vec3_copy(world_pos, label_pos);
+					glm_vec3_copy(current->text_anchor_pos, label_pos);
 					vec3 forward_off, down_off;
-					glm_vec3_scale(cam_front, -0.002f, forward_off); // Move slightly towards camera
-					glm_vec3_scale(up, -0.015f, down_off);			 // Centering adjustment
+					glm_vec3_scale(cam_front, -0.002f, forward_off);
+					glm_vec3_scale(current->up_vec, -0.015f, down_off);
 					glm_vec3_add(label_pos, forward_off, label_pos);
 					glm_vec3_add(label_pos, down_off, label_pos);
 
@@ -354,10 +378,11 @@ void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r, vec3 cam_pos, vec
 					label_instances[label_count].charUV[1] = ci->v0;
 					label_instances[label_count].charUV[2] = ci->u1;
 					label_instances[label_count].charUV[3] = ci->v1;
-					// Scale orientation vectors by current_radius so text shrinks/vanishes with the quad
+
+					// Use cached right/up vectors scaled by current_radius
 					float dynamic_scale = world_text_scale * current->current_radius;
-					glm_vec3_scale(right, dynamic_scale, label_instances[label_count].right);
-					glm_vec3_scale(up, dynamic_scale, label_instances[label_count].up);
+					glm_vec3_scale(current->right_vec, dynamic_scale, label_instances[label_count].right);
+					glm_vec3_scale(current->up_vec, dynamic_scale, label_instances[label_count].up);
 
 					x_cursor += ci->xadvance;
 					label_count++;
