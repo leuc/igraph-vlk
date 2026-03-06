@@ -167,7 +167,7 @@ static void calculate_card_dimensions(MenuNode *node)
 	}
 }
 
-static void update_nextstep_layout_recursive(MenuNode *node, const vec3 top_left_anchor)
+static void update_nextstep_layout_recursive(MenuNode *node, vec3 top_left_anchor)
 {
 	if (!node)
 		return;
@@ -229,13 +229,6 @@ static void update_nextstep_layout_recursive(MenuNode *node, const vec3 top_left
 				child->box_height = MENU_ITEM_HEIGHT;
 			}
 		}
-	} else {
-		node->box_width = MENU_CARD_WIDTH;
-		node->box_height = MENU_ITEM_HEIGHT;
-
-		glm_vec3_copy(top_left_anchor, node->text_anchor_pos);
-		glm_vec3_copy(top_left_anchor, node->quad_center_pos);
-		glm_vec3_copy(top_left_anchor, node->world_pos);
 	}
 }
 
