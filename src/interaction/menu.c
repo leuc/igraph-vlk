@@ -1,7 +1,9 @@
 #include "interaction/menu.h"
 #include "interaction/picking.h"
+#include <GLFW/glfw3.h>
 #include <cglm/cglm.h>
 #include <float.h>
+#include <string.h>
 
 static MenuNode *pick_menu_recursive(MenuNode *node, float *ray_ori, float *ray_dir, float *min_t)
 {
@@ -41,6 +43,37 @@ void clear_menu_hover_recursive(MenuNode *node)
 	}
 }
 
+void clear_menu_focus_recursive(MenuNode *node)
+{
+	if (!node)
+		return;
+	node->is_focused = false;
+	for (int i = 0; i < node->num_children; i++) {
+		clear_menu_focus_recursive(node->children[i]);
+	}
+}
+
+MenuNode *find_focused_node(MenuNode *node)
+{
+	if (!node)
+		return NULL;
+	if (node->is_focused)
+		return node;
+	for (int i = 0; i < node->num_children; i++) {
+		MenuNode *found = find_focused_node(node->children[i]);
+		if (found)
+			return found;
+	}
+	return NULL;
+}
+
+void set_menu_node_focused(MenuNode *root, MenuNode *target)
+{
+	clear_menu_focus_recursive(root);
+	if (target)
+		target->is_focused = true;
+}
+
 MenuNode *raycast_menu_crosshair(AppState *state)
 {
 	clear_menu_hover_recursive(state->app_ctx.root_menu);
@@ -73,4 +106,36 @@ MenuNode *interaction_pick_menu_node(AppState *state, double mouse_x, double mou
 
 	float min_t = FLT_MAX;
 	return pick_menu_recursive(state->app_ctx.root_menu, state->camera.pos, ray_dir, &min_t);
+}
+
+bool handle_menu_key_input(MenuNode *root, int key, int scancode, int action, int mods)
+{
+	MenuNode *focused = find_focused_node(root);
+	if (!focused || action != GLFW_PRESS)
+		return false;
+
+	if (focused->type == NODE_INPUT_TEXT) {
+		if (key == GLFW_KEY_BACKSPACE) {
+			size_t len = strlen(focused->input_buffer);
+			if (len > 0) {
+				focused->input_buffer[len - 1] = '\0';
+			}
+			return true;
+		} else if (key == GLFW_KEY_ENTER || key == GLFW_KEY_ESCAPE) {
+			focused->is_focused = false;
+			return true;
+		} else if (key >= GLFW_KEY_SPACE && key <= GLFW_KEY_WORLD_2) {
+			char c = (char)key;
+			if (c >= ' ' && c <= '~') {
+				size_t len = strlen(focused->input_buffer);
+				if (len < sizeof(focused->input_buffer) - 1) {
+					focused->input_buffer[len] = c;
+					focused->input_buffer[len + 1] = '\0';
+				}
+			}
+			return true;
+		}
+	}
+
+	return false;
 }

@@ -17,9 +17,10 @@
 typedef struct
 {
 	const char *label;		// Menu item label (e.g., "Layout", "Analyze")
-	MenuNodeType type;		// NODE_BRANCH (submenu) or NODE_LEAF (command)
+	MenuNodeType type;		// NODE_BRANCH, NODE_LEAF_COMMAND, NODE_INFO_DISPLAY, NODE_INPUT_TEXT, NODE_INPUT_TOGGLE
 	const int *child_ids;	// Array of child node IDs (NULL/empty for leaves). Terminated by -1.
-	const char *command_id; // ID ("shortest_path") to lookup command for NODE_LEAF (NULL for branches)
+	const char *command_id; // ID ("shortest_path") to lookup command for NODE_LEAF_COMMAND (NULL for branches)
+	const char *info_value; // For NODE_INFO_DISPLAY: the read-only value to show
 	int radius_level;		// Which spherical level (0=root children, 1=grandchildren, etc.)
 } MenuDefinition;
 

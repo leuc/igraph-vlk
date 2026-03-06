@@ -307,14 +307,21 @@ static void handle_command_completion(AppContext *app, AppState *state)
 
 void handle_menu_selection(AppContext *app, MenuNode *selected_node)
 {
+	if (!selected_node)
+		return;
+
 	if (selected_node->type == NODE_BRANCH) {
 		selected_node->is_expanded = !selected_node->is_expanded;
 		app->active_menu_level = selected_node;
-	} else if (selected_node->type == NODE_LEAF) {
+		for (int i = 0; i < selected_node->num_children; i++) {
+			if (selected_node->children[i] != app->active_menu_level) {
+				selected_node->children[i]->is_expanded = false;
+			}
+		}
+	} else if (selected_node->type == NODE_LEAF_COMMAND) {
 		app->pending_command = selected_node->command;
 		app->selection_step = 0;
 
-		// Reset selection parameters
 		for (int i = 0; i < app->pending_command->num_params; i++) {
 			if (app->pending_command->params[i].type == PARAM_TYPE_NODE_SELECTION || app->pending_command->params[i].type == PARAM_TYPE_EDGE_SELECTION) {
 				app->pending_command->params[i].value.selection_id = -1;
@@ -322,6 +329,14 @@ void handle_menu_selection(AppContext *app, MenuNode *selected_node)
 		}
 
 		check_pending_command_requirements(app);
+	} else if (selected_node->type == NODE_INPUT_TEXT) {
+		selected_node->is_focused = !selected_node->is_focused;
+		if (selected_node->is_focused) {
+			memset(selected_node->input_buffer, 0, sizeof(selected_node->input_buffer));
+		}
+	} else if (selected_node->type == NODE_INPUT_TOGGLE) {
+		selected_node->toggle_state = !selected_node->toggle_state;
+	} else if (selected_node->type == NODE_INFO_DISPLAY) {
 	}
 }
 

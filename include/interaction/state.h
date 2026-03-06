@@ -72,8 +72,11 @@ typedef struct
 
 // --- 3D Spherical Menu Tree Structure ---
 typedef enum {
-	NODE_BRANCH, // Submenu
-	NODE_LEAF	 // Actionable Command
+	NODE_BRANCH,	   // Opens a submenu card
+	NODE_LEAF_COMMAND, // Standard clickable action button
+	NODE_INFO_DISPLAY, // Read-only text/data display
+	NODE_INPUT_TEXT,   // Text input field
+	NODE_INPUT_TOGGLE  // Checkbox/boolean toggle
 } MenuNodeType;
 
 typedef struct MenuNode
@@ -97,6 +100,17 @@ typedef struct MenuNode
 	vec3 up_vec;		  // Orthonormal up vector for the billboard
 	float box_width;	  // The unscaled width of the menu node (at 100%)
 	float box_height;	  // The unscaled height of the menu node (at 100%)
+
+	// NeXTSTEP Card Dimensions
+	float card_width;  // Width of the entire card background
+	float card_height; // Height of the entire card background
+	vec3 card_bg_pos;  // Position of the card background quad center
+
+	// Input Handling
+	bool is_focused;		// Tracks keyboard focus for input fields
+	char input_buffer[256]; // User-typed text for input fields
+	bool toggle_state;		// Boolean state for toggle inputs
+	const char *info_value; // Read-only value for info displays
 
 	// For Branches
 	int num_children;
