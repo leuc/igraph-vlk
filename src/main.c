@@ -168,8 +168,8 @@ int main(int argc, char **argv)
 		update_app_state(&app);
 		update_menu_transforms(app.app_ctx.root_menu, &app.app_ctx.menu_spawn_basis);
 
-		// Generate menu buffers if menu is open, otherwise explicitly clear the render counts
-		if (app.app_ctx.current_state == STATE_MENU_OPEN) {
+		// Generate menu buffers if menu is open or processing
+		if (app.app_ctx.current_state == STATE_MENU_OPEN || app.app_ctx.current_state == STATE_JOB_IN_PROGRESS || app.app_ctx.current_state == STATE_EXECUTING) {
 			generate_vulkan_menu_buffers(app.app_ctx.root_menu, &app.renderer);
 		} else {
 			app.renderer.menuNodeCount = 0;
