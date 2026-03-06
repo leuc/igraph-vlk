@@ -72,6 +72,7 @@ add_executable(igraph-vlk
      src/graph/wrappers_centrality.c
 src/graph/wrappers_constructors.c
       src/graph/wrappers_paths.c
+      src/graph/wrappers_structural.c
       src/graph/worker_thread.c
 
     src/graph/command_registry.c

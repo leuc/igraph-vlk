@@ -4,6 +4,7 @@
 #include "graph/wrappers_constructors.h"
 #include "graph/wrappers_layout.h"
 #include "graph/wrappers_paths.h"
+#include "graph/wrappers_structural.h"
 
 const CommandDef g_command_registry[] = {
 	// =========================================================================
@@ -109,12 +110,11 @@ const CommandDef g_command_registry[] = {
 	// Analysis menu - Global Network Properties
 	// =========================================================================
 	{"Analysis/Global Network Properties", "ana_glob_diam", "Diameter", compute_ana_diameter, apply_info_card, free_info_card},
-	{"Analysis/Global Network Properties", "ana_glob_rad", "Radius", NULL, NULL, NULL},
-	{"Analysis/Global Network Properties", "ana_glob_apl", "Average Path Length", NULL, NULL, NULL},
-	{"Analysis/Global Network Properties", "ana_glob_assort", "Assortativity", NULL, NULL, NULL},
-	{"Analysis/Global Network Properties", "ana_glob_mod", "Modularity", NULL, NULL, NULL},
-	{"Analysis/Global Network Properties", "ana_glob_dens", "Density", NULL, NULL, NULL},
-	{"Analysis/Global Network Properties", "ana_glob_trans", "Transitivity", NULL, NULL, NULL},
+	{"Analysis/Global Network Properties", "ana_glob_rad", "Radius", compute_ana_glob_rad, apply_info_card, free_info_card},
+	{"Analysis/Global Network Properties", "ana_glob_apl", "Average Path Length", compute_ana_glob_apl, apply_info_card, free_info_card},
+	{"Analysis/Global Network Properties", "ana_glob_assort", "Assortativity", compute_ana_glob_assort, apply_info_card, free_info_card},
+	{"Analysis/Global Network Properties", "ana_glob_dens", "Density", compute_ana_glob_dens, apply_info_card, free_info_card},
+	{"Analysis/Global Network Properties", "ana_glob_trans", "Transitivity (undirected)", compute_ana_glob_trans, apply_info_card, free_info_card},
 
 	// =========================================================================
 	// Analysis menu - Distances & Paths
