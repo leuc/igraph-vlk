@@ -87,6 +87,13 @@ typedef struct MenuNode
 	float current_radius;
 	float target_radius;
 
+	// Cached spatial data (computed once during layout, reused for rendering/picking)
+	vec3 world_pos;
+	vec3 right_vec;
+	vec3 up_vec;
+	float box_width;
+	float box_height;
+
 	// For Branches
 	int num_children;
 	struct MenuNode **children;
