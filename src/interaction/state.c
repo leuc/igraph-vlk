@@ -2,6 +2,7 @@
 #include "app_state.h"
 #include "graph/graph_core.h"
 #include "graph/worker_thread.h"
+#include "interaction/menu.h"
 #include "interaction/picking.h"
 #include "vulkan/renderer.h"
 #include <GLFW/glfw3.h>

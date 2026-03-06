@@ -78,6 +78,7 @@ add_executable(igraph-vlk
     # Interaction modules
     src/interaction/camera.c
     src/interaction/input.c
+    src/interaction/menu.c
     src/interaction/picking.c
     src/interaction/state.c
 

@@ -1,6 +1,7 @@
 #include "interaction/input.h"
 #include "graph/graph_actions.h"
 #include "interaction/camera.h"
+#include "interaction/menu.h"
 #include "interaction/picking.h"
 #include <GLFW/glfw3.h>
 #include <getopt.h>
