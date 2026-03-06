@@ -3,7 +3,6 @@
 
 #include "interaction/camera.h"
 #include "interaction/state.h" // For MenuNode, MenuNodeType, IgraphCommand, etc.
-#include "vulkan/renderer.h"
 
 // ============================================================================
 // Menu Definition Data Structures (Data-Driven Initialization)
@@ -28,7 +27,6 @@ void init_menu_tree(MenuNode *root);
 void destroy_menu_tree(MenuNode *node);
 void update_menu_animation(MenuNode *node, float delta_time);
 void update_menu_transforms(MenuNode *node, vec3 spawn_pos, vec3 spawn_front, vec3 spawn_up);
-void generate_vulkan_menu_buffers(MenuNode *node, Renderer *r, vec3 cam_pos, vec3 cam_front, vec3 cam_up);
 MenuNode *find_menu_node(MenuNode *root, char const *label);
 
 // Data-driven initialization helper

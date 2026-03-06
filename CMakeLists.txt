@@ -51,6 +51,7 @@ add_executable(igraph-vlk
     src/vulkan/renderer_compute.c
     src/vulkan/renderer_ui.c
     src/vulkan/renderer_pipelines.c
+    src/vulkan/menu.c
     # Utilities and helpers
     src/vulkan/utils.c
     src/vulkan/polyhedron.c

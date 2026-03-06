@@ -7,6 +7,7 @@
 #include "ui/hud.h"
 #include "ui/menu.h"
 #include "vulkan/animation_manager.h"
+#include "vulkan/menu.h"
 #include "vulkan/renderer.h"
 #include <GLFW/glfw3.h>
 
