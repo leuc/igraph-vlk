@@ -43,7 +43,7 @@ void *compute_igraph_layout_umap_3d(igraph_t *graph);
 void *compute_igraph_layout_umap(igraph_t *graph);
 
 // Community-based layouts
-void *compute_lay_layered_sphere(igraph_t *graph);
+void *compute_layout_layered_sphere(igraph_t *graph);
 
 // Standard apply and free functions
 void free_layout_matrix(void *result_data);

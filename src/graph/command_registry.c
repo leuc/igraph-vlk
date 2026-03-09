@@ -61,7 +61,6 @@ const CommandDef g_command_registry[] = {
 	{"Layout/Force-Directed", "igraph_layout_graphopt", "GraphOpt", compute_igraph_layout_graphopt, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "igraph_layout_lgl", "Large Graph Layout (LGL)", compute_igraph_layout_lgl, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "igraph_layout_gem", "GEM", compute_igraph_layout_gem, apply_layout_matrix_centered, free_layout_matrix},
-	{"Layout", "lay_layered_sphere", "Layered Sphere", compute_lay_layered_sphere, apply_layout_matrix, free_layout_matrix},
 
 	// =========================================================================
 	// Layout menu - Tree & Hierarchical
@@ -69,6 +68,9 @@ const CommandDef g_command_registry[] = {
 	{"Layout/Tree & Hierarchical", "igraph_layout_reingold_tilford", "Reingold-Tilford", compute_igraph_layout_reingold_tilford, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Tree & Hierarchical", "igraph_layout_sugiyama", "Sugiyama", compute_igraph_layout_sugiyama, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Tree & Hierarchical", "igraph_layout_sugiyama_radial", "Radial Sugiyama", compute_igraph_layout_sugiyama_radial, apply_layout_matrix, free_layout_matrix},
+
+	// Non-Igraph
+	{"Layout", "lay_layered_sphere", "Layered Sphere", compute_layout_layered_sphere, apply_layout_matrix, free_layout_matrix},
 	// =========================================================================
 	// Layout menu - Geometric
 	// =========================================================================
@@ -84,9 +86,9 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Layout menu - Bipartite Layouts
 	// =========================================================================
-	{"Layout/Bipartite Layouts", "igraph_layout_mds", "MDS", compute_igraph_layout_mds, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Bipartite Layouts", "igraph_layout_bipartite", "Sugiyama (Bipartite)", compute_igraph_layout_bipartite, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Bipartite Layouts", "igraph_layout_bipartite_simple", "Bipartite (Simple)", compute_igraph_layout_bipartite_simple, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Bipartite", "igraph_layout_mds", "MDS", compute_igraph_layout_mds, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Bipartite", "igraph_layout_bipartite", "Sugiyama (Bipartite)", compute_igraph_layout_bipartite, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Bipartite", "igraph_layout_bipartite_simple", "Bipartite (Simple)", compute_igraph_layout_bipartite_simple, apply_layout_matrix, free_layout_matrix},
 
 	// =========================================================================
 	// Layout menu - Graph Embedding
@@ -97,87 +99,25 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Analysis menu - Centrality & Roles
 	// =========================================================================
-	{"Analysis/Centrality & Roles", "igraph_degree", "Degree", compute_igraph_degree, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "igraph_closeness_cutoff", "Closeness", compute_igraph_closeness_cutoff, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "igraph_betweenness", "Betweenness", compute_igraph_betweenness, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "igraph_eigenvector_centrality", "Eigenvector Centrality", compute_igraph_eigenvector_centrality, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "igraph_pagerank", "PageRank", compute_igraph_pagerank, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "igraph_hub_and_authority_scores", "HITS (Hub)", compute_igraph_hub_and_authority_scores, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "igraph_harmonic_centrality", "Harmonic", compute_igraph_harmonic_centrality, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "igraph_strength", "Strength (Weighted Degree)", compute_igraph_strength, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "igraph_constraint", "Constraint (Structural Holes)", compute_igraph_constraint, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality", "igraph_degree", "Degree", compute_igraph_degree, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality", "igraph_closeness_cutoff", "Closeness", compute_igraph_closeness_cutoff, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality", "igraph_betweenness", "Betweenness", compute_igraph_betweenness, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality", "igraph_eigenvector_centrality", "Eigenvector Centrality", compute_igraph_eigenvector_centrality, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality", "igraph_pagerank", "PageRank", compute_igraph_pagerank, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality", "igraph_hub_and_authority_scores", "HITS (Hub)", compute_igraph_hub_and_authority_scores, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality", "igraph_harmonic_centrality", "Harmonic", compute_igraph_harmonic_centrality, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality", "igraph_strength", "Strength (Weighted Degree)", compute_igraph_strength, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality", "igraph_constraint", "Constraint (Structural Holes)", compute_igraph_constraint, apply_centrality_scores, free_centrality_scores},
 
 	// =========================================================================
 	// Analysis menu - Global Network Properties
 	// =========================================================================
-	{"Analysis/Global Network Properties", "igraph_diameter", "Diameter", compute_igraph_diameter, apply_info_card, free_info_card},
-	{"Analysis/Global Network Properties", "igraph_radius", "Radius", compute_igraph_radius, apply_info_card, free_info_card},
-	{"Analysis/Global Network Properties", "igraph_average_path_length", "Average Path Length", compute_igraph_average_path_length, apply_info_card, free_info_card},
-	{"Analysis/Global Network Properties", "ana_glob_assort", "Assortativity", compute_ana_glob_assort, apply_info_card, free_info_card},
-	{"Analysis/Global Network Properties", "ana_glob_dens", "Density", compute_ana_glob_dens, apply_info_card, free_info_card},
-	{"Analysis/Global Network Properties", "ana_glob_trans", "Transitivity (undirected)", compute_ana_glob_trans, apply_info_card, free_info_card},
-
-	// =========================================================================
-	// Analysis menu - Distances & Paths
-	// =========================================================================
-	{"Analysis/Distances & Paths/Shortest Paths", "ana_dist_sp_dij", "Dijkstra", NULL, NULL, NULL},
-	{"Analysis/Distances & Paths/Shortest Paths", "ana_dist_sp_bf", "Bellman-Ford", NULL, NULL, NULL},
-	{"Analysis/Distances & Paths/Shortest Paths", "ana_dist_sp_astar", "A*", NULL, NULL, NULL},
-	{"Analysis/Distances & Paths/Shortest Paths", "ana_dist_sp_joh", "Johnson", NULL, NULL, NULL},
-	{"Analysis/Distances & Paths", "ana_dist_ecc", "Eccentricity", NULL, NULL, NULL},
-
-	// =========================================================================
-	// Analysis menu - Flows & Cuts
-	// =========================================================================
-	{"Analysis/Flows & Cuts", "ana_flow_max", "Maximum Flow", NULL, NULL, NULL},
-	{"Analysis/Flows & Cuts", "ana_flow_min", "Minimum Cut", NULL, NULL, NULL},
-	{"Analysis/Flows & Cuts", "ana_flow_gom", "Gomory-Hu Tree", NULL, NULL, NULL},
-	{"Analysis/Flows & Cuts", "ana_flow_adh", "Adhesion / Cohesion", NULL, NULL, NULL},
-
-	// =========================================================================
-	// Analysis menu - Graph Embedding
-	// =========================================================================
-	{"Analysis/Graph Embedding", "ana_emb_adj", "Adjacency Spectral Embedding", NULL, NULL, NULL},
-	{"Analysis/Graph Embedding", "ana_emb_lap", "Laplacian Spectral Embedding", NULL, NULL, NULL},
-
-	// =========================================================================
-	// Topology menu - Components & Connectivity
-	// =========================================================================
-	{"Topology & Motifs/Components & Connectivity", "top_comp_conn", "Connected Components", NULL, NULL, NULL},
-	{"Topology & Motifs/Components & Connectivity", "top_comp_bicon", "Biconnected Components", NULL, NULL, NULL},
-	{"Topology & Motifs/Components & Connectivity", "top_comp_art", "Articulation Points", NULL, NULL, NULL},
-	{"Topology & Motifs/Components & Connectivity", "top_comp_sep", "Vertex Separators", NULL, NULL, NULL},
-
-	// =========================================================================
-	// Topology menu - Cliques & Independent Sets
-	// =========================================================================
-	{"Topology & Motifs/Cliques & Independent Sets", "top_cliq_maxl", "Maximal Cliques", NULL, NULL, NULL},
-	{"Topology & Motifs/Cliques & Independent Sets", "top_cliq_maxm", "Maximum Cliques", NULL, NULL, NULL},
-	{"Topology & Motifs/Cliques & Independent Sets", "top_cliq_ind", "Largest Independent Vertex Sets", NULL, NULL, NULL},
-
-	// =========================================================================
-	// Topology menu - Cycles & Paths
-	// =========================================================================
-	{"Topology & Motifs/Cycles & Paths", "top_cyc_eul", "Eulerian Paths", NULL, NULL, NULL},
-	{"Topology & Motifs/Cycles & Paths", "top_cyc_fund", "Fundamental Cycles", NULL, NULL, NULL},
-
-	// =========================================================================
-	// Topology menu - Motifs & Censuses
-	// =========================================================================
-	{"Topology & Motifs/Motifs & Censuses", "top_mot_tri", "Triad Census", NULL, NULL, NULL},
-	{"Topology & Motifs/Motifs & Censuses", "top_mot_dya", "Dyad Census", NULL, NULL, NULL},
-	{"Topology & Motifs/Motifs & Censuses", "top_mot_net", "Network Motifs", NULL, NULL, NULL},
-
-	// =========================================================================
-	// Topology menu - Graph Isomorphism
-	// =========================================================================
-	{"Topology & Motifs/Graph Isomorphism", "top_iso_vf2", "VF2", NULL, NULL, NULL},
-	{"Topology & Motifs/Graph Isomorphism", "top_iso_bliss", "Bliss", NULL, NULL, NULL},
-
-	// =========================================================================
-	// Topology menu - Graph Coloring
-	// =========================================================================
-	{"Topology & Motifs/Graph Coloring", "top_col_greedy", "Greedy coloring", NULL, NULL, NULL},
+	{"Analysis/Global Properties", "igraph_diameter", "Diameter", compute_igraph_diameter, apply_info_card, free_info_card},
+	{"Analysis/Global Properties", "igraph_radius", "Radius", compute_igraph_radius, apply_info_card, free_info_card},
+	{"Analysis/Global Properties", "igraph_average_path_length", "Average Path Length", compute_igraph_average_path_length, apply_info_card, free_info_card},
+	{"Analysis/Global Properties", "igraph_assortativity_degree", "Assortativity", compute_igraph_assortativity_degree, apply_info_card, free_info_card},
+	{"Analysis/Global Properties", "igraph_density", "Density", compute_igraph_density, apply_info_card, free_info_card},
+	{"Analysis/Global Properties", "igraph_transitivity_undirected", "Transitivity (undirected)", compute_igraph_transitivity_undirected, apply_info_card, free_info_card},
 
 	// =========================================================================
 	// Communities menu - Detection
@@ -195,35 +135,5 @@ const CommandDef g_command_registry[] = {
 	{"Communities/Detection", "igraph_community_voronoi", "Voronoi", compute_igraph_community_voronoi, apply_community_membership, free_community_membership},
 	{"Communities/Detection", "igraph_community_fluid_communities", "Fluid Communities", compute_igraph_community_fluid_communities, apply_community_membership, free_community_membership},
 
-	// =========================================================================
-	// Communities menu - Compare
-	// =========================================================================
-	{"Communities/Compare", "com_comp_sj", "Split-join distance", NULL, NULL, NULL},
-	{"Communities/Compare", "com_comp_ari", "Adjusted Rand Index", NULL, NULL, NULL},
-
-	// =========================================================================
-	// Communities menu - Graphlets
-	// =========================================================================
-	{"Communities/Graphlets", "com_glet_basis", "basis", NULL, NULL, NULL},
-	{"Communities/Graphlets", "com_glet_proj", "projections", NULL, NULL, NULL},
-
-	// =========================================================================
-	// Communities menu - Hierarchical Random Graphs
-	// =========================================================================
-	{"Communities/Hierarchical Random Graphs", "com_hrg_fit", "Fit", NULL, NULL, NULL},
-	{"Communities/Hierarchical Random Graphs", "com_hrg_cons", "consensus trees", NULL, NULL, NULL},
-
-	// =========================================================================
-	// Processes menu - Search & Traversal
-	// =========================================================================
-	{"Processes & Traversal/Search & Traversal", "pro_search_bfs", "Breadth-First Search", NULL, NULL, NULL},
-	{"Processes & Traversal/Search & Traversal", "pro_search_dfs", "Depth-First Search", NULL, NULL, NULL},
-	{"Processes & Traversal/Search & Traversal", "pro_search_topo", "Topological Sorting", NULL, NULL, NULL},
-
-	// =========================================================================
-	// Processes menu - Processes on Graphs
-	// =========================================================================
-	{"Processes & Traversal/Processes on Graphs", "pro_proc_rw", "Simulate Random Walks", NULL, NULL, NULL},
-	{"Processes & Traversal/Processes on Graphs", "pro_proc_rt", "Rank / transition behaviors", NULL, NULL, NULL},
 };
 const int g_command_registry_size = sizeof(g_command_registry) / sizeof(g_command_registry[0]);

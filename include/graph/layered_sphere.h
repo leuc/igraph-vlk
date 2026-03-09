@@ -3,6 +3,6 @@
 
 #include <igraph.h>
 
-void *compute_lay_layered_sphere(igraph_t *graph);
+void *compute_layout_layered_sphere(igraph_t *graph);
 
 #endif
