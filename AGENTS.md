@@ -8,7 +8,7 @@ To configure and compile the project, run the following from the root:
 
 ```bash
 rm -rf build/
-cmake -S . -B build -Digraph_ROOT=../igraph-1.0.1/local_install/ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake -S . -B build -Digraph_ROOT=../igraph/local_install/ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build build/ --parallel
 ```
 
@@ -23,7 +23,7 @@ cmake --build build/ --parallel
 
 ### Formatting
 ```bash
-clang-format -i src/**/*.c include/**/*.h shaders/**/*.glsl --style=file
+clang-format -i src/**/*.c include/**/*.h shaders/* --style=file
 ```
 Follows `.clang-format`: tabs (width 4), unlimited line length, bin-packed args, no short blocks/ifs.
 
