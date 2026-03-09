@@ -39,8 +39,8 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Generate menu - Bipartite
 	// =========================================================================
-	{"Generate/Bipartite (Two-Mode) Graphs", "gen_bip_rand", "Generate Random Bipartite", compute_gen_bipartite_random, apply_new_graph, free_new_graph},
-	{"Generate/Bipartite (Two-Mode) Graphs", "gen_bip_proj", "Create Bipartite Projections", compute_gen_bipartite_projection, apply_new_graph, free_new_graph},
+	{"Generate/Bipartite Graphs", "gen_bip_rand", "Generate Random Bipartite", compute_gen_bipartite_random, apply_new_graph, free_new_graph},
+	{"Generate/Bipartite Graphs", "gen_bip_proj", "Create Bipartite Projections", compute_gen_bipartite_projection, apply_new_graph, free_new_graph},
 
 	// =========================================================================
 	// Generate menu - Spatial
@@ -68,7 +68,7 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	{"Layout/Tree & Hierarchical", "lay_tree_rt", "Reingold-Tilford", compute_lay_tree_rt, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Tree & Hierarchical", "lay_tree_sug", "Sugiyama", compute_lay_tree_sug, apply_layout_matrix, free_layout_matrix},
-
+	{"Layout/Tree & Hierarchical", "igraph_layout_sugiyama_radial", "Radial Sugiyama", compute_igraph_layout_sugiyama_radial, apply_layout_matrix, free_layout_matrix},
 	// =========================================================================
 	// Layout menu - Geometric
 	// =========================================================================

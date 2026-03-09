@@ -21,6 +21,7 @@ void *compute_lay_force_lgl(igraph_t *graph);
 // Tree layouts
 void *compute_lay_tree_rt(igraph_t *graph);
 void *compute_lay_tree_sug(igraph_t *graph);
+void *compute_igraph_layout_sugiyama_radial(igraph_t *graph);
 
 // Geometric layouts
 void *compute_lay_geo_circle(igraph_t *graph);
