@@ -29,15 +29,12 @@ int pipeline_compute_create(Renderer *r)
 		return -1;
 	}
 
-	VkShaderModule sphMod = VK_NULL_HANDLE, hubMod = VK_NULL_HANDLE;
+	VkShaderModule sphMod = VK_NULL_HANDLE;
 	create_shader_module(device, ROUTING_COMP_SHADER_PATH, &sphMod);
-	create_shader_module(device, ROUTING_HUB_COMP_SHADER_PATH, &hubMod);
 
 	VkPipelineShaderStageCreateInfo cStageSph = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = sphMod, .pName = "main"};
-	VkPipelineShaderStageCreateInfo cStageHub = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = hubMod, .pName = "main"};
 
 	VkComputePipelineCreateInfo cpInfoSph = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = cStageSph, .layout = r->computePipelineLayout};
-	VkComputePipelineCreateInfo cpInfoHub = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = cStageHub, .layout = r->computePipelineLayout};
 
 	result = vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpInfoSph, NULL, &r->computeSphericalPipeline);
 	if (result != VK_SUCCESS) {
@@ -45,14 +42,7 @@ int pipeline_compute_create(Renderer *r)
 		return -1;
 	}
 
-	result = vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpInfoHub, NULL, &r->computeHubSpokePipeline);
-	if (result != VK_SUCCESS) {
-		fprintf(stderr, "Failed to create hub-spoke compute pipeline\n");
-		return -1;
-	}
-
 	vkDestroyShaderModule(device, sphMod, NULL);
-	vkDestroyShaderModule(device, hubMod, NULL);
 
 	return 0;
 }

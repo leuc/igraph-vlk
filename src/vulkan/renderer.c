@@ -492,7 +492,6 @@ void renderer_cleanup(Renderer *r)
 		vkDestroyImageView(r->device, r->swapchainImageViews[i], NULL);
 	}
 	vkDestroyPipeline(r->device, r->computeSphericalPipeline, NULL);
-	vkDestroyPipeline(r->device, r->computeHubSpokePipeline, NULL);
 	vkDestroyPipelineLayout(r->device, r->computePipelineLayout, NULL);
 	vkDestroyDescriptorSetLayout(r->device, r->computeDescriptorSetLayout, NULL);
 	vkDestroyPipeline(r->device, r->uiPipeline, NULL);

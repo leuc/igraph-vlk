@@ -7,8 +7,7 @@
 
 VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge *edgeResults)
 {
-	if (r->currentRoutingMode == ROUTING_MODE_STRAIGHT || r->currentRoutingMode == ROUTING_MODE_3D_VOXEL) {
-		// No compute needed for straight edges or voxel mode (not yet implemented)
+	if (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) {
 		return VK_SUCCESS;
 	}
 
@@ -32,30 +31,16 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	}
 
 	// Create storage buffers for compute shader
-	VkBuffer nBuf, eBuf, hBuf = VK_NULL_HANDLE;
-	VkDeviceMemory nMem, eMem, hMem = VK_NULL_HANDLE;
+	VkBuffer nBuf, eBuf, hBuf;
+	VkDeviceMemory nMem, eMem, hMem;
 
 	createBuffer(r->device, r->physicalDevice, sizeof(CompNode) * graph->node_count, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &nBuf, &nMem);
 	createBuffer(r->device, r->physicalDevice, sizeof(CompEdge) * graph->edge_count, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &eBuf, &eMem);
+	createBuffer(r->device, r->physicalDevice, sizeof(CompHub), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &hBuf, &hMem);
 
 	// Upload node and edge data to GPU
 	updateBuffer(r->device, nMem, sizeof(CompNode) * graph->node_count, cNodes);
 	updateBuffer(r->device, eMem, sizeof(CompEdge) * graph->edge_count, cEdges);
-
-	// Prepare hub data if needed
-	CompHub *cHubs = NULL;
-	if (r->currentRoutingMode == ROUTING_MODE_3D_HUB_SPOKE && graph->hub_count > 0) {
-		cHubs = malloc(sizeof(CompHub) * graph->hub_count);
-		for (int i = 0; i < graph->hub_count; i++) {
-			glm_vec3_scale(graph->hubs[i].position, r->layoutScale, cHubs[i].position);
-			cHubs[i].pad = 0;
-		}
-		createBuffer(r->device, r->physicalDevice, sizeof(CompHub) * graph->hub_count, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &hBuf, &hMem);
-		updateBuffer(r->device, hMem, sizeof(CompHub) * graph->hub_count, cHubs);
-	} else {
-		// Create dummy hub buffer
-		createBuffer(r->device, r->physicalDevice, sizeof(CompHub), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &hBuf, &hMem);
-	}
 
 	// Create transient descriptor pool and set for compute
 	VkDescriptorPoolSize dps = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3};
@@ -65,8 +50,6 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	if (result != VK_SUCCESS) {
 		free(cNodes);
 		free(cEdges);
-		if (cHubs)
-			free(cHubs);
 		return result;
 	}
 
@@ -77,8 +60,6 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 		vkDestroyDescriptorPool(r->device, cPool, NULL);
 		free(cNodes);
 		free(cEdges);
-		if (cHubs)
-			free(cHubs);
 		return result;
 	}
 
@@ -95,19 +76,14 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 		vkDestroyDescriptorPool(r->device, cPool, NULL);
 		free(cNodes);
 		free(cEdges);
-		if (cHubs)
-			free(cHubs);
 		return result;
 	}
 
 	VkCommandBufferBeginInfo bInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL};
 	vkBeginCommandBuffer(cBuf, &bInfo);
 
-	// Bind the appropriate compute pipeline
-	if (r->currentRoutingMode == ROUTING_MODE_SPHERICAL_PCB)
-		vkCmdBindPipeline(cBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computeSphericalPipeline);
-	else if (r->currentRoutingMode == ROUTING_MODE_3D_HUB_SPOKE)
-		vkCmdBindPipeline(cBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computeHubSpokePipeline);
+	// Bind the spherical PCB compute pipeline
+	vkCmdBindPipeline(cBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computeSphericalPipeline);
 
 	vkCmdBindDescriptorSets(cBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computePipelineLayout, 0, 1, &cSet, 0, NULL);
 
@@ -117,7 +93,7 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 		int maxE;
 		float baseR;
 		int numHubs;
-	} pcVals = {graph->edge_count, 5.0f * r->layoutScale, graph->hub_count};
+	} pcVals = {graph->edge_count, 5.0f * r->layoutScale, 0};
 	vkCmdPushConstants(cBuf, r->computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcVals), &pcVals);
 
 	// Dispatch compute shader
@@ -132,8 +108,6 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 		vkDestroyDescriptorPool(r->device, cPool, NULL);
 		free(cNodes);
 		free(cEdges);
-		if (cHubs)
-			free(cHubs);
 		return result;
 	}
 
@@ -148,8 +122,6 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	// Cleanup
 	vkDestroyBuffer(r->device, hBuf, NULL);
 	vkFreeMemory(r->device, hMem, NULL);
-	if (cHubs)
-		free(cHubs);
 
 	vkFreeCommandBuffers(r->device, r->commandPool, 1, &cBuf);
 	vkDestroyDescriptorPool(r->device, cPool, NULL);

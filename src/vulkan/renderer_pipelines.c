@@ -191,17 +191,12 @@ int renderer_create_pipelines(Renderer *r)
 	VkPipelineLayoutCreateInfo cPlyLayInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->computeDescriptorSetLayout, .pushConstantRangeCount = 1, .pPushConstantRanges = &cPush};
 	vkCreatePipelineLayout(r->device, &cPlyLayInfo, NULL, &r->computePipelineLayout);
 
-	VkShaderModule sphMod = VK_NULL_HANDLE, hubMod = VK_NULL_HANDLE;
+	VkShaderModule sphMod = VK_NULL_HANDLE;
 	create_shader_module(r->device, ROUTING_COMP_SHADER_PATH, &sphMod);
-	create_shader_module(r->device, ROUTING_HUB_COMP_SHADER_PATH, &hubMod);
 	VkPipelineShaderStageCreateInfo cStageSph = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = sphMod, .pName = "main"};
-	VkPipelineShaderStageCreateInfo cStageHub = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = hubMod, .pName = "main"};
 	VkComputePipelineCreateInfo cpInfoSph = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = cStageSph, .layout = r->computePipelineLayout};
-	VkComputePipelineCreateInfo cpInfoHub = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = cStageHub, .layout = r->computePipelineLayout};
 	vkCreateComputePipelines(r->device, VK_NULL_HANDLE, 1, &cpInfoSph, NULL, &r->computeSphericalPipeline);
-	vkCreateComputePipelines(r->device, VK_NULL_HANDLE, 1, &cpInfoHub, NULL, &r->computeHubSpokePipeline);
 	vkDestroyShaderModule(r->device, sphMod, NULL);
-	vkDestroyShaderModule(r->device, hubMod, NULL);
 	// ------------------------------
 
 	return 0;

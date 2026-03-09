@@ -14,7 +14,7 @@
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
 // Edge routing mode count (must match renderer.h enum count)
-#define EDGE_ROUTING_COUNT 4
+#define EDGE_ROUTING_COUNT 2
 
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 static void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);

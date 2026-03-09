@@ -10,7 +10,7 @@
 
 struct AppContext;
 
-typedef enum { ROUTING_MODE_STRAIGHT = 0, ROUTING_MODE_SPHERICAL_PCB = 1, ROUTING_MODE_3D_HUB_SPOKE = 2, ROUTING_MODE_3D_VOXEL = 3 } EdgeRoutingMode;
+typedef enum { ROUTING_MODE_STRAIGHT = 0, ROUTING_MODE_SPHERICAL_PCB = 1 } EdgeRoutingMode;
 
 typedef struct
 {
@@ -49,7 +49,6 @@ typedef struct
 	VkPipelineLayout computePipelineLayout;
 
 	VkPipeline computeSphericalPipeline;
-	VkPipeline computeHubSpokePipeline;
 
 	VkFramebuffer *framebuffers;
 	VkCommandPool commandPool;
