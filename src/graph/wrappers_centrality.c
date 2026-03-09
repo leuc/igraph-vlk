@@ -13,7 +13,7 @@
 // ============================================================================
 
 // Degree centrality
-void *compute_cent_degree(igraph_t *graph)
+void *compute_igraph_degree(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
@@ -35,7 +35,7 @@ void *compute_cent_degree(igraph_t *graph)
 }
 
 // Closeness centrality
-void *compute_cent_closeness(igraph_t *graph)
+void *compute_igraph_closeness_cutoff(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
@@ -56,7 +56,7 @@ void *compute_cent_closeness(igraph_t *graph)
 }
 
 // Betweenness centrality
-void *compute_cent_betweenness(igraph_t *graph)
+void *compute_igraph_betweenness(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
@@ -76,7 +76,7 @@ void *compute_cent_betweenness(igraph_t *graph)
 }
 
 // Eigenvector centrality
-void *compute_cent_eigenvector(igraph_t *graph)
+void *compute_igraph_eigenvector_centrality(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
@@ -96,7 +96,7 @@ void *compute_cent_eigenvector(igraph_t *graph)
 }
 
 // PageRank
-void *compute_cent_pagerank(igraph_t *graph)
+void *compute_igraph_pagerank(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
@@ -118,7 +118,7 @@ void *compute_cent_pagerank(igraph_t *graph)
 // HITS (Hub and Authority scores)
 // Returns a combined score: average of hub and authority, or just hub?
 // For simplicity, we'll return hub scores as the centrality measure
-void *compute_cent_hits(igraph_t *graph)
+void *compute_igraph_hub_and_authority_scores(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
@@ -164,7 +164,7 @@ void *compute_cent_hits(igraph_t *graph)
 }
 
 // Harmonic centrality
-void *compute_cent_harmonic(igraph_t *graph)
+void *compute_igraph_harmonic_centrality(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
@@ -184,7 +184,7 @@ void *compute_cent_harmonic(igraph_t *graph)
 }
 
 // Strength (weighted degree sum)
-void *compute_cent_strength(igraph_t *graph)
+void *compute_igraph_strength(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
@@ -204,7 +204,7 @@ void *compute_cent_strength(igraph_t *graph)
 }
 
 // Constraint (structural holes)
-void *compute_cent_constraint(igraph_t *graph)
+void *compute_igraph_constraint(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));

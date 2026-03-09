@@ -97,15 +97,15 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Analysis menu - Centrality & Roles
 	// =========================================================================
-	{"Analysis/Centrality & Roles", "ana_cent_deg", "Degree", compute_cent_degree, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "ana_cent_clo", "Closeness", compute_cent_closeness, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "ana_cent_btw", "Betweenness", compute_cent_betweenness, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "ana_cent_eig", "Eigenvector Centrality", compute_cent_eigenvector, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "ana_cent_pager", "PageRank", compute_cent_pagerank, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "ana_cent_hits", "HITS (Hub)", compute_cent_hits, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "ana_cent_harm", "Harmonic", compute_cent_harmonic, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "ana_cent_strength", "Strength (Weighted Degree)", compute_cent_strength, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality & Roles", "ana_cent_constraint", "Constraint (Structural Holes)", compute_cent_constraint, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "igraph_degree", "Degree", compute_igraph_degree, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "igraph_closeness_cutoff", "Closeness", compute_igraph_closeness_cutoff, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "igraph_betweenness", "Betweenness", compute_igraph_betweenness, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "igraph_eigenvector_centrality", "Eigenvector Centrality", compute_igraph_eigenvector_centrality, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "igraph_pagerank", "PageRank", compute_igraph_pagerank, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "igraph_hub_and_authority_scores", "HITS (Hub)", compute_igraph_hub_and_authority_scores, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "igraph_harmonic_centrality", "Harmonic", compute_igraph_harmonic_centrality, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "igraph_strength", "Strength (Weighted Degree)", compute_igraph_strength, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality & Roles", "igraph_constraint", "Constraint (Structural Holes)", compute_igraph_constraint, apply_centrality_scores, free_centrality_scores},
 
 	// =========================================================================
 	// Analysis menu - Global Network Properties
