@@ -16,7 +16,7 @@
 // ============================================================================
 
 // Ring graph
-void *compute_gen_ring(igraph_t *graph)
+void *compute_igraph_ring(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -34,7 +34,7 @@ void *compute_gen_ring(igraph_t *graph)
 }
 
 // Star graph
-void *compute_gen_star(igraph_t *graph)
+void *compute_igraph_star(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -52,7 +52,7 @@ void *compute_gen_star(igraph_t *graph)
 }
 
 // Tree (k-ary tree, binary by default)
-void *compute_gen_tree(igraph_t *graph)
+void *compute_igraph_kary_tree(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -70,7 +70,7 @@ void *compute_gen_tree(igraph_t *graph)
 }
 
 // Square lattice
-void *compute_gen_lattice(igraph_t *graph)
+void *compute_igraph_square_lattice(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -96,7 +96,7 @@ void *compute_gen_lattice(igraph_t *graph)
 }
 
 // Full graph (clique)
-void *compute_gen_full(igraph_t *graph)
+void *compute_igraph_full(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -114,7 +114,7 @@ void *compute_gen_full(igraph_t *graph)
 }
 
 // Cycle graph (circle)
-void *compute_gen_circle(igraph_t *graph)
+void *compute_igraph_cycle_graph(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -132,7 +132,7 @@ void *compute_gen_circle(igraph_t *graph)
 }
 
 // Famous graph (Zachary's karate club)
-void *compute_gen_notable(igraph_t *graph)
+void *compute_igraph_famous(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -150,7 +150,7 @@ void *compute_gen_notable(igraph_t *graph)
 }
 
 // Erdős-Rényi G(n,p) random graph
-void *compute_gen_er(igraph_t *graph)
+void *compute_igraph_erdos_renyi_game_gnp(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -168,7 +168,7 @@ void *compute_gen_er(igraph_t *graph)
 }
 
 // Barabási-Albert preferential attachment
-void *compute_gen_ba(igraph_t *graph)
+void *compute_igraph_barabasi_game(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -186,7 +186,7 @@ void *compute_gen_ba(igraph_t *graph)
 }
 
 // Watts-Strogatz small-world graph
-void *compute_gen_ws(igraph_t *graph)
+void *compute_igraph_watts_strogatz_game(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -204,7 +204,7 @@ void *compute_gen_ws(igraph_t *graph)
 }
 
 // Forest fire model
-void *compute_gen_forest_fire(igraph_t *graph)
+void *compute_igraph_forest_fire_game(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -222,7 +222,7 @@ void *compute_gen_forest_fire(igraph_t *graph)
 }
 
 // Random tree
-void *compute_gen_random_tree(igraph_t *graph)
+void *compute_igraph_tree_game(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -240,7 +240,7 @@ void *compute_gen_random_tree(igraph_t *graph)
 }
 
 // Degree sequence game (regular graph: all degrees = 4)
-void *compute_gen_degree_seq(igraph_t *graph)
+void *compute_igraph_degree_sequence_game(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -267,7 +267,7 @@ void *compute_gen_degree_seq(igraph_t *graph)
 }
 
 // Random bipartite graph (G(n1, n2, m))
-void *compute_gen_bipartite_random(igraph_t *graph)
+void *compute_igraph_bipartite_game_gnm(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -287,7 +287,7 @@ void *compute_gen_bipartite_random(igraph_t *graph)
 
 // Bipartite projection - transforms current bipartite graph to two unipartite projections
 // This is special: it operates on the current graph and returns a projection
-void *compute_gen_bipartite_projection(igraph_t *graph)
+void *compute_igraph_bipartite_projection(igraph_t *graph)
 {
 	// First, check if the graph is bipartite and get the vertex types
 	igraph_bool_t is_bipartite;
@@ -302,7 +302,7 @@ void *compute_gen_bipartite_projection(igraph_t *graph)
 	if (code != IGRAPH_SUCCESS || !is_bipartite) {
 		igraph_vector_bool_destroy(types);
 		free(types);
-		fprintf(stderr, "[compute_gen_bipartite_projection] Error: Graph is not bipartite\n");
+		fprintf(stderr, "[compute_igraph_bipartite_projection] Error: Graph is not bipartite\n");
 		return NULL;
 	}
 
@@ -345,7 +345,7 @@ void *compute_gen_bipartite_projection(igraph_t *graph)
 }
 
 // Geometric random graph
-void *compute_gen_geometric(igraph_t *graph)
+void *compute_igraph_nearest_neighbor_graph(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)
@@ -373,7 +373,7 @@ void *compute_gen_geometric(igraph_t *graph)
 }
 
 // Gabriel graph
-void *compute_gen_gabriel(igraph_t *graph)
+void *compute_igraph_gabriel_graph(igraph_t *graph)
 {
 	igraph_t *new_graph = malloc(sizeof(igraph_t));
 	if (!new_graph)

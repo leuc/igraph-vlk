@@ -18,35 +18,35 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Generate menu - Deterministic Graphs
 	// =========================================================================
-	{"Generate/Deterministic Graphs", "gen_det_ring", "Ring", compute_gen_ring, apply_new_graph, free_new_graph},
-	{"Generate/Deterministic Graphs", "gen_det_star", "Star", compute_gen_star, apply_new_graph, free_new_graph},
-	{"Generate/Deterministic Graphs", "gen_det_tree", "Tree", compute_gen_tree, apply_new_graph, free_new_graph},
-	{"Generate/Deterministic Graphs", "gen_det_lattice", "Lattice", compute_gen_lattice, apply_new_graph, free_new_graph},
-	{"Generate/Deterministic Graphs", "gen_det_full", "Full Graph (Clique)", compute_gen_full, apply_new_graph, free_new_graph},
-	{"Generate/Deterministic Graphs", "gen_det_circle", "Circle", compute_gen_circle, apply_new_graph, free_new_graph},
-	{"Generate/Deterministic Graphs", "gen_det_notable", "Notable Graphs", compute_gen_notable, apply_new_graph, free_new_graph},
+	{"Generate/Deterministic Graphs", "igraph_ring", "Ring", compute_igraph_ring, apply_new_graph, free_new_graph},
+	{"Generate/Deterministic Graphs", "igraph_star", "Star", compute_igraph_star, apply_new_graph, free_new_graph},
+	{"Generate/Deterministic Graphs", "igraph_kary_tree", "Tree", compute_igraph_kary_tree, apply_new_graph, free_new_graph},
+	{"Generate/Deterministic Graphs", "igraph_square_lattice", "Lattice", compute_igraph_square_lattice, apply_new_graph, free_new_graph},
+	{"Generate/Deterministic Graphs", "igraph_full", "Full Graph (Clique)", compute_igraph_full, apply_new_graph, free_new_graph},
+	{"Generate/Deterministic Graphs", "igraph_cycle_graph", "Circle", compute_igraph_cycle_graph, apply_new_graph, free_new_graph},
+	{"Generate/Deterministic Graphs", "igraph_famous", "Notable Graphs", compute_igraph_famous, apply_new_graph, free_new_graph},
 
 	// =========================================================================
 	// Generate menu - Stochastic Graphs
 	// =========================================================================
-	{"Generate/Stochastic Graphs", "gen_sto_er", "Erdős-Rényi (GNP / GNM)", compute_gen_er, apply_new_graph, free_new_graph},
-	{"Generate/Stochastic Graphs", "gen_sto_ba", "Barabási-Albert (Preferential attachment)", compute_gen_ba, apply_new_graph, free_new_graph},
-	{"Generate/Stochastic Graphs", "gen_sto_ws", "Watts-Strogatz (Small-world)", compute_gen_ws, apply_new_graph, free_new_graph},
-	{"Generate/Stochastic Graphs", "gen_sto_ff", "Forest Fire", compute_gen_forest_fire, apply_new_graph, free_new_graph},
-	{"Generate/Stochastic Graphs", "gen_sto_tree", "Random Tree", compute_gen_random_tree, apply_new_graph, free_new_graph},
-	{"Generate/Stochastic Graphs", "gen_sto_deg", "Degree Sequence", compute_gen_degree_seq, apply_new_graph, free_new_graph},
+	{"Generate/Stochastic Graphs", "igraph_erdos_renyi_game_gnp", "Erdős-Rényi (GNP / GNM)", compute_igraph_erdos_renyi_game_gnp, apply_new_graph, free_new_graph},
+	{"Generate/Stochastic Graphs", "igraph_barabasi_game", "Barabási-Albert (Preferential attachment)", compute_igraph_barabasi_game, apply_new_graph, free_new_graph},
+	{"Generate/Stochastic Graphs", "igraph_watts_strogatz_game", "Watts-Strogatz (Small-world)", compute_igraph_watts_strogatz_game, apply_new_graph, free_new_graph},
+	{"Generate/Stochastic Graphs", "igraph_forest_fire_game", "Forest Fire", compute_igraph_forest_fire_game, apply_new_graph, free_new_graph},
+	{"Generate/Stochastic Graphs", "igraph_tree_game", "Random Tree", compute_igraph_tree_game, apply_new_graph, free_new_graph},
+	{"Generate/Stochastic Graphs", "igraph_degree_sequence_game", "Degree Sequence", compute_igraph_degree_sequence_game, apply_new_graph, free_new_graph},
 
 	// =========================================================================
 	// Generate menu - Bipartite
 	// =========================================================================
-	{"Generate/Bipartite Graphs", "gen_bip_rand", "Generate Random Bipartite", compute_gen_bipartite_random, apply_new_graph, free_new_graph},
-	{"Generate/Bipartite Graphs", "gen_bip_proj", "Create Bipartite Projections", compute_gen_bipartite_projection, apply_new_graph, free_new_graph},
+	{"Generate/Bipartite Graphs", "igraph_bipartite_game_gnm", "Generate Random Bipartite", compute_igraph_bipartite_game_gnm, apply_new_graph, free_new_graph},
+	{"Generate/Bipartite Graphs", "igraph_bipartite_projection", "Create Bipartite Projections", compute_igraph_bipartite_projection, apply_new_graph, free_new_graph},
 
 	// =========================================================================
 	// Generate menu - Spatial
 	// =========================================================================
-	{"Generate/Spatial Graphs", "gen_spa_geo", "Geometric random graphs", compute_gen_geometric, apply_new_graph, free_new_graph},
-	{"Generate/Spatial Graphs", "gen_spa_gab", "Gabriel graphs", compute_gen_gabriel, apply_new_graph, free_new_graph},
+	{"Generate/Spatial Graphs", "igraph_nearest_neighbor_graph", "Geometric random graphs", compute_igraph_nearest_neighbor_graph, apply_new_graph, free_new_graph},
+	{"Generate/Spatial Graphs", "igraph_gabriel_graph", "Gabriel graphs", compute_igraph_gabriel_graph, apply_new_graph, free_new_graph},
 
 	// =========================================================================
 	// Layout menu - Force-Directed
