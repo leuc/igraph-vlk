@@ -182,18 +182,18 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Communities menu - Detection
 	// =========================================================================
-	{"Communities/Detection", "com_det_louv", "Louvain Method (Multilevel)", compute_com_multilevel, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "com_det_leiden", "Leiden", compute_com_leiden, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "com_det_walk", "Walktrap (Random walks)", compute_com_walktrap, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "com_det_btw", "Edge Betweenness (Girvan-Newman)", compute_com_edge_betweenness, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "com_det_fast", "Fast Greedy", compute_com_fastgreedy, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "com_det_info", "Infomap", compute_com_infomap, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "com_det_lab", "Label Propagation", compute_com_label_prop, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "com_det_spin", "Spinglass", compute_com_spinglass, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "com_det_eig", "Leading Eigenvector", compute_com_leading_eigenvector, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "com_det_opt", "Optimal Modularity", compute_com_optimal_modularity, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "com_det_vor", "Voronoi", compute_com_voronoi, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "com_det_fluid", "Fluid Communities", compute_com_fluid, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "igraph_community_multilevel", "Louvain Method (Multilevel)", compute_igraph_community_multilevel, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "igraph_community_leiden", "Leiden", compute_igraph_community_leiden, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "igraph_community_walktrap", "Walktrap (Random walks)", compute_igraph_community_walktrap, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "igraph_community_edge_betweenness", "Edge Betweenness (Girvan-Newman)", compute_igraph_community_edge_betweenness, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "igraph_community_fastgreedy", "Fast Greedy", compute_igraph_community_fastgreedy, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "igraph_community_infomap", "Infomap", compute_igraph_community_infomap, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "igraph_community_label_propagation", "Label Propagation", compute_igraph_community_label_propagation, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "igraph_community_spinglass", "Spinglass", compute_igraph_community_spinglass, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "igraph_community_leading_eigenvector", "Leading Eigenvector", compute_igraph_community_leading_eigenvector, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "igraph_community_optimal_modularity", "Optimal Modularity", compute_igraph_community_optimal_modularity, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "igraph_community_voronoi", "Voronoi", compute_igraph_community_voronoi, apply_community_membership, free_community_membership},
+	{"Communities/Detection", "igraph_community_fluid_communities", "Fluid Communities", compute_igraph_community_fluid_communities, apply_community_membership, free_community_membership},
 
 	// =========================================================================
 	// Communities menu - Compare
