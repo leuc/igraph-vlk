@@ -110,9 +110,9 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Analysis menu - Global Network Properties
 	// =========================================================================
-	{"Analysis/Global Network Properties", "ana_glob_diam", "Diameter", compute_ana_diameter, apply_info_card, free_info_card},
-	{"Analysis/Global Network Properties", "ana_glob_rad", "Radius", compute_ana_glob_rad, apply_info_card, free_info_card},
-	{"Analysis/Global Network Properties", "ana_glob_apl", "Average Path Length", compute_ana_glob_apl, apply_info_card, free_info_card},
+	{"Analysis/Global Network Properties", "igraph_diameter", "Diameter", compute_igraph_diameter, apply_info_card, free_info_card},
+	{"Analysis/Global Network Properties", "igraph_radius", "Radius", compute_igraph_radius, apply_info_card, free_info_card},
+	{"Analysis/Global Network Properties", "igraph_average_path_length", "Average Path Length", compute_igraph_average_path_length, apply_info_card, free_info_card},
 	{"Analysis/Global Network Properties", "ana_glob_assort", "Assortativity", compute_ana_glob_assort, apply_info_card, free_info_card},
 	{"Analysis/Global Network Properties", "ana_glob_dens", "Density", compute_ana_glob_dens, apply_info_card, free_info_card},
 	{"Analysis/Global Network Properties", "ana_glob_trans", "Transitivity (undirected)", compute_ana_glob_trans, apply_info_card, free_info_card},
