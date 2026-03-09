@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "graph/layered_sphere.h"
 #include "graph/layout_openord.h"
 
 void graph_init(GraphData *data)
@@ -107,11 +106,6 @@ void graph_free_data(GraphData *data)
 		openord_cleanup(data->openord);
 		free(data->openord);
 		data->openord = NULL;
-	}
-	if (data->layered_sphere) {
-		layered_sphere_cleanup(data->layered_sphere);
-		free(data->layered_sphere);
-		data->layered_sphere = NULL;
 	}
 	if (data->node_attr_name) {
 		free(data->node_attr_name);

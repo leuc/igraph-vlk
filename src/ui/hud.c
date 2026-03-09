@@ -1,5 +1,4 @@
 #include "ui/hud.h"
-#include "graph/layered_sphere.h"
 #include "graph/layout_openord.h"
 #include "vulkan/renderer_ui.h"
 #include <stdio.h>
@@ -8,7 +7,7 @@
 /**
  * Layout type names for UI display.
  */
-static const char *layout_names[] = {"Fruchterman-Reingold", "Kamada-Kawai", "Random", "Sphere", "Grid", "UMAP", "DrL", "OpenOrd", "Layered Sphere"};
+static const char *layout_names[] = {"Fruchterman-Reingold", "Kamada-Kawai", "Random", "Sphere", "Grid", "UMAP", "DrL", "OpenOrd"};
 
 /**
  * Cluster algorithm names for UI display.
@@ -32,11 +31,6 @@ void ui_hud_update(AppState *state, float fps)
 	// Get stage info for OpenOrd layout
 	if (state->current_layout == LAYOUT_OPENORD_3D && state->current_graph.openord) {
 		snprintf(stage_info, sizeof(stage_info), " [%s:%d]", openord_get_stage_name(state->current_graph.openord->stage_id), state->current_graph.openord->current_iter);
-	}
-	// Get stage info for Layered Sphere layout
-	else if (state->current_layout == LAYOUT_LAYERED_SPHERE && state->current_graph.layered_sphere)
-	{
-		snprintf(stage_info, sizeof(stage_info), " [%s:%d]", layered_sphere_get_stage_name(state->current_graph.layered_sphere), state->current_graph.layered_sphere->current_iter);
 	}
 
 	char buf[1024];

@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "graph/layered_sphere.h"
 #include "interaction/camera.h"
 #include "interaction/state.h"
 #include "vulkan/text.h"
@@ -49,114 +48,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 		}
 	}
 
-	// Generate Sphere Backgrounds if Layered Layout
-	if (graph->active_layout == LAYOUT_LAYERED_SPHERE && graph->layered_sphere && graph->layered_sphere->initialized) {
-		LayeredSphereContext *ctx = graph->layered_sphere;
-		r->numSpheres = ctx->num_spheres;
-		r->sphereIndexCounts = malloc(sizeof(uint32_t) * r->numSpheres);
-		r->sphereIndexOffsets = malloc(sizeof(uint32_t) * r->numSpheres);
-
-		uint32_t totalVertices = 0;
-		uint32_t totalIndices = 0;
-
-		// Pass 1: Calculate sizes
-		for (int s = 0; s < ctx->num_spheres; s++) {
-			int target_faces = ctx->grids[s].max_slots;
-			int rings = (int)sqrt(target_faces / 8.0);
-			if (rings < 4)
-				rings = 4;
-			if (rings > 32)
-				rings = 32; // FIX: Cap sphere resolution to save FPS
-			int sectors = rings * 2;
-
-			totalVertices += (rings + 1) * (sectors + 1);
-			totalIndices += rings * sectors * 6;
-		}
-
-		// Create buffers
-		createBuffer(r->device, r->physicalDevice, sizeof(Vertex) * totalVertices, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->sphereVertexBuffer, &r->sphereVertexBufferMemory);
-		createBuffer(r->device, r->physicalDevice, sizeof(uint32_t) * totalIndices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->sphereIndexBuffer, &r->sphereIndexBufferMemory);
-
-		Vertex *allVerts = malloc(sizeof(Vertex) * totalVertices);
-		uint32_t *allIndices = malloc(sizeof(uint32_t) * totalIndices);
-
-		uint32_t vOffset = 0;
-		uint32_t iOffset = 0;
-
-		// Pass 2: Generate geometry
-		for (int s = 0; s < ctx->num_spheres; s++) {
-			double radius = 5.0; // Default
-			if (ctx->grids[s].max_slots > 0) {
-				double x = ctx->grids[s].slots[0].x;
-				double y = ctx->grids[s].slots[0].y;
-				double z = ctx->grids[s].slots[0].z;
-				radius = sqrt(x * x + y * y + z * z);
-			}
-			float R = (float)radius * r->layoutScale;
-
-			int target_faces = ctx->grids[s].max_slots;
-			int rings = (int)sqrt(target_faces / 8.0);
-			if (rings < 4)
-				rings = 4;
-			if (rings > 32)
-				rings = 32; // FIX: Cap sphere resolution to save FPS
-			int sectors = rings * 2;
-
-			r->sphereIndexOffsets[s] = iOffset;
-			uint32_t startIndex = vOffset;
-
-			float const R_inv = 1.f / R;
-			float const S = 1.f / (float)sectors;
-			float const T = 1.f / (float)rings;
-
-			for (int r_idx = 0; r_idx <= rings; r_idx++) {
-				float const y = sin(-M_PI_2 + M_PI * r_idx * T);
-				float const xz = cos(-M_PI_2 + M_PI * r_idx * T);
-
-				for (int s_idx = 0; s_idx <= sectors; s_idx++) {
-					float const x = xz * cos(2 * M_PI * s_idx * S);
-					float const z = xz * sin(2 * M_PI * s_idx * S);
-
-					vec3 n = {x, y, z};
-					vec3 p;
-					glm_vec3_scale(n, R, p);
-
-					memcpy(allVerts[vOffset].pos, p, 12);
-					memcpy(allVerts[vOffset].normal, n,
-						   12); // Use normal for shading
-					allVerts[vOffset].texCoord[0] = s_idx * S;
-					allVerts[vOffset].texCoord[1] = r_idx * T;
-					vOffset++;
-				}
-			}
-
-			uint32_t indexCount = 0;
-			for (int r_idx = 0; r_idx < rings; r_idx++) {
-				for (int s_idx = 0; s_idx < sectors; s_idx++) {
-					uint32_t curRow = startIndex + r_idx * (sectors + 1);
-					uint32_t nextRow = startIndex + (r_idx + 1) * (sectors + 1);
-
-					allIndices[iOffset++] = curRow + s_idx;
-					allIndices[iOffset++] = nextRow + s_idx;
-					allIndices[iOffset++] = nextRow + (s_idx + 1);
-
-					allIndices[iOffset++] = curRow + s_idx;
-					allIndices[iOffset++] = nextRow + (s_idx + 1);
-					allIndices[iOffset++] = curRow + (s_idx + 1);
-
-					indexCount += 6;
-				}
-			}
-			r->sphereIndexCounts[s] = indexCount;
-		}
-
-		updateBuffer(r->device, r->sphereVertexBufferMemory, sizeof(Vertex) * totalVertices, allVerts);
-		updateBuffer(r->device, r->sphereIndexBufferMemory, sizeof(uint32_t) * totalIndices, allIndices);
-		free(allVerts);
-		free(allIndices);
-	} else {
-		r->numSpheres = 0;
-	}
+	r->numSpheres = 0;
 
 	createBuffer(r->device, r->physicalDevice, sizeof(Node) * r->nodeCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->instanceBuffer, &r->instanceBufferMemory);
 

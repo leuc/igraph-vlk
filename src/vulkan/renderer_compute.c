@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "graph/layered_sphere.h"
 #include "vulkan/utils.h"
 
 VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge *edgeResults)
@@ -29,11 +28,6 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 		cEdges[i].sourceId = graph->edges[i].from;
 		cEdges[i].targetId = graph->edges[i].to;
 		cEdges[i].elevationLevel = 0;
-		if (graph->active_layout == LAYOUT_LAYERED_SPHERE && graph->layered_sphere && graph->layered_sphere->initialized) {
-			int s1 = graph->layered_sphere->node_to_sphere_id[graph->edges[i].from];
-			int s2 = graph->layered_sphere->node_to_sphere_id[graph->edges[i].to];
-			cEdges[i].elevationLevel = (s1 != s2) ? 1 : 0;
-		}
 		cEdges[i].pathLength = 0;
 	}
 

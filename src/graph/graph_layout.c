@@ -8,7 +8,6 @@
 
 #include "graph/graph_core.h"
 #include "graph/graph_layout.h"
-#include "graph/layered_sphere.h"
 #include "graph/layout_openord.h"
 
 void graph_layout_step(GraphData *data, LayoutType type, int iterations)
@@ -51,17 +50,6 @@ void graph_layout_step(GraphData *data, LayoutType type, int iterations)
 		}
 		for (int i = 0; i < iterations; i++) {
 			if (!openord_step(data->openord, data))
-				break;
-		}
-		break;
-	}
-	case LAYOUT_LAYERED_SPHERE: {
-		if (!data->layered_sphere) {
-			data->layered_sphere = malloc(sizeof(LayeredSphereContext));
-			layered_sphere_init(data->layered_sphere, data->node_count);
-		}
-		for (int i = 0; i < iterations; i++) {
-			if (!layered_sphere_step(data->layered_sphere, data))
 				break;
 		}
 		break;

@@ -64,10 +64,6 @@ bool graph_action_step_background_layout(AppState *state)
 		graph_layout_step(&state->current_graph, state->current_layout, 1);
 		renderer_update_graph(&state->renderer, &state->current_graph);
 		return true;
-	} else if (state->current_layout == LAYOUT_LAYERED_SPHERE && state->current_graph.layered_sphere) {
-		graph_layout_step(&state->current_graph, state->current_layout, 1);
-		renderer_update_graph(&state->renderer, &state->current_graph);
-		return true;
 	}
 	return false;
 }

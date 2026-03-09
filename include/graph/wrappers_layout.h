@@ -41,6 +41,9 @@ void *compute_lay_bip_simple(igraph_t *graph);
 void *compute_lay_umap(igraph_t *graph);
 void *compute_lay_umap_2d(igraph_t *graph);
 
+// Community-based layouts
+void *compute_lay_layered_sphere(igraph_t *graph);
+
 // Standard apply and free functions
 void free_layout_matrix(void *result_data);
 void apply_layout_matrix(ExecutionContext *ctx, void *result_data);
