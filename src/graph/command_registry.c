@@ -91,8 +91,8 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Layout menu - Graph Embedding
 	// =========================================================================
-	{"Layout/Graph Embedding", "igraph_layout_umap_2d", "UMAP (2D)", compute_igraph_layout_umap, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Graph Embedding", "igraph_layout_umap_3d", "UMAP (3D)", compute_igraph_layout_umap_3d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Dimension Reduction ", "igraph_layout_umap_2d", "UMAP (2D)", compute_igraph_layout_umap, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Dimension Reduction ", "igraph_layout_umap_3d", "UMAP (3D)", compute_igraph_layout_umap_3d, apply_layout_matrix, free_layout_matrix},
 
 	// =========================================================================
 	// Analysis menu - Centrality & Roles
