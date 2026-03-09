@@ -10,7 +10,7 @@
 #include <stdlib.h>
 
 // Pure worker function - no UI or state dependencies
-void *compute_lay_force_fr(igraph_t *graph)
+void *compute_igraph_layout_fruchterman_reingold_3d(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -30,7 +30,7 @@ void *compute_lay_force_fr(igraph_t *graph)
 }
 
 // Kamada-Kawai layout
-void *compute_lay_force_kk(igraph_t *graph)
+void *compute_igraph_layout_kamada_kawai_3d(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -50,7 +50,7 @@ void *compute_lay_force_kk(igraph_t *graph)
 }
 
 // DRL layout
-void *compute_lay_force_drl(igraph_t *graph)
+void *compute_igraph_layout_drl_3d(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -73,7 +73,7 @@ void *compute_lay_force_drl(igraph_t *graph)
 }
 
 // Davidson-Harel layout
-void *compute_lay_force_dh(igraph_t *graph)
+void *compute_igraph_layout_davidson_harel(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_integer_t ecount = igraph_ecount(graph);
@@ -103,7 +103,7 @@ void *compute_lay_force_dh(igraph_t *graph)
 }
 
 // Reingold-Tilford tree layout
-void *compute_lay_tree_rt(igraph_t *graph)
+void *compute_igraph_layout_reingold_tilford(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -139,7 +139,7 @@ void *compute_lay_tree_rt(igraph_t *graph)
 }
 
 // Sugiyama layout
-void *compute_lay_tree_sug(igraph_t *graph)
+void *compute_igraph_layout_sugiyama(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -263,7 +263,7 @@ void *compute_igraph_layout_sugiyama_radial(igraph_t *graph)
 }
 
 // Circle layout
-void *compute_lay_geo_circle(igraph_t *graph)
+void *compute_igraph_layout_circle(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -292,7 +292,7 @@ void *compute_lay_geo_circle(igraph_t *graph)
 }
 
 // Star layout
-void *compute_lay_geo_star(igraph_t *graph)
+void *compute_igraph_layout_star(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -317,7 +317,7 @@ void *compute_lay_geo_star(igraph_t *graph)
 }
 
 // Grid layout
-void *compute_lay_geo_grid(igraph_t *graph)
+void *compute_igraph_layout_grid_3d(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -339,7 +339,7 @@ void *compute_lay_geo_grid(igraph_t *graph)
 }
 
 // Sphere layout
-void *compute_lay_geo_sphere(igraph_t *graph)
+void *compute_igraph_layout_sphere(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -359,7 +359,7 @@ void *compute_lay_geo_sphere(igraph_t *graph)
 }
 
 // Random layout
-void *compute_lay_geo_rand(igraph_t *graph)
+void *compute_igraph_layout_random_3d(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -379,7 +379,7 @@ void *compute_lay_geo_rand(igraph_t *graph)
 }
 
 // MDS layout (2D)
-void *compute_lay_bip_mds(igraph_t *graph)
+void *compute_igraph_layout_mds(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -429,7 +429,7 @@ void *compute_lay_bip_mds(igraph_t *graph)
 }
 
 // Bipartite layout
-void *compute_lay_bip_sug(igraph_t *graph)
+void *compute_igraph_layout_bipartite(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -466,7 +466,7 @@ void *compute_lay_bip_sug(igraph_t *graph)
 }
 
 // UMAP layout
-void *compute_lay_umap(igraph_t *graph)
+void *compute_igraph_layout_umap_3d(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -486,7 +486,7 @@ void *compute_lay_umap(igraph_t *graph)
 }
 
 // Fruchterman-Reingold layout (2D)
-void *compute_lay_force_fr_2d(igraph_t *graph)
+void *compute_igraph_layout_fruchterman_reingold(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -506,7 +506,7 @@ void *compute_lay_force_fr_2d(igraph_t *graph)
 }
 
 // Kamada-Kawai layout (2D)
-void *compute_lay_force_kk_2d(igraph_t *graph)
+void *compute_igraph_layout_kamada_kawai(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -526,7 +526,7 @@ void *compute_lay_force_kk_2d(igraph_t *graph)
 }
 
 // DRL layout (2D)
-void *compute_lay_force_drl_2d(igraph_t *graph)
+void *compute_igraph_layout_drl(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -549,7 +549,7 @@ void *compute_lay_force_drl_2d(igraph_t *graph)
 }
 
 // Random layout (2D)
-void *compute_lay_geo_rand_2d(igraph_t *graph)
+void *compute_igraph_layout_random(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -569,7 +569,7 @@ void *compute_lay_geo_rand_2d(igraph_t *graph)
 }
 
 // Grid layout (2D)
-void *compute_lay_geo_grid_2d(igraph_t *graph)
+void *compute_igraph_layout_grid(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -589,7 +589,7 @@ void *compute_lay_geo_grid_2d(igraph_t *graph)
 }
 
 // Circle layout (2D)
-void *compute_lay_geo_circle_2d(igraph_t *graph)
+void *compute_igraph_layout_circle_2d(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -613,7 +613,7 @@ void *compute_lay_geo_circle_2d(igraph_t *graph)
 }
 
 // UMAP layout (2D)
-void *compute_lay_umap_2d(igraph_t *graph)
+void *compute_igraph_layout_umap(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -633,7 +633,7 @@ void *compute_lay_umap_2d(igraph_t *graph)
 }
 
 // GraphOpt layout (2D)
-void *compute_lay_force_go(igraph_t *graph)
+void *compute_igraph_layout_graphopt(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -653,7 +653,7 @@ void *compute_lay_force_go(igraph_t *graph)
 }
 
 // Large Graph Layout (LGL)
-void *compute_lay_force_lgl(igraph_t *graph)
+void *compute_igraph_layout_lgl(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -681,7 +681,7 @@ void *compute_lay_force_lgl(igraph_t *graph)
 }
 
 // GEM layout
-void *compute_lay_force_gem(igraph_t *graph)
+void *compute_igraph_layout_gem(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
@@ -712,7 +712,7 @@ void *compute_lay_force_gem(igraph_t *graph)
 }
 
 // Simple bipartite layout
-void *compute_lay_bip_simple(igraph_t *graph)
+void *compute_igraph_layout_bipartite_simple(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));

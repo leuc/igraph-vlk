@@ -7,40 +7,40 @@
 // Pure worker functions - no UI or state dependencies
 
 // Force-directed layouts
-void *compute_lay_force_fr(igraph_t *graph);
-void *compute_lay_force_fr_2d(igraph_t *graph);
-void *compute_lay_force_kk(igraph_t *graph);
-void *compute_lay_force_kk_2d(igraph_t *graph);
-void *compute_lay_force_drl(igraph_t *graph);
-void *compute_lay_force_drl_2d(igraph_t *graph);
-void *compute_lay_force_dh(igraph_t *graph);
-void *compute_lay_force_go(igraph_t *graph);
-void *compute_lay_force_gem(igraph_t *graph);
-void *compute_lay_force_lgl(igraph_t *graph);
+void *compute_igraph_layout_fruchterman_reingold_3d(igraph_t *graph);
+void *compute_igraph_layout_fruchterman_reingold(igraph_t *graph);
+void *compute_igraph_layout_kamada_kawai_3d(igraph_t *graph);
+void *compute_igraph_layout_kamada_kawai(igraph_t *graph);
+void *compute_igraph_layout_drl_3d(igraph_t *graph);
+void *compute_igraph_layout_drl(igraph_t *graph);
+void *compute_igraph_layout_davidson_harel(igraph_t *graph);
+void *compute_igraph_layout_graphopt(igraph_t *graph);
+void *compute_igraph_layout_gem(igraph_t *graph);
+void *compute_igraph_layout_lgl(igraph_t *graph);
 
 // Tree layouts
-void *compute_lay_tree_rt(igraph_t *graph);
-void *compute_lay_tree_sug(igraph_t *graph);
+void *compute_igraph_layout_reingold_tilford(igraph_t *graph);
+void *compute_igraph_layout_sugiyama(igraph_t *graph);
 void *compute_igraph_layout_sugiyama_radial(igraph_t *graph);
 
 // Geometric layouts
-void *compute_lay_geo_circle(igraph_t *graph);
-void *compute_lay_geo_circle_2d(igraph_t *graph);
-void *compute_lay_geo_star(igraph_t *graph);
-void *compute_lay_geo_grid(igraph_t *graph);
-void *compute_lay_geo_grid_2d(igraph_t *graph);
-void *compute_lay_geo_sphere(igraph_t *graph);
-void *compute_lay_geo_rand(igraph_t *graph);
-void *compute_lay_geo_rand_2d(igraph_t *graph);
+void *compute_igraph_layout_circle(igraph_t *graph);
+void *compute_igraph_layout_circle_2d(igraph_t *graph);
+void *compute_igraph_layout_star(igraph_t *graph);
+void *compute_igraph_layout_grid_3d(igraph_t *graph);
+void *compute_igraph_layout_grid(igraph_t *graph);
+void *compute_igraph_layout_sphere(igraph_t *graph);
+void *compute_igraph_layout_random_3d(igraph_t *graph);
+void *compute_igraph_layout_random(igraph_t *graph);
 
 // Bipartite layouts
-void *compute_lay_bip_mds(igraph_t *graph);
-void *compute_lay_bip_sug(igraph_t *graph);
-void *compute_lay_bip_simple(igraph_t *graph);
+void *compute_igraph_layout_mds(igraph_t *graph);
+void *compute_igraph_layout_bipartite(igraph_t *graph);
+void *compute_igraph_layout_bipartite_simple(igraph_t *graph);
 
 // Dimensionality reduction / Embedding
-void *compute_lay_umap(igraph_t *graph);
-void *compute_lay_umap_2d(igraph_t *graph);
+void *compute_igraph_layout_umap_3d(igraph_t *graph);
+void *compute_igraph_layout_umap(igraph_t *graph);
 
 // Community-based layouts
 void *compute_lay_layered_sphere(igraph_t *graph);
