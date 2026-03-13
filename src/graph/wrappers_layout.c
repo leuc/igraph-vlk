@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include "graph/wrappers_layout.h"
 #include "app_state.h"
 #include "interaction/state.h"
@@ -8,6 +10,8 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <omp.h>
+#include <sched.h>
 
 // Pure worker function - no UI or state dependencies
 void *compute_igraph_layout_fruchterman_reingold_3d(igraph_t *graph)
@@ -707,6 +711,66 @@ void *compute_igraph_layout_gem(igraph_t *graph)
 		free(result);
 		return NULL;
 	}
+
+	return result;
+}
+
+// ForceAtlas2 layout (3D)
+void *compute_igraph_layout_forceatlas2_3d(igraph_t *graph)
+{
+    // Reset CPU Affinity for OpenMP to work
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    for (int i = 0; i < 24; i++) {
+        CPU_SET(i, &cpuset);
+    }
+    sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
+
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_integer_t ecount = igraph_ecount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_integer_t iterations = (igraph_integer_t)(50 + sqrt((double)vcount) * 2);
+	if (iterations > 1500) {
+        iterations = 1500;
+	}
+	igraph_real_t scaling_ratio = (igraph_real_t)(1.0 + log1p((double)ecount) / 10.0);
+	igraph_real_t gravity = (igraph_real_t)(1.0 + sqrt((double)vcount) / 100.0);
+
+	printf("[ForceAtlas2] Starting: vcount=%d, ecount=%d, iterations=%d, scaling=%.2f, gravity=%.2f\n", (int)vcount, (int)ecount, (int)iterations, scaling_ratio, gravity);
+	fflush(stdout);
+
+	// FORCE OpenMP to wake up and use the full count
+    //omp_set_dynamic(0);              // Disable dynamic adjustment
+    //omp_set_num_threads(24);         // Explicitly request 24 threads
+
+    // Sanity check: Print this to your log
+    #pragma omp parallel
+    {
+        if (omp_get_thread_num() == 0) {
+            printf("[ForceAtlas2] OpenMP report: using %d threads\n", omp_get_num_threads());
+        }
+    }
+
+	igraph_error_t code = igraph_layout_forceatlas2_3d(graph, result, iterations, 0, 1.0, 1.0, 1, 1.2, scaling_ratio, 0, gravity, NULL);
+
+	printf("[ForceAtlas2] After layout: code=%d\n", code);
+	fflush(stdout);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+
+	igraph_layout_align(graph, result);
+
+	printf("[ForceAtlas2] Done\n");
+	fflush(stdout);
 
 	return result;
 }

@@ -61,6 +61,7 @@ const CommandDef g_command_registry[] = {
 	{"Layout/Force-Directed", "igraph_layout_graphopt", "GraphOpt", compute_igraph_layout_graphopt, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "igraph_layout_lgl", "Large Graph Layout (LGL)", compute_igraph_layout_lgl, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "igraph_layout_gem", "GEM", compute_igraph_layout_gem, apply_layout_matrix_centered, free_layout_matrix},
+	{"Layout/Force-Directed", "igraph_layout_forceatlas2_3d", "ForceAtlas2 (3D)", compute_igraph_layout_forceatlas2_3d, apply_layout_matrix, free_layout_matrix},
 
 	// =========================================================================
 	// Layout menu - Tree & Hierarchical
