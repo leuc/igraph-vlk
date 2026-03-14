@@ -6,10 +6,12 @@
 #include "vulkan/renderer.h"
 #include <float.h>
 #include <igraph.h>
+#include <igraph_constants.h>
 #include <igraph_progress.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <omp.h>
 #include <sched.h>
 
@@ -714,6 +716,51 @@ void *compute_igraph_layout_gem(igraph_t *graph)
 
 	return result;
 }
+
+// Yifan Hu layout
+void *compute_igraph_layout_yifan_hu(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_yifan_hu(graph, result, 0, 500, -1.0, -1.0, 0.1, 1, 0.001, IGRAPH_QUADTREE_NONE, 10, 0, NULL, NULL, NULL, NULL, NULL);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+
+	return result;
+}
+
+// Yifan Hu layout (3D)
+void *compute_igraph_layout_yifan_hu_3d(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_layout_yifan_hu_3d(graph, result, 0, 500, -1.0, -1.0, 0.1, 1, 0.001, IGRAPH_QUADTREE_NORMAL, 10, 0, NULL);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		free(result);
+		return NULL;
+	}
+
+	return result;
+}
+
+
+
 
 // ForceAtlas2 layout (3D)
 void *compute_igraph_layout_forceatlas2_3d(igraph_t *graph)

@@ -17,6 +17,8 @@ void *compute_igraph_layout_davidson_harel(igraph_t *graph);
 void *compute_igraph_layout_graphopt(igraph_t *graph);
 void *compute_igraph_layout_gem(igraph_t *graph);
 void *compute_igraph_layout_forceatlas2_3d(igraph_t *graph);
+void *compute_igraph_layout_yifan_hu(igraph_t *graph);
+void *compute_igraph_layout_yifan_hu_3d(igraph_t *graph);
 void *compute_igraph_layout_lgl(igraph_t *graph);
 
 // Tree layouts
