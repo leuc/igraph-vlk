@@ -188,6 +188,12 @@ void update_app_state(AppState *state)
 		if (state->current_worker_job) {
 			WorkerJobStatus status = worker_thread_get_job_status(state->current_worker_job, &state->job_progress);
 
+			// Update status message from igraph handler
+			const char *job_msg = worker_thread_get_job_status_message(state->current_worker_job);
+			if (job_msg && job_msg[0]) {
+				snprintf(state->job_status_message, sizeof(state->job_status_message), "%s", job_msg);
+			}
+
 			if (status == JOB_STATUS_COMPLETED) {
 				printf("[State] Job completed successfully\n");
 

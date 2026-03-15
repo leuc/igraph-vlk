@@ -18,6 +18,7 @@ typedef struct
 	void *result_data;
 	char error_message[256];
 	_Atomic float progress; // 0.0 to 1.0
+	char status_message[256];
 	pthread_mutex_t mutex;
 
 	// Dynamic job fields
@@ -52,6 +53,9 @@ WorkerJob *worker_thread_submit_job(WorkerThreadContext *context, CommandDef *cm
 
 // Get job status and progress
 WorkerJobStatus worker_thread_get_job_status(WorkerJob *job, float *progress);
+
+// Get job status message
+const char *worker_thread_get_job_status_message(WorkerJob *job);
 
 // Clean up worker thread system
 void worker_thread_cleanup(WorkerThreadContext *context);

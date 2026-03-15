@@ -20,6 +20,18 @@ static igraph_error_t igraph_progress_handler(const char *message, igraph_real_t
 	return IGRAPH_SUCCESS;
 }
 
+// igraph status handler callback for displaying messages to HUD
+static igraph_error_t igraph_status_handler(const char *message, void *data)
+{
+	if (tls_current_job && message) {
+		fprintf(stderr, "[igraph] %s", message);
+		pthread_mutex_lock(&tls_current_job->mutex);
+		snprintf(tls_current_job->status_message, sizeof(tls_current_job->status_message), "%s", message);
+		pthread_mutex_unlock(&tls_current_job->mutex);
+	}
+	return IGRAPH_SUCCESS;
+}
+
 // Worker thread function
 static void *worker_thread_func(void *arg)
 {
@@ -32,6 +44,7 @@ static void *worker_thread_func(void *arg)
 
 	// Set progress handler for this thread
 	igraph_set_progress_handler(igraph_progress_handler);
+	igraph_set_status_handler(igraph_status_handler);
 
 	while (context->running) {
 		pthread_mutex_lock(&context->queue_mutex);
@@ -213,6 +226,19 @@ WorkerJobStatus worker_thread_get_job_status(WorkerJob *job, float *progress)
 	}
 
 	return status;
+}
+
+// Get job status message
+const char *worker_thread_get_job_status_message(WorkerJob *job)
+{
+	if (!job) {
+		return "";
+	}
+	static char msg[256];
+	pthread_mutex_lock(&job->mutex);
+	snprintf(msg, sizeof(msg), "%s", job->status_message);
+	pthread_mutex_unlock(&job->mutex);
+	return msg;
 }
 
 // Wait for job completion (blocking)
