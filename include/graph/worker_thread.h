@@ -3,6 +3,7 @@
 
 #include "graph/command_registry.h"
 #include "interaction/state.h"
+#include <igraph.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -20,6 +21,10 @@ typedef struct
 	_Atomic float progress; // 0.0 to 1.0
 	char status_message[256];
 	pthread_mutex_t mutex;
+	pthread_mutex_t snapshot_mutex;
+	igraph_matrix_t snapshot_matrix;
+	bool snapshot_initialized;
+	bool has_new_snapshot;
 
 	// Dynamic job fields
 	IgraphWorkerFunc worker_func;
@@ -56,6 +61,10 @@ WorkerJobStatus worker_thread_get_job_status(WorkerJob *job, float *progress);
 
 // Get job status message
 const char *worker_thread_get_job_status_message(WorkerJob *job);
+
+// Poll a new real-time snapshot from the worker thread (non-blocking)
+// Returns true if a new snapshot was available and copied into out_matrix
+bool worker_thread_poll_snapshot(WorkerJob *job, igraph_matrix_t *out_matrix);
 
 // Clean up worker thread system
 void worker_thread_cleanup(WorkerThreadContext *context);

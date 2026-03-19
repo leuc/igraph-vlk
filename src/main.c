@@ -1,6 +1,7 @@
 #include "app_state.h"
 #include "graph/graph_actions.h"
 #include "graph/graph_io.h"
+#include "graph/wrappers_layout.h"
 #include "interaction/camera.h"
 #include "interaction/input.h"
 #include "interaction/state.h"
@@ -167,6 +168,21 @@ int main(int argc, char **argv)
 		// Update App FSM and Menu transforms
 		update_app_state(&app);
 		update_menu_transforms(app.app_ctx.root_menu, &app.app_ctx.menu_spawn_basis);
+
+		// Poll real-time layout snapshots from worker thread
+		if (app.current_worker_job && app.current_graph.graph_initialized) {
+			igraph_matrix_t snap;
+			igraph_matrix_init(&snap, 0, 0);
+			if (worker_thread_poll_snapshot(app.current_worker_job, &snap)) {
+				if (snap.nrow == app.current_graph.node_count && snap.nrow > 0) {
+					ExecutionContext ec = {0};
+					ec.app_state = &app;
+					ec.current_graph = &app.current_graph.g;
+					apply_layout_matrix(&ec, &snap);
+				}
+			}
+			igraph_matrix_destroy(&snap);
+		}
 
 		// Generate menu buffers if menu is open or processing
 		if (app.app_ctx.current_state == STATE_MENU_OPEN || app.app_ctx.current_state == STATE_JOB_IN_PROGRESS || app.app_ctx.current_state == STATE_EXECUTING) {

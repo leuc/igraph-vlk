@@ -134,6 +134,7 @@ void update_app_state(AppState *state)
 				exec_ctx.num_params = app->pending_command->num_params;
 				exec_ctx.update_visuals_callback = NULL;
 				exec_ctx.app_state = state;
+				exec_ctx.running = true;
 
 				// Submit job to worker thread
 				if (state->worker_ctx.thread_running) {
@@ -217,6 +218,10 @@ void update_app_state(AppState *state)
 					}
 					pthread_mutex_unlock(&state->worker_ctx.queue_mutex);
 
+					pthread_mutex_destroy(&job->snapshot_mutex);
+					if (job->snapshot_initialized) {
+						igraph_matrix_destroy(&job->snapshot_matrix);
+					}
 					pthread_mutex_destroy(&job->mutex);
 					if (job->ctx) {
 						free(job->ctx);
@@ -247,6 +252,10 @@ void update_app_state(AppState *state)
 					}
 					pthread_mutex_unlock(&state->worker_ctx.queue_mutex);
 
+					pthread_mutex_destroy(&job->snapshot_mutex);
+					if (job->snapshot_initialized) {
+						igraph_matrix_destroy(&job->snapshot_matrix);
+					}
 					pthread_mutex_destroy(&job->mutex);
 					if (job->ctx) {
 						free(job->ctx);

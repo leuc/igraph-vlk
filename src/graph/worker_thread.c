@@ -1,6 +1,7 @@
 #include "graph/worker_thread.h"
 #include "graph/command_registry.h"
 #include <igraph.h>
+#include <igraph_step.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,6 +33,40 @@ static igraph_error_t igraph_status_handler(const char *message, void *data)
 	return IGRAPH_SUCCESS;
 }
 
+// igraph step handler callback for real-time layout snapshots
+static igraph_error_t worker_step_callback(const void *state, void *data)
+{
+	(void)data;
+	if (!tls_current_job) {
+		return IGRAPH_SUCCESS;
+	}
+	if (!tls_current_job->ctx->running) {
+		return IGRAPH_INTERRUPTED;
+	}
+
+	const igraph_matrix_t *src = (const igraph_matrix_t *)state;
+	pthread_mutex_lock(&tls_current_job->snapshot_mutex);
+
+	if (!tls_current_job->snapshot_initialized) {
+		igraph_matrix_init_copy(&tls_current_job->snapshot_matrix, src);
+		tls_current_job->snapshot_initialized = true;
+	} else {
+		igraph_integer_t n = igraph_matrix_nrow(src);
+		igraph_integer_t nc = igraph_matrix_ncol(src);
+		igraph_matrix_resize(&tls_current_job->snapshot_matrix, n, nc);
+		for (igraph_integer_t i = 0; i < n; i++) {
+			for (igraph_integer_t j = 0; j < nc; j++) {
+				MATRIX(tls_current_job->snapshot_matrix, i, j) = MATRIX(*src, i, j);
+			}
+		}
+	}
+	tls_current_job->has_new_snapshot = true;
+	pthread_mutex_unlock(&tls_current_job->snapshot_mutex);
+	return IGRAPH_SUCCESS;
+}
+
+// Poll a real-time layout snapshot from the worker thread (non-blocking)
+
 // Worker thread function
 static void *worker_thread_func(void *arg)
 {
@@ -45,6 +80,7 @@ static void *worker_thread_func(void *arg)
 	// Set progress handler for this thread
 	igraph_set_progress_handler(igraph_progress_handler);
 	igraph_set_status_handler(igraph_status_handler);
+	igraph_set_step_handler(worker_step_callback);
 
 	while (context->running) {
 		pthread_mutex_lock(&context->queue_mutex);
@@ -199,6 +235,11 @@ WorkerJob *worker_thread_submit_job(WorkerThreadContext *context, CommandDef *cm
 		return NULL;
 	}
 
+	pthread_mutex_init(&job->snapshot_mutex, NULL);
+	job->snapshot_initialized = false;
+	job->has_new_snapshot = false;
+	igraph_matrix_init(&job->snapshot_matrix, 0, 0);
+
 	// Add job to queue
 	context->job_queue[context->queue_tail] = job;
 	context->queue_tail = next_tail;
@@ -241,6 +282,30 @@ const char *worker_thread_get_job_status_message(WorkerJob *job)
 	return msg;
 }
 
+// Poll a real-time layout snapshot from the worker thread (non-blocking)
+bool worker_thread_poll_snapshot(WorkerJob *job, igraph_matrix_t *out_matrix)
+{
+	if (!job || !out_matrix) {
+		return false;
+	}
+	pthread_mutex_lock(&job->snapshot_mutex);
+	if (job->has_new_snapshot && job->snapshot_initialized) {
+		igraph_integer_t n = igraph_matrix_nrow(&job->snapshot_matrix);
+		igraph_integer_t nc = igraph_matrix_ncol(&job->snapshot_matrix);
+		igraph_matrix_resize(out_matrix, n, nc);
+		for (igraph_integer_t i = 0; i < n; i++) {
+			for (igraph_integer_t j = 0; j < nc; j++) {
+				MATRIX(*out_matrix, i, j) = MATRIX(job->snapshot_matrix, i, j);
+			}
+		}
+		job->has_new_snapshot = false;
+		pthread_mutex_unlock(&job->snapshot_mutex);
+		return true;
+	}
+	pthread_mutex_unlock(&job->snapshot_mutex);
+	return false;
+}
+
 // Wait for job completion (blocking)
 // Clean up worker thread system
 void worker_thread_cleanup(WorkerThreadContext *context)
@@ -272,6 +337,10 @@ void worker_thread_cleanup(WorkerThreadContext *context)
 			if (job->ctx) {
 				free(job->ctx);
 			}
+			pthread_mutex_destroy(&job->snapshot_mutex);
+			if (job->snapshot_initialized) {
+				igraph_matrix_destroy(&job->snapshot_matrix);
+			}
 			pthread_mutex_destroy(&job->mutex);
 			free(job);
 		}
@@ -283,6 +352,10 @@ void worker_thread_cleanup(WorkerThreadContext *context)
 		}
 		if (context->current_job->ctx) {
 			free(context->current_job->ctx);
+		}
+		pthread_mutex_destroy(&context->current_job->snapshot_mutex);
+		if (context->current_job->snapshot_initialized) {
+			igraph_matrix_destroy(&context->current_job->snapshot_matrix);
 		}
 		pthread_mutex_destroy(&context->current_job->mutex);
 		free(context->current_job);

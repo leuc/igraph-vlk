@@ -46,6 +46,8 @@ typedef struct
 	void (*update_visuals_callback)(void);
 	// Pointer to full application state for layout updates
 	struct AppState *app_state;
+	// Cancellation flag set by main thread to abort worker
+	bool running;
 } ExecutionContext;
 
 // Typedef for the generic wrapper function
