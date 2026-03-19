@@ -1367,9 +1367,9 @@ void *compute_igraph_layout_forceatlas2_3d(igraph_t *graph)
 	 * Widely used in Gephi and other network tools
 	 */
 	igraph_integer_t iterations = (igraph_integer_t)(50 + sqrt((double)vcount) * 2);
-	if (iterations > 1500) {
-		iterations = 1500;
-	}
+	//if (iterations > 1500) {
+	//	iterations = 1500;
+	//}
 
 	igraph_real_t scaling_ratio = (igraph_real_t)(1.0 + log1p((double)ecount) / 10.0);
 	igraph_real_t gravity = (igraph_real_t)(1.0 + sqrt((double)vcount) / 100.0);
@@ -1385,20 +1385,18 @@ void *compute_igraph_layout_forceatlas2_3d(igraph_t *graph)
 	}
 
 	igraph_error_t code = igraph_layout_forceatlas2_3d(graph, result,
-													   iterations,	  // iterations
-													   1,			  // outbound_attraction_distribution
-													   1.0,			  // edge_weight_influence
+													   500,	         // iterations
+													   0,             // LinLog
+													   0,			  // outbound_attraction_distribution
+													   0,			  // edge_weight_influence
 													   1.0,			  // jitter_tolerance
 													   1,			  // barnes_hut_optimize
 													   1.2,			  // barnes_hut_theta
-													   scaling_ratio, // scaling_ratio
-													   0,			  // strong_gravity_mode
-													   gravity,		  // gravity
+													   1.0,           // scaling_ratio
+													   1,			  // strong_gravity_mode
+													   1.0,		      // gravity
 													   NULL			  // weights
 	);
-
-	printf("[ForceAtlas2] After layout: code=%d\n", code);
-	fflush(stdout);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);
@@ -1412,10 +1410,6 @@ void *compute_igraph_layout_forceatlas2_3d(igraph_t *graph)
 	 * @param layout  Layout matrix to align
 	 */
 	igraph_layout_align(graph, result);
-
-	printf("[ForceAtlas2] Done\n");
-	fflush(stdout);
-
 	return result;
 }
 
