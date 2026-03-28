@@ -44,6 +44,8 @@ void *compute_igraph_layout_bipartite_simple(igraph_t *graph);
 // Dimensionality reduction / Embedding
 void *compute_igraph_layout_umap_3d(igraph_t *graph);
 void *compute_igraph_layout_umap(igraph_t *graph);
+void *compute_igraph_layout_bhtsne_3d(igraph_t *graph);
+void *compute_igraph_layout_bhtsne(igraph_t *graph);
 
 // Community-based layouts
 void *compute_layout_layered_sphere(igraph_t *graph);
