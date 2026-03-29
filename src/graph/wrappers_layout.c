@@ -1444,16 +1444,16 @@ void *compute_igraph_layout_forceatlas2_3d(igraph_t *graph)
 	}
 
 	igraph_error_t code = igraph_layout_forceatlas2_3d(graph, result,
-													   500, // iterations
+													   1500, // iterations
 													   0,	// LinLog
 													   0,	// outbound_attraction_distribution
 													   0,	// edge_weight_influence
 													   1.0, // jitter_tolerance
 													   1,	// barnes_hut_optimize
 													   1.2, // barnes_hut_theta
-													   1.0, // scaling_ratio
-													   1,	// strong_gravity_mode
-													   1.0, // gravity
+													   scaling_ratio, // scaling_ratio
+													   0,	// strong_gravity_mode
+													   gravity, // gravity
 													   NULL // weights
 	);
 
