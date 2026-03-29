@@ -1252,7 +1252,7 @@ void *compute_igraph_layout_yifan_hu(igraph_t *graph)
 	 * Efficient for large graphs
 	 */
 	igraph_int_t maxiter = 500;
-	igraph_real_t repulsive_exponent = -1.0;
+	igraph_real_t repulsive_exponent = 1.0;
 	igraph_real_t natural_length = -1.0;
 	igraph_real_t step = 0.1;
 	igraph_bool_t adaptive_cooling = 1;
@@ -1302,7 +1302,7 @@ void *compute_igraph_layout_yifan_hu_3d(igraph_t *graph)
 	 * @param weights         Only parameter (others inherited)
 	 */
 	igraph_int_t maxiter = 500;
-	igraph_real_t repulsive_exponent = -1.0;
+	igraph_real_t repulsive_exponent = 1.0;
 	igraph_real_t natural_length = -1.0;
 	igraph_real_t step = 0.1;
 	igraph_bool_t adaptive_cooling = 1;
