@@ -247,12 +247,24 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 	r->numericInstanceBufferMemory = VK_NULL_HANDLE;
 	r->numericInstanceCount = 0;
 
-	r->instanceBuffer = VK_NULL_HANDLE;
-	r->instanceStagingBuffer = VK_NULL_HANDLE;
+	r->nodePositionBuffer = VK_NULL_HANDLE;
+	r->nodePositionMemory = VK_NULL_HANDLE;
+	r->nodeAttributeBuffer = VK_NULL_HANDLE;
+	r->nodeAttributeMemory = VK_NULL_HANDLE;
+	r->nodeAttributeStagingBuffer = VK_NULL_HANDLE;
+	r->nodeAttributeStagingMemory = VK_NULL_HANDLE;
 	r->nodeCapacity = 0;
-	r->edgeVertexBuffer = VK_NULL_HANDLE;
-	r->edgeStagingBuffer = VK_NULL_HANDLE;
+
+	r->edgePositionBuffer = VK_NULL_HANDLE;
+	r->edgePositionMemory = VK_NULL_HANDLE;
+	r->edgeAttributeBuffer = VK_NULL_HANDLE;
+	r->edgeAttributeMemory = VK_NULL_HANDLE;
+	r->edgeAttributeStagingBuffer = VK_NULL_HANDLE;
+	r->edgeAttributeStagingMemory = VK_NULL_HANDLE;
 	r->edgeCapacity = 0;
+
+	r->needsAttributeUpload = VK_TRUE;
+
 	r->labelInstanceBuffer = VK_NULL_HANDLE;
 	r->labelStagingBuffer = VK_NULL_HANDLE;
 	renderer_update_graph(r, graph);
@@ -352,20 +364,23 @@ void renderer_draw_frame(Renderer *r)
 	vkCmdBindDescriptorSets(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[r->currentFrame], 0, NULL);
 	if (r->showEdges && r->edgeCount > 0) {
 		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->edgePipeline);
-		VkDeviceSize off = 0;
-		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1, &r->edgeVertexBuffer, &off);
+		VkBuffer edgeBuffers[] = {r->edgePositionBuffer, r->edgeAttributeBuffer};
+		VkDeviceSize offsets[] = {0, 0};
+		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, edgeBuffers, offsets);
 		vkCmdDraw(r->commandBuffers[r->currentFrame], r->edgeVertexCount, 1, 0, 0);
+		fprintf(stderr, "[EDGE] Drawing %u vertices from pos=%p attr=%p\n", r->edgeVertexCount, (void *)r->edgePositionBuffer, (void *)r->edgeAttributeBuffer);
 	}
 	if (r->showNodes && r->nodeCount > 0) {
 		float alpha_node = 1.0f;
 		vkCmdPushConstants(r->commandBuffers[r->currentFrame], r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_node);
 		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->graphicsPipeline);
+		fprintf(stderr, "[NODE] Drawing %u nodes, pos=%p attr=%p\n", r->nodeCount, (void *)r->nodePositionBuffer, (void *)r->nodeAttributeBuffer);
 		for (int i = 0; i < PLATONIC_COUNT; i++) {
 			if (r->platonicDrawCalls[i].count == 0)
 				continue;
-			VkBuffer vbs[] = {r->vertexBuffers[i], r->instanceBuffer};
-			VkDeviceSize vos[] = {0, 0};
-			vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, vbs, vos);
+			VkBuffer vbs[] = {r->vertexBuffers[i], r->nodePositionBuffer, r->nodeAttributeBuffer};
+			VkDeviceSize vos[] = {0, 0, 0};
+			vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 3, vbs, vos);
 			vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
 			vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->platonicIndexCounts[i], r->platonicDrawCalls[i].count, 0, 0, r->platonicDrawCalls[i].firstInstance);
 		}
@@ -508,17 +523,23 @@ void renderer_cleanup(Renderer *r)
 	}
 	vkDestroyBuffer(r->device, r->labelVertexBuffer, NULL);
 	vkFreeMemory(r->device, r->labelVertexBufferMemory, NULL);
-	vkDestroyBuffer(r->device, r->edgeVertexBuffer, NULL);
-	vkFreeMemory(r->device, r->edgeVertexBufferMemory, NULL);
-	if (r->edgeStagingBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->device, r->edgeStagingBuffer, NULL);
-		vkFreeMemory(r->device, r->edgeStagingBufferMemory, NULL);
+
+	vkDestroyBuffer(r->device, r->edgePositionBuffer, NULL);
+	vkFreeMemory(r->device, r->edgePositionMemory, NULL);
+	vkDestroyBuffer(r->device, r->edgeAttributeBuffer, NULL);
+	vkFreeMemory(r->device, r->edgeAttributeMemory, NULL);
+	if (r->edgeAttributeStagingBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->edgeAttributeStagingBuffer, NULL);
+		vkFreeMemory(r->device, r->edgeAttributeStagingMemory, NULL);
 	}
-	vkDestroyBuffer(r->device, r->instanceBuffer, NULL);
-	vkFreeMemory(r->device, r->instanceBufferMemory, NULL);
-	if (r->instanceStagingBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->device, r->instanceStagingBuffer, NULL);
-		vkFreeMemory(r->device, r->instanceStagingBufferMemory, NULL);
+
+	vkDestroyBuffer(r->device, r->nodePositionBuffer, NULL);
+	vkFreeMemory(r->device, r->nodePositionMemory, NULL);
+	vkDestroyBuffer(r->device, r->nodeAttributeBuffer, NULL);
+	vkFreeMemory(r->device, r->nodeAttributeMemory, NULL);
+	if (r->nodeAttributeStagingBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->nodeAttributeStagingBuffer, NULL);
+		vkFreeMemory(r->device, r->nodeAttributeStagingMemory, NULL);
 	}
 	for (int i = 0; i < PLATONIC_COUNT; i++) {
 		vkDestroyBuffer(r->device, r->vertexBuffers[i], NULL);

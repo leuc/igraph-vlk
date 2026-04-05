@@ -16,7 +16,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 {
 	// Ring-buffered fence sync instead of vkDeviceWaitIdle
 	uint32_t ringIdx = r->graphUpdateRingIndex;
-	if (r->instanceBuffer != VK_NULL_HANDLE) {
+	if (r->nodePositionBuffer != VK_NULL_HANDLE) {
 		vkWaitForFences(r->device, 1, &r->graphUpdateFences[ringIdx], VK_TRUE, UINT64_MAX);
 		vkResetFences(r->device, 1, &r->graphUpdateFences[ringIdx]);
 	}
@@ -24,31 +24,46 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	r->nodeCount = graph->node_count;
 	r->edgeCount = graph->edge_count;
 
-	// Pre-allocate or grow node instance buffer
+	// Pre-allocate or grow node buffers (split: position + attribute)
 	if (r->nodeCapacity < graph->node_count) {
-		if (r->instanceBuffer != VK_NULL_HANDLE) {
-			vkDestroyBuffer(r->device, r->instanceBuffer, NULL);
-			vkFreeMemory(r->device, r->instanceBufferMemory, NULL);
-			vkDestroyBuffer(r->device, r->instanceStagingBuffer, NULL);
-			vkFreeMemory(r->device, r->instanceStagingBufferMemory, NULL);
+		if (r->nodePositionBuffer != VK_NULL_HANDLE) {
+			vkDestroyBuffer(r->device, r->nodePositionBuffer, NULL);
+			vkFreeMemory(r->device, r->nodePositionMemory, NULL);
+			vkDestroyBuffer(r->device, r->nodeAttributeBuffer, NULL);
+			vkFreeMemory(r->device, r->nodeAttributeMemory, NULL);
+			vkDestroyBuffer(r->device, r->nodeAttributeStagingBuffer, NULL);
+			vkFreeMemory(r->device, r->nodeAttributeStagingMemory, NULL);
 		}
-		createStagingBuffer(r->device, r->physicalDevice, sizeof(Node) * graph->node_count, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->instanceStagingBuffer, &r->instanceStagingBufferMemory, &r->instanceBuffer, &r->instanceBufferMemory);
+		// Position buffer: HOST_COHERENT for fast mapped updates
+		createMappedBuffer(r->device, r->physicalDevice, sizeof(NodePosition) * graph->node_count, &r->nodePositionBuffer, &r->nodePositionMemory);
+		// Attribute buffer: DEVICE_LOCAL with staging buffer for rare updates
+		createStagingBuffer(r->device, r->physicalDevice, sizeof(NodeAttribute) * graph->node_count, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->nodeAttributeStagingBuffer, &r->nodeAttributeStagingMemory, &r->nodeAttributeBuffer, &r->nodeAttributeMemory);
 		r->nodeCapacity = graph->node_count;
+		r->needsAttributeUpload = VK_TRUE;
+	} else if (graph->node_count < r->nodeCount) {
+		// Node count decreased - need to re-upload attributes
+		r->needsAttributeUpload = VK_TRUE;
 	}
 
-	// Pre-allocate or grow edge vertex buffer
+	// Pre-allocate or grow edge buffers (split: position + attribute)
 	int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
 	r->edgeVertexCount = graph->edge_count * segments * 2;
 	uint32_t neededEdgeVerts = r->edgeVertexCount;
 	if (r->edgeCapacity < neededEdgeVerts) {
-		if (r->edgeVertexBuffer != VK_NULL_HANDLE) {
-			vkDestroyBuffer(r->device, r->edgeVertexBuffer, NULL);
-			vkFreeMemory(r->device, r->edgeVertexBufferMemory, NULL);
-			vkDestroyBuffer(r->device, r->edgeStagingBuffer, NULL);
-			vkFreeMemory(r->device, r->edgeStagingBufferMemory, NULL);
+		if (r->edgePositionBuffer != VK_NULL_HANDLE) {
+			vkDestroyBuffer(r->device, r->edgePositionBuffer, NULL);
+			vkFreeMemory(r->device, r->edgePositionMemory, NULL);
+			vkDestroyBuffer(r->device, r->edgeAttributeBuffer, NULL);
+			vkFreeMemory(r->device, r->edgeAttributeMemory, NULL);
+			vkDestroyBuffer(r->device, r->edgeAttributeStagingBuffer, NULL);
+			vkFreeMemory(r->device, r->edgeAttributeStagingMemory, NULL);
 		}
-		createStagingBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex) * neededEdgeVerts, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->edgeStagingBuffer, &r->edgeStagingBufferMemory, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
+		// Position buffer: HOST_COHERENT for fast mapped updates
+		createMappedBuffer(r->device, r->physicalDevice, sizeof(EdgePosition) * neededEdgeVerts, &r->edgePositionBuffer, &r->edgePositionMemory);
+		// Attribute buffer: DEVICE_LOCAL with staging buffer for rare updates
+		createStagingBuffer(r->device, r->physicalDevice, sizeof(EdgeAttribute) * neededEdgeVerts, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->edgeAttributeStagingBuffer, &r->edgeAttributeStagingMemory, &r->edgeAttributeBuffer, &r->edgeAttributeMemory);
 		r->edgeCapacity = neededEdgeVerts;
+		r->needsAttributeUpload = VK_TRUE;
 	}
 
 	// Destroy label/sphere buffers if they exist (these are always rebuilt)
@@ -83,6 +98,8 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 
 	// Build node instances sorted by platonic type
 	Node *sorted = malloc(sizeof(Node) * graph->node_count);
+	NodePosition *nodePositions = malloc(sizeof(NodePosition) * graph->node_count);
+	NodeAttribute *nodeAttributes = malloc(sizeof(NodeAttribute) * graph->node_count);
 	uint32_t currentOffset = 0;
 	for (int t = 0; t < PLATONIC_COUNT; t++) {
 		r->platonicDrawCalls[t].firstInstance = currentOffset;
@@ -102,20 +119,36 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 				pt = PLATONIC_ICOSAHEDRON;
 			if (pt == (PlatonicType)t) {
 				sorted[currentOffset + count] = graph->nodes[i];
-				glm_vec3_scale(sorted[currentOffset + count].position, r->layoutScale, sorted[currentOffset + count].position);
-				if (sorted[currentOffset + count].size < 0.1f)
-					sorted[currentOffset + count].size = 0.1f;
+				float size = sorted[currentOffset + count].size;
+				if (size < 0.1f)
+					size = 0.1f;
+				// Split into position (scaled) + attributes
+				glm_vec3_scale(sorted[currentOffset + count].position, r->layoutScale, nodePositions[currentOffset + count].pos);
+				memcpy(nodeAttributes[currentOffset + count].color, sorted[currentOffset + count].color, sizeof(vec3));
+				nodeAttributes[currentOffset + count].size = size;
+				nodeAttributes[currentOffset + count].degree = sorted[currentOffset + count].degree;
+				nodeAttributes[currentOffset + count].glow = sorted[currentOffset + count].glow;
+				nodeAttributes[currentOffset + count].selected = sorted[currentOffset + count].selected;
 				count++;
 			}
 		}
 		r->platonicDrawCalls[t].count = count;
 		currentOffset += count;
 	}
-	updateBufferStaged(r->device, r->commandPool, r->graphicsQueue, sizeof(Node) * graph->node_count, sorted, r->instanceStagingBuffer, r->instanceStagingBufferMemory, r->instanceBuffer);
+	// Fast path: update positions via mapped buffer
+	updateBufferMapped(r->device, r->nodePositionMemory, sizeof(NodePosition) * graph->node_count, nodePositions);
+	// Rare: update attributes via staged copy
+	if (r->needsAttributeUpload) {
+		updateBufferStaged(r->device, r->commandPool, r->graphicsQueue, sizeof(NodeAttribute) * graph->node_count, nodeAttributes, r->nodeAttributeStagingBuffer, r->nodeAttributeStagingMemory, r->nodeAttributeBuffer);
+	}
 	free(sorted);
+	free(nodePositions);
+	free(nodeAttributes);
 
-	EdgeVertex *evs = malloc(sizeof(EdgeVertex) * r->edgeVertexCount);
-	uint32_t idx = 0;
+	// Split edge data into position + attribute buffers
+	EdgePosition *edgePositions = calloc(r->edgeVertexCount, sizeof(EdgePosition));
+	EdgeAttribute *edgeAttributes = calloc(r->edgeVertexCount, sizeof(EdgeAttribute));
+
 	// Dispatch edge routing compute shader if needed
 	CompEdge *cEdges = NULL;
 	if (r->currentRoutingMode != ROUTING_MODE_STRAIGHT) {
@@ -123,17 +156,15 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 		renderer_dispatch_edge_routing(r, graph, cEdges);
 	}
 
+	uint32_t idx = 0;
 	if (cEdges) {
 		for (uint32_t i = 0; i < graph->edge_count; i++) {
-			// CLAMP PATH LENGTH to prevent Heap Buffer Overflows!
 			int pLen = cEdges[i].pathLength;
 			if (pLen < 0)
 				pLen = 0;
 			if (pLen > 16)
 				pLen = 16;
 
-			// For routed edges, calculate normalized_pos based on segment
-			// length This is an approximation: assuming uniform segment lengths
 			float total_length = 0.0f;
 			if (pLen > 1) {
 				for (int p = 0; p < pLen - 1; ++p) {
@@ -149,7 +180,6 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 			}
 
 			float current_segment_start_len = 0.0f;
-
 			for (int p = 0; p < pLen - 1; p++) {
 				float segment_length = 0.0f;
 				if (pLen > 1) {
@@ -163,62 +193,73 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 					segment_length = glm_vec3_distance(p1, p2);
 				}
 
-				memcpy(evs[idx].pos, cEdges[i].path[p], 12);
-				memcpy(evs[idx].color, graph->nodes[graph->edges[i].from].color, 12);
-				evs[idx].size = graph->edges[i].size;
-				evs[idx].selected = graph->edges[i].selected;
-				evs[idx].animation_progress = graph->edges[i].animation_progress;
-				evs[idx].animation_direction = graph->edges[i].animation_direction;
-				evs[idx].is_animating = graph->edges[i].is_animating;
-				evs[idx].normalized_pos = current_segment_start_len / total_length;
+				memcpy(edgePositions[idx].pos, cEdges[i].path[p], 12);
+				memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].from].color, 12);
+				edgeAttributes[idx].size = graph->edges[i].size;
+				edgeAttributes[idx].selected = graph->edges[i].selected;
+				edgeAttributes[idx].animation_progress = graph->edges[i].animation_progress;
+				edgeAttributes[idx].animation_direction = graph->edges[i].animation_direction;
+				edgeAttributes[idx].is_animating = graph->edges[i].is_animating;
+				edgeAttributes[idx].normalized_pos = current_segment_start_len / (total_length > 0.0f ? total_length : 1.0f);
 				idx++;
 
-				memcpy(evs[idx].pos, cEdges[i].path[p + 1], 12);
-				memcpy(evs[idx].color, graph->nodes[graph->edges[i].to].color, 12);
-				evs[idx].size = graph->edges[i].size;
-				evs[idx].selected = graph->edges[i].selected;
-				evs[idx].animation_progress = graph->edges[i].animation_progress;
-				evs[idx].animation_direction = graph->edges[i].animation_direction;
-				evs[idx].is_animating = graph->edges[i].is_animating;
-				evs[idx].normalized_pos = (current_segment_start_len + segment_length) / total_length;
+				memcpy(edgePositions[idx].pos, cEdges[i].path[p + 1], 12);
+				memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].to].color, 12);
+				edgeAttributes[idx].size = graph->edges[i].size;
+				edgeAttributes[idx].selected = graph->edges[i].selected;
+				edgeAttributes[idx].animation_progress = graph->edges[i].animation_progress;
+				edgeAttributes[idx].animation_direction = graph->edges[i].animation_direction;
+				edgeAttributes[idx].is_animating = graph->edges[i].is_animating;
+				edgeAttributes[idx].normalized_pos = (current_segment_start_len + segment_length) / (total_length > 0.0f ? total_length : 1.0f);
 				idx++;
 				current_segment_start_len += segment_length;
 			}
 		}
-		free(cEdges);
+		if (cEdges)
+			free(cEdges);
 	} else {
 		for (uint32_t i = 0; i < graph->edge_count; i++) {
 			vec3 p1, p2;
 			glm_vec3_scale(graph->nodes[graph->edges[i].from].position, r->layoutScale, p1);
 			glm_vec3_scale(graph->nodes[graph->edges[i].to].position, r->layoutScale, p2);
-			memcpy(evs[idx].pos, p1, 12);
-			memcpy(evs[idx].color, graph->nodes[graph->edges[i].from].color, 12);
-			evs[idx].size = graph->edges[i].size;
-			evs[idx].selected = graph->edges[i].selected;
-			evs[idx].animation_progress = graph->edges[i].animation_progress;
-			evs[idx].animation_direction = graph->edges[i].animation_direction;
-			evs[idx].is_animating = graph->edges[i].is_animating;
-			evs[idx].normalized_pos = 0.0f; // Start of the straight edge
+
+			memcpy(edgePositions[idx].pos, p1, 12);
+			memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].from].color, 12);
+			edgeAttributes[idx].size = graph->edges[i].size;
+			edgeAttributes[idx].selected = graph->edges[i].selected;
+			edgeAttributes[idx].animation_progress = graph->edges[i].animation_progress;
+			edgeAttributes[idx].animation_direction = graph->edges[i].animation_direction;
+			edgeAttributes[idx].is_animating = graph->edges[i].is_animating;
+			edgeAttributes[idx].normalized_pos = 0.0f;
 			idx++;
-			memcpy(evs[idx].pos, p2, 12);
-			memcpy(evs[idx].color, graph->nodes[graph->edges[i].to].color, 12);
-			evs[idx].size = graph->edges[i].size;
-			evs[idx].selected = graph->edges[i].selected;
-			evs[idx].animation_progress = graph->edges[i].animation_progress;
-			evs[idx].animation_direction = graph->edges[i].animation_direction;
-			evs[idx].is_animating = graph->edges[i].is_animating;
-			evs[idx].normalized_pos = 1.0f; // End of the straight edge
+
+			memcpy(edgePositions[idx].pos, p2, 12);
+			memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].to].color, 12);
+			edgeAttributes[idx].size = graph->edges[i].size;
+			edgeAttributes[idx].selected = graph->edges[i].selected;
+			edgeAttributes[idx].animation_progress = graph->edges[i].animation_progress;
+			edgeAttributes[idx].animation_direction = graph->edges[i].animation_direction;
+			edgeAttributes[idx].is_animating = graph->edges[i].is_animating;
+			edgeAttributes[idx].normalized_pos = 1.0f;
 			idx++;
 		}
 	}
 
 	r->edgeVertexCount = idx;
 
-	// PREVENT 0-byte memory maps which crash Vulkan
+	// Fast path: update positions via mapped buffer
 	if (r->edgeVertexCount > 0) {
-		updateBufferStaged(r->device, r->commandPool, r->graphicsQueue, sizeof(EdgeVertex) * r->edgeVertexCount, evs, r->edgeStagingBuffer, r->edgeStagingBufferMemory, r->edgeVertexBuffer);
+		updateBufferMapped(r->device, r->edgePositionMemory, sizeof(EdgePosition) * r->edgeVertexCount, edgePositions);
 	}
-	free(evs);
+	// Rare: update attributes via staged copy (only on graph load)
+	fprintf(stderr, "[EDGE] needsAttributeUpload=%d, edgeVertexCount=%u\n", r->needsAttributeUpload, r->edgeVertexCount);
+	if (r->needsAttributeUpload && r->edgeVertexCount > 0) {
+		fprintf(stderr, "[EDGE] Uploading %zu bytes to attribute buffer\n", sizeof(EdgeAttribute) * r->edgeVertexCount);
+		updateBufferStaged(r->device, r->commandPool, r->graphicsQueue, sizeof(EdgeAttribute) * r->edgeVertexCount, edgeAttributes, r->edgeAttributeStagingBuffer, r->edgeAttributeStagingMemory, r->edgeAttributeBuffer);
+		r->needsAttributeUpload = VK_FALSE;
+	}
+	free(edgePositions);
+	free(edgeAttributes);
 
 	uint32_t tc = 0;
 	for (uint32_t i = 0; i < r->nodeCount; i++)

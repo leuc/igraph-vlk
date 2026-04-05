@@ -104,20 +104,26 @@ typedef struct
 	VkImageView depthImageView;
 	VkFormat depthFormat;
 
-	VkBuffer instanceStagingBuffer;
-	VkDeviceMemory instanceStagingBufferMemory;
-	VkBuffer instanceBuffer;
-	VkDeviceMemory instanceBufferMemory;
+	VkBuffer nodePositionBuffer;
+	VkDeviceMemory nodePositionMemory;
+	VkBuffer nodeAttributeBuffer;
+	VkDeviceMemory nodeAttributeMemory;
+	VkBuffer nodeAttributeStagingBuffer;
+	VkDeviceMemory nodeAttributeStagingMemory;
 	uint32_t nodeCount;
 	uint32_t nodeCapacity;
 
-	VkBuffer edgeStagingBuffer;
-	VkDeviceMemory edgeStagingBufferMemory;
-	VkBuffer edgeVertexBuffer;
-	VkDeviceMemory edgeVertexBufferMemory;
+	VkBuffer edgePositionBuffer;
+	VkDeviceMemory edgePositionMemory;
+	VkBuffer edgeAttributeBuffer;
+	VkDeviceMemory edgeAttributeMemory;
+	VkBuffer edgeAttributeStagingBuffer;
+	VkDeviceMemory edgeAttributeStagingMemory;
 	uint32_t edgeCount;
 	uint32_t edgeVertexCount;
 	uint32_t edgeCapacity;
+
+	bool needsAttributeUpload;
 
 	VkBuffer labelStagingBuffer;
 	VkDeviceMemory labelStagingBufferMemory;

@@ -34,6 +34,31 @@ void updateBuffer(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, con
 	vkUnmapMemory(device, memory);
 }
 
+void updateBufferMapped(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, const void *data)
+{
+	if (size == 0)
+		return;
+	void *mapped;
+	vkMapMemory(device, memory, 0, size, 0, &mapped);
+	memcpy(mapped, data, size);
+	VkMappedMemoryRange range = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, .memory = memory, .size = size};
+	vkFlushMappedMemoryRanges(device, 1, &range);
+	vkUnmapMemory(device, memory);
+}
+
+void createMappedBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBuffer *buffer, VkDeviceMemory *memory)
+{
+	VkBufferCreateInfo info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size, .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+	vkCreateBuffer(device, &info, NULL, buffer);
+
+	VkMemoryRequirements req;
+	vkGetBufferMemoryRequirements(device, *buffer, &req);
+
+	VkMemoryAllocateInfo alloc = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = req.size, .memoryTypeIndex = findMemoryType(physicalDevice, req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)};
+	vkAllocateMemory(device, &alloc, NULL, memory);
+	vkBindBufferMemory(device, *buffer, *memory, 0);
+}
+
 void createStagingBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *stagingBuf, VkDeviceMemory *stagingMem, VkBuffer *deviceBuf, VkDeviceMemory *deviceMem)
 {
 	VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size, .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
@@ -58,6 +83,8 @@ void updateBufferStaged(VkDevice device, VkCommandPool commandPool, VkQueue queu
 	void *mapped;
 	vkMapMemory(device, stagingMem, 0, size, 0, &mapped);
 	memcpy(mapped, data, size);
+	VkMappedMemoryRange range = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, .memory = stagingMem, .size = size};
+	vkFlushMappedMemoryRanges(device, 1, &range);
 	vkUnmapMemory(device, stagingMem);
 
 	VkCommandBufferAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandPool = commandPool, .commandBufferCount = 1};
