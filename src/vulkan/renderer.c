@@ -5,12 +5,12 @@
 #include <string.h>
 
 #include "interaction/state.h"
+#include "vulkan/renderer_compute.h"
 #include "vulkan/renderer_geometry.h"
 #include "vulkan/renderer_pipelines.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
 
-#define MAX_FRAMES_IN_FLIGHT 2
 #define FONT_PATH "/usr/share/fonts/truetype/inconsolata/Inconsolata.otf"
 
 FontAtlas globalAtlas;
@@ -75,7 +75,24 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 	vkGetDeviceQueue(r->device, 0, 0, &r->presentQueue);
 	r->swapchainExtent = (VkExtent2D){3440, 1440};
 	r->swapchainFormat = VK_FORMAT_B8G8R8A8_UNORM;
-	VkSwapchainCreateInfoKHR swpInfo = {.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR, .surface = surface, .minImageCount = 2, .imageFormat = r->swapchainFormat, .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, .imageExtent = r->swapchainExtent, .imageArrayLayers = 1, .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR, .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, .presentMode = VK_PRESENT_MODE_FIFO_KHR, .clipped = VK_TRUE};
+
+	// Query supported present modes and prefer MAILBOX for higher throughput
+	uint32_t presentModeCount;
+	vkGetPhysicalDeviceSurfacePresentModesKHR(r->physicalDevice, surface, &presentModeCount, NULL);
+	VkPresentModeKHR *presentModes = malloc(sizeof(VkPresentModeKHR) * presentModeCount);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(r->physicalDevice, surface, &presentModeCount, presentModes);
+	VkPresentModeKHR chosenPresentMode = VK_PRESENT_MODE_FIFO_KHR;
+	uint32_t minImageCount = 2;
+	for (uint32_t i = 0; i < presentModeCount; i++) {
+		if (presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+			chosenPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+			minImageCount = 3;
+			break;
+		}
+	}
+	free(presentModes);
+
+	VkSwapchainCreateInfoKHR swpInfo = {.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR, .surface = surface, .minImageCount = minImageCount, .imageFormat = r->swapchainFormat, .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, .imageExtent = r->swapchainExtent, .imageArrayLayers = 1, .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR, .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, .presentMode = chosenPresentMode, .clipped = VK_TRUE};
 	vkCreateSwapchainKHR(r->device, &swpInfo, NULL, &r->swapchain);
 	vkGetSwapchainImagesKHR(r->device, r->swapchain, &r->swapchainImageCount, NULL);
 	r->swapchainImages = malloc(sizeof(VkImage) * r->swapchainImageCount);
@@ -219,14 +236,21 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 	r->numericInstanceCount = 0;
 
 	r->instanceBuffer = VK_NULL_HANDLE;
+	r->instanceStagingBuffer = VK_NULL_HANDLE;
 	r->edgeVertexBuffer = VK_NULL_HANDLE;
+	r->edgeStagingBuffer = VK_NULL_HANDLE;
 	r->labelInstanceBuffer = VK_NULL_HANDLE;
+	r->labelStagingBuffer = VK_NULL_HANDLE;
 	renderer_update_graph(r, graph);
 
 	r->uniformBuffers = malloc(sizeof(VkBuffer) * MAX_FRAMES_IN_FLIGHT);
 	r->uniformBuffersMemory = malloc(sizeof(VkDeviceMemory) * MAX_FRAMES_IN_FLIGHT);
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		createBuffer(r->device, r->physicalDevice, sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uniformBuffers[i], &r->uniformBuffersMemory[i]);
+
+	// Persistently map all UBOs to avoid per-frame map/unmap overhead
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+		vkMapMemory(r->device, r->uniformBuffersMemory[i], 0, sizeof(UniformBufferObject), 0, &r->uboMapped[i]);
 	VkDescriptorPoolSize dps[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT}};
 	VkDescriptorPoolCreateInfo dpi = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .poolSizeCount = 2, .pPoolSizes = dps, .maxSets = MAX_FRAMES_IN_FLIGHT};
 	vkCreateDescriptorPool(r->device, &dpi, NULL, &r->descriptorPool);
@@ -255,6 +279,26 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 		vkCreateSemaphore(r->device, &si, NULL, &r->renderFinishedSemaphores[i]);
 		vkCreateFence(r->device, &fi, NULL, &r->inFlightFences[i]);
 	}
+
+	// Initialize ring-buffered fences for graph updates
+	r->graphUpdateRingIndex = 0;
+	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++) {
+		vkCreateFence(r->device, &fi, NULL, &r->graphUpdateFences[i]);
+	}
+
+	// Initialize persistent compute context
+	r->computeCtx.initialized = VK_FALSE;
+	r->computeCtx.cmdPool = VK_NULL_HANDLE;
+	r->computeCtx.cmdBuf = VK_NULL_HANDLE;
+	r->computeCtx.fence = VK_NULL_HANDLE;
+	r->computeCtx.pool = VK_NULL_HANDLE;
+	r->computeCtx.nodeBuf = VK_NULL_HANDLE;
+	r->computeCtx.edgeBuf = VK_NULL_HANDLE;
+	r->computeCtx.hubBuf = VK_NULL_HANDLE;
+
+	// Initialize command buffer caching
+	r->cmdBufferValid = VK_FALSE;
+	r->lastSceneHash = 0;
 	glm_mat4_identity(r->ubo.model);
 	glm_mat4_identity(r->ubo.view);
 	glm_perspective(glm_rad(45.0f), 3440.0f / 1440.0f, 0.1f, 1000.0f, r->ubo.proj);
@@ -275,10 +319,14 @@ void renderer_draw_frame(Renderer *r)
 	vkResetFences(r->device, 1, &r->inFlightFences[r->currentFrame]);
 	uint32_t ii;
 	vkAcquireNextImageKHR(r->device, r->swapchain, UINT64_MAX, r->imageAvailableSemaphores[r->currentFrame], VK_NULL_HANDLE, &ii);
-	void *d;
-	vkMapMemory(r->device, r->uniformBuffersMemory[r->currentFrame], 0, sizeof(UniformBufferObject), 0, &d);
-	memcpy(d, &r->ubo, sizeof(UniformBufferObject));
-	vkUnmapMemory(r->device, r->uniformBuffersMemory[r->currentFrame]);
+
+	// Persistently mapped UBO - no map/unmap overhead
+	memcpy(r->uboMapped[r->currentFrame], &r->ubo, sizeof(UniformBufferObject));
+
+	// Track scene hash for potential command buffer caching
+	r->lastSceneHash = (uint64_t)r->nodeCount * 31337 + (uint64_t)r->edgeCount * 7919 + (r->showEdges ? 1 : 0) + (r->showNodes ? 2 : 0) + (r->showLabels ? 4 : 0) + (r->showUI ? 8 : 0) + (r->showSpheres ? 16 : 0) + (r->labelCharCount * 131) + (r->menuNodeCount * 257);
+	r->cmdBufferValid = VK_TRUE;
+
 	vkResetCommandBuffer(r->commandBuffers[r->currentFrame], 0);
 	VkCommandBufferBeginInfo bi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 	vkBeginCommandBuffer(r->commandBuffers[r->currentFrame], &bi);
@@ -417,16 +465,58 @@ void renderer_cleanup(Renderer *r)
 		vkDestroyBuffer(r->device, r->uniformBuffers[i], NULL);
 		vkFreeMemory(r->device, r->uniformBuffersMemory[i], NULL);
 	}
+
+	// Cleanup ring fences
+	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++) {
+		vkDestroyFence(r->device, r->graphUpdateFences[i], NULL);
+	}
+
+	// Cleanup persistent compute resources
+	if (r->computeCtx.initialized) {
+		if (r->computeCtx.fence != VK_NULL_HANDLE)
+			vkDestroyFence(r->device, r->computeCtx.fence, NULL);
+		if (r->computeCtx.cmdBuf != VK_NULL_HANDLE)
+			vkFreeCommandBuffers(r->device, r->computeCtx.cmdPool, 1, &r->computeCtx.cmdBuf);
+		if (r->computeCtx.cmdPool != VK_NULL_HANDLE)
+			vkDestroyCommandPool(r->device, r->computeCtx.cmdPool, NULL);
+		if (r->computeCtx.pool != VK_NULL_HANDLE)
+			vkDestroyDescriptorPool(r->device, r->computeCtx.pool, NULL);
+		if (r->computeCtx.nodeBuf != VK_NULL_HANDLE) {
+			vkDestroyBuffer(r->device, r->computeCtx.nodeBuf, NULL);
+			vkFreeMemory(r->device, r->computeCtx.nodeMem, NULL);
+		}
+		if (r->computeCtx.edgeBuf != VK_NULL_HANDLE) {
+			vkDestroyBuffer(r->device, r->computeCtx.edgeBuf, NULL);
+			vkFreeMemory(r->device, r->computeCtx.edgeMem, NULL);
+		}
+		if (r->computeCtx.hubBuf != VK_NULL_HANDLE) {
+			vkDestroyBuffer(r->device, r->computeCtx.hubBuf, NULL);
+			vkFreeMemory(r->device, r->computeCtx.hubMem, NULL);
+		}
+	}
+
 	if (r->labelInstanceBuffer != VK_NULL_HANDLE) {
 		vkDestroyBuffer(r->device, r->labelInstanceBuffer, NULL);
 		vkFreeMemory(r->device, r->labelInstanceBufferMemory, NULL);
+	}
+	if (r->labelStagingBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->labelStagingBuffer, NULL);
+		vkFreeMemory(r->device, r->labelStagingBufferMemory, NULL);
 	}
 	vkDestroyBuffer(r->device, r->labelVertexBuffer, NULL);
 	vkFreeMemory(r->device, r->labelVertexBufferMemory, NULL);
 	vkDestroyBuffer(r->device, r->edgeVertexBuffer, NULL);
 	vkFreeMemory(r->device, r->edgeVertexBufferMemory, NULL);
+	if (r->edgeStagingBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->edgeStagingBuffer, NULL);
+		vkFreeMemory(r->device, r->edgeStagingBufferMemory, NULL);
+	}
 	vkDestroyBuffer(r->device, r->instanceBuffer, NULL);
 	vkFreeMemory(r->device, r->instanceBufferMemory, NULL);
+	if (r->instanceStagingBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->instanceStagingBuffer, NULL);
+		vkFreeMemory(r->device, r->instanceStagingBufferMemory, NULL);
+	}
 	for (int i = 0; i < PLATONIC_COUNT; i++) {
 		vkDestroyBuffer(r->device, r->vertexBuffers[i], NULL);
 		vkFreeMemory(r->device, r->vertexBufferMemories[i], NULL);

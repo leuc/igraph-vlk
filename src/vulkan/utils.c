@@ -34,6 +34,46 @@ void updateBuffer(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, con
 	vkUnmapMemory(device, memory);
 }
 
+void createStagingBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *stagingBuf, VkDeviceMemory *stagingMem, VkBuffer *deviceBuf, VkDeviceMemory *deviceMem)
+{
+	VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size, .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+	vkCreateBuffer(device, &bufferInfo, NULL, stagingBuf);
+	VkMemoryRequirements memReqs;
+	vkGetBufferMemoryRequirements(device, *stagingBuf, &memReqs);
+	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = memReqs.size, .memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)};
+	vkAllocateMemory(device, &allocInfo, NULL, stagingMem);
+	vkBindBufferMemory(device, *stagingBuf, *stagingMem, 0);
+
+	bufferInfo.usage = usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	vkCreateBuffer(device, &bufferInfo, NULL, deviceBuf);
+	vkGetBufferMemoryRequirements(device, *deviceBuf, &memReqs);
+	allocInfo.allocationSize = memReqs.size;
+	allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	vkAllocateMemory(device, &allocInfo, NULL, deviceMem);
+	vkBindBufferMemory(device, *deviceBuf, *deviceMem, 0);
+}
+
+void updateBufferStaged(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkDeviceSize size, const void *data, VkBuffer stagingBuf, VkDeviceMemory stagingMem, VkBuffer deviceBuf)
+{
+	void *mapped;
+	vkMapMemory(device, stagingMem, 0, size, 0, &mapped);
+	memcpy(mapped, data, size);
+	vkUnmapMemory(device, stagingMem);
+
+	VkCommandBufferAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandPool = commandPool, .commandBufferCount = 1};
+	VkCommandBuffer commandBuffer;
+	vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+	vkBeginCommandBuffer(commandBuffer, &beginInfo);
+	VkBufferCopy copyRegion = {.size = size};
+	vkCmdCopyBuffer(commandBuffer, stagingBuf, deviceBuf, 1, &copyRegion);
+	vkEndCommandBuffer(commandBuffer);
+	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &commandBuffer};
+	vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+	vkQueueWaitIdle(queue);
+	vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+}
+
 void createImage(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage *image, VkDeviceMemory *imageMemory)
 {
 	VkImageCreateInfo imageInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .extent = {width, height, 1}, .mipLevels = 1, .arrayLayers = 1, .format = format, .tiling = tiling, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .usage = usage, .samples = VK_SAMPLE_COUNT_1_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};

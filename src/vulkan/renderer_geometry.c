@@ -14,18 +14,30 @@ extern FontAtlas globalAtlas;
 
 void renderer_update_graph(Renderer *r, GraphData *graph)
 {
-	vkDeviceWaitIdle(r->device);
+	// Ring-buffered fence sync instead of vkDeviceWaitIdle
+	uint32_t ringIdx = r->graphUpdateRingIndex;
+	if (r->instanceBuffer != VK_NULL_HANDLE) {
+		vkWaitForFences(r->device, 1, &r->graphUpdateFences[ringIdx], VK_TRUE, UINT64_MAX);
+		vkResetFences(r->device, 1, &r->graphUpdateFences[ringIdx]);
+	}
+
 	r->nodeCount = graph->node_count;
 	r->edgeCount = graph->edge_count;
 	if (r->instanceBuffer != VK_NULL_HANDLE) {
 		vkDestroyBuffer(r->device, r->instanceBuffer, NULL);
 		vkFreeMemory(r->device, r->instanceBufferMemory, NULL);
+		vkDestroyBuffer(r->device, r->instanceStagingBuffer, NULL);
+		vkFreeMemory(r->device, r->instanceStagingBufferMemory, NULL);
 		vkDestroyBuffer(r->device, r->edgeVertexBuffer, NULL);
 		vkFreeMemory(r->device, r->edgeVertexBufferMemory, NULL);
+		vkDestroyBuffer(r->device, r->edgeStagingBuffer, NULL);
+		vkFreeMemory(r->device, r->edgeStagingBufferMemory, NULL);
 
 		if (r->labelInstanceBuffer != VK_NULL_HANDLE) {
 			vkDestroyBuffer(r->device, r->labelInstanceBuffer, NULL);
 			vkFreeMemory(r->device, r->labelInstanceBufferMemory, NULL);
+			vkDestroyBuffer(r->device, r->labelStagingBuffer, NULL);
+			vkFreeMemory(r->device, r->labelStagingBufferMemory, NULL);
 			r->labelInstanceBuffer = VK_NULL_HANDLE;
 		}
 		if (r->sphereVertexBuffer != VK_NULL_HANDLE) {
@@ -50,11 +62,12 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 
 	r->numSpheres = 0;
 
-	createBuffer(r->device, r->physicalDevice, sizeof(Node) * r->nodeCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->instanceBuffer, &r->instanceBufferMemory);
+	// Create staging + DEVICE_LOCAL buffer pairs for dynamic geometry
+	createStagingBuffer(r->device, r->physicalDevice, sizeof(Node) * r->nodeCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->instanceStagingBuffer, &r->instanceStagingBufferMemory, &r->instanceBuffer, &r->instanceBufferMemory);
 
 	int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
 	r->edgeVertexCount = graph->edge_count * segments * 2;
-	createBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex) * r->edgeVertexCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
+	createStagingBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex) * r->edgeVertexCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->edgeStagingBuffer, &r->edgeStagingBufferMemory, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
 
 	Node *sorted = malloc(sizeof(Node) * graph->node_count);
 	uint32_t currentOffset = 0;
@@ -85,7 +98,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 		r->platonicDrawCalls[t].count = count;
 		currentOffset += count;
 	}
-	updateBuffer(r->device, r->instanceBufferMemory, sizeof(Node) * graph->node_count, sorted);
+	updateBufferStaged(r->device, r->commandPool, r->graphicsQueue, sizeof(Node) * graph->node_count, sorted, r->instanceStagingBuffer, r->instanceStagingBufferMemory, r->instanceBuffer);
 	EdgeVertex *evs = malloc(sizeof(EdgeVertex) * r->edgeVertexCount);
 	uint32_t idx = 0;
 	// Dispatch edge routing compute shader if needed
@@ -188,7 +201,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 
 	// PREVENT 0-byte memory maps which crash Vulkan
 	if (r->edgeVertexCount > 0) {
-		updateBuffer(r->device, r->edgeVertexBufferMemory, sizeof(EdgeVertex) * r->edgeVertexCount, evs);
+		updateBufferStaged(r->device, r->commandPool, r->graphicsQueue, sizeof(EdgeVertex) * r->edgeVertexCount, evs, r->edgeStagingBuffer, r->edgeStagingBufferMemory, r->edgeVertexBuffer);
 	}
 	free(evs);
 
@@ -198,7 +211,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 			tc += strlen(graph->nodes[i].label);
 	r->labelCharCount = tc;
 	if (tc > 0) {
-		createBuffer(r->device, r->physicalDevice, sizeof(LabelInstance) * tc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->labelInstanceBuffer, &r->labelInstanceBufferMemory);
+		createStagingBuffer(r->device, r->physicalDevice, sizeof(LabelInstance) * tc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->labelStagingBuffer, &r->labelStagingBufferMemory, &r->labelInstanceBuffer, &r->labelInstanceBufferMemory);
 		LabelInstance *li = malloc(sizeof(LabelInstance) * r->labelCharCount);
 		uint32_t k = 0;
 		for (uint32_t i = 0; i < graph->node_count; i++) {
@@ -235,12 +248,17 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 				k++;
 			}
 		}
-		updateBuffer(r->device, r->labelInstanceBufferMemory, sizeof(LabelInstance) * r->labelCharCount, li);
+		updateBufferStaged(r->device, r->commandPool, r->graphicsQueue, sizeof(LabelInstance) * r->labelCharCount, li, r->labelStagingBuffer, r->labelStagingBufferMemory, r->labelInstanceBuffer);
 		free(li);
 	} else {
 		r->labelInstanceBuffer = VK_NULL_HANDLE;
 	}
 	free(sorted);
+
+	// Signal the ring fence for this slot so the next update can proceed
+	// The staged uploads already completed (vkQueueWaitIdle inside updateBufferStaged)
+	// so we just need to mark the fence as done for the ring buffer to advance
+	vkQueueSubmit(r->graphicsQueue, 0, NULL, r->graphUpdateFences[ringIdx]);
 }
 
 void renderer_update_numeric_widget(Renderer *r, NumericInputWidget *widget, Camera *cam)
