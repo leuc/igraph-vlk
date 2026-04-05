@@ -56,8 +56,7 @@ typedef struct
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
 	VkPipeline graphicsPipeline;
-	VkPipeline nodeEdgePipeline; // New pipeline for node edges
-	VkPipeline spherePipeline;	 // Pipeline for semi-transparent spheres
+	VkPipeline spherePipeline; // Pipeline for semi-transparent spheres
 	VkPipeline edgePipeline;
 	VkPipeline labelPipeline;
 	VkPipeline uiPipeline;
@@ -99,6 +98,11 @@ typedef struct
 	VkDeviceMemory textureImageMemory;
 	VkImageView textureImageView;
 	VkSampler textureSampler;
+
+	VkImage depthImage;
+	VkDeviceMemory depthImageMemory;
+	VkImageView depthImageView;
+	VkFormat depthFormat;
 
 	VkBuffer instanceStagingBuffer;
 	VkDeviceMemory instanceStagingBufferMemory;

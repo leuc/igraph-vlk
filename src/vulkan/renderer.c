@@ -115,10 +115,14 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 	VkPipelineLayoutCreateInfo plyLayInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->descriptorSetLayout, .pushConstantRangeCount = 1, .pPushConstantRanges = &pushConstantRange};
 	vkCreatePipelineLayout(r->device, &plyLayInfo, NULL, &r->pipelineLayout);
 	VkAttachmentDescription cAtt = {.format = r->swapchainFormat, .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE, .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR};
+	VkAttachmentDescription dAtt = {.format = VK_FORMAT_D32_SFLOAT, .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
 	VkAttachmentReference cAttRef = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-	VkSubpassDescription sub = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS, .colorAttachmentCount = 1, .pColorAttachments = &cAttRef};
-	VkRenderPassCreateInfo rpInfo = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, .attachmentCount = 1, .pAttachments = &cAtt, .subpassCount = 1, .pSubpasses = &sub};
+	VkAttachmentReference dAttRef = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+	VkSubpassDescription sub = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS, .colorAttachmentCount = 1, .pColorAttachments = &cAttRef, .pDepthStencilAttachment = &dAttRef};
+	VkAttachmentDescription atts[] = {cAtt, dAtt};
+	VkRenderPassCreateInfo rpInfo = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, .attachmentCount = 2, .pAttachments = atts, .subpassCount = 1, .pSubpasses = &sub};
 	vkCreateRenderPass(r->device, &rpInfo, NULL, &r->renderPass);
+	r->depthFormat = VK_FORMAT_D32_SFLOAT;
 
 	VkCommandPoolCreateInfo cpI = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = 0};
 	vkCreateCommandPool(r->device, &cpI, NULL, &r->commandPool);
@@ -157,12 +161,20 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 	VkSamplerCreateInfo sampI = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = VK_FILTER_LINEAR, .minFilter = VK_FILTER_LINEAR, .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR, .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE};
 	vkCreateSampler(r->device, &sampI, NULL, &r->textureSampler);
 
+	// Create depth image for early-Z rejection
+	r->depthFormat = VK_FORMAT_D32_SFLOAT;
+	createImage(r->device, r->physicalDevice, 3440, 1440, r->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->depthImage, &r->depthImageMemory);
+	VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->depthImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
+	vkCreateImageView(r->device, &depthViewInfo, NULL, &r->depthImageView);
+	transitionImageLayout(r->device, r->commandPool, r->graphicsQueue, r->depthImage, r->depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
 	// Call out to the newly split pipelines file
 	renderer_create_pipelines(r);
 
 	r->framebuffers = malloc(sizeof(VkFramebuffer) * r->swapchainImageCount);
 	for (uint32_t i = 0; i < r->swapchainImageCount; i++) {
-		VkFramebufferCreateInfo fbi = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = r->renderPass, .attachmentCount = 1, .pAttachments = &r->swapchainImageViews[i], .width = 3440, .height = 1440, .layers = 1};
+		VkImageView attachments[] = {r->swapchainImageViews[i], r->depthImageView};
+		VkFramebufferCreateInfo fbi = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = r->renderPass, .attachmentCount = 2, .pAttachments = attachments, .width = 3440, .height = 1440, .layers = 1};
 		vkCreateFramebuffer(r->device, &fbi, NULL, &r->framebuffers[i]);
 	}
 
@@ -330,8 +342,10 @@ void renderer_draw_frame(Renderer *r)
 	vkResetCommandBuffer(r->commandBuffers[r->currentFrame], 0);
 	VkCommandBufferBeginInfo bi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 	vkBeginCommandBuffer(r->commandBuffers[r->currentFrame], &bi);
-	VkClearValue cv = {{{0.01f, 0.01f, 0.02f, 1.0f}}};
-	VkRenderPassBeginInfo rpi = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, NULL, r->renderPass, r->framebuffers[ii], {{0, 0}, {3440, 1440}}, 1, &cv};
+	VkClearValue clearValues[2];
+	clearValues[0].color = (VkClearColorValue){0.01f, 0.01f, 0.02f, 1.0f};
+	clearValues[1].depthStencil = (VkClearDepthStencilValue){1.0f, 0};
+	VkRenderPassBeginInfo rpi = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, NULL, r->renderPass, r->framebuffers[ii], {{0, 0}, {3440, 1440}}, 2, clearValues};
 	vkCmdBeginRenderPass(r->commandBuffers[r->currentFrame], &rpi, VK_SUBPASS_CONTENTS_INLINE);
 	vkCmdBindDescriptorSets(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[r->currentFrame], 0, NULL);
 	if (r->showEdges && r->edgeCount > 0) {
@@ -341,22 +355,9 @@ void renderer_draw_frame(Renderer *r)
 		vkCmdDraw(r->commandBuffers[r->currentFrame], r->edgeVertexCount, 1, 0, 0);
 	}
 	if (r->showNodes && r->nodeCount > 0) {
-		float alpha_face = 0.5f;
-		vkCmdPushConstants(r->commandBuffers[r->currentFrame], r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_face);
+		float alpha_node = 1.0f;
+		vkCmdPushConstants(r->commandBuffers[r->currentFrame], r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_node);
 		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->graphicsPipeline);
-		for (int i = 0; i < PLATONIC_COUNT; i++) {
-			if (r->platonicDrawCalls[i].count == 0)
-				continue;
-			VkBuffer vbs[] = {r->vertexBuffers[i], r->instanceBuffer};
-			VkDeviceSize vos[] = {0, 0};
-			vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, vbs, vos);
-			vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
-			vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->platonicIndexCounts[i], r->platonicDrawCalls[i].count, 0, 0, r->platonicDrawCalls[i].firstInstance);
-		}
-
-		float alpha_edge = 1.0f;
-		vkCmdPushConstants(r->commandBuffers[r->currentFrame], r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_edge);
-		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->nodeEdgePipeline);
 		for (int i = 0; i < PLATONIC_COUNT; i++) {
 			if (r->platonicDrawCalls[i].count == 0)
 				continue;
@@ -573,6 +574,9 @@ void renderer_cleanup(Renderer *r)
 
 	vkDestroyCommandPool(r->device, r->commandPool, NULL);
 	vkDestroyDescriptorPool(r->device, r->descriptorPool, NULL);
+	vkDestroyImageView(r->device, r->depthImageView, NULL);
+	vkDestroyImage(r->device, r->depthImage, NULL);
+	vkFreeMemory(r->device, r->depthImageMemory, NULL);
 	vkDestroySampler(r->device, r->textureSampler, NULL);
 	vkDestroyImageView(r->device, r->textureImageView, NULL);
 	vkDestroyImage(r->device, r->textureImage, NULL);
@@ -587,7 +591,6 @@ void renderer_cleanup(Renderer *r)
 	vkDestroyPipeline(r->device, r->uiPipeline, NULL);
 	vkDestroyPipeline(r->device, r->labelPipeline, NULL);
 	vkDestroyPipeline(r->device, r->edgePipeline, NULL);
-	vkDestroyPipeline(r->device, r->nodeEdgePipeline, NULL);
 	vkDestroyPipeline(r->device, r->graphicsPipeline, NULL);
 	vkDestroyPipelineLayout(r->device, r->pipelineLayout, NULL);
 	vkDestroyDescriptorSetLayout(r->device, r->descriptorSetLayout, NULL);

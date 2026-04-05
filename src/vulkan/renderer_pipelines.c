@@ -42,15 +42,12 @@ int renderer_create_pipelines(Renderer *r)
 	VkVertexInputAttributeDescription na[] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0}, {1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12}, {2, 0, VK_FORMAT_R32_SFLOAT, 24}, {3, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Node, position)}, {4, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Node, color)}, {5, 1, VK_FORMAT_R32_SFLOAT, offsetof(Node, size)}, {6, 1, VK_FORMAT_R32_SFLOAT, offsetof(Node, glow)}, {7, 1, VK_FORMAT_R32_SINT, offsetof(Node, degree)}, {8, 1, VK_FORMAT_R32_SFLOAT, offsetof(Node, selected)}};
 	VkPipelineVertexInputStateCreateInfo nvi = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 2, .pVertexBindingDescriptions = nb, .vertexAttributeDescriptionCount = 9, .pVertexAttributeDescriptions = na};
 	VkPipelineInputAssemblyStateCreateInfo niAs = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
-	VkGraphicsPipelineCreateInfo pInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = nstages, .pVertexInputState = &nvi, .pInputAssemblyState = &niAs, .pViewportState = &vpS, .pRasterizationState = &ras, .pMultisampleState = &mul, .pColorBlendState = &colS, .layout = r->pipelineLayout, .renderPass = r->renderPass};
-	vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &pInfo, NULL, &r->graphicsPipeline);
 
-	// Create pipeline for node edges (wireframe)
-	VkPipelineRasterizationStateCreateInfo rasLine = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO, .polygonMode = VK_POLYGON_MODE_LINE, .lineWidth = 2.0f, .cullMode = VK_CULL_MODE_NONE, .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE};
-	VkPipelineColorBlendAttachmentState colB_no_blend = {.colorWriteMask = 0xF, .blendEnable = VK_FALSE};
-	VkPipelineColorBlendStateCreateInfo colS_no_blend = {.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO, .attachmentCount = 1, .pAttachments = &colB_no_blend};
-	VkGraphicsPipelineCreateInfo linePInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = nstages, .pVertexInputState = &nvi, .pInputAssemblyState = &niAs, .pViewportState = &vpS, .pRasterizationState = &rasLine, .pMultisampleState = &mul, .pColorBlendState = &colS_no_blend, .layout = r->pipelineLayout, .renderPass = r->renderPass};
-	vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &linePInfo, NULL, &r->nodeEdgePipeline);
+	// Depth-stencil for opaque nodes: test + write for early-Z
+	VkPipelineDepthStencilStateCreateInfo nodeDS = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO, .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_TRUE, .depthCompareOp = VK_COMPARE_OP_LESS};
+
+	VkGraphicsPipelineCreateInfo pInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = nstages, .pVertexInputState = &nvi, .pInputAssemblyState = &niAs, .pViewportState = &vpS, .pRasterizationState = &ras, .pMultisampleState = &mul, .pColorBlendState = &colS, .pDepthStencilState = &nodeDS, .layout = r->pipelineLayout, .renderPass = r->renderPass};
+	vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &pInfo, NULL, &r->graphicsPipeline);
 
 	VkShaderModule svMod, sfMod;
 	create_shader_module(r->device, SPHERE_VERT_SHADER_PATH, &svMod);
@@ -80,7 +77,8 @@ int renderer_create_pipelines(Renderer *r)
 	VkVertexInputAttributeDescription ea[] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0}, {1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12}, {2, 0, VK_FORMAT_R32_SFLOAT, 24}, {3, 0, VK_FORMAT_R32_SFLOAT, 28}, {4, 0, VK_FORMAT_R32_SFLOAT, offsetof(EdgeVertex, animation_progress)}, {5, 0, VK_FORMAT_R32_SINT, offsetof(EdgeVertex, animation_direction)}, {6, 0, VK_FORMAT_R32_SINT, offsetof(EdgeVertex, is_animating)}, {7, 0, VK_FORMAT_R32_SFLOAT, offsetof(EdgeVertex, normalized_pos)}};
 	VkPipelineVertexInputStateCreateInfo evi = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 1, .pVertexBindingDescriptions = eb, .vertexAttributeDescriptionCount = 8, .pVertexAttributeDescriptions = ea};
 	VkPipelineInputAssemblyStateCreateInfo eia = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST};
-	VkGraphicsPipelineCreateInfo epInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = estages, .pVertexInputState = &evi, .pInputAssemblyState = &eia, .pViewportState = &vpS, .pRasterizationState = &ras, .pMultisampleState = &mul, .pColorBlendState = &colS, .layout = r->pipelineLayout, .renderPass = r->renderPass};
+	VkPipelineDepthStencilStateCreateInfo edgeDS = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO, .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_TRUE, .depthCompareOp = VK_COMPARE_OP_LESS};
+	VkGraphicsPipelineCreateInfo epInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = estages, .pVertexInputState = &evi, .pInputAssemblyState = &eia, .pViewportState = &vpS, .pRasterizationState = &ras, .pMultisampleState = &mul, .pColorBlendState = &colS, .pDepthStencilState = &edgeDS, .layout = r->pipelineLayout, .renderPass = r->renderPass};
 	vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &epInfo, NULL, &r->edgePipeline);
 
 	VkPipelineInputAssemblyStateCreateInfo lias = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP};
