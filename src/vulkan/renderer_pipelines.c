@@ -160,8 +160,8 @@ int renderer_create_pipelines(Renderer *r)
 	// Use triangle list for quads (two triangles per instance)
 	VkPipelineInputAssemblyStateCreateInfo menuIA = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
 
-	// Depth: enable test and writes for solid 3D objects
-	VkPipelineDepthStencilStateCreateInfo menuDS = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO, .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_TRUE, .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL};
+	// Depth: enable test, disable write for alpha-blended menu elements
+	VkPipelineDepthStencilStateCreateInfo menuDS = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO, .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_FALSE, .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL};
 
 	VkGraphicsPipelineCreateInfo menuPInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
 											  .stageCount = 2,
