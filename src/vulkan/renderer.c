@@ -368,13 +368,11 @@ void renderer_draw_frame(Renderer *r)
 		VkDeviceSize offsets[] = {0, 0};
 		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, edgeBuffers, offsets);
 		vkCmdDraw(r->commandBuffers[r->currentFrame], r->edgeVertexCount, 1, 0, 0);
-		fprintf(stderr, "[EDGE] Drawing %u vertices from pos=%p attr=%p\n", r->edgeVertexCount, (void *)r->edgePositionBuffer, (void *)r->edgeAttributeBuffer);
 	}
 	if (r->showNodes && r->nodeCount > 0) {
 		float alpha_node = 1.0f;
 		vkCmdPushConstants(r->commandBuffers[r->currentFrame], r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_node);
 		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->graphicsPipeline);
-		fprintf(stderr, "[NODE] Drawing %u nodes, pos=%p attr=%p\n", r->nodeCount, (void *)r->nodePositionBuffer, (void *)r->nodeAttributeBuffer);
 		for (int i = 0; i < PLATONIC_COUNT; i++) {
 			if (r->platonicDrawCalls[i].count == 0)
 				continue;

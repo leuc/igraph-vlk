@@ -251,15 +251,13 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	if (r->edgeVertexCount > 0) {
 		updateBufferMapped(r->device, r->edgePositionMemory, sizeof(EdgePosition) * r->edgeVertexCount, edgePositions);
 	}
-	// Rare: update attributes via staged copy (only on graph load)
-	fprintf(stderr, "[EDGE] needsAttributeUpload=%d, edgeVertexCount=%u\n", r->needsAttributeUpload, r->edgeVertexCount);
+	// Rare: update attributes via staged copy (only when flag set)
 	if (r->needsAttributeUpload && r->edgeVertexCount > 0) {
-		fprintf(stderr, "[EDGE] Uploading %zu bytes to attribute buffer\n", sizeof(EdgeAttribute) * r->edgeVertexCount);
 		updateBufferStaged(r->device, r->commandPool, r->graphicsQueue, sizeof(EdgeAttribute) * r->edgeVertexCount, edgeAttributes, r->edgeAttributeStagingBuffer, r->edgeAttributeStagingMemory, r->edgeAttributeBuffer);
-		r->needsAttributeUpload = VK_FALSE;
 	}
 	free(edgePositions);
 	free(edgeAttributes);
+	r->needsAttributeUpload = VK_FALSE;
 
 	uint32_t tc = 0;
 	for (uint32_t i = 0; i < r->nodeCount; i++)
