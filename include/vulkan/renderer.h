@@ -109,6 +109,7 @@ typedef struct
 	VkBuffer instanceBuffer;
 	VkDeviceMemory instanceBufferMemory;
 	uint32_t nodeCount;
+	uint32_t nodeCapacity;
 
 	VkBuffer edgeStagingBuffer;
 	VkDeviceMemory edgeStagingBufferMemory;
@@ -116,6 +117,7 @@ typedef struct
 	VkDeviceMemory edgeVertexBufferMemory;
 	uint32_t edgeCount;
 	uint32_t edgeVertexCount;
+	uint32_t edgeCapacity;
 
 	VkBuffer labelStagingBuffer;
 	VkDeviceMemory labelStagingBufferMemory;

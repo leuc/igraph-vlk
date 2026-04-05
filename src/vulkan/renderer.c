@@ -249,8 +249,10 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 
 	r->instanceBuffer = VK_NULL_HANDLE;
 	r->instanceStagingBuffer = VK_NULL_HANDLE;
+	r->nodeCapacity = 0;
 	r->edgeVertexBuffer = VK_NULL_HANDLE;
 	r->edgeStagingBuffer = VK_NULL_HANDLE;
+	r->edgeCapacity = 0;
 	r->labelInstanceBuffer = VK_NULL_HANDLE;
 	r->labelStagingBuffer = VK_NULL_HANDLE;
 	renderer_update_graph(r, graph);

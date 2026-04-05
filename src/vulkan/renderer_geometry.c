@@ -23,52 +23,65 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 
 	r->nodeCount = graph->node_count;
 	r->edgeCount = graph->edge_count;
-	if (r->instanceBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->device, r->instanceBuffer, NULL);
-		vkFreeMemory(r->device, r->instanceBufferMemory, NULL);
-		vkDestroyBuffer(r->device, r->instanceStagingBuffer, NULL);
-		vkFreeMemory(r->device, r->instanceStagingBufferMemory, NULL);
-		vkDestroyBuffer(r->device, r->edgeVertexBuffer, NULL);
-		vkFreeMemory(r->device, r->edgeVertexBufferMemory, NULL);
-		vkDestroyBuffer(r->device, r->edgeStagingBuffer, NULL);
-		vkFreeMemory(r->device, r->edgeStagingBufferMemory, NULL);
 
-		if (r->labelInstanceBuffer != VK_NULL_HANDLE) {
-			vkDestroyBuffer(r->device, r->labelInstanceBuffer, NULL);
-			vkFreeMemory(r->device, r->labelInstanceBufferMemory, NULL);
-			vkDestroyBuffer(r->device, r->labelStagingBuffer, NULL);
-			vkFreeMemory(r->device, r->labelStagingBufferMemory, NULL);
-			r->labelInstanceBuffer = VK_NULL_HANDLE;
+	// Pre-allocate or grow node instance buffer
+	if (r->nodeCapacity < graph->node_count) {
+		if (r->instanceBuffer != VK_NULL_HANDLE) {
+			vkDestroyBuffer(r->device, r->instanceBuffer, NULL);
+			vkFreeMemory(r->device, r->instanceBufferMemory, NULL);
+			vkDestroyBuffer(r->device, r->instanceStagingBuffer, NULL);
+			vkFreeMemory(r->device, r->instanceStagingBufferMemory, NULL);
 		}
-		if (r->sphereVertexBuffer != VK_NULL_HANDLE) {
-			vkDestroyBuffer(r->device, r->sphereVertexBuffer, NULL);
-			vkFreeMemory(r->device, r->sphereVertexBufferMemory, NULL);
-			r->sphereVertexBuffer = VK_NULL_HANDLE;
+		createStagingBuffer(r->device, r->physicalDevice, sizeof(Node) * graph->node_count, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->instanceStagingBuffer, &r->instanceStagingBufferMemory, &r->instanceBuffer, &r->instanceBufferMemory);
+		r->nodeCapacity = graph->node_count;
+	}
+
+	// Pre-allocate or grow edge vertex buffer
+	int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
+	r->edgeVertexCount = graph->edge_count * segments * 2;
+	uint32_t neededEdgeVerts = r->edgeVertexCount;
+	if (r->edgeCapacity < neededEdgeVerts) {
+		if (r->edgeVertexBuffer != VK_NULL_HANDLE) {
+			vkDestroyBuffer(r->device, r->edgeVertexBuffer, NULL);
+			vkFreeMemory(r->device, r->edgeVertexBufferMemory, NULL);
+			vkDestroyBuffer(r->device, r->edgeStagingBuffer, NULL);
+			vkFreeMemory(r->device, r->edgeStagingBufferMemory, NULL);
 		}
-		if (r->sphereIndexBuffer != VK_NULL_HANDLE) {
-			vkDestroyBuffer(r->device, r->sphereIndexBuffer, NULL);
-			vkFreeMemory(r->device, r->sphereIndexBufferMemory, NULL);
-			r->sphereIndexBuffer = VK_NULL_HANDLE;
-		}
-		if (r->sphereIndexCounts) {
-			free(r->sphereIndexCounts);
-			r->sphereIndexCounts = NULL;
-		}
-		if (r->sphereIndexOffsets) {
-			free(r->sphereIndexOffsets);
-			r->sphereIndexOffsets = NULL;
-		}
+		createStagingBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex) * neededEdgeVerts, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->edgeStagingBuffer, &r->edgeStagingBufferMemory, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
+		r->edgeCapacity = neededEdgeVerts;
+	}
+
+	// Destroy label/sphere buffers if they exist (these are always rebuilt)
+	if (r->labelInstanceBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->labelInstanceBuffer, NULL);
+		vkFreeMemory(r->device, r->labelInstanceBufferMemory, NULL);
+		vkDestroyBuffer(r->device, r->labelStagingBuffer, NULL);
+		vkFreeMemory(r->device, r->labelStagingBufferMemory, NULL);
+		r->labelInstanceBuffer = VK_NULL_HANDLE;
+		r->labelStagingBuffer = VK_NULL_HANDLE;
+	}
+	if (r->sphereVertexBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->sphereVertexBuffer, NULL);
+		vkFreeMemory(r->device, r->sphereVertexBufferMemory, NULL);
+		r->sphereVertexBuffer = VK_NULL_HANDLE;
+	}
+	if (r->sphereIndexBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->sphereIndexBuffer, NULL);
+		vkFreeMemory(r->device, r->sphereIndexBufferMemory, NULL);
+		r->sphereIndexBuffer = VK_NULL_HANDLE;
+	}
+	if (r->sphereIndexCounts) {
+		free(r->sphereIndexCounts);
+		r->sphereIndexCounts = NULL;
+	}
+	if (r->sphereIndexOffsets) {
+		free(r->sphereIndexOffsets);
+		r->sphereIndexOffsets = NULL;
 	}
 
 	r->numSpheres = 0;
 
-	// Create staging + DEVICE_LOCAL buffer pairs for dynamic geometry
-	createStagingBuffer(r->device, r->physicalDevice, sizeof(Node) * r->nodeCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->instanceStagingBuffer, &r->instanceStagingBufferMemory, &r->instanceBuffer, &r->instanceBufferMemory);
-
-	int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
-	r->edgeVertexCount = graph->edge_count * segments * 2;
-	createStagingBuffer(r->device, r->physicalDevice, sizeof(EdgeVertex) * r->edgeVertexCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->edgeStagingBuffer, &r->edgeStagingBufferMemory, &r->edgeVertexBuffer, &r->edgeVertexBufferMemory);
-
+	// Build node instances sorted by platonic type
 	Node *sorted = malloc(sizeof(Node) * graph->node_count);
 	uint32_t currentOffset = 0;
 	for (int t = 0; t < PLATONIC_COUNT; t++) {
@@ -99,6 +112,8 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 		currentOffset += count;
 	}
 	updateBufferStaged(r->device, r->commandPool, r->graphicsQueue, sizeof(Node) * graph->node_count, sorted, r->instanceStagingBuffer, r->instanceStagingBufferMemory, r->instanceBuffer);
+	free(sorted);
+
 	EdgeVertex *evs = malloc(sizeof(EdgeVertex) * r->edgeVertexCount);
 	uint32_t idx = 0;
 	// Dispatch edge routing compute shader if needed
@@ -253,11 +268,8 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	} else {
 		r->labelInstanceBuffer = VK_NULL_HANDLE;
 	}
-	free(sorted);
 
 	// Signal the ring fence for this slot so the next update can proceed
-	// The staged uploads already completed (vkQueueWaitIdle inside updateBufferStaged)
-	// so we just need to mark the fence as done for the ring buffer to advance
 	vkQueueSubmit(r->graphicsQueue, 0, NULL, r->graphUpdateFences[ringIdx]);
 }
 
