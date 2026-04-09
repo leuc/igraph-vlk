@@ -16,6 +16,14 @@
 #define MAX_INTER_ITERS 100
 #define HILBERT_RES 32768
 
+static double geodesic_distance(double ux, double uy, double uz, double nx, double ny, double nz, double radius)
+{
+	double cos_angle = ux * nx + uy * ny + uz * nz;
+	if (cos_angle > 1.0) cos_angle = 1.0;
+	if (cos_angle < -1.0) cos_angle = -1.0;
+	return radius * acos(cos_angle);
+}
+
 typedef struct
 {
 	int comm_id;
@@ -146,6 +154,7 @@ static double calculate_move_delta_intra(const igraph_t *ig, const igraph_matrix
 {
 	int v = ctx->grids[target_sphere_s].slot_occupant[target_slot_k];
 	double current_score = 0.0, potential_score = 0.0;
+	double radius = ctx->grids[target_sphere_s].radius;
 
 	double tx = ctx->grids[target_sphere_s].slots[target_slot_k].x;
 	double ty = ctx->grids[target_sphere_s].slots[target_slot_k].y;
@@ -155,6 +164,14 @@ static double calculate_move_delta_intra(const igraph_t *ig, const igraph_matrix
 	double ux = ctx->grids[target_sphere_s].slots[u_slot].x;
 	double uy = ctx->grids[target_sphere_s].slots[u_slot].y;
 	double uz = ctx->grids[target_sphere_s].slots[u_slot].z;
+
+	double tx_n = tx / radius;
+	double ty_n = ty / radius;
+	double tz_n = tz / radius;
+
+	double ux_n = ux / radius;
+	double uy_n = uy / radius;
+	double uz_n = uz / radius;
 
 	igraph_vector_int_t neis;
 	igraph_vector_int_init(&neis, 0);
@@ -168,8 +185,13 @@ static double calculate_move_delta_intra(const igraph_t *ig, const igraph_matrix
 			continue;
 
 		double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
-		current_score += (ux - nx) * (ux - nx) + (uy - ny) * (uy - ny) + (uz - nz) * (uz - nz);
-		potential_score += (tx - nx) * (tx - nx) + (ty - ny) * (ty - ny) + (tz - nz) * (tz - nz);
+		double nr = sqrt(nx * nx + ny * ny + nz * nz);
+		if (nr < 0.001)
+			continue;
+		double nx_n = nx / nr, ny_n = ny / nr, nz_n = nz / nr;
+
+		current_score += geodesic_distance(ux_n, uy_n, uz_n, nx_n, ny_n, nz_n, radius);
+		potential_score += geodesic_distance(tx_n, ty_n, tz_n, nx_n, ny_n, nz_n, radius);
 	}
 	igraph_vector_int_destroy(&neis);
 
@@ -184,8 +206,13 @@ static double calculate_move_delta_intra(const igraph_t *ig, const igraph_matrix
 				continue;
 
 			double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
-			current_score += (tx - nx) * (tx - nx) + (ty - ny) * (ty - ny) + (tz - nz) * (tz - nz);
-			potential_score += (ux - nx) * (ux - nx) + (uy - ny) * (uy - ny) + (uz - nz) * (uz - nz);
+			double nr = sqrt(nx * nx + ny * ny + nz * nz);
+			if (nr < 0.001)
+				continue;
+			double nx_n = nx / nr, ny_n = ny / nr, nz_n = nz / nr;
+
+			current_score += geodesic_distance(tx_n, ty_n, tz_n, nx_n, ny_n, nz_n, radius);
+			potential_score += geodesic_distance(ux_n, uy_n, uz_n, nx_n, ny_n, nz_n, radius);
 		}
 		igraph_vector_int_destroy(&neis);
 	}
@@ -196,16 +223,23 @@ static double calculate_move_delta_inter(const igraph_t *ig, const igraph_matrix
 {
 	int v = ctx->grids[target_sphere_s].slot_occupant[target_slot_k];
 	double current_score = 0.0, potential_score = 0.0;
-	double r = ctx->grids[target_sphere_s].radius;
+	double target_r = ctx->grids[target_sphere_s].radius;
 
-	double tx = ctx->grids[target_sphere_s].slots[target_slot_k].x / r;
-	double ty = ctx->grids[target_sphere_s].slots[target_slot_k].y / r;
-	double tz = ctx->grids[target_sphere_s].slots[target_slot_k].z / r;
+	double tx = ctx->grids[target_sphere_s].slots[target_slot_k].x;
+	double ty = ctx->grids[target_sphere_s].slots[target_slot_k].y;
+	double tz = ctx->grids[target_sphere_s].slots[target_slot_k].z;
 
 	int u_slot = ctx->node_to_slot_idx[u];
-	double ux = ctx->grids[target_sphere_s].slots[u_slot].x / r;
-	double uy = ctx->grids[target_sphere_s].slots[u_slot].y / r;
-	double uz = ctx->grids[target_sphere_s].slots[u_slot].z / r;
+	int u_sphere = ctx->node_to_sphere_id[u];
+	double u_r = ctx->grids[u_sphere].radius;
+	double ux = ctx->grids[u_sphere].slots[u_slot].x;
+	double uy = ctx->grids[u_sphere].slots[u_slot].y;
+	double uz = ctx->grids[u_sphere].slots[u_slot].z;
+
+	double avg_radius = (target_r + u_r) * 0.5;
+
+	double tx_n = tx / target_r, ty_n = ty / target_r, tz_n = tz / target_r;
+	double ux_n = ux / u_r, uy_n = uy / u_r, uz_n = uz / u_r;
 
 	igraph_vector_int_t neis;
 	igraph_vector_int_init(&neis, 0);
@@ -217,16 +251,16 @@ static double calculate_move_delta_inter(const igraph_t *ig, const igraph_matrix
 		if (neighbor == v)
 			continue;
 
+		int n_sphere = ctx->node_to_sphere_id[neighbor];
+		double n_r = ctx->grids[n_sphere].radius;
 		double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
 		double n_len = sqrt(nx * nx + ny * ny + nz * nz);
 		if (n_len < 0.001)
 			continue;
-		nx /= n_len;
-		ny /= n_len;
-		nz /= n_len;
+		double nx_n = nx / n_len, ny_n = ny / n_len, nz_n = nz / n_len;
 
-		current_score += (1.0 - (ux * nx + uy * ny + uz * nz));
-		potential_score += (1.0 - (tx * nx + ty * ny + tz * nz));
+		current_score += geodesic_distance(ux_n, uy_n, uz_n, nx_n, ny_n, nz_n, avg_radius);
+		potential_score += geodesic_distance(tx_n, ty_n, tz_n, nx_n, ny_n, nz_n, avg_radius);
 	}
 	igraph_vector_int_destroy(&neis);
 
@@ -240,16 +274,16 @@ static double calculate_move_delta_inter(const igraph_t *ig, const igraph_matrix
 			if (neighbor == u)
 				continue;
 
+			int n_sphere = ctx->node_to_sphere_id[neighbor];
+			double n_r = ctx->grids[n_sphere].radius;
 			double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
 			double n_len = sqrt(nx * nx + ny * ny + nz * nz);
 			if (n_len < 0.001)
 				continue;
-			nx /= n_len;
-			ny /= n_len;
-			nz /= n_len;
+			double nx_n = nx / n_len, ny_n = ny / n_len, nz_n = nz / n_len;
 
-			current_score += (1.0 - (tx * nx + ty * ny + tz * nz));
-			potential_score += (1.0 - (ux * nx + uy * ny + uz * nz));
+			current_score += geodesic_distance(tx_n, ty_n, tz_n, nx_n, ny_n, nz_n, avg_radius);
+			potential_score += geodesic_distance(ux_n, uy_n, uz_n, nx_n, ny_n, nz_n, avg_radius);
 		}
 		igraph_vector_int_destroy(&neis);
 	}
