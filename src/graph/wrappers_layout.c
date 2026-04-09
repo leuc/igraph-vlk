@@ -1317,7 +1317,6 @@ void *compute_igraph_layout_yifan_hu(igraph_t *graph)
 	igraph_bool_t adaptive_cooling = 1;
 	igraph_real_t tolerance = 0.001;
 	igraph_quadtree_scheme_t quadtree_scheme = IGRAPH_QUADTREE_NORMAL;
-	igraph_int_t max_qtree_level = 10;
 	igraph_bool_t beautify_leaves = 0;
 
 	igraph_error_t code = igraph_layout_yifan_hu(graph, result,
@@ -1329,7 +1328,6 @@ void *compute_igraph_layout_yifan_hu(igraph_t *graph)
 												 adaptive_cooling,		// adaptive cooling
 												 tolerance,				// tolerance
 												 quadtree_scheme,		// quadtree
-												 max_qtree_level,		// max depth
 												 beautify_leaves,		// beautify
 												 NULL,					// weights
 												 NULL, NULL, NULL, NULL // bounds
@@ -1367,10 +1365,9 @@ void *compute_igraph_layout_yifan_hu_3d(igraph_t *graph)
 	igraph_bool_t adaptive_cooling = 1;
 	igraph_real_t tolerance = 0.001;
 	igraph_quadtree_scheme_t quadtree_scheme = IGRAPH_QUADTREE_NORMAL;
-	igraph_int_t max_qtree_level = 10;
 	igraph_bool_t beautify_leaves = 0;
 
-	igraph_error_t code = igraph_layout_yifan_hu_3d(graph, result, 0, maxiter, repulsive_exponent, natural_length, step, adaptive_cooling, tolerance, quadtree_scheme, max_qtree_level, beautify_leaves,
+	igraph_error_t code = igraph_layout_yifan_hu_3d(graph, result, 0, maxiter, repulsive_exponent, natural_length, step, adaptive_cooling, tolerance, quadtree_scheme,  beautify_leaves,
 													NULL // weights
 	);
 
