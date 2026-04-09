@@ -430,7 +430,8 @@ void apply_community_membership(ExecutionContext *ctx, void *result_data)
 	free(colors);
 	free(cluster_sizes);
 
-	// Refresh renderer
+	// Mark attributes dirty and refresh renderer
+	renderer->needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(renderer, data);
 
 	printf("[apply_community_membership] Communities applied - %d communities found\n", cluster_count);

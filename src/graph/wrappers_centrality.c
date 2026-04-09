@@ -267,6 +267,7 @@ void apply_centrality_scores(ExecutionContext *ctx, void *result_data)
 	}
 
 	// Refresh renderer
+	renderer->needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(renderer, data);
 
 	printf("[apply_centrality_scores] Centrality applied\n");

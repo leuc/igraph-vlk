@@ -10,6 +10,9 @@
 
 struct AppContext;
 
+#define MAX_FRAMES_IN_FLIGHT 2
+#define GRAPH_UPDATE_RING_SIZE 3
+
 typedef enum { ROUTING_MODE_STRAIGHT = 0, ROUTING_MODE_SPHERICAL_PCB = 1 } EdgeRoutingMode;
 
 typedef struct
@@ -18,6 +21,22 @@ typedef struct
 	mat4 view;
 	mat4 proj;
 } UniformBufferObject;
+
+typedef struct
+{
+	VkBuffer nodeBuf;
+	VkDeviceMemory nodeMem;
+	VkBuffer edgeBuf;
+	VkDeviceMemory edgeMem;
+	VkBuffer hubBuf;
+	VkDeviceMemory hubMem;
+	VkDescriptorPool pool;
+	VkDescriptorSet descSet;
+	VkCommandBuffer cmdBuf;
+	VkCommandPool cmdPool;
+	VkFence fence;
+	VkBool32 initialized;
+} ComputeContext;
 
 typedef struct
 {
@@ -37,8 +56,7 @@ typedef struct
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
 	VkPipeline graphicsPipeline;
-	VkPipeline nodeEdgePipeline; // New pipeline for node edges
-	VkPipeline spherePipeline;	 // Pipeline for semi-transparent spheres
+	VkPipeline spherePipeline; // Pipeline for semi-transparent spheres
 	VkPipeline edgePipeline;
 	VkPipeline labelPipeline;
 	VkPipeline uiPipeline;
@@ -71,6 +89,7 @@ typedef struct
 
 	VkBuffer *uniformBuffers;
 	VkDeviceMemory *uniformBuffersMemory;
+	void *uboMapped[MAX_FRAMES_IN_FLIGHT];
 	VkDescriptorPool descriptorPool;
 	VkDescriptorSet *descriptorSets;
 	uint32_t polyhedronIndexCount;
@@ -80,15 +99,34 @@ typedef struct
 	VkImageView textureImageView;
 	VkSampler textureSampler;
 
-	VkBuffer instanceBuffer;
-	VkDeviceMemory instanceBufferMemory;
-	uint32_t nodeCount;
+	VkImage depthImage;
+	VkDeviceMemory depthImageMemory;
+	VkImageView depthImageView;
+	VkFormat depthFormat;
 
-	VkBuffer edgeVertexBuffer;
-	VkDeviceMemory edgeVertexBufferMemory;
+	VkBuffer nodePositionBuffer;
+	VkDeviceMemory nodePositionMemory;
+	VkBuffer nodeAttributeBuffer;
+	VkDeviceMemory nodeAttributeMemory;
+	VkBuffer nodeAttributeStagingBuffer;
+	VkDeviceMemory nodeAttributeStagingMemory;
+	uint32_t nodeCount;
+	uint32_t nodeCapacity;
+
+	VkBuffer edgePositionBuffer;
+	VkDeviceMemory edgePositionMemory;
+	VkBuffer edgeAttributeBuffer;
+	VkDeviceMemory edgeAttributeMemory;
+	VkBuffer edgeAttributeStagingBuffer;
+	VkDeviceMemory edgeAttributeStagingMemory;
 	uint32_t edgeCount;
 	uint32_t edgeVertexCount;
+	uint32_t edgeCapacity;
 
+	bool needsAttributeUpload;
+
+	VkBuffer labelStagingBuffer;
+	VkDeviceMemory labelStagingBufferMemory;
 	VkBuffer labelVertexBuffer;
 	VkDeviceMemory labelVertexBufferMemory;
 	VkBuffer labelInstanceBuffer;
@@ -150,6 +188,17 @@ typedef struct
 
 	// App context pointer for state checking
 	struct AppContext *app_ctx_ptr;
+
+	// Ring-buffered sync for graph updates
+	VkFence graphUpdateFences[GRAPH_UPDATE_RING_SIZE];
+	uint32_t graphUpdateRingIndex;
+
+	// Persistent compute context
+	ComputeContext computeCtx;
+
+	// Command buffer caching
+	VkBool32 cmdBufferValid;
+	uint64_t lastSceneHash;
 
 	// Layered Spheres (Transparent)
 	VkBuffer sphereVertexBuffer;

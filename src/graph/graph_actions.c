@@ -19,6 +19,7 @@ void graph_action_update_layout(AppState *state)
 void graph_action_run_clustering(AppState *state)
 {
 	graph_cluster(&state->current_graph, state->current_cluster);
+	state->renderer.needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(&state->renderer, &state->current_graph);
 }
 
@@ -31,18 +32,21 @@ void graph_action_run_iteration(AppState *state)
 void graph_action_filter_degree(AppState *state, int min_deg)
 {
 	graph_filter_degree(&state->current_graph, min_deg);
+	state->renderer.needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(&state->renderer, &state->current_graph);
 }
 
 void graph_action_filter_coreness(AppState *state, int min_core)
 {
 	graph_filter_coreness(&state->current_graph, min_core);
+	state->renderer.needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(&state->renderer, &state->current_graph);
 }
 
 void graph_action_highlight_infrastructure(AppState *state)
 {
 	graph_highlight_infrastructure(&state->current_graph);
+	state->renderer.needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(&state->renderer, &state->current_graph);
 }
 
@@ -87,6 +91,7 @@ void graph_action_cycle_community_arrangement(AppState *state)
 		graph_action_update_layout(state);
 	} else {
 		graph_apply_community_arrangement(&state->current_graph, state->current_comm_arrangement);
+		state->renderer.needsAttributeUpload = VK_TRUE;
 		renderer_update_graph(&state->renderer, &state->current_graph);
 	}
 }

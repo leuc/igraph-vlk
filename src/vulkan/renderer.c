@@ -5,12 +5,12 @@
 #include <string.h>
 
 #include "interaction/state.h"
+#include "vulkan/renderer_compute.h"
 #include "vulkan/renderer_geometry.h"
 #include "vulkan/renderer_pipelines.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
 
-#define MAX_FRAMES_IN_FLIGHT 2
 #define FONT_PATH "/usr/share/fonts/truetype/inconsolata/Inconsolata.otf"
 
 FontAtlas globalAtlas;
@@ -75,7 +75,24 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 	vkGetDeviceQueue(r->device, 0, 0, &r->presentQueue);
 	r->swapchainExtent = (VkExtent2D){3440, 1440};
 	r->swapchainFormat = VK_FORMAT_B8G8R8A8_UNORM;
-	VkSwapchainCreateInfoKHR swpInfo = {.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR, .surface = surface, .minImageCount = 2, .imageFormat = r->swapchainFormat, .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, .imageExtent = r->swapchainExtent, .imageArrayLayers = 1, .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR, .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, .presentMode = VK_PRESENT_MODE_FIFO_KHR, .clipped = VK_TRUE};
+
+	// Query supported present modes and prefer MAILBOX for higher throughput
+	uint32_t presentModeCount;
+	vkGetPhysicalDeviceSurfacePresentModesKHR(r->physicalDevice, surface, &presentModeCount, NULL);
+	VkPresentModeKHR *presentModes = malloc(sizeof(VkPresentModeKHR) * presentModeCount);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(r->physicalDevice, surface, &presentModeCount, presentModes);
+	VkPresentModeKHR chosenPresentMode = VK_PRESENT_MODE_FIFO_KHR;
+	uint32_t minImageCount = 2;
+	for (uint32_t i = 0; i < presentModeCount; i++) {
+		if (presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+			chosenPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+			minImageCount = 3;
+			break;
+		}
+	}
+	free(presentModes);
+
+	VkSwapchainCreateInfoKHR swpInfo = {.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR, .surface = surface, .minImageCount = minImageCount, .imageFormat = r->swapchainFormat, .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, .imageExtent = r->swapchainExtent, .imageArrayLayers = 1, .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR, .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, .presentMode = chosenPresentMode, .clipped = VK_TRUE};
 	vkCreateSwapchainKHR(r->device, &swpInfo, NULL, &r->swapchain);
 	vkGetSwapchainImagesKHR(r->device, r->swapchain, &r->swapchainImageCount, NULL);
 	r->swapchainImages = malloc(sizeof(VkImage) * r->swapchainImageCount);
@@ -98,10 +115,14 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 	VkPipelineLayoutCreateInfo plyLayInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->descriptorSetLayout, .pushConstantRangeCount = 1, .pPushConstantRanges = &pushConstantRange};
 	vkCreatePipelineLayout(r->device, &plyLayInfo, NULL, &r->pipelineLayout);
 	VkAttachmentDescription cAtt = {.format = r->swapchainFormat, .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE, .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR};
+	VkAttachmentDescription dAtt = {.format = VK_FORMAT_D32_SFLOAT, .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
 	VkAttachmentReference cAttRef = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-	VkSubpassDescription sub = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS, .colorAttachmentCount = 1, .pColorAttachments = &cAttRef};
-	VkRenderPassCreateInfo rpInfo = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, .attachmentCount = 1, .pAttachments = &cAtt, .subpassCount = 1, .pSubpasses = &sub};
+	VkAttachmentReference dAttRef = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+	VkSubpassDescription sub = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS, .colorAttachmentCount = 1, .pColorAttachments = &cAttRef, .pDepthStencilAttachment = &dAttRef};
+	VkAttachmentDescription atts[] = {cAtt, dAtt};
+	VkRenderPassCreateInfo rpInfo = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, .attachmentCount = 2, .pAttachments = atts, .subpassCount = 1, .pSubpasses = &sub};
 	vkCreateRenderPass(r->device, &rpInfo, NULL, &r->renderPass);
+	r->depthFormat = VK_FORMAT_D32_SFLOAT;
 
 	VkCommandPoolCreateInfo cpI = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = 0};
 	vkCreateCommandPool(r->device, &cpI, NULL, &r->commandPool);
@@ -140,12 +161,20 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 	VkSamplerCreateInfo sampI = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = VK_FILTER_LINEAR, .minFilter = VK_FILTER_LINEAR, .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR, .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE};
 	vkCreateSampler(r->device, &sampI, NULL, &r->textureSampler);
 
+	// Create depth image for early-Z rejection
+	r->depthFormat = VK_FORMAT_D32_SFLOAT;
+	createImage(r->device, r->physicalDevice, 3440, 1440, r->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->depthImage, &r->depthImageMemory);
+	VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->depthImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
+	vkCreateImageView(r->device, &depthViewInfo, NULL, &r->depthImageView);
+	transitionImageLayout(r->device, r->commandPool, r->graphicsQueue, r->depthImage, r->depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
 	// Call out to the newly split pipelines file
 	renderer_create_pipelines(r);
 
 	r->framebuffers = malloc(sizeof(VkFramebuffer) * r->swapchainImageCount);
 	for (uint32_t i = 0; i < r->swapchainImageCount; i++) {
-		VkFramebufferCreateInfo fbi = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = r->renderPass, .attachmentCount = 1, .pAttachments = &r->swapchainImageViews[i], .width = 3440, .height = 1440, .layers = 1};
+		VkImageView attachments[] = {r->swapchainImageViews[i], r->depthImageView};
+		VkFramebufferCreateInfo fbi = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = r->renderPass, .attachmentCount = 2, .pAttachments = attachments, .width = 3440, .height = 1440, .layers = 1};
 		vkCreateFramebuffer(r->device, &fbi, NULL, &r->framebuffers[i]);
 	}
 
@@ -218,15 +247,36 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 	r->numericInstanceBufferMemory = VK_NULL_HANDLE;
 	r->numericInstanceCount = 0;
 
-	r->instanceBuffer = VK_NULL_HANDLE;
-	r->edgeVertexBuffer = VK_NULL_HANDLE;
+	r->nodePositionBuffer = VK_NULL_HANDLE;
+	r->nodePositionMemory = VK_NULL_HANDLE;
+	r->nodeAttributeBuffer = VK_NULL_HANDLE;
+	r->nodeAttributeMemory = VK_NULL_HANDLE;
+	r->nodeAttributeStagingBuffer = VK_NULL_HANDLE;
+	r->nodeAttributeStagingMemory = VK_NULL_HANDLE;
+	r->nodeCapacity = 0;
+
+	r->edgePositionBuffer = VK_NULL_HANDLE;
+	r->edgePositionMemory = VK_NULL_HANDLE;
+	r->edgeAttributeBuffer = VK_NULL_HANDLE;
+	r->edgeAttributeMemory = VK_NULL_HANDLE;
+	r->edgeAttributeStagingBuffer = VK_NULL_HANDLE;
+	r->edgeAttributeStagingMemory = VK_NULL_HANDLE;
+	r->edgeCapacity = 0;
+
+	r->needsAttributeUpload = VK_TRUE;
+
 	r->labelInstanceBuffer = VK_NULL_HANDLE;
+	r->labelStagingBuffer = VK_NULL_HANDLE;
 	renderer_update_graph(r, graph);
 
 	r->uniformBuffers = malloc(sizeof(VkBuffer) * MAX_FRAMES_IN_FLIGHT);
 	r->uniformBuffersMemory = malloc(sizeof(VkDeviceMemory) * MAX_FRAMES_IN_FLIGHT);
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		createBuffer(r->device, r->physicalDevice, sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uniformBuffers[i], &r->uniformBuffersMemory[i]);
+
+	// Persistently map all UBOs to avoid per-frame map/unmap overhead
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+		vkMapMemory(r->device, r->uniformBuffersMemory[i], 0, sizeof(UniformBufferObject), 0, &r->uboMapped[i]);
 	VkDescriptorPoolSize dps[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT}};
 	VkDescriptorPoolCreateInfo dpi = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .poolSizeCount = 2, .pPoolSizes = dps, .maxSets = MAX_FRAMES_IN_FLIGHT};
 	vkCreateDescriptorPool(r->device, &dpi, NULL, &r->descriptorPool);
@@ -255,6 +305,26 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 		vkCreateSemaphore(r->device, &si, NULL, &r->renderFinishedSemaphores[i]);
 		vkCreateFence(r->device, &fi, NULL, &r->inFlightFences[i]);
 	}
+
+	// Initialize ring-buffered fences for graph updates
+	r->graphUpdateRingIndex = 0;
+	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++) {
+		vkCreateFence(r->device, &fi, NULL, &r->graphUpdateFences[i]);
+	}
+
+	// Initialize persistent compute context
+	r->computeCtx.initialized = VK_FALSE;
+	r->computeCtx.cmdPool = VK_NULL_HANDLE;
+	r->computeCtx.cmdBuf = VK_NULL_HANDLE;
+	r->computeCtx.fence = VK_NULL_HANDLE;
+	r->computeCtx.pool = VK_NULL_HANDLE;
+	r->computeCtx.nodeBuf = VK_NULL_HANDLE;
+	r->computeCtx.edgeBuf = VK_NULL_HANDLE;
+	r->computeCtx.hubBuf = VK_NULL_HANDLE;
+
+	// Initialize command buffer caching
+	r->cmdBufferValid = VK_FALSE;
+	r->lastSceneHash = 0;
 	glm_mat4_identity(r->ubo.model);
 	glm_mat4_identity(r->ubo.view);
 	glm_perspective(glm_rad(45.0f), 3440.0f / 1440.0f, 0.1f, 1000.0f, r->ubo.proj);
@@ -275,46 +345,40 @@ void renderer_draw_frame(Renderer *r)
 	vkResetFences(r->device, 1, &r->inFlightFences[r->currentFrame]);
 	uint32_t ii;
 	vkAcquireNextImageKHR(r->device, r->swapchain, UINT64_MAX, r->imageAvailableSemaphores[r->currentFrame], VK_NULL_HANDLE, &ii);
-	void *d;
-	vkMapMemory(r->device, r->uniformBuffersMemory[r->currentFrame], 0, sizeof(UniformBufferObject), 0, &d);
-	memcpy(d, &r->ubo, sizeof(UniformBufferObject));
-	vkUnmapMemory(r->device, r->uniformBuffersMemory[r->currentFrame]);
+
+	// Persistently mapped UBO - no map/unmap overhead
+	memcpy(r->uboMapped[r->currentFrame], &r->ubo, sizeof(UniformBufferObject));
+
+	// Track scene hash for potential command buffer caching
+	r->lastSceneHash = (uint64_t)r->nodeCount * 31337 + (uint64_t)r->edgeCount * 7919 + (r->showEdges ? 1 : 0) + (r->showNodes ? 2 : 0) + (r->showLabels ? 4 : 0) + (r->showUI ? 8 : 0) + (r->showSpheres ? 16 : 0) + (r->labelCharCount * 131) + (r->menuNodeCount * 257);
+	r->cmdBufferValid = VK_TRUE;
+
 	vkResetCommandBuffer(r->commandBuffers[r->currentFrame], 0);
 	VkCommandBufferBeginInfo bi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 	vkBeginCommandBuffer(r->commandBuffers[r->currentFrame], &bi);
-	VkClearValue cv = {{{0.01f, 0.01f, 0.02f, 1.0f}}};
-	VkRenderPassBeginInfo rpi = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, NULL, r->renderPass, r->framebuffers[ii], {{0, 0}, {3440, 1440}}, 1, &cv};
+	VkClearValue clearValues[2];
+	clearValues[0].color = (VkClearColorValue){0.01f, 0.01f, 0.02f, 1.0f};
+	clearValues[1].depthStencil = (VkClearDepthStencilValue){1.0f, 0};
+	VkRenderPassBeginInfo rpi = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, NULL, r->renderPass, r->framebuffers[ii], {{0, 0}, {3440, 1440}}, 2, clearValues};
 	vkCmdBeginRenderPass(r->commandBuffers[r->currentFrame], &rpi, VK_SUBPASS_CONTENTS_INLINE);
 	vkCmdBindDescriptorSets(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[r->currentFrame], 0, NULL);
 	if (r->showEdges && r->edgeCount > 0) {
 		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->edgePipeline);
-		VkDeviceSize off = 0;
-		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1, &r->edgeVertexBuffer, &off);
+		VkBuffer edgeBuffers[] = {r->edgePositionBuffer, r->edgeAttributeBuffer};
+		VkDeviceSize offsets[] = {0, 0};
+		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, edgeBuffers, offsets);
 		vkCmdDraw(r->commandBuffers[r->currentFrame], r->edgeVertexCount, 1, 0, 0);
 	}
 	if (r->showNodes && r->nodeCount > 0) {
-		float alpha_face = 0.5f;
-		vkCmdPushConstants(r->commandBuffers[r->currentFrame], r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_face);
+		float alpha_node = 1.0f;
+		vkCmdPushConstants(r->commandBuffers[r->currentFrame], r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_node);
 		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->graphicsPipeline);
 		for (int i = 0; i < PLATONIC_COUNT; i++) {
 			if (r->platonicDrawCalls[i].count == 0)
 				continue;
-			VkBuffer vbs[] = {r->vertexBuffers[i], r->instanceBuffer};
-			VkDeviceSize vos[] = {0, 0};
-			vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, vbs, vos);
-			vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
-			vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->platonicIndexCounts[i], r->platonicDrawCalls[i].count, 0, 0, r->platonicDrawCalls[i].firstInstance);
-		}
-
-		float alpha_edge = 1.0f;
-		vkCmdPushConstants(r->commandBuffers[r->currentFrame], r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_edge);
-		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->nodeEdgePipeline);
-		for (int i = 0; i < PLATONIC_COUNT; i++) {
-			if (r->platonicDrawCalls[i].count == 0)
-				continue;
-			VkBuffer vbs[] = {r->vertexBuffers[i], r->instanceBuffer};
-			VkDeviceSize vos[] = {0, 0};
-			vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, vbs, vos);
+			VkBuffer vbs[] = {r->vertexBuffers[i], r->nodePositionBuffer, r->nodeAttributeBuffer};
+			VkDeviceSize vos[] = {0, 0, 0};
+			vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 3, vbs, vos);
 			vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
 			vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->platonicIndexCounts[i], r->platonicDrawCalls[i].count, 0, 0, r->platonicDrawCalls[i].firstInstance);
 		}
@@ -417,16 +481,64 @@ void renderer_cleanup(Renderer *r)
 		vkDestroyBuffer(r->device, r->uniformBuffers[i], NULL);
 		vkFreeMemory(r->device, r->uniformBuffersMemory[i], NULL);
 	}
+
+	// Cleanup ring fences
+	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++) {
+		vkDestroyFence(r->device, r->graphUpdateFences[i], NULL);
+	}
+
+	// Cleanup persistent compute resources
+	if (r->computeCtx.initialized) {
+		if (r->computeCtx.fence != VK_NULL_HANDLE)
+			vkDestroyFence(r->device, r->computeCtx.fence, NULL);
+		if (r->computeCtx.cmdBuf != VK_NULL_HANDLE)
+			vkFreeCommandBuffers(r->device, r->computeCtx.cmdPool, 1, &r->computeCtx.cmdBuf);
+		if (r->computeCtx.cmdPool != VK_NULL_HANDLE)
+			vkDestroyCommandPool(r->device, r->computeCtx.cmdPool, NULL);
+		if (r->computeCtx.pool != VK_NULL_HANDLE)
+			vkDestroyDescriptorPool(r->device, r->computeCtx.pool, NULL);
+		if (r->computeCtx.nodeBuf != VK_NULL_HANDLE) {
+			vkDestroyBuffer(r->device, r->computeCtx.nodeBuf, NULL);
+			vkFreeMemory(r->device, r->computeCtx.nodeMem, NULL);
+		}
+		if (r->computeCtx.edgeBuf != VK_NULL_HANDLE) {
+			vkDestroyBuffer(r->device, r->computeCtx.edgeBuf, NULL);
+			vkFreeMemory(r->device, r->computeCtx.edgeMem, NULL);
+		}
+		if (r->computeCtx.hubBuf != VK_NULL_HANDLE) {
+			vkDestroyBuffer(r->device, r->computeCtx.hubBuf, NULL);
+			vkFreeMemory(r->device, r->computeCtx.hubMem, NULL);
+		}
+	}
+
 	if (r->labelInstanceBuffer != VK_NULL_HANDLE) {
 		vkDestroyBuffer(r->device, r->labelInstanceBuffer, NULL);
 		vkFreeMemory(r->device, r->labelInstanceBufferMemory, NULL);
 	}
+	if (r->labelStagingBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->labelStagingBuffer, NULL);
+		vkFreeMemory(r->device, r->labelStagingBufferMemory, NULL);
+	}
 	vkDestroyBuffer(r->device, r->labelVertexBuffer, NULL);
 	vkFreeMemory(r->device, r->labelVertexBufferMemory, NULL);
-	vkDestroyBuffer(r->device, r->edgeVertexBuffer, NULL);
-	vkFreeMemory(r->device, r->edgeVertexBufferMemory, NULL);
-	vkDestroyBuffer(r->device, r->instanceBuffer, NULL);
-	vkFreeMemory(r->device, r->instanceBufferMemory, NULL);
+
+	vkDestroyBuffer(r->device, r->edgePositionBuffer, NULL);
+	vkFreeMemory(r->device, r->edgePositionMemory, NULL);
+	vkDestroyBuffer(r->device, r->edgeAttributeBuffer, NULL);
+	vkFreeMemory(r->device, r->edgeAttributeMemory, NULL);
+	if (r->edgeAttributeStagingBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->edgeAttributeStagingBuffer, NULL);
+		vkFreeMemory(r->device, r->edgeAttributeStagingMemory, NULL);
+	}
+
+	vkDestroyBuffer(r->device, r->nodePositionBuffer, NULL);
+	vkFreeMemory(r->device, r->nodePositionMemory, NULL);
+	vkDestroyBuffer(r->device, r->nodeAttributeBuffer, NULL);
+	vkFreeMemory(r->device, r->nodeAttributeMemory, NULL);
+	if (r->nodeAttributeStagingBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->device, r->nodeAttributeStagingBuffer, NULL);
+		vkFreeMemory(r->device, r->nodeAttributeStagingMemory, NULL);
+	}
 	for (int i = 0; i < PLATONIC_COUNT; i++) {
 		vkDestroyBuffer(r->device, r->vertexBuffers[i], NULL);
 		vkFreeMemory(r->device, r->vertexBufferMemories[i], NULL);
@@ -483,6 +595,9 @@ void renderer_cleanup(Renderer *r)
 
 	vkDestroyCommandPool(r->device, r->commandPool, NULL);
 	vkDestroyDescriptorPool(r->device, r->descriptorPool, NULL);
+	vkDestroyImageView(r->device, r->depthImageView, NULL);
+	vkDestroyImage(r->device, r->depthImage, NULL);
+	vkFreeMemory(r->device, r->depthImageMemory, NULL);
 	vkDestroySampler(r->device, r->textureSampler, NULL);
 	vkDestroyImageView(r->device, r->textureImageView, NULL);
 	vkDestroyImage(r->device, r->textureImage, NULL);
@@ -497,7 +612,6 @@ void renderer_cleanup(Renderer *r)
 	vkDestroyPipeline(r->device, r->uiPipeline, NULL);
 	vkDestroyPipeline(r->device, r->labelPipeline, NULL);
 	vkDestroyPipeline(r->device, r->edgePipeline, NULL);
-	vkDestroyPipeline(r->device, r->nodeEdgePipeline, NULL);
 	vkDestroyPipeline(r->device, r->graphicsPipeline, NULL);
 	vkDestroyPipelineLayout(r->device, r->pipelineLayout, NULL);
 	vkDestroyDescriptorSetLayout(r->device, r->descriptorSetLayout, NULL);

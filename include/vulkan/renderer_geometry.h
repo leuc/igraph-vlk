@@ -15,6 +15,37 @@ typedef struct
 	int is_animating;	  // Use int for GLSL bool
 	float normalized_pos; // 0.0 to 1.0 along the edge
 } EdgeVertex;
+
+// Split buffers for large graphs - position updated every layout, attributes rarely
+typedef struct
+{
+	vec3 pos;
+} NodePosition; // 12 bytes - updated every layout
+
+typedef struct
+{
+	vec3 color;
+	float size;
+	int degree;
+	float glow;
+	float selected;
+} NodeAttribute; // ~24 bytes - rarely updated
+
+typedef struct
+{
+	vec3 pos;
+} EdgePosition; // 12 bytes - updated every layout
+
+typedef struct
+{
+	vec3 color;
+	float size;
+	float selected;
+	float animation_progress;
+	int animation_direction;
+	int is_animating;
+	float normalized_pos;
+} EdgeAttribute; // ~32 bytes - rarely updated
 typedef struct
 {
 	vec3 pos;

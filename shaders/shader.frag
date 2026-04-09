@@ -27,8 +27,14 @@ void main()
 	float r = 6.2831853071 / float(N);
 	float d = cos(floor(0.5 + a / r) * r - a) * length(uv);
 
-	// Cut the shape out of the tile!
-	if (d > 0.6) {
+	// Edge ring: bright highlight near SDF boundary
+	float edge_width = 0.04;
+	float edge_inner = 0.6 - edge_width;
+	float edge_outer = 0.6 + edge_width;
+	float edge_factor = smoothstep(edge_inner, 0.6, d) - smoothstep(0.6, edge_outer, d);
+
+	// Cut the shape out (including edge ring)
+	if (d > edge_outer) {
 		discard;
 	}
 
@@ -38,15 +44,22 @@ void main()
 	vec3 baseColor = fragColor * diff;
 	vec3 glowColor = fragColor * fragGlow * 1.5;
 
+	// Edge ring color (brighter, slightly desaturated)
+	vec3 edgeColor = mix(baseColor, vec3(1.0), 0.6);
+
+	// Blend interior with edge ring
+	vec3 finalColor = mix(baseColor + glowColor, edgeColor * 1.5, edge_factor);
+
 	// Circuit board border styling
-	if (d > 0.5) {
-		baseColor *= 0.5; // Darken the outer edge to frame the node
+	if (d > 0.5 && d <= 0.6) {
+		finalColor *= 0.7;
 	}
 
-	float finalAlpha = pc.alpha;
+	float finalAlpha = 1.0;
 	if (fragSelected > 0.5) {
 		finalAlpha = 1.0;
+		finalColor = mix(finalColor, vec3(1.0, 1.0, 0.0), 0.3);
 	}
 
-	outColor = vec4(baseColor + glowColor, finalAlpha);
+	outColor = vec4(finalColor, finalAlpha * pc.alpha);
 }

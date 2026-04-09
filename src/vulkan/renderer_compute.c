@@ -11,6 +11,14 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 		return VK_SUCCESS;
 	}
 
+	ComputeContext *ctx = &r->computeCtx;
+
+	// Wait for previous compute job to complete
+	if (ctx->initialized && ctx->fence != VK_NULL_HANDLE) {
+		vkWaitForFences(r->device, 1, &ctx->fence, VK_TRUE, UINT64_MAX);
+		vkResetFences(r->device, 1, &ctx->fence);
+	}
+
 	// Prepare compute shader input data
 	CompNode *cNodes = malloc(sizeof(CompNode) * graph->node_count);
 	CompEdge *cEdges = malloc(sizeof(CompEdge) * graph->edge_count);
@@ -30,105 +38,106 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 		cEdges[i].pathLength = 0;
 	}
 
-	// Create storage buffers for compute shader
-	VkBuffer nBuf, eBuf, hBuf;
-	VkDeviceMemory nMem, eMem, hMem;
+	// Allocate persistent resources on first use
+	if (!ctx->initialized) {
+		VkCommandPoolCreateInfo cpInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = 0};
+		vkCreateCommandPool(r->device, &cpInfo, NULL, &ctx->cmdPool);
 
-	createBuffer(r->device, r->physicalDevice, sizeof(CompNode) * graph->node_count, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &nBuf, &nMem);
-	createBuffer(r->device, r->physicalDevice, sizeof(CompEdge) * graph->edge_count, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &eBuf, &eMem);
-	createBuffer(r->device, r->physicalDevice, sizeof(CompHub), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &hBuf, &hMem);
+		VkCommandBufferAllocateInfo cbAlloc = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = ctx->cmdPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
+		vkAllocateCommandBuffers(r->device, &cbAlloc, &ctx->cmdBuf);
+
+		VkFenceCreateInfo fi = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
+		vkCreateFence(r->device, &fi, NULL, &ctx->fence);
+
+		VkDescriptorPoolSize dps = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3};
+		VkDescriptorPoolCreateInfo dpInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &dps};
+		vkCreateDescriptorPool(r->device, &dpInfo, NULL, &ctx->pool);
+
+		VkDescriptorSetAllocateInfo dsAlloc = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = ctx->pool, .descriptorSetCount = 1, .pSetLayouts = &r->computeDescriptorSetLayout};
+		vkAllocateDescriptorSets(r->device, &dsAlloc, &ctx->descSet);
+
+		ctx->initialized = VK_TRUE;
+	}
+
+	// Create or resize storage buffers if needed
+	VkDeviceSize nodeSize = sizeof(CompNode) * graph->node_count;
+	VkDeviceSize edgeSize = sizeof(CompEdge) * graph->edge_count;
+
+	if (ctx->nodeBuf != VK_NULL_HANDLE) {
+		// Check if buffers are large enough
+		VkMemoryRequirements memReqs;
+		vkGetBufferMemoryRequirements(r->device, ctx->nodeBuf, &memReqs);
+		if (memReqs.size < nodeSize) {
+			vkDestroyBuffer(r->device, ctx->nodeBuf, NULL);
+			vkFreeMemory(r->device, ctx->nodeMem, NULL);
+			ctx->nodeBuf = VK_NULL_HANDLE;
+		}
+	}
+	if (ctx->nodeBuf == VK_NULL_HANDLE) {
+		createBuffer(r->device, r->physicalDevice, nodeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->nodeBuf, &ctx->nodeMem);
+	}
+
+	if (ctx->edgeBuf != VK_NULL_HANDLE) {
+		VkMemoryRequirements memReqs;
+		vkGetBufferMemoryRequirements(r->device, ctx->edgeBuf, &memReqs);
+		if (memReqs.size < edgeSize) {
+			vkDestroyBuffer(r->device, ctx->edgeBuf, NULL);
+			vkFreeMemory(r->device, ctx->edgeMem, NULL);
+			ctx->edgeBuf = VK_NULL_HANDLE;
+		}
+	}
+	if (ctx->edgeBuf == VK_NULL_HANDLE) {
+		createBuffer(r->device, r->physicalDevice, edgeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->edgeBuf, &ctx->edgeMem);
+	}
+
+	if (ctx->hubBuf == VK_NULL_HANDLE) {
+		createBuffer(r->device, r->physicalDevice, sizeof(CompHub), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->hubBuf, &ctx->hubMem);
+	}
 
 	// Upload node and edge data to GPU
-	updateBuffer(r->device, nMem, sizeof(CompNode) * graph->node_count, cNodes);
-	updateBuffer(r->device, eMem, sizeof(CompEdge) * graph->edge_count, cEdges);
-
-	// Create transient descriptor pool and set for compute
-	VkDescriptorPoolSize dps = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3};
-	VkDescriptorPoolCreateInfo dpInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, NULL, 0, 1, 1, &dps};
-	VkDescriptorPool cPool;
-	VkResult result = vkCreateDescriptorPool(r->device, &dpInfo, NULL, &cPool);
-	if (result != VK_SUCCESS) {
-		free(cNodes);
-		free(cEdges);
-		return result;
-	}
-
-	VkDescriptorSetAllocateInfo dsAlloc = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, NULL, cPool, 1, &r->computeDescriptorSetLayout};
-	VkDescriptorSet cSet;
-	result = vkAllocateDescriptorSets(r->device, &dsAlloc, &cSet);
-	if (result != VK_SUCCESS) {
-		vkDestroyDescriptorPool(r->device, cPool, NULL);
-		free(cNodes);
-		free(cEdges);
-		return result;
-	}
+	updateBuffer(r->device, ctx->nodeMem, nodeSize, cNodes);
+	updateBuffer(r->device, ctx->edgeMem, edgeSize, cEdges);
 
 	// Update descriptor set with storage buffers
-	VkDescriptorBufferInfo nbi = {nBuf, 0, VK_WHOLE_SIZE}, ebi = {eBuf, 0, VK_WHOLE_SIZE}, hbi = {hBuf, 0, VK_WHOLE_SIZE};
-	VkWriteDescriptorSet writes[3] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, cSet, 0, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &nbi, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, cSet, 1, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &ebi, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, cSet, 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &hbi, NULL}};
+	VkDescriptorBufferInfo nbi = {ctx->nodeBuf, 0, VK_WHOLE_SIZE}, ebi = {ctx->edgeBuf, 0, VK_WHOLE_SIZE}, hbi = {ctx->hubBuf, 0, VK_WHOLE_SIZE};
+	VkWriteDescriptorSet writes[3] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 0, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &nbi, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 1, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &ebi, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &hbi, NULL}};
 	vkUpdateDescriptorSets(r->device, 3, writes, 0, NULL);
 
-	// Allocate and record compute command buffer
-	VkCommandBufferAllocateInfo cbAlloc = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, NULL, r->commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
-	VkCommandBuffer cBuf;
-	result = vkAllocateCommandBuffers(r->device, &cbAlloc, &cBuf);
-	if (result != VK_SUCCESS) {
-		vkDestroyDescriptorPool(r->device, cPool, NULL);
-		free(cNodes);
-		free(cEdges);
-		return result;
-	}
+	// Record command buffer
+	vkResetCommandBuffer(ctx->cmdBuf, 0);
+	VkCommandBufferBeginInfo bInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+	vkBeginCommandBuffer(ctx->cmdBuf, &bInfo);
 
-	VkCommandBufferBeginInfo bInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL};
-	vkBeginCommandBuffer(cBuf, &bInfo);
+	vkCmdBindPipeline(ctx->cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computeSphericalPipeline);
+	vkCmdBindDescriptorSets(ctx->cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computePipelineLayout, 0, 1, &ctx->descSet, 0, NULL);
 
-	// Bind the spherical PCB compute pipeline
-	vkCmdBindPipeline(cBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computeSphericalPipeline);
-
-	vkCmdBindDescriptorSets(cBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computePipelineLayout, 0, 1, &cSet, 0, NULL);
-
-	// Push constants for compute shader
 	struct
 	{
 		int maxE;
 		float baseR;
 		int numHubs;
 	} pcVals = {graph->edge_count, 5.0f * r->layoutScale, 0};
-	vkCmdPushConstants(cBuf, r->computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcVals), &pcVals);
+	vkCmdPushConstants(ctx->cmdBuf, r->computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcVals), &pcVals);
 
-	// Dispatch compute shader
-	vkCmdDispatch(cBuf, (graph->edge_count + 255) / 256, 1, 1);
-	vkEndCommandBuffer(cBuf);
+	vkCmdDispatch(ctx->cmdBuf, (graph->edge_count + 255) / 256, 1, 1);
+	vkEndCommandBuffer(ctx->cmdBuf);
 
-	// Submit and wait for completion
-	VkSubmitInfo sInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO, NULL, 0, NULL, NULL, 1, &cBuf, 0, NULL};
-	result = vkQueueSubmit(r->graphicsQueue, 1, &sInfo, VK_NULL_HANDLE);
+	// Submit with fence (no vkQueueWaitIdle)
+	VkSubmitInfo sInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &ctx->cmdBuf};
+	VkResult result = vkQueueSubmit(r->graphicsQueue, 1, &sInfo, ctx->fence);
 	if (result != VK_SUCCESS) {
-		vkFreeCommandBuffers(r->device, r->commandPool, 1, &cBuf);
-		vkDestroyDescriptorPool(r->device, cPool, NULL);
 		free(cNodes);
 		free(cEdges);
 		return result;
 	}
 
-	vkQueueWaitIdle(r->graphicsQueue);
+	// Wait for completion and read back
+	vkWaitForFences(r->device, 1, &ctx->fence, VK_TRUE, UINT64_MAX);
 
-	// Read back computed edge results
 	void *mapped;
-	vkMapMemory(r->device, eMem, 0, VK_WHOLE_SIZE, 0, &mapped);
+	vkMapMemory(r->device, ctx->edgeMem, 0, edgeSize, 0, &mapped);
 	memcpy(edgeResults, mapped, sizeof(CompEdge) * graph->edge_count);
-	vkUnmapMemory(r->device, eMem);
-
-	// Cleanup
-	vkDestroyBuffer(r->device, hBuf, NULL);
-	vkFreeMemory(r->device, hMem, NULL);
-
-	vkFreeCommandBuffers(r->device, r->commandPool, 1, &cBuf);
-	vkDestroyDescriptorPool(r->device, cPool, NULL);
-	vkDestroyBuffer(r->device, nBuf, NULL);
-	vkFreeMemory(r->device, nMem, NULL);
-	vkDestroyBuffer(r->device, eBuf, NULL);
-	vkFreeMemory(r->device, eMem, NULL);
+	vkUnmapMemory(r->device, ctx->edgeMem);
 
 	free(cNodes);
 	free(cEdges);
