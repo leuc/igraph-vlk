@@ -66,7 +66,22 @@ add_executable(igraph-vlk
     src/graph/layout_openord.c
     src/graph/layered_sphere.c
     src/graph/graph_actions.c
-     src/graph/wrappers_layout.c
+     # Layout wrappers (split by algorithm)
+     src/graph/layouts_force_fr.c
+     src/graph/layouts_drl.c
+     src/graph/layouts_davidson_harel.c
+     src/graph/layouts_tree.c
+     src/graph/layouts_sugiyama.c
+     src/graph/layouts_basic.c
+     src/graph/layouts_mds.c
+     src/graph/layouts_bipartite.c
+     src/graph/layouts_umap.c
+     src/graph/layouts_graphopt.c
+     src/graph/layouts_gem.c
+     src/graph/layouts_yifan_hu.c
+     src/graph/layouts_forceatlas2.c
+     src/graph/layouts_tsne.c
+     src/graph/layouts_apply.c
      src/graph/wrappers_community.c
      src/graph/wrappers_centrality.c
 src/graph/wrappers_constructors.c
