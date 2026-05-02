@@ -229,10 +229,16 @@ int main(int argc, char **argv)
 		}
 
 		if (app.vr_enabled && app.xr_ctx.session_running) {
-			XrFrameState frameState = { .type = XR_TYPE_FRAME_STATE };
-			xr_context_begin_frame(&app.xr_ctx, &frameState);
+            // Sync with XR frame
+            XrFrameState frameState = { .type = XR_TYPE_FRAME_STATE };
+            xr_context_begin_frame(&app.xr_ctx, &frameState);
 
-			vkWaitForFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame], VK_TRUE, UINT64_MAX);
+            // Separate Desktop Presentation logic
+            uint32_t ii = -1;
+            VkResult res = vkAcquireNextImageKHR(app.renderer.device, app.renderer.swapchain, 0, app.renderer.imageAvailableSemaphores[app.renderer.currentFrame], VK_NULL_HANDLE, &ii);
+            bool has_desktop = (res == VK_SUCCESS || res == VK_SUBOPTIMAL_KHR);
+
+            vkWaitForFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame], VK_TRUE, UINT64_MAX);
 			vkResetFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame]);
 
 			vkResetCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame], 0);
@@ -253,13 +259,19 @@ int main(int argc, char **argv)
 				xr_context_get_view_matrix(&app.xr_ctx, i, eye_view);
 				xr_context_get_projection_matrix(&app.xr_ctx, i, 0.1f, 1000.0f, eye_proj);
 				
-				// Update base view matrix from camera
 				renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
 				glm_mat4_mul(eye_view, app.renderer.ubo.view, final_view);
 
-                // OpenXR expects Vulkan projection matrices to be inverted on Y compared to OpenGL/Renderer standard
-                eye_proj[1][1] *= -1.0f;
+                // Render to desktop companion (Left eye only)
+                if (i == 0 && has_desktop) {
+                    mat4 desktop_proj;
+                    glm_mat4_copy(eye_proj, desktop_proj);
+                    desktop_proj[1][1] *= -1.0f;
+				    renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.framebuffers[ii], app.renderer.swapchainExtent, final_view, desktop_proj, i);
+                }
 
+                // Render to XR Swapchain
+                eye_proj[1][1] *= -1.0f;
 				renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.xrFramebuffers[i][imageIndex], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, final_view, eye_proj, i);
 
 				XrSwapchainImageReleaseInfo releaseInfo = { .type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
@@ -285,6 +297,11 @@ int main(int argc, char **argv)
 				.pCommandBuffers = &app.renderer.commandBuffers[app.renderer.currentFrame]
 			};
 			vkQueueSubmit(app.renderer.graphicsQueue, 1, &si, app.renderer.inFlightFences[app.renderer.currentFrame]);
+
+            if (has_desktop) {
+                VkPresentInfoKHR pi = { .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 0, .swapchainCount = 1, .pSwapchains = &app.renderer.swapchain, .pImageIndices = &ii };
+                vkQueuePresentKHR(app.renderer.presentQueue, &pi);
+            }
 
 			XrCompositionLayerProjection layer = {
 				.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,
