@@ -220,7 +220,9 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 
 	// Create depth image for early-Z rejection
 	r->depthFormat = VK_FORMAT_D32_SFLOAT;
-	createImage(r->device, r->physicalDevice, 3440, 1440, r->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->depthImage, &r->depthImageMemory);
+    uint32_t depth_w = (xr && xr->swapchains) ? xr->swapchains[0].width : 3440;
+    uint32_t depth_h = (xr && xr->swapchains) ? xr->swapchains[0].height : 1440;
+	createImage(r->device, r->physicalDevice, depth_w, depth_h, r->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->depthImage, &r->depthImageMemory);
 	VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->depthImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
 	vkCreateImageView(r->device, &depthViewInfo, NULL, &r->depthImageView);
 	transitionImageLayout(r->device, r->commandPool, r->graphicsQueue, r->depthImage, r->depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
@@ -388,9 +390,17 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 	r->lastSceneHash = 0;
 	glm_mat4_identity(r->ubo.model);
 	glm_mat4_identity(r->ubo.view);
-	glm_perspective(glm_rad(45.0f), 3440.0f / 1440.0f, 0.1f, 1000.0f, r->ubo.proj);
+	glm_perspective(glm_rad(45.0f), (float)width / (float)height, 0.1f, 1000.0f, r->ubo.proj);
 	r->ubo.proj[1][1] *= -1;
 	return 0;
+}
+
+void renderer_create_depth_resources(Renderer *r, uint32_t width, uint32_t height) {
+    r->depthFormat = VK_FORMAT_D32_SFLOAT;
+    createImage(r->device, r->physicalDevice, width, height, r->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->depthImage, &r->depthImageMemory);
+    VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->depthImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
+    vkCreateImageView(r->device, &depthViewInfo, NULL, &r->depthImageView);
+    transitionImageLayout(r->device, r->commandPool, r->graphicsQueue, r->depthImage, r->depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 }
 
 void renderer_update_view(Renderer *r, vec3 pos, vec3 front, vec3 up)

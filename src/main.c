@@ -120,11 +120,15 @@ int main(int argc, char **argv)
 		if (!xr_context_create_session(&app.xr_ctx, app.renderer.instance, app.renderer.physicalDevice, app.renderer.device, 0, 0)) {
 			fprintf(stderr, "Failed to create XR session\n");
 			app.vr_enabled = false;
+            renderer_create_depth_resources(&app.renderer, app.renderer.swapchainExtent.width, app.renderer.swapchainExtent.height);
 		} else {
 			renderer_setup_xr(&app.renderer, &app.xr_ctx);
+            renderer_create_depth_resources(&app.renderer, app.xr_ctx.swapchains[0].width, app.xr_ctx.swapchains[0].height);
 			xr_context_init_input(&app.xr_ctx);
 		}
-	}
+	} else {
+        renderer_create_depth_resources(&app.renderer, app.renderer.swapchainExtent.width, app.renderer.swapchainExtent.height);
+    }
 
 	// Initialize animation manager
 	animation_manager_init(&app.anim_manager, &app.renderer, &app.current_graph);
@@ -314,9 +318,18 @@ int main(int argc, char **argv)
 
 			app.renderer.currentFrame = (app.renderer.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 		} else {
-			// Update view matrix and draw (Desktop path)
+			// Update base view matrix from camera
 			renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
+
+			// For Desktop path
+			mat4 desktop_proj;
+			glm_mat4_copy(app.renderer.ubo.proj, desktop_proj);
+			// Apply Y-axis inversion to match what we do for VR
+			desktop_proj[1][1] *= -1.0f;
+
+			renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.framebuffers[app.renderer.currentFrame], app.renderer.swapchainExtent, app.renderer.ubo.view, desktop_proj, MAX_VIEWS - 1);
 			renderer_draw_frame(&app.renderer);
+
 		}
 
 		glfwPollEvents();
