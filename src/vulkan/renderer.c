@@ -16,7 +16,7 @@
 FontAtlas globalAtlas;
 bool atlasLoaded = false;
 
-int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
+int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *xr)
 {
 	r->window = window;
 	r->currentFrame = 0;
@@ -32,6 +32,8 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 	r->numSpheres = 0;
 	r->sphereIndexCounts = NULL;
 	r->sphereIndexOffsets = NULL;
+	r->xrFramebuffers = NULL;
+	r->xrFramebufferImageCount = NULL;
 	r->currentRoutingMode = ROUTING_MODE_SPHERICAL_PCB;
 	r->sphereVertexBuffer = VK_NULL_HANDLE;
 	r->sphereIndexBuffer = VK_NULL_HANDLE;
@@ -56,20 +58,75 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 
 	uint32_t glfwExtCount = 0;
 	const char **glfwExts = glfwGetRequiredInstanceExtensions(&glfwExtCount);
-	VkInstanceCreateInfo instInfo = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .ppEnabledExtensionNames = glfwExts, .enabledExtensionCount = glfwExtCount};
+	
+	const char *instExts[64];
+	uint32_t instExtCount = 0;
+	for (uint32_t i = 0; i < glfwExtCount; i++) instExts[instExtCount++] = glfwExts[i];
+
+	if (xr) {
+		char xrInstExts[4096];
+		uint32_t xrInstExtsSize = sizeof(xrInstExts);
+		xr_context_get_vulkan_instance_extensions(xr, xrInstExts, &xrInstExtsSize);
+		
+		char *token = strtok(xrInstExts, " ");
+		while (token) {
+			instExts[instExtCount++] = strdup(token);
+			token = strtok(NULL, " ");
+		}
+	}
+
+	VkInstanceCreateInfo instInfo = {
+		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+		.ppEnabledExtensionNames = instExts,
+		.enabledExtensionCount = instExtCount
+	};
 	vkCreateInstance(&instInfo, NULL, &r->instance);
+
 	VkSurfaceKHR surface;
 	glfwCreateWindowSurface(r->instance, window, NULL, &surface);
-	uint32_t devCount = 0;
-	vkEnumeratePhysicalDevices(r->instance, &devCount, NULL);
-	VkPhysicalDevice *devs = malloc(sizeof(VkPhysicalDevice) * devCount);
-	vkEnumeratePhysicalDevices(r->instance, &devCount, devs);
-	r->physicalDevice = devs[0];
-	free(devs);
+
+	if (xr) {
+		r->physicalDevice = xr_context_get_vulkan_graphics_device(xr, r->instance);
+	} else {
+		uint32_t devCount = 0;
+		vkEnumeratePhysicalDevices(r->instance, &devCount, NULL);
+		VkPhysicalDevice *devs = malloc(sizeof(VkPhysicalDevice) * devCount);
+		vkEnumeratePhysicalDevices(r->instance, &devCount, devs);
+		r->physicalDevice = devs[0];
+		free(devs);
+	}
+
 	float qPrio = 1.0f;
-	VkDeviceQueueCreateInfo qInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = 0, .queueCount = 1, .pQueuePriorities = &qPrio};
-	const char *devExts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-	VkDeviceCreateInfo devInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .queueCreateInfoCount = 1, .pQueueCreateInfos = &qInfo, .enabledExtensionCount = 1, .ppEnabledExtensionNames = devExts};
+	VkDeviceQueueCreateInfo qInfo = {
+		.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+		.queueFamilyIndex = 0,
+		.queueCount = 1,
+		.pQueuePriorities = &qPrio
+	};
+
+	const char *devExts[64];
+	uint32_t devExtCount = 0;
+	devExts[devExtCount++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+
+	if (xr) {
+		char xrDevExts[4096];
+		uint32_t xrDevExtsSize = sizeof(xrDevExts);
+		xr_context_get_vulkan_device_extensions(xr, xrDevExts, &xrDevExtsSize);
+
+		char *token = strtok(xrDevExts, " ");
+		while (token) {
+			devExts[devExtCount++] = strdup(token);
+			token = strtok(NULL, " ");
+		}
+	}
+
+	VkDeviceCreateInfo devInfo = {
+		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+		.queueCreateInfoCount = 1,
+		.pQueueCreateInfos = &qInfo,
+		.enabledExtensionCount = devExtCount,
+		.ppEnabledExtensionNames = devExts
+	};
 	vkCreateDevice(r->physicalDevice, &devInfo, NULL, &r->device);
 	vkGetDeviceQueue(r->device, 0, 0, &r->graphicsQueue);
 	vkGetDeviceQueue(r->device, 0, 0, &r->presentQueue);
@@ -269,24 +326,28 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph)
 	r->labelStagingBuffer = VK_NULL_HANDLE;
 	renderer_update_graph(r, graph);
 
-	r->uniformBuffers = malloc(sizeof(VkBuffer) * MAX_FRAMES_IN_FLIGHT);
-	r->uniformBuffersMemory = malloc(sizeof(VkDeviceMemory) * MAX_FRAMES_IN_FLIGHT);
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	r->uniformBuffers = malloc(sizeof(VkBuffer) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
+	r->uniformBuffersMemory = malloc(sizeof(VkDeviceMemory) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++)
 		createBuffer(r->device, r->physicalDevice, sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uniformBuffers[i], &r->uniformBuffersMemory[i]);
 
-	// Persistently map all UBOs to avoid per-frame map/unmap overhead
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	// Persistently map all UBOs
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++)
 		vkMapMemory(r->device, r->uniformBuffersMemory[i], 0, sizeof(UniformBufferObject), 0, &r->uboMapped[i]);
-	VkDescriptorPoolSize dps[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT}};
-	VkDescriptorPoolCreateInfo dpi = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .poolSizeCount = 2, .pPoolSizes = dps, .maxSets = MAX_FRAMES_IN_FLIGHT};
+
+	VkDescriptorPoolSize dps[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS}};
+	VkDescriptorPoolCreateInfo dpi = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .poolSizeCount = 2, .pPoolSizes = dps, .maxSets = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS};
 	vkCreateDescriptorPool(r->device, &dpi, NULL, &r->descriptorPool);
-	VkDescriptorSetLayout dsls[MAX_FRAMES_IN_FLIGHT];
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+
+	VkDescriptorSetLayout dsls[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++)
 		dsls[i] = r->descriptorSetLayout;
-	VkDescriptorSetAllocateInfo dsa = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->descriptorPool, .descriptorSetCount = MAX_FRAMES_IN_FLIGHT, .pSetLayouts = dsls};
-	r->descriptorSets = malloc(sizeof(VkDescriptorSet) * MAX_FRAMES_IN_FLIGHT);
+
+	VkDescriptorSetAllocateInfo dsa = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->descriptorPool, .descriptorSetCount = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS, .pSetLayouts = dsls};
+	r->descriptorSets = malloc(sizeof(VkDescriptorSet) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
 	vkAllocateDescriptorSets(r->device, &dsa, r->descriptorSets);
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 		VkDescriptorBufferInfo bi = {r->uniformBuffers[i], 0, sizeof(UniformBufferObject)};
 		VkDescriptorImageInfo ii = {r->textureSampler, r->textureImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 		VkWriteDescriptorSet dw[] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &bi, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &ii, NULL, NULL}};
@@ -339,6 +400,159 @@ void renderer_update_view(Renderer *r, vec3 pos, vec3 front, vec3 up)
 	glm_lookat(pos, c, up, r->ubo.view);
 }
 
+void renderer_setup_xr(Renderer *r, XrContext *xr) {
+    r->xrFramebuffers = malloc(sizeof(VkFramebuffer*) * xr->view_count);
+    r->xrFramebufferImageCount = malloc(sizeof(uint32_t) * xr->view_count);
+
+    for (uint32_t i = 0; i < xr->view_count; i++) {
+        r->xrFramebufferImageCount[i] = xr->swapchains[i].image_count;
+        r->xrFramebuffers[i] = malloc(sizeof(VkFramebuffer) * xr->swapchains[i].image_count);
+        xr->swapchains[i].image_views = malloc(sizeof(VkImageView) * xr->swapchains[i].image_count);
+
+        for (uint32_t j = 0; j < xr->swapchains[i].image_count; j++) {
+            VkImageViewCreateInfo ivInfo = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .image = xr->swapchains[i].images[j],
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .format = VK_FORMAT_B8G8R8A8_SRGB, // Match swapchain format
+                .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
+            };
+            vkCreateImageView(r->device, &ivInfo, NULL, &xr->swapchains[i].image_views[j]);
+
+            VkImageView attachments[] = {xr->swapchains[i].image_views[j], r->depthImageView};
+            VkFramebufferCreateInfo fbInfo = {
+                .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                .renderPass = r->renderPass,
+                .attachmentCount = 2,
+                .pAttachments = attachments,
+                .width = xr->swapchains[i].width,
+                .height = xr->swapchains[i].height,
+                .layers = 1
+            };
+            vkCreateFramebuffer(r->device, &fbInfo, NULL, &r->xrFramebuffers[i][j]);
+        }
+    }
+}
+
+void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index)
+{
+	uint32_t ubo_idx = r->currentFrame * MAX_VIEWS + view_index;
+	UniformBufferObject eye_ubo = r->ubo;
+	glm_mat4_copy(view, eye_ubo.view);
+	glm_mat4_copy(proj, eye_ubo.proj);
+	memcpy(r->uboMapped[ubo_idx], &eye_ubo, sizeof(UniformBufferObject));
+
+	VkClearValue clearValues[2];
+	clearValues[0].color = (VkClearColorValue){0.01f, 0.01f, 0.02f, 1.0f};
+	clearValues[1].depthStencil = (VkClearDepthStencilValue){1.0f, 0};
+
+	VkRenderPassBeginInfo rpi = {
+		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+		.renderPass = r->renderPass,
+		.framebuffer = fb,
+		.renderArea = {{0, 0}, extent},
+		.clearValueCount = 2,
+		.pClearValues = clearValues};
+
+	vkCmdBeginRenderPass(cmd, &rpi, VK_SUBPASS_CONTENTS_INLINE);
+
+	// Set dynamic viewport and scissor
+	VkViewport viewport = {0.0f, 0.0f, (float)extent.width, (float)extent.height, 0.0f, 1.0f};
+	vkCmdSetViewport(cmd, 0, 1, &viewport);
+	VkRect2D scissor = {{0, 0}, extent};
+	vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[ubo_idx], 0, NULL);
+
+	if (r->showEdges && r->edgeCount > 0) {
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->edgePipeline);
+		VkBuffer edgeBuffers[] = {r->edgePositionBuffer, r->edgeAttributeBuffer};
+		VkDeviceSize offsets[] = {0, 0};
+		vkCmdBindVertexBuffers(cmd, 0, 2, edgeBuffers, offsets);
+		vkCmdDraw(cmd, r->edgeVertexCount, 1, 0, 0);
+	}
+
+	if (r->showNodes && r->nodeCount > 0) {
+		float alpha_node = 1.0f;
+		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_node);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->graphicsPipeline);
+		for (int i = 0; i < PLATONIC_COUNT; i++) {
+			if (r->platonicDrawCalls[i].count == 0)
+				continue;
+			VkBuffer vbs[] = {r->vertexBuffers[i], r->nodePositionBuffer, r->nodeAttributeBuffer};
+			VkDeviceSize vos[] = {0, 0, 0};
+			vkCmdBindVertexBuffers(cmd, 0, 3, vbs, vos);
+			vkCmdBindIndexBuffer(cmd, r->indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
+			vkCmdDrawIndexed(cmd, r->platonicIndexCounts[i], r->platonicDrawCalls[i].count, 0, 0, r->platonicDrawCalls[i].firstInstance);
+		}
+	}
+
+	if (r->showLabels && r->labelCharCount > 0 && r->labelInstanceBuffer != VK_NULL_HANDLE) {
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
+		VkBuffer lbs[] = {r->labelVertexBuffer, r->labelInstanceBuffer};
+		VkDeviceSize los[] = {0, 0};
+		vkCmdBindVertexBuffers(cmd, 0, 2, lbs, los);
+		vkCmdDraw(cmd, 4, r->labelCharCount, 0, 0);
+	}
+
+	if (r->menuNodeCount > 0 && r->menuInstanceBuffer != VK_NULL_HANDLE) {
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->menuPipeline);
+		VkBuffer menuVbs[] = {r->menuQuadVertexBuffer, r->menuInstanceBuffer};
+		VkDeviceSize menuVos[] = {0, 0};
+		vkCmdBindVertexBuffers(cmd, 0, 2, menuVbs, menuVos);
+		vkCmdBindIndexBuffer(cmd, r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(cmd, r->menuQuadIndexCount, r->menuNodeCount, 0, 0, 0);
+
+		if (r->menuTextCharCount > 0 && r->menuTextInstanceBuffer != VK_NULL_HANDLE) {
+			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
+			VkBuffer mTextVbs[] = {r->labelVertexBuffer, r->menuTextInstanceBuffer};
+			VkDeviceSize mTextVos[] = {0, 0};
+			vkCmdBindVertexBuffers(cmd, 0, 2, mTextVbs, mTextVos);
+			vkCmdDraw(cmd, 4, r->menuTextCharCount, 0, 0);
+		}
+	}
+
+	if (r->numericInstanceCount > 0 && r->numericInstanceBuffer != VK_NULL_HANDLE) {
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->menuPipeline);
+		VkBuffer numericVbs[] = {r->numericQuadVertexBuffer, r->numericInstanceBuffer};
+		VkDeviceSize numericVos[] = {0, 0};
+		vkCmdBindVertexBuffers(cmd, 0, 2, numericVbs, numericVos);
+		vkCmdBindIndexBuffer(cmd, r->numericQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(cmd, r->numericQuadIndexCount, r->numericInstanceCount, 0, 0, 0);
+	}
+
+	if (r->showSpheres && r->numSpheres > 0 && r->sphereVertexBuffer != VK_NULL_HANDLE) {
+		float alpha_sphere = 0.2f / (float)r->numSpheres;
+		if (alpha_sphere < 0.02f)
+			alpha_sphere = 0.02f;
+		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_sphere);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->spherePipeline);
+		VkBuffer vbs[] = {r->sphereVertexBuffer};
+		VkDeviceSize vos[] = {0};
+		vkCmdBindVertexBuffers(cmd, 0, 1, vbs, vos);
+		vkCmdBindIndexBuffer(cmd, r->sphereIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		for (int s = 0; s < r->numSpheres; s++) {
+			vkCmdDrawIndexed(cmd, r->sphereIndexCounts[s], 1, r->sphereIndexOffsets[s], 0, 0);
+		}
+	}
+
+	if (r->showUI) {
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->uiPipeline);
+		VkBuffer bgUbs[] = {r->uiBgVertexBuffer, r->uiBgInstanceBuffer};
+		VkDeviceSize bgUos[] = {0, 0};
+		vkCmdBindVertexBuffers(cmd, 0, 2, bgUbs, bgUos);
+		vkCmdDraw(cmd, 4, 1, 0, 0);
+		if (r->uiTextCharCount > 0) {
+			VkBuffer ubs[] = {r->labelVertexBuffer, r->uiTextInstanceBuffer};
+			VkDeviceSize uos[] = {0, 0};
+			vkCmdBindVertexBuffers(cmd, 0, 2, ubs, uos);
+			vkCmdDraw(cmd, 4, r->uiTextCharCount, 0, 0);
+		}
+	}
+
+	vkCmdEndRenderPass(cmd);
+}
+
 void renderer_draw_frame(Renderer *r)
 {
 	vkWaitForFences(r->device, 1, &r->inFlightFences[r->currentFrame], VK_TRUE, UINT64_MAX);
@@ -346,127 +560,36 @@ void renderer_draw_frame(Renderer *r)
 	uint32_t ii;
 	vkAcquireNextImageKHR(r->device, r->swapchain, UINT64_MAX, r->imageAvailableSemaphores[r->currentFrame], VK_NULL_HANDLE, &ii);
 
-	// Persistently mapped UBO - no map/unmap overhead
-	memcpy(r->uboMapped[r->currentFrame], &r->ubo, sizeof(UniformBufferObject));
-
-	// Track scene hash for potential command buffer caching
-	r->lastSceneHash = (uint64_t)r->nodeCount * 31337 + (uint64_t)r->edgeCount * 7919 + (r->showEdges ? 1 : 0) + (r->showNodes ? 2 : 0) + (r->showLabels ? 4 : 0) + (r->showUI ? 8 : 0) + (r->showSpheres ? 16 : 0) + (r->labelCharCount * 131) + (r->menuNodeCount * 257);
-	r->cmdBufferValid = VK_TRUE;
-
 	vkResetCommandBuffer(r->commandBuffers[r->currentFrame], 0);
-	VkCommandBufferBeginInfo bi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+	VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 	vkBeginCommandBuffer(r->commandBuffers[r->currentFrame], &bi);
-	VkClearValue clearValues[2];
-	clearValues[0].color = (VkClearColorValue){0.01f, 0.01f, 0.02f, 1.0f};
-	clearValues[1].depthStencil = (VkClearDepthStencilValue){1.0f, 0};
-	VkRenderPassBeginInfo rpi = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, NULL, r->renderPass, r->framebuffers[ii], {{0, 0}, {3440, 1440}}, 2, clearValues};
-	vkCmdBeginRenderPass(r->commandBuffers[r->currentFrame], &rpi, VK_SUBPASS_CONTENTS_INLINE);
-	vkCmdBindDescriptorSets(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[r->currentFrame], 0, NULL);
-	if (r->showEdges && r->edgeCount > 0) {
-		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->edgePipeline);
-		VkBuffer edgeBuffers[] = {r->edgePositionBuffer, r->edgeAttributeBuffer};
-		VkDeviceSize offsets[] = {0, 0};
-		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, edgeBuffers, offsets);
-		vkCmdDraw(r->commandBuffers[r->currentFrame], r->edgeVertexCount, 1, 0, 0);
-	}
-	if (r->showNodes && r->nodeCount > 0) {
-		float alpha_node = 1.0f;
-		vkCmdPushConstants(r->commandBuffers[r->currentFrame], r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_node);
-		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->graphicsPipeline);
-		for (int i = 0; i < PLATONIC_COUNT; i++) {
-			if (r->platonicDrawCalls[i].count == 0)
-				continue;
-			VkBuffer vbs[] = {r->vertexBuffers[i], r->nodePositionBuffer, r->nodeAttributeBuffer};
-			VkDeviceSize vos[] = {0, 0, 0};
-			vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 3, vbs, vos);
-			vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
-			vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->platonicIndexCounts[i], r->platonicDrawCalls[i].count, 0, 0, r->platonicDrawCalls[i].firstInstance);
-		}
-	}
-	if (r->showLabels && r->labelCharCount > 0 && r->labelInstanceBuffer != VK_NULL_HANDLE) {
-		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
-		VkBuffer lbs[] = {r->labelVertexBuffer, r->labelInstanceBuffer};
-		VkDeviceSize los[] = {0, 0};
-		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, lbs, los);
-		vkCmdDraw(r->commandBuffers[r->currentFrame], 4, r->labelCharCount, 0, 0);
-	}
 
-	// Draw 3D Spherical Menu (if visible and has instances)
-	if (r->menuNodeCount > 0 && r->menuInstanceBuffer != VK_NULL_HANDLE) {
-		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->menuPipeline);
+	renderer_render_scene(r, r->commandBuffers[r->currentFrame], r->framebuffers[ii], r->swapchainExtent, r->ubo.view, r->ubo.proj, MAX_VIEWS - 1);
 
-		// Bind quad vertex buffer (binding 0) and menu instance buffer (binding 1)
-		VkBuffer menuVbs[] = {r->menuQuadVertexBuffer, r->menuInstanceBuffer};
-		VkDeviceSize menuVos[] = {0, 0};
-		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, menuVbs, menuVos);
 
-		// Bind index buffer for quad
-		vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
-		// Draw each menu node instance with 6 indices (two triangles per quad)
-		vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->menuQuadIndexCount, r->menuNodeCount, 0, 0, 0);
-
-		// Draw menu text labels if generated
-		if (r->menuTextCharCount > 0 && r->menuTextInstanceBuffer != VK_NULL_HANDLE) {
-			vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
-			VkBuffer mTextVbs[] = {r->labelVertexBuffer, r->menuTextInstanceBuffer};
-			VkDeviceSize mTextVos[] = {0, 0};
-			vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, mTextVbs, mTextVos);
-			vkCmdDraw(r->commandBuffers[r->currentFrame], 4, r->menuTextCharCount, 0, 0);
-		}
-	}
-
-	// Draw Numeric Input Widget (if active)
-	// Uses menu pipeline for world-space quads (track + thumb) and UI label pipeline for value text
-	if (r->numericInstanceCount > 0 && r->numericInstanceBuffer != VK_NULL_HANDLE) {
-		// Draw slider track and thumb using the menu pipeline (world-space)
-		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->menuPipeline);
-		VkBuffer numericVbs[] = {r->numericQuadVertexBuffer, r->numericInstanceBuffer};
-		VkDeviceSize numericVos[] = {0, 0};
-		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, numericVbs, numericVos);
-		vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->numericQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-		// 6 indices per quad, 2 quads total
-		vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->numericQuadIndexCount, r->numericInstanceCount, 0, 0, 0);
-	}
-
-	// Draw Transparent Spheres (Last for blending)
-	if (r->showSpheres && r->numSpheres > 0 && r->sphereVertexBuffer != VK_NULL_HANDLE) {
-		float alpha_sphere = 0.2f / (float)r->numSpheres; // Scale transparency
-		if (alpha_sphere < 0.02f)
-			alpha_sphere = 0.02f;
-
-		vkCmdPushConstants(r->commandBuffers[r->currentFrame], r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &alpha_sphere);
-		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->spherePipeline);
-		VkBuffer vbs[] = {r->sphereVertexBuffer};
-		VkDeviceSize vos[] = {0};
-		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 1, vbs, vos);
-		vkCmdBindIndexBuffer(r->commandBuffers[r->currentFrame], r->sphereIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
-		for (int s = 0; s < r->numSpheres; s++) {
-			vkCmdDrawIndexed(r->commandBuffers[r->currentFrame], r->sphereIndexCounts[s], 1, r->sphereIndexOffsets[s], 0, 0);
-		}
-	}
-
-	if (r->showUI) {
-		vkCmdBindPipeline(r->commandBuffers[r->currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, r->uiPipeline);
-		VkBuffer bgUbs[] = {r->uiBgVertexBuffer, r->uiBgInstanceBuffer};
-		VkDeviceSize bgUos[] = {0, 0};
-		vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, bgUbs, bgUos);
-		vkCmdDraw(r->commandBuffers[r->currentFrame], 4, 1, 0, 0);
-		if (r->uiTextCharCount > 0) {
-			VkBuffer ubs[] = {r->labelVertexBuffer, r->uiTextInstanceBuffer};
-			VkDeviceSize uos[] = {0, 0};
-			vkCmdBindVertexBuffers(r->commandBuffers[r->currentFrame], 0, 2, ubs, uos);
-			vkCmdDraw(r->commandBuffers[r->currentFrame], 4, r->uiTextCharCount, 0, 0);
-		}
-	}
-
-	vkCmdEndRenderPass(r->commandBuffers[r->currentFrame]);
 	vkEndCommandBuffer(r->commandBuffers[r->currentFrame]);
+
 	VkPipelineStageFlags ws = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	VkSubmitInfo si = {VK_STRUCTURE_TYPE_SUBMIT_INFO, NULL, 1, &r->imageAvailableSemaphores[r->currentFrame], &ws, 1, &r->commandBuffers[r->currentFrame], 1, &r->renderFinishedSemaphores[r->currentFrame]};
+	VkSubmitInfo si = {
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.waitSemaphoreCount = 1,
+		.pWaitSemaphores = &r->imageAvailableSemaphores[r->currentFrame],
+		.pWaitDstStageMask = &ws,
+		.commandBufferCount = 1,
+		.pCommandBuffers = &r->commandBuffers[r->currentFrame],
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = &r->renderFinishedSemaphores[r->currentFrame]};
+
 	vkQueueSubmit(r->graphicsQueue, 1, &si, r->inFlightFences[r->currentFrame]);
-	VkPresentInfoKHR pi = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, NULL, 1, &r->renderFinishedSemaphores[r->currentFrame], 1, &r->swapchain, &ii, NULL};
+
+	VkPresentInfoKHR pi = {
+		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+		.waitSemaphoreCount = 1,
+		.pWaitSemaphores = &r->renderFinishedSemaphores[r->currentFrame],
+		.swapchainCount = 1,
+		.pSwapchains = &r->swapchain,
+		.pImageIndices = &ii};
+
 	vkQueuePresentKHR(r->presentQueue, &pi);
 	r->currentFrame = (r->currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
@@ -474,12 +597,14 @@ void renderer_draw_frame(Renderer *r)
 void renderer_cleanup(Renderer *r)
 {
 	vkDeviceWaitIdle(r->device);
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
+		vkDestroyBuffer(r->device, r->uniformBuffers[i], NULL);
+		vkFreeMemory(r->device, r->uniformBuffersMemory[i], NULL);
+	}
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 		vkDestroySemaphore(r->device, r->renderFinishedSemaphores[i], NULL);
 		vkDestroySemaphore(r->device, r->imageAvailableSemaphores[i], NULL);
 		vkDestroyFence(r->device, r->inFlightFences[i], NULL);
-		vkDestroyBuffer(r->device, r->uniformBuffers[i], NULL);
-		vkFreeMemory(r->device, r->uniformBuffersMemory[i], NULL);
 	}
 
 	// Cleanup ring fences
@@ -591,6 +716,21 @@ void renderer_cleanup(Renderer *r)
 	if (r->numericInstanceBuffer != VK_NULL_HANDLE) {
 		vkDestroyBuffer(r->device, r->numericInstanceBuffer, NULL);
 		vkFreeMemory(r->device, r->numericInstanceBufferMemory, NULL);
+	}
+
+	if (r->xrFramebuffers) {
+		// Assuming we know xr->view_count or stored it. 
+		// Actually, let's just use MAX_VIEWS - 1 as a limit if we don't have xr context here.
+		// Better: add xr_enabled or similar to Renderer?
+		// For now, let's assume view_count is 2 for VR.
+		for (int i = 0; i < 2; i++) {
+			for (uint32_t j = 0; j < r->xrFramebufferImageCount[i]; j++) {
+				vkDestroyFramebuffer(r->device, r->xrFramebuffers[i][j], NULL);
+			}
+			free(r->xrFramebuffers[i]);
+		}
+		free(r->xrFramebuffers);
+		free(r->xrFramebufferImageCount);
 	}
 
 	vkDestroyCommandPool(r->device, r->commandPool, NULL);

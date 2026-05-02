@@ -7,6 +7,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(igraph REQUIRED)
+find_package(OpenXR REQUIRED)
 
 find_path(CGLM_INCLUDE_DIR cglm/cglm.h)
 find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
@@ -99,6 +100,9 @@ src/graph/wrappers_constructors.c
     src/interaction/spatial.c
     src/interaction/state.c
 
+    # XR modules
+    src/xr/openxr_context.c
+
     # UI modules
     src/ui/hud.c
     src/ui/menu.c
@@ -119,6 +123,7 @@ target_link_libraries(igraph-vlk PRIVATE
     Vulkan::Vulkan
     glfw
     igraph::igraph
+    OpenXR::openxr_loader
     m
     OpenMP::OpenMP_C
 )

@@ -99,12 +99,29 @@ int main(int argc, char **argv)
 	// Initialize input handling (registers GLFW callbacks)
 	interaction_init(app.window);
 
+	// Initialize OpenXR (Display Only)
+	app.vr_enabled = xr_context_init(&app.xr_ctx, "igraph-vlk");
+	if (app.vr_enabled) {
+		printf("OpenXR HMD detected, enabling VR mode.\n");
+	} else {
+		printf("No HMD detected, running in desktop mode.\n");
+	}
+
 	// Initialize renderer
-	if (renderer_init(&app.renderer, app.window, &app.current_graph) != 0) {
+	if (renderer_init(&app.renderer, app.window, &app.current_graph, app.vr_enabled ? &app.xr_ctx : NULL) != 0) {
 		fprintf(stderr, "Failed to initialize renderer\n");
 		glfwDestroyWindow(app.window);
 		glfwTerminate();
 		return EXIT_FAILURE;
+	}
+
+	if (app.vr_enabled) {
+		if (!xr_context_create_session(&app.xr_ctx, app.renderer.instance, app.renderer.physicalDevice, app.renderer.device, 0, 0)) {
+			fprintf(stderr, "Failed to create XR session\n");
+			app.vr_enabled = false;
+		} else {
+			renderer_setup_xr(&app.renderer, &app.xr_ctx);
+		}
 	}
 
 	// Initialize animation manager
@@ -184,26 +201,89 @@ int main(int argc, char **argv)
 			igraph_matrix_destroy(&snap);
 		}
 
-		// Generate menu buffers if menu is open or processing
-		if (app.app_ctx.current_state == STATE_MENU_OPEN || app.app_ctx.current_state == STATE_JOB_IN_PROGRESS || app.app_ctx.current_state == STATE_EXECUTING) {
-			generate_vulkan_menu_buffers(&app.app_ctx, &app.renderer);
-		} else {
-			app.renderer.menuNodeCount = 0;
-			app.renderer.menuTextCharCount = 0;
-		}
-
 		// Update animations
 		animation_manager_update(&app.anim_manager, deltaTime);
 		if (app.anim_manager.num_animations > 0) {
 			renderer_update_graph(&app.renderer, &app.current_graph);
 		}
 
-		// Step background layout (OpenOrd / Layered Sphere)
+		// Step background layout
 		graph_action_step_background_layout(&app);
 
-		// Update view matrix and draw
-		renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
-		renderer_draw_frame(&app.renderer);
+		if (app.vr_enabled) {
+			xr_context_poll_events(&app.xr_ctx);
+		}
+
+		if (app.vr_enabled && app.xr_ctx.session_running) {
+			XrFrameState frameState = { .type = XR_TYPE_FRAME_STATE };
+			xr_context_begin_frame(&app.xr_ctx, &frameState);
+
+			vkWaitForFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame], VK_TRUE, UINT64_MAX);
+			vkResetFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame]);
+
+			vkResetCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame], 0);
+			VkCommandBufferBeginInfo bi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+			vkBeginCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame], &bi);
+
+			XrCompositionLayerProjectionView projectionViews[2]; // Stereo
+
+			for (uint32_t i = 0; i < app.xr_ctx.view_count; i++) {
+				uint32_t imageIndex;
+				XrSwapchainImageAcquireInfo acquireInfo = { .type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
+				xrAcquireSwapchainImage(app.xr_ctx.swapchains[i].handle, &acquireInfo, &imageIndex);
+
+				XrSwapchainImageWaitInfo waitInfo = { .type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO, .timeout = XR_INFINITE_DURATION };
+				xrWaitSwapchainImage(app.xr_ctx.swapchains[i].handle, &waitInfo);
+
+				mat4 eye_view, eye_proj, final_view;
+				xr_context_get_view_matrix(&app.xr_ctx, i, eye_view);
+				xr_context_get_projection_matrix(&app.xr_ctx, i, 0.1f, 1000.0f, eye_proj);
+				
+				// Update base view matrix from camera
+				renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
+				glm_mat4_mul(eye_view, app.renderer.ubo.view, final_view);
+
+				renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.xrFramebuffers[i][imageIndex], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, final_view, eye_proj, i);
+
+				XrSwapchainImageReleaseInfo releaseInfo = { .type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
+				xrReleaseSwapchainImage(app.xr_ctx.swapchains[i].handle, &releaseInfo);
+
+				projectionViews[i] = (XrCompositionLayerProjectionView){
+					.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
+					.pose = app.xr_ctx.views[i].pose,
+					.fov = app.xr_ctx.views[i].fov,
+					.subImage = {
+						.swapchain = app.xr_ctx.swapchains[i].handle,
+						.imageRect = {{0, 0}, {(int32_t)app.xr_ctx.swapchains[i].width, (int32_t)app.xr_ctx.swapchains[i].height}},
+						.imageArrayIndex = 0,
+					}
+				};
+			}
+
+			vkEndCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame]);
+			
+			VkSubmitInfo si = {
+				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+				.commandBufferCount = 1,
+				.pCommandBuffers = &app.renderer.commandBuffers[app.renderer.currentFrame]
+			};
+			vkQueueSubmit(app.renderer.graphicsQueue, 1, &si, app.renderer.inFlightFences[app.renderer.currentFrame]);
+
+			XrCompositionLayerProjection layer = {
+				.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,
+				.space = app.xr_ctx.stage_space,
+				.viewCount = app.xr_ctx.view_count,
+				.views = projectionViews,
+			};
+			XrCompositionLayerBaseHeader* layerPtr = (XrCompositionLayerBaseHeader*)&layer;
+			xr_context_end_frame(&app.xr_ctx, &frameState, &layerPtr, 1);
+
+			app.renderer.currentFrame = (app.renderer.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+		} else {
+			// Update view matrix and draw (Desktop path)
+			renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
+			renderer_draw_frame(&app.renderer);
+		}
 
 		glfwPollEvents();
 	}

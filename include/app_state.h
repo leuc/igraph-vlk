@@ -13,6 +13,7 @@
 #include "interaction/state.h"
 #include "vulkan/animation_manager.h"
 #include "vulkan/renderer.h"
+#include "xr/openxr_context.h"
 
 /**
  * Central application state that glues together all modules.
@@ -22,6 +23,8 @@ typedef struct AppState
 {
 	/* Core Subsystems */
 	Renderer renderer;
+	XrContext xr_ctx;
+	bool vr_enabled;
 	GraphData current_graph;
 	AnimationManager anim_manager;
 	Camera camera;

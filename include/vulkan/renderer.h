@@ -11,6 +11,7 @@
 struct AppContext;
 
 #define MAX_FRAMES_IN_FLIGHT 2
+#define MAX_VIEWS 3
 #define GRAPH_UPDATE_RING_SIZE 3
 
 typedef enum { ROUTING_MODE_STRAIGHT = 0, ROUTING_MODE_SPHERICAL_PCB = 1 } EdgeRoutingMode;
@@ -69,6 +70,8 @@ typedef struct
 	VkPipeline computeSphericalPipeline;
 
 	VkFramebuffer *framebuffers;
+	VkFramebuffer **xrFramebuffers; // [view_index][image_index]
+	uint32_t *xrFramebufferImageCount;
 	VkCommandPool commandPool;
 	VkCommandBuffer *commandBuffers;
 	VkSemaphore *imageAvailableSemaphores;
@@ -89,7 +92,7 @@ typedef struct
 
 	VkBuffer *uniformBuffers;
 	VkDeviceMemory *uniformBuffersMemory;
-	void *uboMapped[MAX_FRAMES_IN_FLIGHT];
+	void *uboMapped[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
 	VkDescriptorPool descriptorPool;
 	VkDescriptorSet *descriptorSets;
 	uint32_t polyhedronIndexCount;
@@ -211,9 +214,13 @@ typedef struct
 	bool showSpheres;			  // Toggle
 } Renderer;
 
-int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph);
+#include "xr/openxr_context.h"
+
+int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *xr);
+void renderer_setup_xr(Renderer *r, XrContext *xr);
 void renderer_cleanup(Renderer *r);
 void renderer_draw_frame(Renderer *r);
+void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index);
 void renderer_update_view(Renderer *r, vec3 pos, vec3 front, vec3 up);
 void renderer_update_graph(Renderer *r, GraphData *graph);
 // renderer_update_ui is declared in renderer_ui.h
