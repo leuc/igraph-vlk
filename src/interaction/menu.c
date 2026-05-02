@@ -1,9 +1,30 @@
 #include "interaction/menu.h"
 #include "interaction/picking.h"
+#include "interaction/spatial.h"
 #include <GLFW/glfw3.h>
 #include <cglm/cglm.h>
 #include <float.h>
 #include <string.h>
+
+void interaction_menu_toggle(AppState *state)
+{
+	if (state->app_ctx.current_state == STATE_GRAPH_VIEW && state->app_ctx.root_menu->current_radius < 0.01f) {
+		state->app_ctx.current_state = STATE_MENU_OPEN;
+		state->app_ctx.root_menu->target_radius = 1.0f;
+
+		spatial_calculate_basis(state->camera.pos, state->camera.front, state->camera.up, &state->app_ctx.menu_spawn_basis);
+
+		if (state->window) {
+			glfwSetInputMode(state->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		}
+	} else if (state->app_ctx.current_state == STATE_MENU_OPEN || state->app_ctx.root_menu->current_radius > 0.99f) {
+		state->app_ctx.current_state = STATE_GRAPH_VIEW;
+		state->app_ctx.root_menu->target_radius = 0.0f;
+		if (state->window) {
+			glfwSetInputMode(state->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		}
+	}
+}
 
 static MenuNode *pick_menu_recursive(MenuNode *node, float *ray_ori, float *ray_dir, float *min_t)
 {

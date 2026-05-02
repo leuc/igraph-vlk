@@ -46,6 +46,7 @@ void xr_context_cleanup(XrContext* ctx);
 void xr_context_poll_events(XrContext* ctx);
 bool xr_context_init_input(XrContext* ctx);
 void xr_context_sync_input(XrContext* ctx);
+bool xr_context_is_action_pressed(XrContext* ctx, XrAction action, uint32_t hand_index);
 
 bool xr_context_get_vulkan_instance_extensions(XrContext* ctx, char* out_exts, uint32_t* out_size);
 bool xr_context_get_vulkan_device_extensions(XrContext* ctx, char* out_exts, uint32_t* out_size);

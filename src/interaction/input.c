@@ -137,19 +137,7 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 		state->renderer.showUI = !state->renderer.showUI;
 		break;
 	case GLFW_KEY_SPACE:
-		if (state->app_ctx.current_state == STATE_GRAPH_VIEW && state->app_ctx.root_menu->current_radius < 0.01f) {
-			state->app_ctx.current_state = STATE_MENU_OPEN;
-			state->app_ctx.root_menu->target_radius = 1.0f;
-
-			spatial_calculate_basis(state->camera.pos, state->camera.front, state->camera.up, &state->app_ctx.menu_spawn_basis);
-
-			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-			// Keep cursor disabled to maintain camera lock for crosshair selection
-		} else if (state->app_ctx.current_state == STATE_MENU_OPEN || state->app_ctx.root_menu->current_radius > 0.99f) {
-			state->app_ctx.current_state = STATE_GRAPH_VIEW;
-			state->app_ctx.root_menu->target_radius = 0.0f;
-			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-		}
+		interaction_menu_toggle(state);
 		break;
 	case GLFW_KEY_1:
 	case GLFW_KEY_2:

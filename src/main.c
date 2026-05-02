@@ -4,6 +4,7 @@
 #include "graph/wrappers_layout.h"
 #include "interaction/camera.h"
 #include "interaction/input.h"
+#include "interaction/menu.h"
 #include "interaction/state.h"
 #include "ui/hud.h"
 #include "ui/menu.h"
@@ -222,6 +223,9 @@ int main(int argc, char **argv)
 		if (app.vr_enabled) {
 			xr_context_poll_events(&app.xr_ctx);
 			xr_context_sync_input(&app.xr_ctx);
+            if (xr_context_is_action_pressed(&app.xr_ctx, app.xr_ctx.menu_action, 0)) { // 0 = Left hand
+                interaction_menu_toggle(&app);
+            }
 		}
 
 		if (app.vr_enabled && app.xr_ctx.session_running) {

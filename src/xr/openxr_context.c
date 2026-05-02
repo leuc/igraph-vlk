@@ -367,16 +367,21 @@ bool xr_context_init_input(XrContext* ctx) {
     return true;
 }
 
-static void check_button(XrSession session, XrPath* hand_paths, XrAction action, const char* name) {
+bool xr_context_is_action_pressed(XrContext* ctx, XrAction action, uint32_t hand_index) {
+    if (!ctx->session_running || hand_index >= 2) return false;
+    XrActionStateGetInfo getInfo = {
+        .type = XR_TYPE_ACTION_STATE_GET_INFO,
+        .action = action,
+        .subactionPath = ctx->hand_paths[hand_index],
+    };
+    XrActionStateBoolean state = { .type = XR_TYPE_ACTION_STATE_BOOLEAN };
+    xrGetActionStateBoolean(ctx->session, &getInfo, &state);
+    return state.isActive && state.changedSinceLastSync && state.currentState;
+}
+
+static void check_button(XrContext* ctx, XrAction action, const char* name) {
     for (int i = 0; i < 2; i++) {
-        XrActionStateGetInfo getInfo = {
-            .type = XR_TYPE_ACTION_STATE_GET_INFO,
-            .action = action,
-            .subactionPath = hand_paths[i],
-        };
-        XrActionStateBoolean state = { .type = XR_TYPE_ACTION_STATE_BOOLEAN };
-        xrGetActionStateBoolean(session, &getInfo, &state);
-        if (state.isActive && state.changedSinceLastSync && state.currentState) {
+        if (xr_context_is_action_pressed(ctx, action, i)) {
             printf("VR Button Pressed: %s (%s hand)\n", name, i == 0 ? "Left" : "Right");
         }
     }
@@ -398,10 +403,10 @@ void xr_context_sync_input(XrContext* ctx) {
 
     xrSyncActions(ctx->session, &syncInfo);
 
-    check_button(ctx->session, ctx->hand_paths, ctx->select_action, "Select");
-    check_button(ctx->session, ctx->hand_paths, ctx->menu_action, "Menu");
-    check_button(ctx->session, ctx->hand_paths, ctx->button_a_action, "Button A");
-    check_button(ctx->session, ctx->hand_paths, ctx->button_b_action, "Button B");
-    check_button(ctx->session, ctx->hand_paths, ctx->button_x_action, "Button X");
-    check_button(ctx->session, ctx->hand_paths, ctx->button_y_action, "Button Y");
+    check_button(ctx, ctx->select_action, "Select");
+    check_button(ctx, ctx->menu_action, "Menu");
+    check_button(ctx, ctx->button_a_action, "Button A");
+    check_button(ctx, ctx->button_b_action, "Button B");
+    check_button(ctx, ctx->button_x_action, "Button X");
+    check_button(ctx, ctx->button_y_action, "Button Y");
 }
