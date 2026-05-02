@@ -210,6 +210,14 @@ int main(int argc, char **argv)
 		// Step background layout
 		graph_action_step_background_layout(&app);
 
+		// Generate menu buffers if menu is open or processing
+		if (app.app_ctx.current_state == STATE_MENU_OPEN || app.app_ctx.current_state == STATE_JOB_IN_PROGRESS || app.app_ctx.current_state == STATE_EXECUTING) {
+			generate_vulkan_menu_buffers(&app.app_ctx, &app.renderer);
+		} else {
+			app.renderer.menuNodeCount = 0;
+			app.renderer.menuTextCharCount = 0;
+		}
+
 		if (app.vr_enabled) {
 			xr_context_poll_events(&app.xr_ctx);
 		}
