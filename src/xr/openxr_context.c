@@ -30,7 +30,12 @@ static void xr_pose_to_matrix(const XrPosef pose, mat4 out) {
     vec3 p = {pose.position.x, pose.position.y, pose.position.z};
     glm_quat_mat4(q, out);
     glm_translate(out, p);
-    glm_mat4_inv(out, out); // View matrix is inverse of camera pose
+
+    // We want the view matrix, which is the inverse of the camera pose.
+    // The camera pose is in stage space (OpenXR).
+    // ViewMatrix = Inverse(Translation * Rotation)
+    // Inverse(T*R) = Inverse(R) * Inverse(T) = Transpose(R) * (-T)
+    glm_mat4_inv(out, out);
 }
 
 bool xr_context_init(XrContext* ctx, const char* app_name) {
@@ -38,7 +43,7 @@ bool xr_context_init(XrContext* ctx, const char* app_name) {
     ctx->view_config_type = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
 
     const char* extensions[] = {XR_KHR_VULKAN_ENABLE_EXTENSION_NAME};
-    
+
     XrInstanceCreateInfo createInfo = {
         .type = XR_TYPE_INSTANCE_CREATE_INFO,
         .next = NULL,
@@ -309,7 +314,7 @@ bool xr_context_init_input(XrContext* ctx) {
     // Suggest bindings for KHR Simple Controller
     XrPath simpleProfile;
     xrStringToPath(ctx->instance, "/interaction_profiles/khr/simple_controller", &simpleProfile);
-    
+
     XrPath selectLeft, selectRight, menuLeft, menuRight;
     xrStringToPath(ctx->instance, "/user/hand/left/input/select/click", &selectLeft);
     xrStringToPath(ctx->instance, "/user/hand/right/input/select/click", &selectRight);
@@ -332,7 +337,7 @@ bool xr_context_init_input(XrContext* ctx) {
     // Suggest bindings for Oculus Touch (broadly compatible)
     XrPath touchProfile;
     xrStringToPath(ctx->instance, "/interaction_profiles/oculus/touch_controller", &touchProfile);
-    
+
     XrPath aClick, bClick, xClick, yClick;
     xrStringToPath(ctx->instance, "/user/hand/right/input/a/click", &aClick);
     xrStringToPath(ctx->instance, "/user/hand/right/input/b/click", &bClick);

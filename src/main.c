@@ -257,6 +257,9 @@ int main(int argc, char **argv)
 				renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
 				glm_mat4_mul(eye_view, app.renderer.ubo.view, final_view);
 
+                // OpenXR expects Vulkan projection matrices to be inverted on Y compared to OpenGL/Renderer standard
+                eye_proj[1][1] *= -1.0f;
+
 				renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.xrFramebuffers[i][imageIndex], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, final_view, eye_proj, i);
 
 				XrSwapchainImageReleaseInfo releaseInfo = { .type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
