@@ -29,11 +29,23 @@ typedef struct {
 
     bool session_running;
     XrSessionState state;
+
+    // Input actions
+    XrActionSet action_set;
+    XrAction select_action;
+    XrAction menu_action;
+    XrAction button_a_action;
+    XrAction button_b_action;
+    XrAction button_x_action;
+    XrAction button_y_action;
+    XrPath hand_paths[2];
 } XrContext;
 
 bool xr_context_init(XrContext* ctx, const char* app_name);
 void xr_context_cleanup(XrContext* ctx);
 void xr_context_poll_events(XrContext* ctx);
+bool xr_context_init_input(XrContext* ctx);
+void xr_context_sync_input(XrContext* ctx);
 
 bool xr_context_get_vulkan_instance_extensions(XrContext* ctx, char* out_exts, uint32_t* out_size);
 bool xr_context_get_vulkan_device_extensions(XrContext* ctx, char* out_exts, uint32_t* out_size);

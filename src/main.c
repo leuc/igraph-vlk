@@ -121,6 +121,7 @@ int main(int argc, char **argv)
 			app.vr_enabled = false;
 		} else {
 			renderer_setup_xr(&app.renderer, &app.xr_ctx);
+			xr_context_init_input(&app.xr_ctx);
 		}
 	}
 
@@ -220,6 +221,7 @@ int main(int argc, char **argv)
 
 		if (app.vr_enabled) {
 			xr_context_poll_events(&app.xr_ctx);
+			xr_context_sync_input(&app.xr_ctx);
 		}
 
 		if (app.vr_enabled && app.xr_ctx.session_running) {
