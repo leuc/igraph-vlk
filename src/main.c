@@ -226,12 +226,50 @@ int main(int argc, char **argv)
 			if (xr_context_is_action_pressed(&app.xr_ctx, app.xr_ctx.menu_action, 0)) {
 				interaction_menu_toggle(&app);
 			}
-			// Process thumbstick - move XR play space offset
-			float tx = xr_context_get_thumbstick(&app.xr_ctx, 0, 0);
-			float ty = xr_context_get_thumbstick(&app.xr_ctx, 0, 1);
-			if (tx != 0.0f || ty != 0.0f) {
-				app.vr_play_offset[0] += tx * deltaTime * 20.0f;
-				app.vr_play_offset[2] += -ty * deltaTime * 20.0f;
+			// Process thumbsticks for locomotion
+			float tx = xr_context_get_thumbstick(&app.xr_ctx, 0, 0); // Left thumbstick X (Strafe)
+			float ty = xr_context_get_thumbstick(&app.xr_ctx, 0, 1); // Left thumbstick Y (Forward/Back)
+			float ry = xr_context_get_thumbstick(&app.xr_ctx, 1, 1); // Right thumbstick Y (Up/Down)
+
+			if (tx != 0.0f || ty != 0.0f || ry != 0.0f) {
+				// 1. Get the headset's current orientation from the view matrix at the origin
+				mat4 head_view;
+				xr_context_get_view_matrix(&app.xr_ctx, 0, (vec3){0, 0, 0}, head_view);
+
+				// 2. Extract Forward and Right vectors from the View Matrix rows
+				// (Remember: cglm is column-major, so mat[col][row])
+				vec3 right = {head_view[0][0], head_view[1][0], head_view[2][0]};
+				vec3 forward = {-head_view[0][2], -head_view[1][2], -head_view[2][2]}; // -Z is forward
+
+				// 3. Project vectors onto the XZ plane (so looking down doesn't drive you into the floor)
+				right[1] = 0.0f;
+				forward[1] = 0.0f;
+				glm_vec3_normalize(right);
+				glm_vec3_normalize(forward);
+
+				// 4. Calculate movement direction based on Left Thumbstick
+				vec3 move_dir = {0, 0, 0};
+
+				if (tx != 0.0f) {
+					vec3 right_move;
+					glm_vec3_scale(right, tx, right_move);
+					glm_vec3_add(move_dir, right_move, move_dir);
+				}
+				if (ty != 0.0f) {
+					vec3 fwd_move;
+					// OpenXR standard: Y is positive forward
+					glm_vec3_scale(forward, ty, fwd_move);
+					glm_vec3_add(move_dir, fwd_move, move_dir);
+				}
+
+				// Apply speed to horizontal movement
+				glm_vec3_scale(move_dir, deltaTime * 20.0f, move_dir);
+
+				// 5. Apply Right Thumbstick for vertical flying (Up/Down)
+				move_dir[1] += ry * deltaTime * 20.0f;
+
+				// 6. Update the global VR play offset
+				glm_vec3_add(app.vr_play_offset, move_dir, app.vr_play_offset);
 			}
 		}
 
