@@ -42,6 +42,8 @@ typedef struct
 	XrAction button_b_action;
 	XrAction button_x_action;
 	XrAction button_y_action;
+	XrAction thumbstick_left_action;
+	XrAction thumbstick_right_action;
 	XrPath hand_paths[2];
 } XrContext;
 
@@ -51,6 +53,7 @@ void xr_context_poll_events(XrContext *ctx);
 bool xr_context_init_input(XrContext *ctx);
 void xr_context_sync_input(XrContext *ctx);
 bool xr_context_is_action_pressed(XrContext *ctx, XrAction action, uint32_t hand_index);
+float xr_context_get_thumbstick(XrContext *ctx, uint32_t hand_index, uint32_t axis);
 
 bool xr_context_get_vulkan_instance_extensions(XrContext *ctx, char *out_exts, uint32_t *out_size);
 bool xr_context_get_vulkan_device_extensions(XrContext *ctx, char *out_exts, uint32_t *out_size);

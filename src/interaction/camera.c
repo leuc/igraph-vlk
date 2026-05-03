@@ -62,6 +62,35 @@ void camera_process_keyboard(Camera *cam, int direction, float delta_time)
 	}
 }
 
+void camera_process_analog(Camera *cam, float x, float y, float delta_time)
+{
+	// Analog input from thumbstick: x = strafe left/right, y = forward/back
+	// Thumbstick Y is typically -1 forward, +1 backward, but we want +1 = forward
+	float speed = cam->move_speed * delta_time;
+
+	if (x != 0.0f || y != 0.0f) {
+		vec3 temp;
+
+		// Y-axis: forward (negative Y = forward due to thumbstick convention)
+		if (y != 0.0f) {
+			glm_vec3_scale(cam->front, -y * speed, temp);
+			glm_vec3_add(cam->pos, temp, cam->pos);
+		}
+
+		// X-axis: strafe
+		if (x != 0.0f) {
+			vec3 cross;
+			glm_vec3_cross(cam->up, cam->front, cross);
+			glm_vec3_normalize(cross);
+			// Negative X = right, positive X = left in standard convention
+			// But typically thumbstick: right = +X, left = -X
+			// We'll use: +X = strafe right, -X = strafe left
+			glm_vec3_scale(cross, -x * speed, temp);
+			glm_vec3_add(cam->pos, temp, cam->pos);
+		}
+	}
+}
+
 void camera_process_mouse(Camera *cam, float xpos, float ypos)
 {
 	if (cam->first_mouse) {

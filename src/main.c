@@ -226,6 +226,13 @@ int main(int argc, char **argv)
 			if (xr_context_is_action_pressed(&app.xr_ctx, app.xr_ctx.menu_action, 0)) { // 0 = Left hand
 				interaction_menu_toggle(&app);
 			}
+			// Process thumbstick for fly-through navigation
+			// Left thumbstick: move forward/back/strafe
+			float thumb_x = xr_context_get_thumbstick(&app.xr_ctx, 0, 0); // Left hand, X axis
+			float thumb_y = xr_context_get_thumbstick(&app.xr_ctx, 0, 1); // Left hand, Y axis
+			if (thumb_x != 0.0f || thumb_y != 0.0f) {
+				camera_process_analog(&app.camera, thumb_x, thumb_y, deltaTime);
+			}
 		}
 
 		if (app.vr_enabled && app.xr_ctx.session_running) {

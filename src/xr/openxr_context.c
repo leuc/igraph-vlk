@@ -378,6 +378,29 @@ bool xr_context_init_input(XrContext *ctx)
 	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_x_action, "button_x", "Button X", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button X action");
 	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_y_action, "button_y", "Button Y", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button Y action");
 
+	// Thumbstick actions - Use VECTOR2F_INPUT for 2D thumbstick per hand
+	// Left hand thumbstick (both X and Y axes)
+	XrActionCreateInfo thumbstickLeftInfo = {
+		.type = XR_TYPE_ACTION_CREATE_INFO,
+		.actionType = XR_ACTION_TYPE_VECTOR2F_INPUT,
+		.countSubactionPaths = 1,
+		.subactionPaths = &ctx->hand_paths[0],
+	};
+	strncpy(thumbstickLeftInfo.actionName, "thumbstick_left", XR_MAX_ACTION_NAME_SIZE - 1);
+	strncpy(thumbstickLeftInfo.localizedActionName, "Left Thumbstick", XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
+	XR_CHECK(xrCreateAction(ctx->action_set, &thumbstickLeftInfo, &ctx->thumbstick_left_action), "Failed to create left thumbstick action");
+
+	// Right hand thumbstick
+	XrActionCreateInfo thumbstickRightInfo = {
+		.type = XR_TYPE_ACTION_CREATE_INFO,
+		.actionType = XR_ACTION_TYPE_VECTOR2F_INPUT,
+		.countSubactionPaths = 1,
+		.subactionPaths = &ctx->hand_paths[1],
+	};
+	strncpy(thumbstickRightInfo.actionName, "thumbstick_right", XR_MAX_ACTION_NAME_SIZE - 1);
+	strncpy(thumbstickRightInfo.localizedActionName, "Right Thumbstick", XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
+	XR_CHECK(xrCreateAction(ctx->action_set, &thumbstickRightInfo, &ctx->thumbstick_right_action), "Failed to create right thumb stick action");
+
 	// Suggest bindings for KHR Simple Controller
 	XrPath simpleProfile;
 	xrStringToPath(ctx->instance, "/interaction_profiles/khr/simple_controller", &simpleProfile);
@@ -405,10 +428,13 @@ bool xr_context_init_input(XrContext *ctx)
 	XrPath triggerLeft, triggerRight;
 	xrStringToPath(ctx->instance, "/user/hand/left/input/trigger/value", &triggerLeft);
 	xrStringToPath(ctx->instance, "/user/hand/right/input/trigger/value", &triggerRight);
+	XrPath thumbstickLeft, thumbstickRight;
+	xrStringToPath(ctx->instance, "/user/hand/left/input/thumbstick", &thumbstickLeft);
+	xrStringToPath(ctx->instance, "/user/hand/right/input/thumbstick", &thumbstickRight);
 
-	XrActionSuggestedBinding touchBindings[] = {{ctx->select_action, triggerLeft}, {ctx->select_action, triggerRight}, {ctx->menu_action, menuLeft}, {ctx->button_a_action, aClick}, {ctx->button_b_action, bClick}, {ctx->button_x_action, xClick}, {ctx->button_y_action, yClick}};
+	XrActionSuggestedBinding touchBindings[] = {{ctx->select_action, triggerLeft}, {ctx->select_action, triggerRight}, {ctx->menu_action, menuLeft}, {ctx->button_a_action, aClick}, {ctx->button_b_action, bClick}, {ctx->button_x_action, xClick}, {ctx->button_y_action, yClick}, {ctx->thumbstick_left_action, thumbstickLeft}, {ctx->thumbstick_right_action, thumbstickRight}};
 
-	XrInteractionProfileSuggestedBinding touchProfileBindings = {.type = XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING, .interactionProfile = touchProfile, .suggestedBindings = touchBindings, .countSuggestedBindings = 7};
+	XrInteractionProfileSuggestedBinding touchProfileBindings = {.type = XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING, .interactionProfile = touchProfile, .suggestedBindings = touchBindings, .countSuggestedBindings = 8};
 	xrSuggestInteractionProfileBindings(ctx->instance, &touchProfileBindings);
 
 	XrSessionActionSetsAttachInfo attachInfo = {
@@ -468,4 +494,37 @@ void xr_context_sync_input(XrContext *ctx)
 	check_button(ctx, ctx->button_b_action, "Button B");
 	check_button(ctx, ctx->button_x_action, "Button X");
 	check_button(ctx, ctx->button_y_action, "Button Y");
+}
+
+float xr_context_get_thumbstick(XrContext *ctx, uint32_t hand_index, uint32_t axis)
+{
+	if (!ctx->session_running || hand_index >= 2 || axis >= 2)
+		return 0.0f;
+
+	// Get thumbstick vector2f state
+	XrAction action = (hand_index == 0) ? ctx->thumbstick_left_action : ctx->thumbstick_right_action;
+	if (action == XR_NULL_HANDLE)
+		return 0.0f;
+
+	XrActionStateGetInfo getInfo = {
+		.type = XR_TYPE_ACTION_STATE_GET_INFO,
+		.action = action,
+		.subactionPath = ctx->hand_paths[hand_index],
+	};
+
+	XrActionStateVector2f state = {
+		.type = XR_TYPE_ACTION_STATE_VECTOR2F,
+	};
+
+	XrResult res = xrGetActionStateVector2f(ctx->session, &getInfo, &state);
+	if (XR_FAILED(res) || !state.isActive)
+		return 0.0f;
+
+	// Apply deadzone to ignore small drift
+	const float deadzone = 0.15f;
+	float value = (axis == 0) ? state.currentState.x : state.currentState.y;
+	if (fabsf(value) < deadzone)
+		return 0.0f;
+
+	return value;
 }

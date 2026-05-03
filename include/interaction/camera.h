@@ -44,6 +44,15 @@ void camera_init(Camera *cam);
 void camera_process_keyboard(Camera *cam, int direction, float delta_time);
 
 /**
+ * Process analog thumbstick input for camera movement.
+ * @param cam Pointer to camera
+ * @param x Horizontal axis (-1.0 to 1.0)
+ * @param y Vertical axis (-1.0 to 1.0)
+ * @param delta_time Time since last frame in seconds
+ */
+void camera_process_analog(Camera *cam, float x, float y, float delta_time);
+
+/**
  * Process mouse movement for camera look.
  * @param cam Pointer to camera
  * @param xpos Mouse X position
