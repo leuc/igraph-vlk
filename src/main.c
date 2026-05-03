@@ -223,15 +223,15 @@ int main(int argc, char **argv)
 		if (app.vr_enabled) {
 			xr_context_poll_events(&app.xr_ctx);
 			xr_context_sync_input(&app.xr_ctx);
-			if (xr_context_is_action_pressed(&app.xr_ctx, app.xr_ctx.menu_action, 0)) { // 0 = Left hand
+			if (xr_context_is_action_pressed(&app.xr_ctx, app.xr_ctx.menu_action, 0)) {
 				interaction_menu_toggle(&app);
 			}
-			// Process thumbstick for fly-through navigation
-			// Left thumbstick: move forward/back/strafe
-			float thumb_x = xr_context_get_thumbstick(&app.xr_ctx, 0, 0); // Left hand, X axis
-			float thumb_y = xr_context_get_thumbstick(&app.xr_ctx, 0, 1); // Left hand, Y axis
-			if (thumb_x != 0.0f || thumb_y != 0.0f) {
-				camera_process_analog(&app.camera, thumb_x, thumb_y, deltaTime);
+			// Process thumbstick - move XR play space offset
+			float tx = xr_context_get_thumbstick(&app.xr_ctx, 0, 0);
+			float ty = xr_context_get_thumbstick(&app.xr_ctx, 0, 1);
+			if (tx != 0.0f || ty != 0.0f) {
+				app.vr_play_offset[0] += tx * deltaTime * 20.0f;
+				app.vr_play_offset[2] += -ty * deltaTime * 20.0f;
 			}
 		}
 
@@ -265,6 +265,10 @@ int main(int argc, char **argv)
 				mat4 eye_view, eye_proj;
 				xr_context_get_view_matrix(&app.xr_ctx, i, eye_view);
 				xr_context_get_projection_matrix(&app.xr_ctx, i, 0.1f, 1000.0f, eye_proj);
+				// Apply VR play offset to eye position
+				eye_view[3][0] += app.vr_play_offset[0];
+				eye_view[3][1] += app.vr_play_offset[1];
+				eye_view[3][2] += app.vr_play_offset[2];
 				// Flip Y axis for Vulkan NDC (Y-down)
 				eye_proj[1][1] *= -1.0f;
 

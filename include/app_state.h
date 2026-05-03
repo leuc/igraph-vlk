@@ -46,6 +46,7 @@ typedef struct AppState
 	int last_picked_node;
 	int last_picked_edge;
 	int prev_left_mouse_button;
+	vec3 vr_play_offset; // XR offset applied to stage space (thumbstick movement)
 
 	/* Timing */
 	float last_frame_time;
