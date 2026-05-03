@@ -34,6 +34,10 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 	r->sphereIndexOffsets = NULL;
 	r->xrFramebuffers = NULL;
 	r->xrFramebufferImageCount = NULL;
+	r->xr_view_count = 0;
+	r->xrDepthImages = NULL;
+	r->xrDepthImageMemories = NULL;
+	r->xrDepthImageViews = NULL;
 	r->currentRoutingMode = ROUTING_MODE_SPHERICAL_PCB;
 	r->sphereVertexBuffer = VK_NULL_HANDLE;
 	r->sphereIndexBuffer = VK_NULL_HANDLE;

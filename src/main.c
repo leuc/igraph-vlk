@@ -255,23 +255,22 @@ int main(int argc, char **argv)
 				XrSwapchainImageWaitInfo waitInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO, .timeout = XR_INFINITE_DURATION};
 				xrWaitSwapchainImage(app.xr_ctx.swapchains[i].handle, &waitInfo);
 
-				mat4 eye_view, eye_proj, final_view;
+				mat4 eye_view, eye_proj;
 				xr_context_get_view_matrix(&app.xr_ctx, i, eye_view);
 				xr_context_get_projection_matrix(&app.xr_ctx, i, 0.1f, 1000.0f, eye_proj);
+				// Flip Y axis for Vulkan NDC (Y-down)
+				eye_proj[1][1] *= -1.0f;
 
 				printf("[XR] View %u: Pos(%.2f, %.2f, %.2f) Fov(U:%.2f, D:%.2f)\n", i, app.xr_ctx.views[i].pose.position.x, app.xr_ctx.views[i].pose.position.y, app.xr_ctx.views[i].pose.position.z, app.xr_ctx.views[i].fov.angleUp, app.xr_ctx.views[i].fov.angleDown);
 
-				// Update base view matrix from camera
-				renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
-				glm_mat4_mul(eye_view, app.renderer.ubo.view, final_view);
+				// Render to XR Swapchain (use XR view/proj directly, no camera multiplication)
+				renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.xrFramebuffers[i][imageIndex], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, eye_view, eye_proj, i);
 
-				// Render to desktop companion (Left eye only)
+				// Render to desktop companion (Left eye only) using camera view/proj
 				if (i == 0 && has_desktop) {
-					renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.framebuffers[ii], app.renderer.swapchainExtent, final_view, eye_proj, i);
+					renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
+					renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.framebuffers[ii], app.renderer.swapchainExtent, app.renderer.ubo.view, app.renderer.ubo.proj, i);
 				}
-
-				// Render to XR Swapchain
-				renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.xrFramebuffers[i][imageIndex], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, final_view, eye_proj, i);
 
 				XrSwapchainImageReleaseInfo releaseInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
 				xrReleaseSwapchainImage(app.xr_ctx.swapchains[i].handle, &releaseInfo);
