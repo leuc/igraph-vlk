@@ -20,9 +20,14 @@ int renderer_create_pipelines(Renderer *r)
 	create_shader_module(r->device, MENU_VERT_SHADER_PATH, &menuVMod);
 	create_shader_module(r->device, MENU_FRAG_SHADER_PATH, &menuFMod);
 
-	VkViewport vp = {0, 0, 3440, 1440, 0, 1};
-	VkRect2D sc = {{0, 0}, {3440, 1440}};
-	VkPipelineViewportStateCreateInfo vpS = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, .viewportCount = 1, .pViewports = &vp, .scissorCount = 1, .pScissors = &sc};
+	// Viewport
+	VkPipelineViewportStateCreateInfo vpS = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+		.viewportCount = 1,
+		.pViewports = NULL, // Dynamic
+		.scissorCount = 1,
+		.pScissors = NULL // Dynamic
+	};
 	VkPipelineRasterizationStateCreateInfo ras = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO, .polygonMode = VK_POLYGON_MODE_FILL, .lineWidth = 1.0f, .cullMode = VK_CULL_MODE_NONE, .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE};
 	VkPipelineMultisampleStateCreateInfo mul = {.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT};
 	VkPipelineColorBlendAttachmentState colB = {

@@ -228,12 +228,11 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 	transitionImageLayout(r->device, r->commandPool, r->graphicsQueue, r->depthImage, r->depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
 	// Call out to the newly split pipelines file
-	renderer_create_pipelines(r);
-
+	// Create framebuffers for desktop swapchain
 	r->framebuffers = malloc(sizeof(VkFramebuffer) * r->swapchainImageCount);
 	for (uint32_t i = 0; i < r->swapchainImageCount; i++) {
 		VkImageView attachments[] = {r->swapchainImageViews[i], r->depthImageView};
-		VkFramebufferCreateInfo fbi = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = r->renderPass, .attachmentCount = 2, .pAttachments = attachments, .width = 3440, .height = 1440, .layers = 1};
+		VkFramebufferCreateInfo fbi = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = r->renderPass, .attachmentCount = 2, .pAttachments = attachments, .width = r->swapchainExtent.width, .height = r->swapchainExtent.height, .layers = 1};
 		vkCreateFramebuffer(r->device, &fbi, NULL, &r->framebuffers[i]);
 	}
 
@@ -424,7 +423,7 @@ void renderer_setup_xr(Renderer *r, XrContext *xr) {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                 .image = xr->swapchains[i].images[j],
                 .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                .format = VK_FORMAT_B8G8R8A8_SRGB, // Match swapchain format
+                .format = VK_FORMAT_B8G8R8A8_SRGB, 
                 .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
             };
             vkCreateImageView(r->device, &ivInfo, NULL, &xr->swapchains[i].image_views[j]);
@@ -446,6 +445,7 @@ void renderer_setup_xr(Renderer *r, XrContext *xr) {
 
 void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index)
 {
+    printf("[Renderer] RenderScene(View: %u, FB: %p, Extent: %ux%u)\n", view_index, (void*)fb, extent.width, extent.height);
 	uint32_t ubo_idx = r->currentFrame * MAX_VIEWS + view_index;
 	UniformBufferObject eye_ubo = r->ubo;
 	glm_mat4_copy(view, eye_ubo.view);
@@ -460,7 +460,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkFramebuffer fb, V
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
 		.renderPass = r->renderPass,
 		.framebuffer = fb,
-		.renderArea = {{0, 0}, extent},
+		.renderArea = {{0, 0}, {extent.width, extent.height}},
 		.clearValueCount = 2,
 		.pClearValues = clearValues};
 
@@ -468,8 +468,10 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkFramebuffer fb, V
 
 	// Set dynamic viewport and scissor
 	VkViewport viewport = {0.0f, 0.0f, (float)extent.width, (float)extent.height, 0.0f, 1.0f};
+    printf("[Renderer] Viewport: 0,0, %fx%f\n", viewport.width, viewport.height);
 	vkCmdSetViewport(cmd, 0, 1, &viewport);
-	VkRect2D scissor = {{0, 0}, extent};
+	VkRect2D scissor = {{0, 0}, {extent.width, extent.height}};
+    printf("[Renderer] Scissor: 0,0, %ux%u\n", scissor.extent.width, scissor.extent.height);
 	vkCmdSetScissor(cmd, 0, 1, &scissor);
 
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[ubo_idx], 0, NULL);

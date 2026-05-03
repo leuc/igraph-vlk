@@ -28,14 +28,20 @@ static void xr_fov_to_matrix(const XrFovf fov, float nearZ, float farZ, mat4 out
 static void xr_pose_to_matrix(const XrPosef pose, mat4 out) {
     versor q = {pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w};
     vec3 p = {pose.position.x, pose.position.y, pose.position.z};
-    glm_quat_mat4(q, out);
-    glm_translate(out, p);
-
-    // We want the view matrix, which is the inverse of the camera pose.
-    // The camera pose is in stage space (OpenXR).
-    // ViewMatrix = Inverse(Translation * Rotation)
-    // Inverse(T*R) = Inverse(R) * Inverse(T) = Transpose(R) * (-T)
-    glm_mat4_inv(out, out);
+    
+    // View Matrix = Inverse(Rotation * Translation) = Inverse(Translation) * Inverse(Rotation)
+    // T = Translation(p), R = Rotation(q)
+    // Inv(TR) = R^T * Trans(-p)
+    mat4 rot;
+    glm_quat_mat4(q, rot);
+    glm_mat4_transpose(rot); // R^T
+    
+    mat4 trans;
+    glm_mat4_identity(trans);
+    vec3 neg_p = {-p[0], -p[1], -p[2]};
+    glm_translate(trans, neg_p); // Trans(-p)
+    
+    glm_mat4_mul(rot, trans, out); // Out = R^T * T^-1
 }
 
 bool xr_context_init(XrContext* ctx, const char* app_name) {
@@ -84,6 +90,9 @@ bool xr_context_init(XrContext* ctx, const char* app_name) {
     }
     res = xrEnumerateViewConfigurationViews(ctx->instance, ctx->system_id, ctx->view_config_type, ctx->view_count, &ctx->view_count, ctx->view_configs);
     XR_CHECK(res, "Failed to enumerate view configs");
+
+    // Re-verify view count
+    if (ctx->view_count == 0) return false;
 
     ctx->views = malloc(sizeof(XrView) * ctx->view_count);
     for (uint32_t i = 0; i < ctx->view_count; i++) {
@@ -176,10 +185,12 @@ bool xr_context_create_session(XrContext* ctx, VkInstance instance, VkPhysicalDe
     // Create swapchains
     ctx->swapchains = malloc(sizeof(*ctx->swapchains) * ctx->view_count);
     for (uint32_t i = 0; i < ctx->view_count; i++) {
+        printf("[OpenXR] View %u: %ux%u (recommended)\n", i, ctx->view_configs[i].recommendedImageRectWidth, ctx->view_configs[i].recommendedImageRectHeight);
+
         XrSwapchainCreateInfo swapchainCreateInfo = {
             .type = XR_TYPE_SWAPCHAIN_CREATE_INFO,
             .usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT,
-            .format = VK_FORMAT_B8G8R8A8_SRGB, // Should query supported formats
+            .format = VK_FORMAT_B8G8R8A8_SRGB, 
             .sampleCount = ctx->view_configs[i].recommendedSwapchainSampleCount,
             .width = ctx->view_configs[i].recommendedImageRectWidth,
             .height = ctx->view_configs[i].recommendedImageRectHeight,
