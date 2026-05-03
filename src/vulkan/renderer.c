@@ -58,16 +58,17 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 
 	uint32_t glfwExtCount = 0;
 	const char **glfwExts = glfwGetRequiredInstanceExtensions(&glfwExtCount);
-	
+
 	const char *instExts[64];
 	uint32_t instExtCount = 0;
-	for (uint32_t i = 0; i < glfwExtCount; i++) instExts[instExtCount++] = glfwExts[i];
+	for (uint32_t i = 0; i < glfwExtCount; i++)
+		instExts[instExtCount++] = glfwExts[i];
 
 	if (xr) {
 		char xrInstExts[4096];
 		uint32_t xrInstExtsSize = sizeof(xrInstExts);
 		xr_context_get_vulkan_instance_extensions(xr, xrInstExts, &xrInstExtsSize);
-		
+
 		char *token = strtok(xrInstExts, " ");
 		while (token) {
 			instExts[instExtCount++] = strdup(token);
@@ -75,11 +76,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 		}
 	}
 
-	VkInstanceCreateInfo instInfo = {
-		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-		.ppEnabledExtensionNames = instExts,
-		.enabledExtensionCount = instExtCount
-	};
+	VkInstanceCreateInfo instInfo = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .ppEnabledExtensionNames = instExts, .enabledExtensionCount = instExtCount};
 	vkCreateInstance(&instInfo, NULL, &r->instance);
 
 	VkSurfaceKHR surface;
@@ -97,12 +94,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 	}
 
 	float qPrio = 1.0f;
-	VkDeviceQueueCreateInfo qInfo = {
-		.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-		.queueFamilyIndex = 0,
-		.queueCount = 1,
-		.pQueuePriorities = &qPrio
-	};
+	VkDeviceQueueCreateInfo qInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = 0, .queueCount = 1, .pQueuePriorities = &qPrio};
 
 	const char *devExts[64];
 	uint32_t devExtCount = 0;
@@ -120,13 +112,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 		}
 	}
 
-	VkDeviceCreateInfo devInfo = {
-		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-		.queueCreateInfoCount = 1,
-		.pQueueCreateInfos = &qInfo,
-		.enabledExtensionCount = devExtCount,
-		.ppEnabledExtensionNames = devExts
-	};
+	VkDeviceCreateInfo devInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .queueCreateInfoCount = 1, .pQueueCreateInfos = &qInfo, .enabledExtensionCount = devExtCount, .ppEnabledExtensionNames = devExts};
 	vkCreateDevice(r->physicalDevice, &devInfo, NULL, &r->device);
 	vkGetDeviceQueue(r->device, 0, 0, &r->graphicsQueue);
 	vkGetDeviceQueue(r->device, 0, 0, &r->presentQueue);
@@ -220,14 +206,16 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 
 	// Create depth image for early-Z rejection
 	r->depthFormat = VK_FORMAT_D32_SFLOAT;
-    uint32_t depth_w = (xr && xr->swapchains) ? xr->swapchains[0].width : 3440;
-    uint32_t depth_h = (xr && xr->swapchains) ? xr->swapchains[0].height : 1440;
+	uint32_t depth_w = (xr && xr->swapchains) ? xr->swapchains[0].width : 3440;
+	uint32_t depth_h = (xr && xr->swapchains) ? xr->swapchains[0].height : 1440;
 	createImage(r->device, r->physicalDevice, depth_w, depth_h, r->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->depthImage, &r->depthImageMemory);
 	VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->depthImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
 	vkCreateImageView(r->device, &depthViewInfo, NULL, &r->depthImageView);
 	transitionImageLayout(r->device, r->commandPool, r->graphicsQueue, r->depthImage, r->depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
 	// Call out to the newly split pipelines file
+	renderer_create_pipelines(r);
+
 	// Create framebuffers for desktop swapchain
 	r->framebuffers = malloc(sizeof(VkFramebuffer) * r->swapchainImageCount);
 	for (uint32_t i = 0; i < r->swapchainImageCount; i++) {
@@ -394,12 +382,13 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 	return 0;
 }
 
-void renderer_create_depth_resources(Renderer *r, uint32_t width, uint32_t height) {
-    r->depthFormat = VK_FORMAT_D32_SFLOAT;
-    createImage(r->device, r->physicalDevice, width, height, r->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->depthImage, &r->depthImageMemory);
-    VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->depthImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
-    vkCreateImageView(r->device, &depthViewInfo, NULL, &r->depthImageView);
-    transitionImageLayout(r->device, r->commandPool, r->graphicsQueue, r->depthImage, r->depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+void renderer_create_depth_resources(Renderer *r, uint32_t width, uint32_t height)
+{
+	r->depthFormat = VK_FORMAT_D32_SFLOAT;
+	createImage(r->device, r->physicalDevice, width, height, r->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->depthImage, &r->depthImageMemory);
+	VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->depthImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
+	vkCreateImageView(r->device, &depthViewInfo, NULL, &r->depthImageView);
+	transitionImageLayout(r->device, r->commandPool, r->graphicsQueue, r->depthImage, r->depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 }
 
 void renderer_update_view(Renderer *r, vec3 pos, vec3 front, vec3 up)
@@ -409,43 +398,30 @@ void renderer_update_view(Renderer *r, vec3 pos, vec3 front, vec3 up)
 	glm_lookat(pos, c, up, r->ubo.view);
 }
 
-void renderer_setup_xr(Renderer *r, XrContext *xr) {
-    r->xrFramebuffers = malloc(sizeof(VkFramebuffer*) * xr->view_count);
-    r->xrFramebufferImageCount = malloc(sizeof(uint32_t) * xr->view_count);
+void renderer_setup_xr(Renderer *r, XrContext *xr)
+{
+	r->xrFramebuffers = malloc(sizeof(VkFramebuffer *) * xr->view_count);
+	r->xrFramebufferImageCount = malloc(sizeof(uint32_t) * xr->view_count);
 
-    for (uint32_t i = 0; i < xr->view_count; i++) {
-        r->xrFramebufferImageCount[i] = xr->swapchains[i].image_count;
-        r->xrFramebuffers[i] = malloc(sizeof(VkFramebuffer) * xr->swapchains[i].image_count);
-        xr->swapchains[i].image_views = malloc(sizeof(VkImageView) * xr->swapchains[i].image_count);
+	for (uint32_t i = 0; i < xr->view_count; i++) {
+		r->xrFramebufferImageCount[i] = xr->swapchains[i].image_count;
+		r->xrFramebuffers[i] = malloc(sizeof(VkFramebuffer) * xr->swapchains[i].image_count);
+		xr->swapchains[i].image_views = malloc(sizeof(VkImageView) * xr->swapchains[i].image_count);
 
-        for (uint32_t j = 0; j < xr->swapchains[i].image_count; j++) {
-            VkImageViewCreateInfo ivInfo = {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                .image = xr->swapchains[i].images[j],
-                .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                .format = VK_FORMAT_B8G8R8A8_SRGB, 
-                .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
-            };
-            vkCreateImageView(r->device, &ivInfo, NULL, &xr->swapchains[i].image_views[j]);
+		for (uint32_t j = 0; j < xr->swapchains[i].image_count; j++) {
+			VkImageViewCreateInfo ivInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = xr->swapchains[i].images[j], .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_B8G8R8A8_SRGB, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+			vkCreateImageView(r->device, &ivInfo, NULL, &xr->swapchains[i].image_views[j]);
 
-            VkImageView attachments[] = {xr->swapchains[i].image_views[j], r->depthImageView};
-            VkFramebufferCreateInfo fbInfo = {
-                .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-                .renderPass = r->renderPass,
-                .attachmentCount = 2,
-                .pAttachments = attachments,
-                .width = xr->swapchains[i].width,
-                .height = xr->swapchains[i].height,
-                .layers = 1
-            };
-            vkCreateFramebuffer(r->device, &fbInfo, NULL, &r->xrFramebuffers[i][j]);
-        }
-    }
+			VkImageView attachments[] = {xr->swapchains[i].image_views[j], r->depthImageView};
+			VkFramebufferCreateInfo fbInfo = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = r->renderPass, .attachmentCount = 2, .pAttachments = attachments, .width = xr->swapchains[i].width, .height = xr->swapchains[i].height, .layers = 1};
+			vkCreateFramebuffer(r->device, &fbInfo, NULL, &r->xrFramebuffers[i][j]);
+		}
+	}
 }
 
 void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index)
 {
-    printf("[Renderer] RenderScene(View: %u, FB: %p, Extent: %ux%u)\n", view_index, (void*)fb, extent.width, extent.height);
+	printf("[Renderer] RenderScene(View: %u, FB: %p, Extent: %ux%u)\n", view_index, (void *)fb, extent.width, extent.height);
 	uint32_t ubo_idx = r->currentFrame * MAX_VIEWS + view_index;
 	UniformBufferObject eye_ubo = r->ubo;
 	glm_mat4_copy(view, eye_ubo.view);
@@ -456,22 +432,16 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkFramebuffer fb, V
 	clearValues[0].color = (VkClearColorValue){0.01f, 0.01f, 0.02f, 1.0f};
 	clearValues[1].depthStencil = (VkClearDepthStencilValue){1.0f, 0};
 
-	VkRenderPassBeginInfo rpi = {
-		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-		.renderPass = r->renderPass,
-		.framebuffer = fb,
-		.renderArea = {{0, 0}, {extent.width, extent.height}},
-		.clearValueCount = 2,
-		.pClearValues = clearValues};
+	VkRenderPassBeginInfo rpi = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, .renderPass = r->renderPass, .framebuffer = fb, .renderArea = {{0, 0}, {extent.width, extent.height}}, .clearValueCount = 2, .pClearValues = clearValues};
 
 	vkCmdBeginRenderPass(cmd, &rpi, VK_SUBPASS_CONTENTS_INLINE);
 
 	// Set dynamic viewport and scissor
 	VkViewport viewport = {0.0f, 0.0f, (float)extent.width, (float)extent.height, 0.0f, 1.0f};
-    printf("[Renderer] Viewport: 0,0, %fx%f\n", viewport.width, viewport.height);
+	printf("[Renderer] Viewport: 0,0, %fx%f\n", viewport.width, viewport.height);
 	vkCmdSetViewport(cmd, 0, 1, &viewport);
 	VkRect2D scissor = {{0, 0}, {extent.width, extent.height}};
-    printf("[Renderer] Scissor: 0,0, %ux%u\n", scissor.extent.width, scissor.extent.height);
+	printf("[Renderer] Scissor: 0,0, %ux%u\n", scissor.extent.width, scissor.extent.height);
 	vkCmdSetScissor(cmd, 0, 1, &scissor);
 
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[ubo_idx], 0, NULL);
@@ -576,31 +546,16 @@ void renderer_draw_frame(Renderer *r)
 	VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 	vkBeginCommandBuffer(r->commandBuffers[r->currentFrame], &bi);
 
-	renderer_render_scene(r, r->commandBuffers[r->currentFrame], r->framebuffers[ii], r->swapchainExtent, r->ubo.view, r->ubo.proj, MAX_VIEWS - 1);
-
+	renderer_render_scene(r, r->commandBuffers[r->currentFrame], r->framebuffers[ii], r->swapchainExtent, r->ubo.view, r->ubo.proj, 0);
 
 	vkEndCommandBuffer(r->commandBuffers[r->currentFrame]);
 
 	VkPipelineStageFlags ws = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	VkSubmitInfo si = {
-		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = &r->imageAvailableSemaphores[r->currentFrame],
-		.pWaitDstStageMask = &ws,
-		.commandBufferCount = 1,
-		.pCommandBuffers = &r->commandBuffers[r->currentFrame],
-		.signalSemaphoreCount = 1,
-		.pSignalSemaphores = &r->renderFinishedSemaphores[r->currentFrame]};
+	VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .waitSemaphoreCount = 1, .pWaitSemaphores = &r->imageAvailableSemaphores[r->currentFrame], .pWaitDstStageMask = &ws, .commandBufferCount = 1, .pCommandBuffers = &r->commandBuffers[r->currentFrame], .signalSemaphoreCount = 1, .pSignalSemaphores = &r->renderFinishedSemaphores[r->currentFrame]};
 
 	vkQueueSubmit(r->graphicsQueue, 1, &si, r->inFlightFences[r->currentFrame]);
 
-	VkPresentInfoKHR pi = {
-		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = &r->renderFinishedSemaphores[r->currentFrame],
-		.swapchainCount = 1,
-		.pSwapchains = &r->swapchain,
-		.pImageIndices = &ii};
+	VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 1, .pWaitSemaphores = &r->renderFinishedSemaphores[r->currentFrame], .swapchainCount = 1, .pSwapchains = &r->swapchain, .pImageIndices = &ii};
 
 	vkQueuePresentKHR(r->presentQueue, &pi);
 	r->currentFrame = (r->currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -731,7 +686,7 @@ void renderer_cleanup(Renderer *r)
 	}
 
 	if (r->xrFramebuffers) {
-		// Assuming we know xr->view_count or stored it. 
+		// Assuming we know xr->view_count or stored it.
 		// Actually, let's just use MAX_VIEWS - 1 as a limit if we don't have xr context here.
 		// Better: add xr_enabled or similar to Renderer?
 		// For now, let's assume view_count is 2 for VR.

@@ -120,15 +120,15 @@ int main(int argc, char **argv)
 		if (!xr_context_create_session(&app.xr_ctx, app.renderer.instance, app.renderer.physicalDevice, app.renderer.device, 0, 0)) {
 			fprintf(stderr, "Failed to create XR session\n");
 			app.vr_enabled = false;
-            renderer_create_depth_resources(&app.renderer, app.renderer.swapchainExtent.width, app.renderer.swapchainExtent.height);
+			renderer_create_depth_resources(&app.renderer, app.renderer.swapchainExtent.width, app.renderer.swapchainExtent.height);
 		} else {
 			renderer_setup_xr(&app.renderer, &app.xr_ctx);
-            renderer_create_depth_resources(&app.renderer, app.xr_ctx.swapchains[0].width, app.xr_ctx.swapchains[0].height);
+			renderer_create_depth_resources(&app.renderer, app.xr_ctx.swapchains[0].width, app.xr_ctx.swapchains[0].height);
 			xr_context_init_input(&app.xr_ctx);
 		}
 	} else {
-        renderer_create_depth_resources(&app.renderer, app.renderer.swapchainExtent.width, app.renderer.swapchainExtent.height);
-    }
+		renderer_create_depth_resources(&app.renderer, app.renderer.swapchainExtent.width, app.renderer.swapchainExtent.height);
+	}
 
 	// Initialize animation manager
 	animation_manager_init(&app.anim_manager, &app.renderer, &app.current_graph);
@@ -227,95 +227,81 @@ int main(int argc, char **argv)
 		if (app.vr_enabled) {
 			xr_context_poll_events(&app.xr_ctx);
 			xr_context_sync_input(&app.xr_ctx);
-            if (xr_context_is_action_pressed(&app.xr_ctx, app.xr_ctx.menu_action, 0)) { // 0 = Left hand
-                interaction_menu_toggle(&app);
-            }
+			if (xr_context_is_action_pressed(&app.xr_ctx, app.xr_ctx.menu_action, 0)) { // 0 = Left hand
+				interaction_menu_toggle(&app);
+			}
 		}
 
 		if (app.vr_enabled && app.xr_ctx.session_running) {
-            // Sync with XR frame
-            XrFrameState frameState = { .type = XR_TYPE_FRAME_STATE };
-            xr_context_begin_frame(&app.xr_ctx, &frameState);
+			// Sync with XR frame
+			XrFrameState frameState = {.type = XR_TYPE_FRAME_STATE};
+			xr_context_begin_frame(&app.xr_ctx, &frameState);
 
-            // Separate Desktop Presentation logic
-            uint32_t ii = -1;
-            VkResult res = vkAcquireNextImageKHR(app.renderer.device, app.renderer.swapchain, 0, app.renderer.imageAvailableSemaphores[app.renderer.currentFrame], VK_NULL_HANDLE, &ii);
-            bool has_desktop = (res == VK_SUCCESS || res == VK_SUBOPTIMAL_KHR);
+			// Separate Desktop Presentation logic
+			uint32_t ii = -1;
+			VkResult res = vkAcquireNextImageKHR(app.renderer.device, app.renderer.swapchain, 0, app.renderer.imageAvailableSemaphores[app.renderer.currentFrame], VK_NULL_HANDLE, &ii);
+			bool has_desktop = (res == VK_SUCCESS || res == VK_SUBOPTIMAL_KHR);
 
-            vkWaitForFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame], VK_TRUE, UINT64_MAX);
+			vkWaitForFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame], VK_TRUE, UINT64_MAX);
 			vkResetFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame]);
 
 			vkResetCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame], 0);
-			VkCommandBufferBeginInfo bi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+			VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 			vkBeginCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame], &bi);
 
 			XrCompositionLayerProjectionView projectionViews[2]; // Stereo
 
 			for (uint32_t i = 0; i < app.xr_ctx.view_count; i++) {
 				uint32_t imageIndex;
-				XrSwapchainImageAcquireInfo acquireInfo = { .type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
+				XrSwapchainImageAcquireInfo acquireInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
 				xrAcquireSwapchainImage(app.xr_ctx.swapchains[i].handle, &acquireInfo, &imageIndex);
 
-				XrSwapchainImageWaitInfo waitInfo = { .type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO, .timeout = XR_INFINITE_DURATION };
+				XrSwapchainImageWaitInfo waitInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO, .timeout = XR_INFINITE_DURATION};
 				xrWaitSwapchainImage(app.xr_ctx.swapchains[i].handle, &waitInfo);
 
 				mat4 eye_view, eye_proj, final_view;
 				xr_context_get_view_matrix(&app.xr_ctx, i, eye_view);
 				xr_context_get_projection_matrix(&app.xr_ctx, i, 0.1f, 1000.0f, eye_proj);
 
-				printf("[XR] View %u: Pos(%.2f, %.2f, %.2f) Fov(U:%.2f, D:%.2f)\n", 
-				i, 
-				app.xr_ctx.views[i].pose.position.x, 
-				app.xr_ctx.views[i].pose.position.y, 
-				app.xr_ctx.views[i].pose.position.z,
-				app.xr_ctx.views[i].fov.angleUp,
-				app.xr_ctx.views[i].fov.angleDown);
+				printf("[XR] View %u: Pos(%.2f, %.2f, %.2f) Fov(U:%.2f, D:%.2f)\n", i, app.xr_ctx.views[i].pose.position.x, app.xr_ctx.views[i].pose.position.y, app.xr_ctx.views[i].pose.position.z, app.xr_ctx.views[i].fov.angleUp, app.xr_ctx.views[i].fov.angleDown);
 
 				// Update base view matrix from camera
 				renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
 				glm_mat4_mul(eye_view, app.renderer.ubo.view, final_view);
 
-                // Render to desktop companion (Left eye only)
-                if (i == 0 && has_desktop) {
-				    renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.framebuffers[ii], app.renderer.swapchainExtent, final_view, eye_proj, i);
-                    
-                    VkPresentInfoKHR pi = { .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 0, .swapchainCount = 1, .pSwapchains = &app.renderer.swapchain, .pImageIndices = &ii };
-                    vkQueuePresentKHR(app.renderer.presentQueue, &pi);
-                }
+				// Render to desktop companion (Left eye only)
+				if (i == 0 && has_desktop) {
+					renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.framebuffers[ii], app.renderer.swapchainExtent, final_view, eye_proj, i);
 
-                // Render to XR Swapchain
+					VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 0, .swapchainCount = 1, .pSwapchains = &app.renderer.swapchain, .pImageIndices = &ii};
+					vkQueuePresentKHR(app.renderer.presentQueue, &pi);
+				}
+
+				// Render to XR Swapchain
 				renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.xrFramebuffers[i][imageIndex], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, final_view, eye_proj, i);
 
-
-
-				XrSwapchainImageReleaseInfo releaseInfo = { .type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
+				XrSwapchainImageReleaseInfo releaseInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
 				xrReleaseSwapchainImage(app.xr_ctx.swapchains[i].handle, &releaseInfo);
 
-				projectionViews[i] = (XrCompositionLayerProjectionView){
-					.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
-					.pose = app.xr_ctx.views[i].pose,
-					.fov = app.xr_ctx.views[i].fov,
-					.subImage = {
-						.swapchain = app.xr_ctx.swapchains[i].handle,
-						.imageRect = {{0, 0}, {(int32_t)app.xr_ctx.swapchains[i].width, (int32_t)app.xr_ctx.swapchains[i].height}},
-						.imageArrayIndex = 0,
-					}
-				};
+				projectionViews[i] = (XrCompositionLayerProjectionView){.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
+																		.pose = app.xr_ctx.views[i].pose,
+																		.fov = app.xr_ctx.views[i].fov,
+																		.subImage = {
+																			.swapchain = app.xr_ctx.swapchains[i].handle,
+																			.imageRect = {{0, 0}, {(int32_t)app.xr_ctx.swapchains[i].width, (int32_t)app.xr_ctx.swapchains[i].height}},
+																			.imageArrayIndex = 0,
+																		}};
 			}
 
 			vkEndCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame]);
-			
-			VkSubmitInfo si = {
-				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-				.commandBufferCount = 1,
-				.pCommandBuffers = &app.renderer.commandBuffers[app.renderer.currentFrame]
-			};
+
+			VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &app.renderer.commandBuffers[app.renderer.currentFrame]};
 			vkQueueSubmit(app.renderer.graphicsQueue, 1, &si, app.renderer.inFlightFences[app.renderer.currentFrame]);
 
-            if (has_desktop) {
-                VkPresentInfoKHR pi = { .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 0, .swapchainCount = 1, .pSwapchains = &app.renderer.swapchain, .pImageIndices = &ii };
-                vkQueuePresentKHR(app.renderer.presentQueue, &pi);
-            }
+			if (has_desktop) {
+				VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 0, .swapchainCount = 1, .pSwapchains = &app.renderer.swapchain, .pImageIndices = &ii};
+				vkQueuePresentKHR(app.renderer.presentQueue, &pi);
+			}
 
 			XrCompositionLayerProjection layer = {
 				.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,
@@ -323,7 +309,7 @@ int main(int argc, char **argv)
 				.viewCount = app.xr_ctx.view_count,
 				.views = projectionViews,
 			};
-			XrCompositionLayerBaseHeader* layerPtr = (XrCompositionLayerBaseHeader*)&layer;
+			XrCompositionLayerBaseHeader *layerPtr = (XrCompositionLayerBaseHeader *)&layer;
 			xr_context_end_frame(&app.xr_ctx, &frameState, &layerPtr, 1);
 
 			app.renderer.currentFrame = (app.renderer.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -331,15 +317,7 @@ int main(int argc, char **argv)
 			// Update base view matrix from camera
 			renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
 
-			// For Desktop path
-			mat4 desktop_proj;
-			glm_mat4_copy(app.renderer.ubo.proj, desktop_proj);
-			// Apply Y-axis inversion to match what we do for VR
-			desktop_proj[1][1] *= -1.0f;
-
-			renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.framebuffers[app.renderer.currentFrame], app.renderer.swapchainExtent, app.renderer.ubo.view, desktop_proj, MAX_VIEWS - 1);
 			renderer_draw_frame(&app.renderer);
-
 		}
 
 		glfwPollEvents();

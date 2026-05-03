@@ -20,7 +20,7 @@ int renderer_create_pipelines(Renderer *r)
 	create_shader_module(r->device, MENU_VERT_SHADER_PATH, &menuVMod);
 	create_shader_module(r->device, MENU_FRAG_SHADER_PATH, &menuFMod);
 
-	// Viewport
+	// Viewport - Dynamic state
 	VkPipelineViewportStateCreateInfo vpS = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
 		.viewportCount = 1,
@@ -28,6 +28,10 @@ int renderer_create_pipelines(Renderer *r)
 		.scissorCount = 1,
 		.pScissors = NULL // Dynamic
 	};
+
+	// Dynamic state for viewport and scissor
+	VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+	VkPipelineDynamicStateCreateInfo dynS = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO, .dynamicStateCount = 2, .pDynamicStates = dynamicStates};
 	VkPipelineRasterizationStateCreateInfo ras = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO, .polygonMode = VK_POLYGON_MODE_FILL, .lineWidth = 1.0f, .cullMode = VK_CULL_MODE_NONE, .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE};
 	VkPipelineMultisampleStateCreateInfo mul = {.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT};
 	VkPipelineColorBlendAttachmentState colB = {
@@ -65,7 +69,7 @@ int renderer_create_pipelines(Renderer *r)
 	// Depth-stencil for opaque nodes: test + write for early-Z
 	VkPipelineDepthStencilStateCreateInfo nodeDS = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO, .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_TRUE, .depthCompareOp = VK_COMPARE_OP_LESS};
 
-	VkGraphicsPipelineCreateInfo pInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = nstages, .pVertexInputState = &nvi, .pInputAssemblyState = &niAs, .pViewportState = &vpS, .pRasterizationState = &ras, .pMultisampleState = &mul, .pColorBlendState = &colS, .pDepthStencilState = &nodeDS, .layout = r->pipelineLayout, .renderPass = r->renderPass};
+	VkGraphicsPipelineCreateInfo pInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = nstages, .pVertexInputState = &nvi, .pInputAssemblyState = &niAs, .pViewportState = &vpS, .pRasterizationState = &ras, .pMultisampleState = &mul, .pColorBlendState = &colS, .pDepthStencilState = &nodeDS, .pDynamicState = &dynS, .layout = r->pipelineLayout, .renderPass = r->renderPass};
 	vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &pInfo, NULL, &r->graphicsPipeline);
 
 	VkShaderModule svMod, sfMod;
@@ -86,7 +90,7 @@ int renderer_create_pipelines(Renderer *r)
 
 	VkPipelineRasterizationStateCreateInfo rasSphere = ras;
 	rasSphere.cullMode = VK_CULL_MODE_BACK_BIT; // FIX: Prevent drawing the inside of spheres
-	VkGraphicsPipelineCreateInfo spInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = sstages, .pVertexInputState = &svi, .pInputAssemblyState = &niAs, .pViewportState = &vpS, .pRasterizationState = &rasSphere, .pMultisampleState = &mul, .pColorBlendState = &colS_trans, .pDepthStencilState = &ds, .layout = r->pipelineLayout, .renderPass = r->renderPass};
+	VkGraphicsPipelineCreateInfo spInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = sstages, .pVertexInputState = &svi, .pInputAssemblyState = &niAs, .pViewportState = &vpS, .pRasterizationState = &rasSphere, .pMultisampleState = &mul, .pColorBlendState = &colS_trans, .pDepthStencilState = &ds, .pDynamicState = &dynS, .layout = r->pipelineLayout, .renderPass = r->renderPass};
 	vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &spInfo, NULL, &r->spherePipeline);
 	vkDestroyShaderModule(r->device, sfMod, NULL);
 	vkDestroyShaderModule(r->device, svMod, NULL);
@@ -109,7 +113,7 @@ int renderer_create_pipelines(Renderer *r)
 	VkPipelineVertexInputStateCreateInfo evi = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 2, .pVertexBindingDescriptions = eb, .vertexAttributeDescriptionCount = 8, .pVertexAttributeDescriptions = ea};
 	VkPipelineInputAssemblyStateCreateInfo eia = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST};
 	VkPipelineDepthStencilStateCreateInfo edgeDS = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO, .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_TRUE, .depthCompareOp = VK_COMPARE_OP_LESS};
-	VkGraphicsPipelineCreateInfo epInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = estages, .pVertexInputState = &evi, .pInputAssemblyState = &eia, .pViewportState = &vpS, .pRasterizationState = &ras, .pMultisampleState = &mul, .pColorBlendState = &colS, .pDepthStencilState = &edgeDS, .layout = r->pipelineLayout, .renderPass = r->renderPass};
+	VkGraphicsPipelineCreateInfo epInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = estages, .pVertexInputState = &evi, .pInputAssemblyState = &eia, .pViewportState = &vpS, .pRasterizationState = &ras, .pMultisampleState = &mul, .pColorBlendState = &colS, .pDepthStencilState = &edgeDS, .pDynamicState = &dynS, .layout = r->pipelineLayout, .renderPass = r->renderPass};
 	vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &epInfo, NULL, &r->edgePipeline);
 
 	VkPipelineInputAssemblyStateCreateInfo lias = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP};
@@ -123,7 +127,7 @@ int renderer_create_pipelines(Renderer *r)
 	// Depth state for labels: test enabled, write disabled to prevent z-fighting
 	VkPipelineDepthStencilStateCreateInfo lds = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO, .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_FALSE, .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL};
 
-	VkGraphicsPipelineCreateInfo lpInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = lstages, .pVertexInputState = &lvi, .pInputAssemblyState = &lias, .pViewportState = &vpS, .pRasterizationState = &ras, .pMultisampleState = &mul, .pColorBlendState = &lcs, .pDepthStencilState = &lds, .layout = r->pipelineLayout, .renderPass = r->renderPass};
+	VkGraphicsPipelineCreateInfo lpInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = lstages, .pVertexInputState = &lvi, .pInputAssemblyState = &lias, .pViewportState = &vpS, .pRasterizationState = &ras, .pMultisampleState = &mul, .pColorBlendState = &lcs, .pDepthStencilState = &lds, .pDynamicState = &dynS, .layout = r->pipelineLayout, .renderPass = r->renderPass};
 	vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &lpInfo, NULL, &r->labelPipeline);
 
 	// Define stages for UI
@@ -204,6 +208,7 @@ int renderer_create_pipelines(Renderer *r)
 											  .pMultisampleState = &mul,
 											  .pColorBlendState = &colS, // with blending for textures
 											  .pDepthStencilState = &menuDS,
+											  .pDynamicState = &dynS,
 											  .layout = r->pipelineLayout,
 											  .renderPass = r->renderPass};
 
