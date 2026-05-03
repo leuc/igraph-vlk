@@ -120,14 +120,10 @@ int main(int argc, char **argv)
 		if (!xr_context_create_session(&app.xr_ctx, app.renderer.instance, app.renderer.physicalDevice, app.renderer.device, 0, 0)) {
 			fprintf(stderr, "Failed to create XR session\n");
 			app.vr_enabled = false;
-			renderer_create_depth_resources(&app.renderer, app.renderer.swapchainExtent.width, app.renderer.swapchainExtent.height);
 		} else {
 			renderer_setup_xr(&app.renderer, &app.xr_ctx);
-			renderer_create_depth_resources(&app.renderer, app.xr_ctx.swapchains[0].width, app.xr_ctx.swapchains[0].height);
 			xr_context_init_input(&app.xr_ctx);
 		}
-	} else {
-		renderer_create_depth_resources(&app.renderer, app.renderer.swapchainExtent.width, app.renderer.swapchainExtent.height);
 	}
 
 	// Initialize animation manager
@@ -272,9 +268,6 @@ int main(int argc, char **argv)
 				// Render to desktop companion (Left eye only)
 				if (i == 0 && has_desktop) {
 					renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.framebuffers[ii], app.renderer.swapchainExtent, final_view, eye_proj, i);
-
-					VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 0, .swapchainCount = 1, .pSwapchains = &app.renderer.swapchain, .pImageIndices = &ii};
-					vkQueuePresentKHR(app.renderer.presentQueue, &pi);
 				}
 
 				// Render to XR Swapchain
@@ -295,11 +288,22 @@ int main(int argc, char **argv)
 
 			vkEndCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame]);
 
+			VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &app.renderer.commandBuffers[app.renderer.currentFrame]};
+
+			// Only use desktop semaphores if we successfully acquired a desktop image
+			if (has_desktop) {
+				si.waitSemaphoreCount = 1;
+				si.pWaitSemaphores = &app.renderer.imageAvailableSemaphores[app.renderer.currentFrame];
+				si.pWaitDstStageMask = &waitStage;
+				si.signalSemaphoreCount = 1;
+				si.pSignalSemaphores = &app.renderer.renderFinishedSemaphores[app.renderer.currentFrame];
+			}
+
 			vkQueueSubmit(app.renderer.graphicsQueue, 1, &si, app.renderer.inFlightFences[app.renderer.currentFrame]);
 
 			if (has_desktop) {
-				VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 0, .swapchainCount = 1, .pSwapchains = &app.renderer.swapchain, .pImageIndices = &ii};
+				VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 1, .pWaitSemaphores = &app.renderer.renderFinishedSemaphores[app.renderer.currentFrame], .swapchainCount = 1, .pSwapchains = &app.renderer.swapchain, .pImageIndices = &ii};
 				vkQueuePresentKHR(app.renderer.presentQueue, &pi);
 			}
 

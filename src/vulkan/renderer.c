@@ -61,6 +61,8 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 
 	const char *instExts[64];
 	uint32_t instExtCount = 0;
+	char *instStrdup[64];
+	uint32_t instStrdupCount = 0;
 	for (uint32_t i = 0; i < glfwExtCount; i++)
 		instExts[instExtCount++] = glfwExts[i];
 
@@ -70,14 +72,23 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 		xr_context_get_vulkan_instance_extensions(xr, xrInstExts, &xrInstExtsSize);
 
 		char *token = strtok(xrInstExts, " ");
+		char *instStrdup[64];
+		uint32_t instStrdupCount = 0;
 		while (token) {
-			instExts[instExtCount++] = strdup(token);
+			char *dup = strdup(token);
+			instExts[instExtCount++] = dup;
+			instStrdup[instStrdupCount++] = dup;
 			token = strtok(NULL, " ");
 		}
 	}
 
 	VkInstanceCreateInfo instInfo = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .ppEnabledExtensionNames = instExts, .enabledExtensionCount = instExtCount};
 	vkCreateInstance(&instInfo, NULL, &r->instance);
+
+	// Free instance extension strdup'd strings (no longer needed after instance creation)
+	for (uint32_t i = 0; i < instStrdupCount; i++) {
+		free(instStrdup[i]);
+	}
 
 	VkSurfaceKHR surface;
 	glfwCreateWindowSurface(r->instance, window, NULL, &surface);
@@ -98,6 +109,8 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 
 	const char *devExts[64];
 	uint32_t devExtCount = 0;
+	char *devStrdup[64];
+	uint32_t devStrdupCount = 0;
 	devExts[devExtCount++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
 
 	if (xr) {
@@ -107,15 +120,27 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 
 		char *token = strtok(xrDevExts, " ");
 		while (token) {
-			devExts[devExtCount++] = strdup(token);
+			char *dup = strdup(token);
+			devExts[devExtCount++] = dup;
+			devStrdup[devStrdupCount++] = dup;
 			token = strtok(NULL, " ");
 		}
 	}
 
 	VkDeviceCreateInfo devInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .queueCreateInfoCount = 1, .pQueueCreateInfos = &qInfo, .enabledExtensionCount = devExtCount, .ppEnabledExtensionNames = devExts};
 	vkCreateDevice(r->physicalDevice, &devInfo, NULL, &r->device);
+
+	// Free device extension strdup'd strings (no longer needed after device creation)
+	for (uint32_t i = 0; i < devStrdupCount; i++) {
+		free(devStrdup[i]);
+	}
 	vkGetDeviceQueue(r->device, 0, 0, &r->graphicsQueue);
 	vkGetDeviceQueue(r->device, 0, 0, &r->presentQueue);
+
+	// Create command pool early so transitionImageLayout can use it
+	VkCommandPoolCreateInfo cpI = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = 0};
+	vkCreateCommandPool(r->device, &cpI, NULL, &r->commandPool);
+
 	r->swapchainExtent = (VkExtent2D){3440, 1440};
 	r->swapchainFormat = VK_FORMAT_B8G8R8A8_UNORM;
 
@@ -145,6 +170,14 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 		VkImageViewCreateInfo vInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->swapchainImages[i], .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->swapchainFormat, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
 		vkCreateImageView(r->device, &vInfo, NULL, &r->swapchainImageViews[i]);
 	}
+
+	// Create desktop depth buffer (sized to swapchain extent)
+	r->depthFormat = VK_FORMAT_D32_SFLOAT;
+	createImage(r->device, r->physicalDevice, r->swapchainExtent.width, r->swapchainExtent.height, r->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->depthImage, &r->depthImageMemory);
+	VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->depthImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
+	vkCreateImageView(r->device, &depthViewInfo, NULL, &r->depthImageView);
+	transitionImageLayout(r->device, r->commandPool, r->graphicsQueue, r->depthImage, r->depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
 	VkDescriptorSetLayoutBinding dslb[] = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL}};
 	VkDescriptorSetLayoutCreateInfo layInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 2, .pBindings = dslb};
 	vkCreateDescriptorSetLayout(r->device, &layInfo, NULL, &r->descriptorSetLayout);
@@ -166,9 +199,6 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 	VkRenderPassCreateInfo rpInfo = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, .attachmentCount = 2, .pAttachments = atts, .subpassCount = 1, .pSubpasses = &sub};
 	vkCreateRenderPass(r->device, &rpInfo, NULL, &r->renderPass);
 	r->depthFormat = VK_FORMAT_D32_SFLOAT;
-
-	VkCommandPoolCreateInfo cpI = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = 0};
-	vkCreateCommandPool(r->device, &cpI, NULL, &r->commandPool);
 
 	if (!atlasLoaded) {
 		text_generate_atlas(FONT_PATH, &globalAtlas);
@@ -203,15 +233,6 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 	vkCreateImageView(r->device, &viewI, NULL, &r->textureImageView);
 	VkSamplerCreateInfo sampI = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = VK_FILTER_LINEAR, .minFilter = VK_FILTER_LINEAR, .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR, .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE};
 	vkCreateSampler(r->device, &sampI, NULL, &r->textureSampler);
-
-	// Create depth image for early-Z rejection
-	r->depthFormat = VK_FORMAT_D32_SFLOAT;
-	uint32_t depth_w = (xr && xr->swapchains) ? xr->swapchains[0].width : 3440;
-	uint32_t depth_h = (xr && xr->swapchains) ? xr->swapchains[0].height : 1440;
-	createImage(r->device, r->physicalDevice, depth_w, depth_h, r->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->depthImage, &r->depthImageMemory);
-	VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->depthImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
-	vkCreateImageView(r->device, &depthViewInfo, NULL, &r->depthImageView);
-	transitionImageLayout(r->device, r->commandPool, r->graphicsQueue, r->depthImage, r->depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
 	// Call out to the newly split pipelines file
 	renderer_create_pipelines(r);
@@ -382,15 +403,6 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 	return 0;
 }
 
-void renderer_create_depth_resources(Renderer *r, uint32_t width, uint32_t height)
-{
-	r->depthFormat = VK_FORMAT_D32_SFLOAT;
-	createImage(r->device, r->physicalDevice, width, height, r->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->depthImage, &r->depthImageMemory);
-	VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->depthImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
-	vkCreateImageView(r->device, &depthViewInfo, NULL, &r->depthImageView);
-	transitionImageLayout(r->device, r->commandPool, r->graphicsQueue, r->depthImage, r->depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-}
-
 void renderer_update_view(Renderer *r, vec3 pos, vec3 front, vec3 up)
 {
 	vec3 c;
@@ -400,19 +412,35 @@ void renderer_update_view(Renderer *r, vec3 pos, vec3 front, vec3 up)
 
 void renderer_setup_xr(Renderer *r, XrContext *xr)
 {
+	r->xr_view_count = xr->view_count;
 	r->xrFramebuffers = malloc(sizeof(VkFramebuffer *) * xr->view_count);
 	r->xrFramebufferImageCount = malloc(sizeof(uint32_t) * xr->view_count);
+
+	// Allocate per-view XR depth buffers
+	r->xrDepthImages = malloc(sizeof(VkImage) * xr->view_count);
+	r->xrDepthImageMemories = malloc(sizeof(VkDeviceMemory) * xr->view_count);
+	r->xrDepthImageViews = malloc(sizeof(VkImageView) * xr->view_count);
 
 	for (uint32_t i = 0; i < xr->view_count; i++) {
 		r->xrFramebufferImageCount[i] = xr->swapchains[i].image_count;
 		r->xrFramebuffers[i] = malloc(sizeof(VkFramebuffer) * xr->swapchains[i].image_count);
 		xr->swapchains[i].image_views = malloc(sizeof(VkImageView) * xr->swapchains[i].image_count);
 
+		// Create depth buffer for this XR view
+		createImage(r->device, r->physicalDevice, xr->swapchains[i].width, xr->swapchains[i].height, r->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->xrDepthImages[i], &r->xrDepthImageMemories[i]);
+		VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->xrDepthImages[i], .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
+		vkCreateImageView(r->device, &depthViewInfo, NULL, &r->xrDepthImageViews[i]);
+		transitionImageLayout(r->device, r->commandPool, r->graphicsQueue, r->xrDepthImages[i], r->depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
 		for (uint32_t j = 0; j < xr->swapchains[i].image_count; j++) {
-			VkImageViewCreateInfo ivInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = xr->swapchains[i].images[j], .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_B8G8R8A8_SRGB, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+			VkImageViewCreateInfo ivInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+											.image = xr->swapchains[i].images[j],
+											.viewType = VK_IMAGE_VIEW_TYPE_2D,
+											.format = xr->swapchain_format, // Use queried format
+											.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
 			vkCreateImageView(r->device, &ivInfo, NULL, &xr->swapchains[i].image_views[j]);
 
-			VkImageView attachments[] = {xr->swapchains[i].image_views[j], r->depthImageView};
+			VkImageView attachments[] = {xr->swapchains[i].image_views[j], r->xrDepthImageViews[i]};
 			VkFramebufferCreateInfo fbInfo = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = r->renderPass, .attachmentCount = 2, .pAttachments = attachments, .width = xr->swapchains[i].width, .height = xr->swapchains[i].height, .layers = 1};
 			vkCreateFramebuffer(r->device, &fbInfo, NULL, &r->xrFramebuffers[i][j]);
 		}
@@ -686,11 +714,18 @@ void renderer_cleanup(Renderer *r)
 	}
 
 	if (r->xrFramebuffers) {
-		// Assuming we know xr->view_count or stored it.
-		// Actually, let's just use MAX_VIEWS - 1 as a limit if we don't have xr context here.
-		// Better: add xr_enabled or similar to Renderer?
-		// For now, let's assume view_count is 2 for VR.
-		for (int i = 0; i < 2; i++) {
+		for (uint32_t i = 0; i < r->xr_view_count; i++) {
+			// Cleanup per-view XR depth resources
+			if (r->xrDepthImageViews[i] != VK_NULL_HANDLE) {
+				vkDestroyImageView(r->device, r->xrDepthImageViews[i], NULL);
+			}
+			if (r->xrDepthImages[i] != VK_NULL_HANDLE) {
+				vkDestroyImage(r->device, r->xrDepthImages[i], NULL);
+			}
+			if (r->xrDepthImageMemories[i] != VK_NULL_HANDLE) {
+				vkFreeMemory(r->device, r->xrDepthImageMemories[i], NULL);
+			}
+
 			for (uint32_t j = 0; j < r->xrFramebufferImageCount[i]; j++) {
 				vkDestroyFramebuffer(r->device, r->xrFramebuffers[i][j], NULL);
 			}
@@ -698,6 +733,9 @@ void renderer_cleanup(Renderer *r)
 		}
 		free(r->xrFramebuffers);
 		free(r->xrFramebufferImageCount);
+		free(r->xrDepthImages);
+		free(r->xrDepthImageMemories);
+		free(r->xrDepthImageViews);
 	}
 
 	vkDestroyCommandPool(r->device, r->commandPool, NULL);

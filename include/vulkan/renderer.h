@@ -107,6 +107,12 @@ typedef struct
 	VkImageView depthImageView;
 	VkFormat depthFormat;
 
+	// XR-specific depth buffers (per view, separate from desktop)
+	uint32_t xr_view_count;
+	VkImage *xrDepthImages;				  // [view_index]
+	VkDeviceMemory *xrDepthImageMemories; // [view_index]
+	VkImageView *xrDepthImageViews;		  // [view_index]
+
 	VkBuffer nodePositionBuffer;
 	VkDeviceMemory nodePositionMemory;
 	VkBuffer nodeAttributeBuffer;
@@ -217,7 +223,6 @@ typedef struct
 #include "xr/openxr_context.h"
 
 int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *xr);
-void renderer_create_depth_resources(Renderer *r, uint32_t width, uint32_t height);
 void renderer_setup_xr(Renderer *r, XrContext *xr);
 void renderer_cleanup(Renderer *r);
 void renderer_draw_frame(Renderer *r);
