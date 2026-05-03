@@ -63,6 +63,6 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 void xr_context_destroy_session(XrContext *ctx);
 
 bool xr_context_begin_frame(XrContext *ctx, XrFrameState *frame_state);
-void xr_context_get_view_matrix(XrContext *ctx, uint32_t view_index, mat4 out);
+void xr_context_get_view_matrix(XrContext *ctx, uint32_t view_index, vec3 camera_pos, mat4 out);
 void xr_context_get_projection_matrix(XrContext *ctx, uint32_t view_index, float nearZ, float farZ, mat4 out);
 bool xr_context_end_frame(XrContext *ctx, XrFrameState *frame_state, XrCompositionLayerBaseHeader **layers, uint32_t layer_count);
