@@ -265,10 +265,12 @@ int main(int argc, char **argv)
 				mat4 eye_view, eye_proj;
 				xr_context_get_view_matrix(&app.xr_ctx, i, eye_view);
 				xr_context_get_projection_matrix(&app.xr_ctx, i, 0.1f, 1000.0f, eye_proj);
-				// Apply VR play offset to eye position
-				eye_view[3][0] += app.vr_play_offset[0];
-				eye_view[3][1] += app.vr_play_offset[1];
-				eye_view[3][2] += app.vr_play_offset[2];
+				// Use headset orientation only (columns 0,1,2), but thumbstick position
+				// eye_view has: rotation in col 0,1,2 and -position in row 3
+				// Keep rotation, replace position with thumbstick offset
+				eye_view[3][0] = -app.vr_play_offset[0];
+				eye_view[3][1] = -app.vr_play_offset[1];
+				eye_view[3][2] = -app.vr_play_offset[2];
 				// Flip Y axis for Vulkan NDC (Y-down)
 				eye_proj[1][1] *= -1.0f;
 
