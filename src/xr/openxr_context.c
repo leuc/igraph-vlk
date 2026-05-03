@@ -320,21 +320,31 @@ bool xr_context_begin_frame(XrContext *ctx, XrFrameState *frame_state)
 	return true;
 }
 
-void xr_context_get_view_matrix(XrContext *ctx, uint32_t view_index, vec3 camera_pos, mat4 out)
+void xr_context_get_view_matrix(XrContext *ctx, uint32_t view_index, vec3 camera_pos, float camera_yaw, mat4 out)
 {
 	XrPosef pose = ctx->views[view_index].pose;
 	versor q = {pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w};
 
-	mat4 rot;
-	glm_quat_mat4(q, rot);
-	glm_mat4_transpose(rot); // R^T
+	// 1. Inverse Headset Rotation (R_hmd^-1)
+	mat4 rot_hmd;
+	glm_quat_mat4(q, rot_hmd);
+	glm_mat4_transpose(rot_hmd);
 
+	// 2. Inverse Virtual Body Yaw (R_yaw^-1)
+	mat4 rot_yaw;
+	glm_mat4_identity(rot_yaw);
+	glm_rotate(rot_yaw, -camera_yaw, (vec3){0.0f, 1.0f, 0.0f});
+
+	// 3. Inverse Translation (T_offset^-1)
 	mat4 trans;
 	glm_mat4_identity(trans);
 	vec3 neg_p = {-camera_pos[0], -camera_pos[1], -camera_pos[2]};
-	glm_translate(trans, neg_p); // Trans(-p)
+	glm_translate(trans, neg_p);
 
-	glm_mat4_mul(rot, trans, out); // Out = R^T * T^-1
+	// Combine: Out = rot_hmd * rot_yaw * trans
+	mat4 temp;
+	glm_mat4_mul(rot_yaw, trans, temp);
+	glm_mat4_mul(rot_hmd, temp, out);
 }
 
 void xr_context_get_projection_matrix(XrContext *ctx, uint32_t view_index, float nearZ, float farZ, mat4 out)

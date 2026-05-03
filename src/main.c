@@ -227,29 +227,34 @@ int main(int argc, char **argv)
 				interaction_menu_toggle(&app);
 			}
 			// Process thumbsticks for locomotion
-			float tx = xr_context_get_thumbstick(&app.xr_ctx, 0, 0); // Left thumbstick X (Strafe)
-			float ty = xr_context_get_thumbstick(&app.xr_ctx, 0, 1); // Left thumbstick Y (Forward/Back)
-			float ry = xr_context_get_thumbstick(&app.xr_ctx, 1, 1); // Right thumbstick Y (Up/Down)
+			float tx = xr_context_get_thumbstick(&app.xr_ctx, 0, 0); // Left X (Strafe)
+			float ty = xr_context_get_thumbstick(&app.xr_ctx, 0, 1); // Left Y (Forward/Back)
+			float rx = xr_context_get_thumbstick(&app.xr_ctx, 1, 0); // Right X (Turn)
+			float ry = xr_context_get_thumbstick(&app.xr_ctx, 1, 1); // Right Y (Up/Down)
 
-			if (tx != 0.0f || ty != 0.0f || ry != 0.0f) {
-				// 1. Get the headset's current orientation from the view matrix at the origin
+			if (tx != 0.0f || ty != 0.0f || rx != 0.0f || ry != 0.0f) {
+
+				// 1. Apply smooth turning to the virtual yaw
+				if (rx != 0.0f) {
+					app.vr_play_yaw += rx * deltaTime * 2.0f;
+				}
+
+				// 2. Get headset orientation AT the origin, but WITH our virtual yaw applied
 				mat4 head_view;
-				xr_context_get_view_matrix(&app.xr_ctx, 0, (vec3){0, 0, 0}, head_view);
+				xr_context_get_view_matrix(&app.xr_ctx, 0, (vec3){0, 0, 0}, app.vr_play_yaw, head_view);
 
-				// 2. Extract Forward and Right vectors from the View Matrix rows
-				// (Remember: cglm is column-major, so mat[col][row])
+				// 3. Extract Forward and Right vectors from the View Matrix rows
 				vec3 right = {head_view[0][0], head_view[1][0], head_view[2][0]};
-				vec3 forward = {-head_view[0][2], -head_view[1][2], -head_view[2][2]}; // -Z is forward
+				vec3 forward = {-head_view[0][2], -head_view[1][2], -head_view[2][2]};
 
-				// 3. Project vectors onto the XZ plane (so looking down doesn't drive you into the floor)
+				// 4. Project onto the XZ plane
 				right[1] = 0.0f;
 				forward[1] = 0.0f;
 				glm_vec3_normalize(right);
 				glm_vec3_normalize(forward);
 
-				// 4. Calculate movement direction based on Left Thumbstick
+				// 5. Calculate horizontal movement
 				vec3 move_dir = {0, 0, 0};
-
 				if (tx != 0.0f) {
 					vec3 right_move;
 					glm_vec3_scale(right, tx, right_move);
@@ -257,18 +262,16 @@ int main(int argc, char **argv)
 				}
 				if (ty != 0.0f) {
 					vec3 fwd_move;
-					// OpenXR standard: Y is positive forward
 					glm_vec3_scale(forward, ty, fwd_move);
 					glm_vec3_add(move_dir, fwd_move, move_dir);
 				}
 
-				// Apply speed to horizontal movement
 				glm_vec3_scale(move_dir, deltaTime * 20.0f, move_dir);
 
-				// 5. Apply Right Thumbstick for vertical flying (Up/Down)
+				// 6. Apply Vertical flying
 				move_dir[1] += ry * deltaTime * 20.0f;
 
-				// 6. Update the global VR play offset
+				// 7. Apply the final movement vector to the global offset
 				glm_vec3_add(app.vr_play_offset, move_dir, app.vr_play_offset);
 			}
 		}
@@ -302,7 +305,7 @@ int main(int argc, char **argv)
 				xrWaitSwapchainImage(app.xr_ctx.swapchains[i].handle, &waitInfo);
 
 				mat4 eye_view, eye_proj;
-				xr_context_get_view_matrix(&app.xr_ctx, i, app.vr_play_offset, eye_view);
+				xr_context_get_view_matrix(&app.xr_ctx, i, app.vr_play_offset, app.vr_play_yaw, eye_view);
 				xr_context_get_projection_matrix(&app.xr_ctx, i, 0.1f, 1000.0f, eye_proj);
 				// Flip Y axis for Vulkan NDC (Y-down)
 				eye_proj[1][1] *= -1.0f;
