@@ -261,15 +261,13 @@ int main(int argc, char **argv)
 				// Flip Y axis for Vulkan NDC (Y-down)
 				eye_proj[1][1] *= -1.0f;
 
-				printf("[XR] View %u: Pos(%.2f, %.2f, %.2f) Fov(U:%.2f, D:%.2f)\n", i, app.xr_ctx.views[i].pose.position.x, app.xr_ctx.views[i].pose.position.y, app.xr_ctx.views[i].pose.position.z, app.xr_ctx.views[i].fov.angleUp, app.xr_ctx.views[i].fov.angleDown);
-
 				// Render to XR Swapchain (use XR view/proj directly, no camera multiplication)
 				renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.xrFramebuffers[i][imageIndex], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, eye_view, eye_proj, i);
 
-				// Render to desktop companion (Left eye only) using camera view/proj
+				// Render to desktop companion (Left eye only) using camera view/proj, separate UBO slot
 				if (i == 0 && has_desktop) {
 					renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
-					renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.framebuffers[ii], app.renderer.swapchainExtent, app.renderer.ubo.view, app.renderer.ubo.proj, i);
+					renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.framebuffers[ii], app.renderer.swapchainExtent, app.renderer.ubo.view, app.renderer.ubo.proj, 2);
 				}
 
 				XrSwapchainImageReleaseInfo releaseInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};

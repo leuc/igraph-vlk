@@ -53,7 +53,8 @@ typedef struct
 	uint32_t swapchainImageCount;
 	VkImage *swapchainImages;
 	VkImageView *swapchainImageViews;
-	VkRenderPass renderPass;
+	VkRenderPass renderPass;   // Desktop render pass
+	VkRenderPass renderPassXR; // XR render pass (if format differs)
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
 	VkPipeline graphicsPipeline;

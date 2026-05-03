@@ -38,6 +38,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 	r->xrDepthImages = NULL;
 	r->xrDepthImageMemories = NULL;
 	r->xrDepthImageViews = NULL;
+	r->renderPassXR = VK_NULL_HANDLE;
 	r->currentRoutingMode = ROUTING_MODE_SPHERICAL_PCB;
 	r->sphereVertexBuffer = VK_NULL_HANDLE;
 	r->sphereIndexBuffer = VK_NULL_HANDLE;
@@ -146,7 +147,8 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 	vkCreateCommandPool(r->device, &cpI, NULL, &r->commandPool);
 
 	r->swapchainExtent = (VkExtent2D){3440, 1440};
-	r->swapchainFormat = VK_FORMAT_B8G8R8A8_UNORM;
+	// Use SRGB format to match likely XR swapchain format
+	r->swapchainFormat = VK_FORMAT_B8G8R8A8_SRGB;
 
 	// Query supported present modes and prefer MAILBOX for higher throughput
 	uint32_t presentModeCount;
@@ -453,7 +455,6 @@ void renderer_setup_xr(Renderer *r, XrContext *xr)
 
 void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index)
 {
-	printf("[Renderer] RenderScene(View: %u, FB: %p, Extent: %ux%u)\n", view_index, (void *)fb, extent.width, extent.height);
 	uint32_t ubo_idx = r->currentFrame * MAX_VIEWS + view_index;
 	UniformBufferObject eye_ubo = r->ubo;
 	glm_mat4_copy(view, eye_ubo.view);
@@ -470,10 +471,8 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkFramebuffer fb, V
 
 	// Set dynamic viewport and scissor
 	VkViewport viewport = {0.0f, 0.0f, (float)extent.width, (float)extent.height, 0.0f, 1.0f};
-	printf("[Renderer] Viewport: 0,0, %fx%f\n", viewport.width, viewport.height);
 	vkCmdSetViewport(cmd, 0, 1, &viewport);
 	VkRect2D scissor = {{0, 0}, {extent.width, extent.height}};
-	printf("[Renderer] Scissor: 0,0, %ux%u\n", scissor.extent.width, scissor.extent.height);
 	vkCmdSetScissor(cmd, 0, 1, &scissor);
 
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[ubo_idx], 0, NULL);
