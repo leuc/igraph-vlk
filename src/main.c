@@ -262,12 +262,13 @@ int main(int argc, char **argv)
 				eye_proj[1][1] *= -1.0f;
 
 				// Render to XR Swapchain (use XR view/proj directly, no camera multiplication)
-				renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.xrFramebuffers[i][imageIndex], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, eye_view, eye_proj, i);
+				VkRenderPass xrRP = app.renderer.renderPassXR != VK_NULL_HANDLE ? app.renderer.renderPassXR : app.renderer.renderPass;
+				renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], xrRP, app.renderer.xrFramebuffers[i][imageIndex], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, eye_view, eye_proj, i);
 
 				// Render to desktop companion (Left eye only) using camera view/proj, separate UBO slot
 				if (i == 0 && has_desktop) {
 					renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
-					renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.framebuffers[ii], app.renderer.swapchainExtent, app.renderer.ubo.view, app.renderer.ubo.proj, 2);
+					renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.renderPass, app.renderer.framebuffers[ii], app.renderer.swapchainExtent, app.renderer.ubo.view, app.renderer.ubo.proj, 2);
 				}
 
 				XrSwapchainImageReleaseInfo releaseInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};

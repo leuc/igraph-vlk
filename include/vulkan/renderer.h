@@ -55,6 +55,7 @@ typedef struct
 	VkImageView *swapchainImageViews;
 	VkRenderPass renderPass;   // Desktop render pass
 	VkRenderPass renderPassXR; // XR render pass (if format differs)
+	VkFormat xrFormat;		   // XR swapchain format (may differ from desktop)
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
 	VkPipeline graphicsPipeline;
@@ -227,7 +228,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 void renderer_setup_xr(Renderer *r, XrContext *xr);
 void renderer_cleanup(Renderer *r);
 void renderer_draw_frame(Renderer *r);
-void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index);
+void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index);
 void renderer_update_view(Renderer *r, vec3 pos, vec3 front, vec3 up);
 void renderer_update_graph(Renderer *r, GraphData *graph);
 // renderer_update_ui is declared in renderer_ui.h

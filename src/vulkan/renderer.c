@@ -39,6 +39,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 	r->xrDepthImageMemories = NULL;
 	r->xrDepthImageViews = NULL;
 	r->renderPassXR = VK_NULL_HANDLE;
+	r->xrFormat = VK_FORMAT_UNDEFINED;
 	r->currentRoutingMode = ROUTING_MODE_SPHERICAL_PCB;
 	r->sphereVertexBuffer = VK_NULL_HANDLE;
 	r->sphereIndexBuffer = VK_NULL_HANDLE;
@@ -419,8 +420,23 @@ void renderer_update_view(Renderer *r, vec3 pos, vec3 front, vec3 up)
 void renderer_setup_xr(Renderer *r, XrContext *xr)
 {
 	r->xr_view_count = xr->view_count;
+	r->xrFormat = xr->swapchain_format;
 	r->xrFramebuffers = malloc(sizeof(VkFramebuffer *) * xr->view_count);
 	r->xrFramebufferImageCount = malloc(sizeof(uint32_t) * xr->view_count);
+
+	VkRenderPass xrRenderPass = r->renderPass;
+	if (xr->swapchain_format != r->swapchainFormat) {
+		fprintf(stderr, "[Renderer] XR format (%d) differs from desktop (%d), creating separate render pass\n", xr->swapchain_format, r->swapchainFormat);
+		VkAttachmentDescription cAttXR = {.format = xr->swapchain_format, .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE, .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR};
+		VkAttachmentDescription dAttXR = {.format = VK_FORMAT_D32_SFLOAT, .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+		VkAttachmentReference cAttRefXR = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+		VkAttachmentReference dAttRefXR = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+		VkSubpassDescription subXR = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS, .colorAttachmentCount = 1, .pColorAttachments = &cAttRefXR, .pDepthStencilAttachment = &dAttRefXR};
+		VkAttachmentDescription attsXR[] = {cAttXR, dAttXR};
+		VkRenderPassCreateInfo rpInfoXR = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, .attachmentCount = 2, .pAttachments = attsXR, .subpassCount = 1, .pSubpasses = &subXR};
+		vkCreateRenderPass(r->device, &rpInfoXR, NULL, &r->renderPassXR);
+		xrRenderPass = r->renderPassXR;
+	}
 
 	// Allocate per-view XR depth buffers
 	r->xrDepthImages = malloc(sizeof(VkImage) * xr->view_count);
@@ -439,21 +455,17 @@ void renderer_setup_xr(Renderer *r, XrContext *xr)
 		transitionImageLayout(r->device, r->commandPool, r->graphicsQueue, r->xrDepthImages[i], r->depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
 		for (uint32_t j = 0; j < xr->swapchains[i].image_count; j++) {
-			VkImageViewCreateInfo ivInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-											.image = xr->swapchains[i].images[j],
-											.viewType = VK_IMAGE_VIEW_TYPE_2D,
-											.format = xr->swapchain_format, // Use queried format
-											.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+			VkImageViewCreateInfo ivInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = xr->swapchains[i].images[j], .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = xr->swapchain_format, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
 			vkCreateImageView(r->device, &ivInfo, NULL, &xr->swapchains[i].image_views[j]);
 
 			VkImageView attachments[] = {xr->swapchains[i].image_views[j], r->xrDepthImageViews[i]};
-			VkFramebufferCreateInfo fbInfo = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = r->renderPass, .attachmentCount = 2, .pAttachments = attachments, .width = xr->swapchains[i].width, .height = xr->swapchains[i].height, .layers = 1};
+			VkFramebufferCreateInfo fbInfo = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = xrRenderPass, .attachmentCount = 2, .pAttachments = attachments, .width = xr->swapchains[i].width, .height = xr->swapchains[i].height, .layers = 1};
 			vkCreateFramebuffer(r->device, &fbInfo, NULL, &r->xrFramebuffers[i][j]);
 		}
 	}
 }
 
-void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index)
+void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index)
 {
 	uint32_t ubo_idx = r->currentFrame * MAX_VIEWS + view_index;
 	UniformBufferObject eye_ubo = r->ubo;
@@ -465,7 +477,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkFramebuffer fb, V
 	clearValues[0].color = (VkClearColorValue){0.01f, 0.01f, 0.02f, 1.0f};
 	clearValues[1].depthStencil = (VkClearDepthStencilValue){1.0f, 0};
 
-	VkRenderPassBeginInfo rpi = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, .renderPass = r->renderPass, .framebuffer = fb, .renderArea = {{0, 0}, {extent.width, extent.height}}, .clearValueCount = 2, .pClearValues = clearValues};
+	VkRenderPassBeginInfo rpi = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, .renderPass = rp, .framebuffer = fb, .renderArea = {{0, 0}, {extent.width, extent.height}}, .clearValueCount = 2, .pClearValues = clearValues};
 
 	vkCmdBeginRenderPass(cmd, &rpi, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -577,7 +589,7 @@ void renderer_draw_frame(Renderer *r)
 	VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 	vkBeginCommandBuffer(r->commandBuffers[r->currentFrame], &bi);
 
-	renderer_render_scene(r, r->commandBuffers[r->currentFrame], r->framebuffers[ii], r->swapchainExtent, r->ubo.view, r->ubo.proj, 0);
+	renderer_render_scene(r, r->commandBuffers[r->currentFrame], r->renderPass, r->framebuffers[ii], r->swapchainExtent, r->ubo.view, r->ubo.proj, 0);
 
 	vkEndCommandBuffer(r->commandBuffers[r->currentFrame]);
 
@@ -764,6 +776,9 @@ void renderer_cleanup(Renderer *r)
 	vkDestroyPipelineLayout(r->device, r->pipelineLayout, NULL);
 	vkDestroyDescriptorSetLayout(r->device, r->descriptorSetLayout, NULL);
 	vkDestroyRenderPass(r->device, r->renderPass, NULL);
+	if (r->renderPassXR != VK_NULL_HANDLE) {
+		vkDestroyRenderPass(r->device, r->renderPassXR, NULL);
+	}
 	vkDestroySwapchainKHR(r->device, r->swapchain, NULL);
 	vkDestroyDevice(r->device, NULL);
 	vkDestroyInstance(r->instance, NULL);
