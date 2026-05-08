@@ -110,7 +110,8 @@ bool xr_context_init_input(XrContext *ctx)
 	xrStringToPath(ctx->instance, "/user/hand/right/input/menu/click", &menuRight);
 	xrStringToPath(ctx->instance, "/user/hand/left/input/thumbstick", &thumbstickLeft);
 	xrStringToPath(ctx->instance, "/user/hand/right/input/thumbstick", &thumbstickRight);
-	xrStringToPath(ctx->instance, "/user/hand/right/input/grip/pose", &rightHandPose);
+	// CHANGED: Use 'aim/pose' instead of 'grip/pose' for pointer rays
+	xrStringToPath(ctx->instance, "/user/hand/right/input/aim/pose", &rightHandPose);
 
 	XrPath aClick, bClick, xClick, yClick, triggerLeft, triggerRight, squeezeLeft, squeezeRight, gripLeft, gripRight;
 	xrStringToPath(ctx->instance, "/user/hand/right/input/a/click", &aClick);

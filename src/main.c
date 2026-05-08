@@ -327,6 +327,47 @@ int main(int argc, char **argv)
 				VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 				vkBeginCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame], &bi);
 
+				XrPosef head_pose = app.xr_ctx.views[0].pose;
+				vec3 head_pos = {head_pose.position.x, head_pose.position.y, head_pose.position.z};
+
+				// Evaluate hand tracking ONCE per frame
+				XrPosef hand_pose;
+				bool has_ray = xr_context_get_hand_pose(&app.xr_ctx, 1, frameState.predictedDisplayTime, &hand_pose);
+				vec3 ray_origin = {0}, ray_dir = {0};
+
+				if (has_ray) {
+					// Raw tracking space data (relative to head)
+					vec3 raw_pos;
+					glm_vec3_sub((vec3){hand_pose.position.x, hand_pose.position.y, hand_pose.position.z}, head_pos, raw_pos);
+
+					XrQuaternionf rot = hand_pose.orientation;
+					mat4 rot_mat;
+					glm_quat_mat4((float *)&rot, rot_mat);
+					vec3 base_dir = {-rot_mat[2][0], -rot_mat[2][1], -rot_mat[2][2]};
+
+					// Rotate tracking data by the player's virtual yaw
+					mat4 yaw_mat;
+					glm_mat4_identity(yaw_mat);
+					glm_rotate(yaw_mat, app.vr_play_yaw, (vec3){0.0f, 1.0f, 0.0f});
+
+					// Multiply direction (w=0) and position (w=1)
+					vec4 dir4 = {base_dir[0], base_dir[1], base_dir[2], 0.0f};
+					vec4 pos4 = {raw_pos[0], raw_pos[1], raw_pos[2], 1.0f};
+					glm_mat4_mulv(yaw_mat, dir4, dir4);
+					glm_mat4_mulv(yaw_mat, pos4, pos4);
+
+					// Apply rotated vectors and add global locomotion offset
+					ray_dir[0] = dir4[0];
+					ray_dir[1] = dir4[1];
+					ray_dir[2] = dir4[2];
+					glm_vec3_normalize(ray_dir);
+
+					// Add head position and locomotion offset
+					ray_origin[0] = pos4[0] + head_pos[0] + app.vr_play_offset[0];
+					ray_origin[1] = pos4[1] + head_pos[1] + app.vr_play_offset[1];
+					ray_origin[2] = pos4[2] + head_pos[2] + app.vr_play_offset[2];
+				}
+
 				XrCompositionLayerProjectionView projectionViews[2]; // Stereo
 
 				for (uint32_t i = 0; i < app.xr_ctx.view_count; i++) {
@@ -337,22 +378,6 @@ int main(int argc, char **argv)
 					eye_proj[1][1] *= -1.0f;
 
 					VkRenderPass xrRP = app.renderer.renderPassXR != VK_NULL_HANDLE ? app.renderer.renderPassXR : app.renderer.renderPass;
-
-					XrPosef hand_pose;
-					bool has_ray = xr_context_get_hand_pose(&app.xr_ctx, 1, frameState.predictedDisplayTime, &hand_pose);
-					vec3 ray_origin = {0}, ray_dir = {0};
-					if (has_ray) {
-						ray_origin[0] = hand_pose.position.x + app.vr_play_offset[0];
-						ray_origin[1] = hand_pose.position.y + app.vr_play_offset[1];
-						ray_origin[2] = hand_pose.position.z + app.vr_play_offset[2];
-						XrQuaternionf rot = hand_pose.orientation;
-						mat4 rot_mat;
-						glm_quat_mat4((float *)&rot, rot_mat);
-						ray_dir[0] = -rot_mat[2][0];
-						ray_dir[1] = -rot_mat[2][1];
-						ray_dir[2] = -rot_mat[2][2];
-					}
-
 					renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], xrRP, app.renderer.xrFramebuffers[i][imageIndices[i]], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, eye_view, eye_proj, i, has_ray, ray_origin, ray_dir);
 
 					projectionViews[i] = (XrCompositionLayerProjectionView){
