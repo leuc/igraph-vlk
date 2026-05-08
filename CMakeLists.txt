@@ -108,6 +108,7 @@ src/graph/wrappers_constructors.c
     src/xr/openxr_session.c
     src/xr/openxr_input.c
     src/xr/openxr_view.c
+    src/xr/openxr_frame.c
 
     # UI modules
     src/ui/hud.c
