@@ -4,6 +4,9 @@ Language: Cpp
 # Set to a massive number to FORCE unwrapping of existing multi-line statements
 ColumnLimit: 9999
 
+# Prevent escaped-newlines in macros from being padded with spaces to ColumnLimit
+AlignEscapedNewlines: DontAlign
+
 # Prevent clang-format from breaking long strings (like your fprintf usage)
 BreakStringLiterals: false
 
