@@ -57,36 +57,6 @@ void interaction_process_continuous_input(AppState *state, float delta_time)
 		camera_process_keyboard(&state->camera, CAMERA_DIR_RIGHT, adjusted_delta);
 }
 
-GLFWmonitor *interaction_get_current_monitor(GLFWwindow *window)
-{
-	int window_x, window_y;
-	glfwGetWindowPos(window, &window_x, &window_y);
-
-	int monitor_count;
-	GLFWmonitor **monitors = glfwGetMonitors(&monitor_count);
-
-	GLFWmonitor *best_monitor = glfwGetPrimaryMonitor();
-	int best_overlap = 0;
-
-	for (int i = 0; i < monitor_count; i++) {
-		GLFWmonitor *monitor = monitors[i];
-
-		int mx, my;
-		const GLFWvidmode *mode = glfwGetVideoMode(monitor);
-		glfwGetMonitorPos(monitor, &mx, &my);
-
-		int overlap_x = (min(window_x + 3440, mx + mode->width) - max(window_x, mx));
-		int overlap_y = (min(window_y + 1440, my + mode->height) - max(window_y, my));
-
-		int overlap = max(0, overlap_x) * max(0, overlap_y);
-		if (overlap > best_overlap) {
-			best_overlap = overlap;
-			best_monitor = monitor;
-		}
-	}
-	return best_monitor;
-}
-
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
 	if (action != GLFW_PRESS)

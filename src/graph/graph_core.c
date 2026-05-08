@@ -8,12 +8,6 @@
 
 #include "graph/layout_openord.h"
 
-void graph_init(GraphData *data)
-{
-	memset(data, 0, sizeof(GraphData));
-	igraph_matrix_init(&data->current_layout, 0, 0);
-}
-
 void graph_sync_node_positions(GraphData *data)
 {
 	if (!data->nodes)

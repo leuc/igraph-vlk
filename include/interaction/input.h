@@ -16,10 +16,3 @@ void interaction_init(GLFWwindow *window);
  * @param delta_time Time since last frame in seconds
  */
 void interaction_process_continuous_input(AppState *state, float delta_time);
-
-/**
- * Get the current monitor for fullscreen handling.
- * @param window GLFW window
- * @return Pointer to the monitor to use
- */
-GLFWmonitor *interaction_get_current_monitor(GLFWwindow *window);

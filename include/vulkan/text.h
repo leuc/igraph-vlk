@@ -18,6 +18,5 @@ typedef struct
 } FontAtlas;
 
 int text_generate_atlas(const char *fontPath, FontAtlas *atlas);
-void text_free_atlas(FontAtlas *atlas);
 
 #endif

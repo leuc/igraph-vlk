@@ -312,78 +312,6 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	vkQueueSubmit(r->graphicsQueue, 0, NULL, r->graphUpdateFences[ringIdx]);
 }
 
-void renderer_update_numeric_widget(Renderer *r, NumericInputWidget *widget, Camera *cam)
-{
-	// Generate instances for slider track (index 0) and thumb (index 1)
-	// Position the widget in front of the camera at a fixed distance
-	MenuInstance *instances = malloc(sizeof(MenuInstance) * 2);
-	if (!instances)
-		return;
-
-	// World position: in front of camera, slightly down from center
-	vec3 track_pos;
-	glm_vec3_copy(cam->pos, track_pos);
-	vec3 forward;
-	glm_vec3_copy(cam->front, forward);
-	glm_vec3_scale(forward, 1.5f, forward); // 1.5m in front
-	glm_vec3_add(track_pos, forward, track_pos);
-	track_pos[1] -= 0.2f; // Slightly below center
-
-	// Track: horizontal rectangle, width 0.5m, height 0.02m
-	instances[0].worldPos[0] = track_pos[0];
-	instances[0].worldPos[1] = track_pos[1];
-	instances[0].worldPos[2] = track_pos[2];
-	instances[0].texCoord[0] = 0.0f;
-	instances[0].texCoord[1] = 0.0f;
-	instances[0].texId = -1.0f;	   // Use solid color (no texture)
-	instances[0].scale[0] = 0.5f;  // width
-	instances[0].scale[1] = 0.02f; // height
-	instances[0].scale[2] = 1.0f;
-	glm_quat_identity(instances[0].rotation); // billboard, no rotation
-	// Thumb: vertical square, size 0.05m
-	// Compute thumb position based on normalized value (0..1) along track width
-	float track_left = track_pos[0] - 0.25f;
-	float normalized_value;
-	if (widget->param_type == PARAM_TYPE_FLOAT) {
-		// Normalize from [min,max] to [0,1]
-		normalized_value = (widget->current.float_val - widget->constraints.float_range.min_val) / (widget->constraints.float_range.max_val - widget->constraints.float_range.min_val);
-	} else {
-		normalized_value = (float)(widget->current.int_val - widget->constraints.int_range.min_val) / (float)(widget->constraints.int_range.max_val - widget->constraints.int_range.min_val);
-	}
-	float thumb_x = track_left + normalized_value * 0.5f;
-
-	instances[1].worldPos[0] = thumb_x;
-	instances[1].worldPos[1] = track_pos[1];
-	instances[1].worldPos[2] = track_pos[2];
-	instances[1].texCoord[0] = 0.0f;
-	instances[1].texCoord[1] = 0.0f;
-	instances[1].texId = -2.0f; // Different solid color
-	instances[1].scale[0] = 0.05f;
-	instances[1].scale[1] = 0.05f;
-	instances[1].scale[2] = 1.0f;
-	glm_quat_identity(instances[1].rotation);
-
-	// Update buffer
-	if (r->numericInstanceBuffer != VK_NULL_HANDLE) {
-		vkDeviceWaitIdle(r->device); // Ensure not in use
-		vkFreeMemory(r->device, r->numericInstanceBufferMemory, NULL);
-		vkDestroyBuffer(r->device, r->numericInstanceBuffer, NULL);
-	}
-	createBuffer(r->device, r->physicalDevice, sizeof(MenuInstance) * 2, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->numericInstanceBuffer, &r->numericInstanceBufferMemory);
-	updateBuffer(r->device, r->numericInstanceBufferMemory, sizeof(MenuInstance) * 2, instances);
-	r->numericInstanceCount = 2;
-
-	// Format numeric value string for HUD display
-	if (widget->param_type == PARAM_TYPE_FLOAT) {
-		snprintf(r->numericValueString, sizeof(r->numericValueString), "%.3f", widget->current.float_val);
-	} else {
-		snprintf(r->numericValueString, sizeof(r->numericValueString), "%d", widget->current.int_val);
-	}
-	r->showNumericValue = true;
-
-	free(instances);
-}
-
 void renderer_render_ray(Renderer *r, VkCommandBuffer cmd, vec3 origin, vec3 dir, mat4 view, mat4 proj)
 {
 	// Ray length
@@ -395,7 +323,7 @@ void renderer_render_ray(Renderer *r, VkCommandBuffer cmd, vec3 origin, vec3 dir
 	// Ray vertices (pos: vec3, color: vec4)
 	float vertices[] = {
 		origin[0], origin[1], origin[2], 1.0f, 1.0f, 1.0f, 1.0f, // Origin (white)
-		end[0], end[1], end[2], 1.0f, 0.0f, 0.0f, 0.5f			// End (red, semi-transparent)
+		end[0],	   end[1],	  end[2],	 1.0f, 0.0f, 0.0f, 0.5f	 // End (red, semi-transparent)
 	};
 
 	// Update ray buffer (host-visible)
@@ -408,7 +336,8 @@ void renderer_render_ray(Renderer *r, VkCommandBuffer cmd, vec3 origin, vec3 dir
 	// Draw
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->rayPipeline);
 
-	struct {
+	struct
+	{
 		mat4 view;
 		mat4 proj;
 	} push;

@@ -16,12 +16,6 @@ void graph_action_update_layout(AppState *state);
 void graph_action_run_clustering(AppState *state);
 
 /**
- * Run centrality calculation on the current graph.
- * @param state Pointer to the application state
- */
-void graph_action_run_centrality(AppState *state);
-
-/**
  * Run a single iteration step of the layout.
  * @param state Pointer to the application state
  */
@@ -72,12 +66,6 @@ void graph_action_cycle_layout(AppState *state);
  * @param state Pointer to the application state
  */
 void graph_action_cycle_cluster(AppState *state);
-
-/**
- * Cycle to the next centrality metric.
- * @param state Pointer to the application state
- */
-void graph_action_cycle_centrality(AppState *state);
 
 /**
  * Cycle to the next community arrangement mode.

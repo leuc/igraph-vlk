@@ -85,20 +85,6 @@ void animation_manager_add_edge(AnimationManager *am, uint32_t edge_id, int dire
 	am->num_animations++;
 }
 
-void animation_manager_remove_edge(AnimationManager *am, uint32_t edge_id)
-{
-	for (uint32_t i = 0; i < am->num_animations; ++i) {
-		if (am->animations[i].edge_id == edge_id) {
-			am->animations[i].is_active = false;
-			// Mark the edge in GraphData as not animating
-			am->graph_data_ptr->edges[edge_id].is_animating = false;
-			// Optional: compact array by swapping with last element and
-			// decrementing num_animations
-			return;
-		}
-	}
-}
-
 void animation_manager_toggle_edge(AnimationManager *am, uint32_t edge_id, int direction)
 {
 	// Find the edge in the active animations

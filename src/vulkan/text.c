@@ -44,8 +44,3 @@ int text_generate_atlas(const char *fontPath, FontAtlas *atlas)
 	free(fontBuffer);
 	return 0;
 }
-
-void text_free_atlas(FontAtlas *atlas)
-{
-	free(atlas->atlasData);
-}

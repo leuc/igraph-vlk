@@ -103,28 +103,6 @@ void openord_cleanup(OpenOrdContext *ctx)
 	ctx->initialized = false;
 }
 
-static inline int get_grid_idx(float x, float y, float z)
-{
-	int gx = (int)((x + HALF_VIEW) * VIEW_TO_GRID);
-	int gy = (int)((y + HALF_VIEW) * VIEW_TO_GRID);
-	int gz = (int)((z + HALF_VIEW) * VIEW_TO_GRID);
-
-	if (gx < 0)
-		gx = 0;
-	if (gx >= GRID_DIM)
-		gx = GRID_DIM - 1;
-	if (gy < 0)
-		gy = 0;
-	if (gy >= GRID_DIM)
-		gy = GRID_DIM - 1;
-	if (gz < 0)
-		gz = 0;
-	if (gz >= GRID_DIM)
-		gz = GRID_DIM - 1;
-
-	return gz * GRID_DIM * GRID_DIM + gy * GRID_DIM + gx;
-}
-
 static void update_density(OpenOrdContext *ctx, vec3 pos, float sign)
 {
 	int gx = (int)((pos[0] + HALF_VIEW) * VIEW_TO_GRID);

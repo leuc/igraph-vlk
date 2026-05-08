@@ -8,12 +8,6 @@
  * ============================================================================ */
 
 /**
- * Initialize graph data structure with default values.
- * @param data Pointer to GraphData to initialize
- */
-void graph_init(GraphData *data);
-
-/**
  * Free all graph data including igraph structures, nodes, edges, and layouts.
  * @param data Pointer to GraphData to free
  */

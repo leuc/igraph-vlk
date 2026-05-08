@@ -54,6 +54,5 @@ void *compute_layout_layered_sphere(igraph_t *graph);
 // Standard apply and free functions
 void free_layout_matrix(void *result_data);
 void apply_layout_matrix(ExecutionContext *ctx, void *result_data);
-void apply_layout_matrix_centered(ExecutionContext *ctx, void *result_data);
 
 #endif // GRAPH_WRAPPERS_LAYOUT_H

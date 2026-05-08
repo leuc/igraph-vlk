@@ -23,11 +23,4 @@ void graph_filter_coreness(GraphData *data, int min_coreness);
  */
 void graph_highlight_infrastructure(GraphData *data);
 
-/**
- * Generate hub positions using k-means clustering on edge midpoints.
- * @param data Pointer to GraphData
- * @param num_hubs Number of hubs to generate
- */
-void graph_generate_hubs(GraphData *data, int num_hubs);
-
 #endif // GRAPH_FILTER_H

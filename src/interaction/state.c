@@ -10,48 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Helper function to apply a computed layout matrix to the graph and update visualization
-static void apply_layout_to_graph(AppState *state, igraph_matrix_t *layout)
-{
-	if (!state)
-		return;
-
-	GraphData *data = &state->current_graph;
-	Renderer *renderer = &state->renderer;
-
-	if (!data->graph_initialized) {
-		fprintf(stderr, "[State] Error: Graph not initialized\n");
-		return;
-	}
-
-	igraph_integer_t vcount = data->node_count;
-	if (layout->nrow != vcount || layout->ncol < 2) {
-		fprintf(stderr, "[State] Error: Layout dimensions don't match node count\n");
-		return;
-	}
-
-	// Destroy old layout and replace with new one
-	igraph_matrix_destroy(&data->current_layout);
-	igraph_matrix_init_copy(&data->current_layout, layout);
-
-	// Sync node positions from the layout matrix
-	if (data->nodes) {
-		for (igraph_integer_t i = 0; i < vcount; i++) {
-			data->nodes[i].position[0] = (float)MATRIX(data->current_layout, i, 0);
-			data->nodes[i].position[1] = (float)MATRIX(data->current_layout, i, 1);
-			data->nodes[i].position[2] = (igraph_matrix_ncol(&data->current_layout) > 2) ? (float)MATRIX(data->current_layout, i, 2) : 0.0f;
-		}
-	}
-
-	// Trigger renderer update to display new layout
-	renderer_update_graph(renderer, data);
-
-	printf("[State] Layout applied and renderer refreshed\n");
-}
-
-// Forward declarations for helper functions
-static void handle_command_completion(AppContext *app, AppState *state);
-
 void app_context_init(AppContext *ctx, igraph_t *graph, MenuNode *root_menu)
 {
 	ctx->current_state = STATE_GRAPH_VIEW;
@@ -277,46 +235,6 @@ void update_app_state(AppState *state)
 		// For now, any keypress or click will return to graph view
 		// TODO: Implement proper dismissal (e.g., ESC key, or "Close" button in UI)
 		break;
-	}
-}
-
-// Helper function to determine if a command should use worker thread
-static bool should_use_worker_thread(const IgraphCommand *cmd)
-{
-	if (!cmd || !cmd->id_name) {
-		return false;
-	}
-
-	// Long-running layout algorithms that should be offloaded to worker thread
-	const char *long_running_commands[] = {"lay_force_drl", // DRL layout
-										   "lay_force_dh",	// Davidson-Harel layout
-										   "lay_tree_rt",	// Reingold-Tilford layout
-										   "lay_tree_sug",	// Sugiyama layout
-										   "lay_umap",		// UMAP layout
-										   "lay_bip_mds",	// MDS layout
-										   "lay_bip_sug",	// Bipartite Sugiyama layout
-										   NULL};
-
-	for (int i = 0; long_running_commands[i]; i++) {
-		if (strcmp(cmd->id_name, long_running_commands[i]) == 0) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
-// Handle command completion (synchronous execution path)
-static void handle_command_completion(AppContext *app, AppState *state)
-{
-	// Check if this command produced visual results
-	if (app->pending_command && app->pending_command->produces_visual_output) {
-		app->has_visual_results = true;
-		app->current_state = STATE_DISPLAY_RESULTS;
-	} else {
-		// Reset after execution but keep menu open
-		app->pending_command = NULL;
-		app->current_state = STATE_MENU_OPEN;
 	}
 }
 

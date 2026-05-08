@@ -288,20 +288,6 @@ void update_menu_transforms(MenuNode *node, const SpatialBasis *basis)
 	update_nextstep_layout_recursive(node, root_top_left);
 }
 
-MenuNode *find_menu_node(MenuNode *root, const char *label)
-{
-	if (root == NULL || label == NULL)
-		return NULL;
-	if (strcmp(root->label, label) == 0)
-		return root;
-	for (int i = 0; i < root->num_children; i++) {
-		MenuNode *res = find_menu_node(root->children[i], label);
-		if (res)
-			return res;
-	}
-	return NULL;
-}
-
 static void assign_menu_icons(MenuNode *node)
 {
 	if (node == NULL)
