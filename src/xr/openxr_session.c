@@ -48,7 +48,7 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 	}
 
 	// Preferred formats in order
-	VkFormat preferredFormats[] = {VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM};
+	VkFormat preferredFormats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB};
 
 	ctx->swapchain_format = VK_FORMAT_UNDEFINED;
 	for (size_t p = 0; p < sizeof(preferredFormats) / sizeof(preferredFormats[0]); p++) {

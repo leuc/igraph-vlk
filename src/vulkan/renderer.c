@@ -149,7 +149,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 
 	r->swapchainExtent = (VkExtent2D){3440, 1440};
 	// Use SRGB format to match likely XR swapchain format
-	r->swapchainFormat = VK_FORMAT_B8G8R8A8_SRGB;
+	r->swapchainFormat = VK_FORMAT_B8G8R8A8_UNORM;
 
 	// Query supported present modes and prefer MAILBOX for higher throughput
 	uint32_t presentModeCount;
