@@ -102,6 +102,10 @@ src/graph/wrappers_constructors.c
 
     # XR modules
     src/xr/openxr_context.c
+    src/xr/openxr_vulkan.c
+    src/xr/openxr_session.c
+    src/xr/openxr_input.c
+    src/xr/openxr_view.c
 
     # UI modules
     src/ui/hud.c

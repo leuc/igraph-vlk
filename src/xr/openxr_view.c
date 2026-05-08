@@ -1,0 +1,103 @@
+#include "xr/openxr_context.h"
+#include <stdio.h>
+#include <math.h>
+
+static void xr_fov_to_matrix(const XrFovf fov, float nearZ, float farZ, mat4 out)
+{
+	float tanLeft = tanf(fov.angleLeft);
+	float tanRight = tanf(fov.angleRight);
+	float tanUp = tanf(fov.angleUp);
+	float tanDown = tanf(fov.angleDown);
+	float tanWidth = tanRight - tanLeft;
+	float tanHeight = tanUp - tanDown;
+
+	glm_mat4_zero(out);
+	out[0][0] = 2.0f / tanWidth;
+	out[1][1] = 2.0f / tanHeight;
+	out[2][0] = (tanRight + tanLeft) / tanWidth;
+	out[2][1] = (tanUp + tanDown) / tanHeight;
+	out[2][2] = -(farZ + nearZ) / (farZ - nearZ);
+	out[2][3] = -1.0f;
+	out[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
+}
+
+bool xr_context_begin_frame(XrContext *ctx, XrFrameState *frame_state)
+{
+	XrFrameWaitInfo waitInfo = {.type = XR_TYPE_FRAME_WAIT_INFO};
+	XrResult res = xrWaitFrame(ctx->session, &waitInfo, frame_state);
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to wait frame (Result: %d)\n", res);
+		return false;
+	}
+
+	XrFrameBeginInfo beginInfo = {.type = XR_TYPE_FRAME_BEGIN_INFO};
+	res = xrBeginFrame(ctx->session, &beginInfo);
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to begin frame (Result: %d)\n", res);
+		return false;
+	}
+
+	XrViewState viewState = {.type = XR_TYPE_VIEW_STATE};
+	XrViewLocateInfo locateInfo = {
+		.type = XR_TYPE_VIEW_LOCATE_INFO,
+		.viewConfigurationType = ctx->view_config_type,
+		.displayTime = frame_state->predictedDisplayTime,
+		.space = ctx->stage_space,
+	};
+	res = xrLocateViews(ctx->session, &locateInfo, &viewState, ctx->view_count, &ctx->view_count, ctx->views);
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to locate views (Result: %d)\n", res);
+		return false;
+	}
+
+	return true;
+}
+
+void xr_context_get_view_matrix(XrContext *ctx, uint32_t view_index, vec3 camera_pos, float camera_yaw, mat4 out)
+{
+	XrPosef pose = ctx->views[view_index].pose;
+	versor q = {pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w};
+
+	// 1. Inverse Headset Rotation (R_hmd^-1)
+	mat4 rot_hmd;
+	glm_quat_mat4(q, rot_hmd);
+	glm_mat4_transpose(rot_hmd);
+
+	// 2. Inverse Virtual Body Yaw (R_yaw^-1)
+	mat4 rot_yaw;
+	glm_mat4_identity(rot_yaw);
+	glm_rotate(rot_yaw, -camera_yaw, (vec3){0.0f, 1.0f, 0.0f});
+
+	// 3. Inverse Translation (T_offset^-1)
+	mat4 trans;
+	glm_mat4_identity(trans);
+	vec3 neg_p = {-camera_pos[0], -camera_pos[1], -camera_pos[2]};
+	glm_translate(trans, neg_p);
+
+	// Combine: Out = rot_hmd * rot_yaw * trans
+	mat4 temp;
+	glm_mat4_mul(rot_yaw, trans, temp);
+	glm_mat4_mul(rot_hmd, temp, out);
+}
+
+void xr_context_get_projection_matrix(XrContext *ctx, uint32_t view_index, float nearZ, float farZ, mat4 out)
+{
+	xr_fov_to_matrix(ctx->views[view_index].fov, nearZ, farZ, out);
+}
+
+bool xr_context_end_frame(XrContext *ctx, XrFrameState *frame_state, XrCompositionLayerBaseHeader **layers, uint32_t layer_count)
+{
+	XrFrameEndInfo endInfo = {
+		.type = XR_TYPE_FRAME_END_INFO,
+		.displayTime = frame_state->predictedDisplayTime,
+		.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
+		.layerCount = layer_count,
+		.layers = (const XrCompositionLayerBaseHeader *const *)layers,
+	};
+	XrResult res = xrEndFrame(ctx->session, &endInfo);
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to end frame (Result: %d)\n", res);
+		return false;
+	}
+	return true;
+}
