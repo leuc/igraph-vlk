@@ -122,6 +122,18 @@ MenuNode *raycast_menu_crosshair(AppState *state)
 	return hit;
 }
 
+MenuNode *raycast_menu_vr(AppState *state, vec3 ray_ori, vec3 ray_dir)
+{
+	clear_menu_hover_recursive(state->app_ctx.root_menu);
+	float min_t = FLT_MAX;
+	MenuNode *hit = pick_menu_recursive(state->app_ctx.root_menu, ray_ori, ray_dir, &min_t);
+	if (hit) {
+		printf("HIT: %s at t=%.2f\n", hit->label, min_t);
+		hit->hovered = true;
+	}
+	return hit;
+}
+
 MenuNode *interaction_pick_menu_node(AppState *state, double mouse_x, double mouse_y)
 {
 	float x = (2.0f * (float)mouse_x) / state->win_w - 1.0f;

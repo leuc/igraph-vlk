@@ -378,6 +378,17 @@ int main(int argc, char **argv)
 					eye_proj[1][1] *= -1.0f;
 
 					VkRenderPass xrRP = app.renderer.renderPassXR != VK_NULL_HANDLE ? app.renderer.renderPassXR : app.renderer.renderPass;
+
+					if (has_ray && i == 0) {
+						MenuNode *hit = raycast_menu_vr(&app, ray_origin, ray_dir);
+						if (hit && hit->hovered && xr_context_is_action_pressed(&app.xr_ctx, app.xr_ctx.select_action, 1)) {
+							handle_menu_selection(&app.app_ctx, hit);
+						}
+					}
+					
+					// Ensure menu state is flushed to GPU for current eye
+					generate_vulkan_menu_buffers(&app.app_ctx, &app.renderer);
+
 					renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], xrRP, app.renderer.xrFramebuffers[i][imageIndices[i]], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, eye_view, eye_proj, i, has_ray, ray_origin, ray_dir);
 
 					projectionViews[i] = (XrCompositionLayerProjectionView){

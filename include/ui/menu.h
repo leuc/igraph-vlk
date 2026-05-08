@@ -29,5 +29,6 @@ void init_menu_tree(MenuNode *root);
 void destroy_menu_tree(MenuNode *node);
 void update_menu_transforms(MenuNode *node, const SpatialBasis *basis);
 MenuNode *find_menu_node(MenuNode *root, char const *label);
+MenuNode *raycast_menu_vr(struct AppState *state, vec3 ray_ori, vec3 ray_dir);
 
 #endif // UI_MENU_H
