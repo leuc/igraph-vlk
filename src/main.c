@@ -165,11 +165,6 @@ int main(int argc, char **argv)
 
 	// Main loop
 	while (!glfwWindowShouldClose(app.window)) {
-		XrFrameState frameState = {.type = XR_TYPE_FRAME_STATE};
-		if (app.vr_enabled && app.xr_ctx.session_running) {
-			xr_context_wait_frame(&app.xr_ctx, &frameState);
-		}
-
 		float currentFrame = (float)glfwGetTime();
 		float deltaTime = currentFrame - lastFrame;
 		lastFrame = currentFrame;
@@ -282,65 +277,81 @@ int main(int argc, char **argv)
 		}
 
 		if (app.vr_enabled && app.xr_ctx.session_running) {
-			// Ensure GPU slot is ready before telling XR we are beginning
-			vkWaitForFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame], VK_TRUE, UINT64_MAX);
-			vkResetFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame]);
-
+			XrFrameState frameState = {.type = XR_TYPE_FRAME_STATE};
+			xr_context_wait_frame(&app.xr_ctx, &frameState);
 			xr_context_begin_frame(&app.xr_ctx);
-			xr_context_locate_views(&app.xr_ctx, frameState.predictedDisplayTime);
 
-			vkResetCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame], 0);
-			VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-			vkBeginCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame], &bi);
+			// OpenXR dictates we MUST ONLY render if shouldRender is true
+			if (frameState.shouldRender) {
+				// 1. Ensure GPU slot is ready AFTER xrWaitFrame has unblocked
+				vkWaitForFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame], VK_TRUE, UINT64_MAX);
+				vkResetFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame]);
 
-			XrCompositionLayerProjectionView projectionViews[2]; // Stereo
+				xr_context_locate_views(&app.xr_ctx, frameState.predictedDisplayTime);
 
-			for (uint32_t i = 0; i < app.xr_ctx.view_count; i++) {
-				uint32_t imageIndex;
-				XrSwapchainImageAcquireInfo acquireInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
-				xrAcquireSwapchainImage(app.xr_ctx.swapchains[i].handle, &acquireInfo, &imageIndex);
+				// 2. Acquire & Wait for ALL eyes first to prevent blocking CPU during command buffer recording
+				uint32_t imageIndices[2];
+				for (uint32_t i = 0; i < app.xr_ctx.view_count; i++) {
+					XrSwapchainImageAcquireInfo acquireInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+					xrAcquireSwapchainImage(app.xr_ctx.swapchains[i].handle, &acquireInfo, &imageIndices[i]);
 
-				XrSwapchainImageWaitInfo waitInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO, .timeout = XR_INFINITE_DURATION};
-				xrWaitSwapchainImage(app.xr_ctx.swapchains[i].handle, &waitInfo);
+					XrSwapchainImageWaitInfo waitInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO, .timeout = XR_INFINITE_DURATION};
+					xrWaitSwapchainImage(app.xr_ctx.swapchains[i].handle, &waitInfo);
+				}
 
-				mat4 eye_view, eye_proj;
-				xr_context_get_view_matrix(&app.xr_ctx, i, app.vr_play_offset, app.vr_play_yaw, eye_view);
-				xr_context_get_projection_matrix(&app.xr_ctx, i, 0.1f, 1000.0f, eye_proj);
-				// Flip Y axis for Vulkan NDC (Y-down)
-				eye_proj[1][1] *= -1.0f;
+				// 3. Record command buffers uninterrupted
+				vkResetCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame], 0);
+				VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+				vkBeginCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame], &bi);
 
-				// Render to XR Swapchain (use XR view/proj directly, no camera multiplication)
-				VkRenderPass xrRP = app.renderer.renderPassXR != VK_NULL_HANDLE ? app.renderer.renderPassXR : app.renderer.renderPass;
-				renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], xrRP, app.renderer.xrFramebuffers[i][imageIndex], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, eye_view, eye_proj, i);
+				XrCompositionLayerProjectionView projectionViews[2]; // Stereo
 
-				XrSwapchainImageReleaseInfo releaseInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-				xrReleaseSwapchainImage(app.xr_ctx.swapchains[i].handle, &releaseInfo);
+				for (uint32_t i = 0; i < app.xr_ctx.view_count; i++) {
+					mat4 eye_view, eye_proj;
+					xr_context_get_view_matrix(&app.xr_ctx, i, app.vr_play_offset, app.vr_play_yaw, eye_view);
+					xr_context_get_projection_matrix(&app.xr_ctx, i, 0.1f, 1000.0f, eye_proj);
+					// Flip Y axis for Vulkan NDC (Y-down)
+					eye_proj[1][1] *= -1.0f;
 
-				projectionViews[i] = (XrCompositionLayerProjectionView){.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
-																		.pose = app.xr_ctx.views[i].pose,
-																		.fov = app.xr_ctx.views[i].fov,
-																		.subImage = {
-																			.swapchain = app.xr_ctx.swapchains[i].handle,
-																			.imageRect = {{0, 0}, {(int32_t)app.xr_ctx.swapchains[i].width, (int32_t)app.xr_ctx.swapchains[i].height}},
-																			.imageArrayIndex = 0,
-																		}};
+					VkRenderPass xrRP = app.renderer.renderPassXR != VK_NULL_HANDLE ? app.renderer.renderPassXR : app.renderer.renderPass;
+					renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], xrRP, app.renderer.xrFramebuffers[i][imageIndices[i]], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, eye_view, eye_proj, i);
+
+					projectionViews[i] = (XrCompositionLayerProjectionView){.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
+																			.pose = app.xr_ctx.views[i].pose,
+																			.fov = app.xr_ctx.views[i].fov,
+																			.subImage = {
+																				.swapchain = app.xr_ctx.swapchains[i].handle,
+																				.imageRect = {{0, 0}, {(int32_t)app.xr_ctx.swapchains[i].width, (int32_t)app.xr_ctx.swapchains[i].height}},
+																				.imageArrayIndex = 0,
+																			}};
+				}
+
+				vkEndCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame]);
+
+				// 4. Submit to GPU
+				VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &app.renderer.commandBuffers[app.renderer.currentFrame]};
+				vkQueueSubmit(app.renderer.graphicsQueue, 1, &si, app.renderer.inFlightFences[app.renderer.currentFrame]);
+
+				// 5. Release images back to Compositor
+				for (uint32_t i = 0; i < app.xr_ctx.view_count; i++) {
+					XrSwapchainImageReleaseInfo releaseInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+					xrReleaseSwapchainImage(app.xr_ctx.swapchains[i].handle, &releaseInfo);
+				}
+
+				XrCompositionLayerProjection layer = {
+					.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,
+					.space = app.xr_ctx.stage_space,
+					.viewCount = app.xr_ctx.view_count,
+					.views = projectionViews,
+				};
+				XrCompositionLayerBaseHeader *layerPtr = (XrCompositionLayerBaseHeader *)&layer;
+				xr_context_end_frame(&app.xr_ctx, &frameState, &layerPtr, 1);
+
+				app.renderer.currentFrame = (app.renderer.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+			} else {
+				// Compositor requested skip. End frame without layers, do NOT advance Vulkan fences
+				xr_context_end_frame(&app.xr_ctx, &frameState, NULL, 0);
 			}
-
-			vkEndCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame]);
-
-			VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &app.renderer.commandBuffers[app.renderer.currentFrame]};
-			vkQueueSubmit(app.renderer.graphicsQueue, 1, &si, app.renderer.inFlightFences[app.renderer.currentFrame]);
-
-			XrCompositionLayerProjection layer = {
-				.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,
-				.space = app.xr_ctx.stage_space,
-				.viewCount = app.xr_ctx.view_count,
-				.views = projectionViews,
-			};
-			XrCompositionLayerBaseHeader *layerPtr = (XrCompositionLayerBaseHeader *)&layer;
-			xr_context_end_frame(&app.xr_ctx, &frameState, &layerPtr, 1);
-
-			app.renderer.currentFrame = (app.renderer.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 		} else {
 			// Update base view matrix from camera
 			renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
