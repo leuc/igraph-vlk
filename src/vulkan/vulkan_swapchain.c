@@ -1,5 +1,6 @@
 #include "vulkan/vulkan_swapchain.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <vulkan/vulkan.h>
@@ -42,65 +43,72 @@ VkExtent2D choose_swap_extent(VkSurfaceCapabilitiesKHR *caps, GLFWwindow *window
 
 void vulkan_swapchain_create(VulkanSwapchain *swap, VulkanCore *core, GLFWwindow *window)
 {
-	// Initialize to NULL for proper cleanup
 	swap->images = NULL;
 	swap->views = NULL;
 	swap->swapchain = VK_NULL_HANDLE;
+	swap->depthImage = VK_NULL_HANDLE;
+	swap->depthView = VK_NULL_HANDLE;
+	swap->depthMemory = VK_NULL_HANDLE;
 
-	// Get surface capabilities
 	VkSurfaceCapabilitiesKHR caps;
 	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(core->physicalDevice, core->surface, &caps);
 
-	// Get surface formats
 	uint32_t formatCount;
 	vkGetPhysicalDeviceSurfaceFormatsKHR(core->physicalDevice, core->surface, &formatCount, NULL);
 	VkSurfaceFormatKHR *surfFormats = malloc(sizeof(VkSurfaceFormatKHR) * formatCount);
 	vkGetPhysicalDeviceSurfaceFormatsKHR(core->physicalDevice, core->surface, &formatCount, surfFormats);
 
-	// Get present modes
 	uint32_t presentModeCount;
 	vkGetPhysicalDeviceSurfacePresentModesKHR(core->physicalDevice, core->surface, &presentModeCount, NULL);
 	VkPresentModeKHR *presentModes = malloc(sizeof(VkPresentModeKHR) * presentModeCount);
 	vkGetPhysicalDeviceSurfacePresentModesKHR(core->physicalDevice, core->surface, &presentModeCount, presentModes);
 
-	// Choose swapchain settings
 	VkSurfaceFormatKHR surfaceFormat = choose_swap_surface_format(surfFormats, formatCount);
 	VkPresentModeKHR presentMode = choose_swap_present_mode(presentModes, presentModeCount);
 	VkExtent2D extent = choose_swap_extent(&caps, window);
 
-	// Determine image count
 	uint32_t imageCount = caps.minImageCount + 1;
 	if (caps.maxImageCount > 0 && imageCount > caps.maxImageCount)
 		imageCount = caps.maxImageCount;
 
-	// Create swapchain
-	VkSwapchainCreateInfoKHR createInfo = {VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR, NULL, 0, core->surface, imageCount, surfaceFormat.format, surfaceFormat.colorSpace, extent, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_SHARING_MODE_EXCLUSIVE, 0, NULL, caps.currentTransform, VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, presentMode, VK_TRUE, VK_NULL_HANDLE};
+	VkSwapchainCreateInfoKHR swpInfo = {.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR, .surface = core->surface, .minImageCount = imageCount, .imageFormat = surfaceFormat.format, .imageColorSpace = surfaceFormat.colorSpace, .imageExtent = extent, .imageArrayLayers = 1, .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = caps.currentTransform, .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, .presentMode = presentMode, .clipped = VK_TRUE};
 
-	VK_CHECK(vkCreateSwapchainKHR(core->device, &createInfo, NULL, &swap->swapchain), "Failed to create swapchain");
+	VK_CHECK(vkCreateSwapchainKHR(core->device, &swpInfo, NULL, &swap->swapchain), "Failed to create swapchain");
 
-	// Store format and extent
 	swap->imageFormat = surfaceFormat.format;
 	swap->extent = extent;
 	swap->imageCount = imageCount;
 
-	// Get swapchain images
+	vkGetSwapchainImagesKHR(core->device, swap->swapchain, &imageCount, NULL);
 	swap->images = malloc(sizeof(VkImage) * imageCount);
 	vkGetSwapchainImagesKHR(core->device, swap->swapchain, &imageCount, swap->images);
 
-	// Create image views
 	swap->views = malloc(sizeof(VkImageView) * imageCount);
 	for (uint32_t i = 0; i < imageCount; i++) {
-		VkImageViewCreateInfo viewInfo = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, NULL, 0, swap->images[i], VK_IMAGE_VIEW_TYPE_2D, swap->imageFormat, {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY}, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+		VkImageViewCreateInfo viewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = swap->images[i], .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = swap->imageFormat, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
 		VK_CHECK(vkCreateImageView(core->device, &viewInfo, NULL, &swap->views[i]), "Failed to create image views");
 	}
 
-	// Cleanup
+	// Depth Buffer
+	swap->depthFormat = VK_FORMAT_D32_SFLOAT;
+	createImage(core->device, core->physicalDevice, extent.width, extent.height, swap->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &swap->depthImage, &swap->depthMemory);
+
+	VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = swap->depthImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = swap->depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
+	VK_CHECK(vkCreateImageView(core->device, &depthViewInfo, NULL, &swap->depthView), "Failed to create depth image view");
+
 	free(surfFormats);
 	free(presentModes);
 }
 
 void vulkan_swapchain_destroy(VulkanSwapchain *swap, VkDevice device)
 {
+	if (swap->depthView != VK_NULL_HANDLE)
+		vkDestroyImageView(device, swap->depthView, NULL);
+	if (swap->depthImage != VK_NULL_HANDLE)
+		vkDestroyImage(device, swap->depthImage, NULL);
+	if (swap->depthMemory != VK_NULL_HANDLE)
+		vkFreeMemory(device, swap->depthMemory, NULL);
+
 	if (swap->views) {
 		for (uint32_t i = 0; i < swap->imageCount; i++) {
 			if (swap->views[i] != VK_NULL_HANDLE)

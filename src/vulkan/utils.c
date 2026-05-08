@@ -156,3 +156,9 @@ VkResult create_shader_module(VkDevice device, const char *path, VkShaderModule 
 	free(code);
 	return result;
 }
+
+void exit_with_error(const char *msg)
+{
+	fprintf(stderr, "Fatal Error: %s\n", msg);
+	exit(1);
+}

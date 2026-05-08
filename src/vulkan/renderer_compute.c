@@ -15,8 +15,8 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 
 	// Wait for previous compute job to complete
 	if (ctx->initialized && ctx->fence != VK_NULL_HANDLE) {
-		vkWaitForFences(r->device, 1, &ctx->fence, VK_TRUE, UINT64_MAX);
-		vkResetFences(r->device, 1, &ctx->fence);
+		vkWaitForFences(r->core.device, 1, &ctx->fence, VK_TRUE, UINT64_MAX);
+		vkResetFences(r->core.device, 1, &ctx->fence);
 	}
 
 	// Prepare compute shader input data
@@ -41,20 +41,20 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	// Allocate persistent resources on first use
 	if (!ctx->initialized) {
 		VkCommandPoolCreateInfo cpInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = 0};
-		vkCreateCommandPool(r->device, &cpInfo, NULL, &ctx->cmdPool);
+		vkCreateCommandPool(r->core.device, &cpInfo, NULL, &ctx->cmdPool);
 
 		VkCommandBufferAllocateInfo cbAlloc = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = ctx->cmdPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
-		vkAllocateCommandBuffers(r->device, &cbAlloc, &ctx->cmdBuf);
+		vkAllocateCommandBuffers(r->core.device, &cbAlloc, &ctx->cmdBuf);
 
 		VkFenceCreateInfo fi = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
-		vkCreateFence(r->device, &fi, NULL, &ctx->fence);
+		vkCreateFence(r->core.device, &fi, NULL, &ctx->fence);
 
 		VkDescriptorPoolSize dps = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3};
 		VkDescriptorPoolCreateInfo dpInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &dps};
-		vkCreateDescriptorPool(r->device, &dpInfo, NULL, &ctx->pool);
+		vkCreateDescriptorPool(r->core.device, &dpInfo, NULL, &ctx->pool);
 
 		VkDescriptorSetAllocateInfo dsAlloc = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = ctx->pool, .descriptorSetCount = 1, .pSetLayouts = &r->computeDescriptorSetLayout};
-		vkAllocateDescriptorSets(r->device, &dsAlloc, &ctx->descSet);
+		vkAllocateDescriptorSets(r->core.device, &dsAlloc, &ctx->descSet);
 
 		ctx->initialized = VK_TRUE;
 	}
@@ -66,42 +66,42 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	if (ctx->nodeBuf != VK_NULL_HANDLE) {
 		// Check if buffers are large enough
 		VkMemoryRequirements memReqs;
-		vkGetBufferMemoryRequirements(r->device, ctx->nodeBuf, &memReqs);
+		vkGetBufferMemoryRequirements(r->core.device, ctx->nodeBuf, &memReqs);
 		if (memReqs.size < nodeSize) {
-			vkDestroyBuffer(r->device, ctx->nodeBuf, NULL);
-			vkFreeMemory(r->device, ctx->nodeMem, NULL);
+			vkDestroyBuffer(r->core.device, ctx->nodeBuf, NULL);
+			vkFreeMemory(r->core.device, ctx->nodeMem, NULL);
 			ctx->nodeBuf = VK_NULL_HANDLE;
 		}
 	}
 	if (ctx->nodeBuf == VK_NULL_HANDLE) {
-		createBuffer(r->device, r->physicalDevice, nodeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->nodeBuf, &ctx->nodeMem);
+		createBuffer(r->core.device, r->core.physicalDevice, nodeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->nodeBuf, &ctx->nodeMem);
 	}
 
 	if (ctx->edgeBuf != VK_NULL_HANDLE) {
 		VkMemoryRequirements memReqs;
-		vkGetBufferMemoryRequirements(r->device, ctx->edgeBuf, &memReqs);
+		vkGetBufferMemoryRequirements(r->core.device, ctx->edgeBuf, &memReqs);
 		if (memReqs.size < edgeSize) {
-			vkDestroyBuffer(r->device, ctx->edgeBuf, NULL);
-			vkFreeMemory(r->device, ctx->edgeMem, NULL);
+			vkDestroyBuffer(r->core.device, ctx->edgeBuf, NULL);
+			vkFreeMemory(r->core.device, ctx->edgeMem, NULL);
 			ctx->edgeBuf = VK_NULL_HANDLE;
 		}
 	}
 	if (ctx->edgeBuf == VK_NULL_HANDLE) {
-		createBuffer(r->device, r->physicalDevice, edgeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->edgeBuf, &ctx->edgeMem);
+		createBuffer(r->core.device, r->core.physicalDevice, edgeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->edgeBuf, &ctx->edgeMem);
 	}
 
 	if (ctx->hubBuf == VK_NULL_HANDLE) {
-		createBuffer(r->device, r->physicalDevice, sizeof(CompHub), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->hubBuf, &ctx->hubMem);
+		createBuffer(r->core.device, r->core.physicalDevice, sizeof(CompHub), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->hubBuf, &ctx->hubMem);
 	}
 
 	// Upload node and edge data to GPU
-	updateBuffer(r->device, ctx->nodeMem, nodeSize, cNodes);
-	updateBuffer(r->device, ctx->edgeMem, edgeSize, cEdges);
+	updateBuffer(r->core.device, ctx->nodeMem, nodeSize, cNodes);
+	updateBuffer(r->core.device, ctx->edgeMem, edgeSize, cEdges);
 
 	// Update descriptor set with storage buffers
 	VkDescriptorBufferInfo nbi = {ctx->nodeBuf, 0, VK_WHOLE_SIZE}, ebi = {ctx->edgeBuf, 0, VK_WHOLE_SIZE}, hbi = {ctx->hubBuf, 0, VK_WHOLE_SIZE};
 	VkWriteDescriptorSet writes[3] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 0, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &nbi, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 1, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &ebi, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &hbi, NULL}};
-	vkUpdateDescriptorSets(r->device, 3, writes, 0, NULL);
+	vkUpdateDescriptorSets(r->core.device, 3, writes, 0, NULL);
 
 	// Record command buffer
 	vkResetCommandBuffer(ctx->cmdBuf, 0);
@@ -124,7 +124,7 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 
 	// Submit with fence (no vkQueueWaitIdle)
 	VkSubmitInfo sInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &ctx->cmdBuf};
-	VkResult result = vkQueueSubmit(r->graphicsQueue, 1, &sInfo, ctx->fence);
+	VkResult result = vkQueueSubmit(r->core.graphicsQueue, 1, &sInfo, ctx->fence);
 	if (result != VK_SUCCESS) {
 		free(cNodes);
 		free(cEdges);
@@ -132,12 +132,12 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	}
 
 	// Wait for completion and read back
-	vkWaitForFences(r->device, 1, &ctx->fence, VK_TRUE, UINT64_MAX);
+	vkWaitForFences(r->core.device, 1, &ctx->fence, VK_TRUE, UINT64_MAX);
 
 	void *mapped;
-	vkMapMemory(r->device, ctx->edgeMem, 0, edgeSize, 0, &mapped);
+	vkMapMemory(r->core.device, ctx->edgeMem, 0, edgeSize, 0, &mapped);
 	memcpy(edgeResults, mapped, sizeof(CompEdge) * graph->edge_count);
-	vkUnmapMemory(r->device, ctx->edgeMem);
+	vkUnmapMemory(r->core.device, ctx->edgeMem);
 
 	free(cNodes);
 	free(cEdges);

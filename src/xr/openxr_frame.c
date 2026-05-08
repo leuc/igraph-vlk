@@ -10,7 +10,7 @@
 
 bool xr_init_vr(AppState *app)
 {
-	if (!xr_context_create_session(&app->xr_ctx, app->renderer.instance, app->renderer.physicalDevice, app->renderer.device, 0, 0)) {
+	if (!xr_context_create_session(&app->xr_ctx, app->renderer.core.instance, app->renderer.core.physicalDevice, app->renderer.core.device, app->renderer.core.graphicsQueueFamily, 0)) {
 		fprintf(stderr, "Failed to create XR session\n");
 		return false;
 	}
@@ -99,13 +99,13 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 		}
 		*last_predicted_display_time = frameState.predictedDisplayTime;
 
-		VkResult vkRes = vkWaitForFences(app->renderer.device, 1, &app->renderer.inFlightFences[app->renderer.currentFrame], VK_TRUE, UINT64_MAX);
+		VkResult vkRes = vkWaitForFences(app->renderer.core.device, 1, &app->renderer.commands.inFlightFences[app->renderer.commands.currentFrame], VK_TRUE, UINT64_MAX);
 		if (vkRes != VK_SUCCESS) {
 			fprintf(stderr, "XR: vkWaitForFences failed: %d\n", vkRes);
 			xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);
 			return;
 		}
-		vkResetFences(app->renderer.device, 1, &app->renderer.inFlightFences[app->renderer.currentFrame]);
+		vkResetFences(app->renderer.core.device, 1, &app->renderer.commands.inFlightFences[app->renderer.commands.currentFrame]);
 
 		if (!xr_context_locate_views(&app->xr_ctx, frameState.predictedDisplayTime)) {
 			fprintf(stderr, "XR: xrLocateViews failed\n");
@@ -132,9 +132,9 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 			}
 		}
 
-		vkResetCommandBuffer(app->renderer.commandBuffers[app->renderer.currentFrame], 0);
+		vkResetCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], 0);
 		VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-		vkRes = vkBeginCommandBuffer(app->renderer.commandBuffers[app->renderer.currentFrame], &bi);
+		vkRes = vkBeginCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], &bi);
 		if (vkRes != VK_SUCCESS) {
 			fprintf(stderr, "XR: vkBeginCommandBuffer failed: %d\n", vkRes);
 			xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);
@@ -184,7 +184,7 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 			xr_context_get_projection_matrix(&app->xr_ctx, i, 0.1f, 1000.0f, eye_proj);
 			eye_proj[1][1] *= -1.0f;
 
-			VkRenderPass xrRP = app->renderer.renderPassXR != VK_NULL_HANDLE ? app->renderer.renderPassXR : app->renderer.renderPass;
+			VkRenderPass xrRP = app->renderer.renderPassXR != VK_NULL_HANDLE ? app->renderer.renderPassXR : app->renderer.renderPass.renderPass;
 
 			if (has_ray && i == 0) {
 				MenuNode *hit = raycast_menu_vr(app, ray_origin, ray_dir);
@@ -195,7 +195,7 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 
 			generate_vulkan_menu_buffers(&app->app_ctx, &app->renderer);
 
-			renderer_render_scene(&app->renderer, app->renderer.commandBuffers[app->renderer.currentFrame], xrRP, app->renderer.xrFramebuffers[i][imageIndices[i]], (VkExtent2D){app->xr_ctx.swapchains[i].width, app->xr_ctx.swapchains[i].height}, eye_view, eye_proj, i, has_ray, ray_origin, ray_dir);
+			renderer_render_scene(&app->renderer, app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], xrRP, app->renderer.xrFramebuffers[i][imageIndices[i]], (VkExtent2D){app->xr_ctx.swapchains[i].width, app->xr_ctx.swapchains[i].height}, eye_view, eye_proj, i, has_ray, ray_origin, ray_dir);
 
 			projectionViews[i] = (XrCompositionLayerProjectionView){.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
 																	.pose = app->xr_ctx.views[i].pose,
@@ -207,15 +207,15 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 																	}};
 		}
 
-		vkEndCommandBuffer(app->renderer.commandBuffers[app->renderer.currentFrame]);
+		vkEndCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame]);
 
-		VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &app->renderer.commandBuffers[app->renderer.currentFrame]};
-		vkRes = vkQueueSubmit(app->renderer.graphicsQueue, 1, &si, app->renderer.inFlightFences[app->renderer.currentFrame]);
+		VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame]};
+		vkRes = vkQueueSubmit(app->renderer.core.graphicsQueue, 1, &si, app->renderer.commands.inFlightFences[app->renderer.commands.currentFrame]);
 		if (vkRes != VK_SUCCESS) {
 			fprintf(stderr, "XR: vkQueueSubmit failed: %d\n", vkRes);
-			vkResetFences(app->renderer.device, 1, &app->renderer.inFlightFences[app->renderer.currentFrame]);
+			vkResetFences(app->renderer.core.device, 1, &app->renderer.commands.inFlightFences[app->renderer.commands.currentFrame]);
 			xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);
-			app->renderer.currentFrame = (app->renderer.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+			app->renderer.commands.currentFrame = (app->renderer.commands.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 			return;
 		}
 
@@ -238,7 +238,7 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 			fprintf(stderr, "XR: xrEndFrame failed\n");
 		}
 
-		app->renderer.currentFrame = (app->renderer.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+		app->renderer.commands.currentFrame = (app->renderer.commands.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 	} else {
 		xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);
 	}

@@ -1,5 +1,6 @@
 #include "vulkan/vulkan_commands.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <vulkan/vulkan.h>
@@ -15,12 +16,12 @@ void vulkan_commands_create(VulkanCommands *cmds, VulkanCore *core, uint32_t ima
 	cmds->currentFrame = 0;
 
 	// Create command pool
-	VkCommandPoolCreateInfo poolInfo = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, NULL, 0, core->graphicsQueueFamily};
+	VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = core->graphicsQueueFamily, .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT};
 	VK_CHECK(vkCreateCommandPool(core->device, &poolInfo, NULL, &cmds->commandPool), "Failed to create command pool");
 
 	// Allocate command buffers
 	cmds->commandBuffers = malloc(sizeof(VkCommandBuffer) * MAX_FRAMES_IN_FLIGHT);
-	VkCommandBufferAllocateInfo allocInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, NULL, VK_COMMAND_BUFFER_LEVEL_PRIMARY, cmds->commandPool, MAX_FRAMES_IN_FLIGHT};
+	VkCommandBufferAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = cmds->commandPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = MAX_FRAMES_IN_FLIGHT};
 	VK_CHECK(vkAllocateCommandBuffers(core->device, &allocInfo, cmds->commandBuffers), "Failed to allocate command buffers");
 
 	// Create synchronization primitives
@@ -28,8 +29,8 @@ void vulkan_commands_create(VulkanCommands *cmds, VulkanCore *core, uint32_t ima
 	cmds->renderFinishedSemaphores = malloc(sizeof(VkSemaphore) * MAX_FRAMES_IN_FLIGHT);
 	cmds->inFlightFences = malloc(sizeof(VkFence) * MAX_FRAMES_IN_FLIGHT);
 
-	VkSemaphoreCreateInfo semaphoreInfo = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, NULL, 0};
-	VkFenceCreateInfo fenceInfo = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, NULL, VK_FENCE_CREATE_SIGNALED_BIT};
+	VkSemaphoreCreateInfo semaphoreInfo = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 		VK_CHECK(vkCreateSemaphore(core->device, &semaphoreInfo, NULL, &cmds->imageAvailableSemaphores[i]), "Failed to create image available semaphore");
@@ -40,7 +41,6 @@ void vulkan_commands_create(VulkanCommands *cmds, VulkanCore *core, uint32_t ima
 
 void vulkan_commands_destroy(VulkanCommands *cmds, VkDevice device)
 {
-	// Destroy synchronization primitives
 	if (cmds->imageAvailableSemaphores) {
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			if (cmds->imageAvailableSemaphores[i] != VK_NULL_HANDLE)
@@ -53,13 +53,18 @@ void vulkan_commands_destroy(VulkanCommands *cmds, VkDevice device)
 		free(cmds->imageAvailableSemaphores);
 		free(cmds->renderFinishedSemaphores);
 		free(cmds->inFlightFences);
+		cmds->imageAvailableSemaphores = NULL;
+		cmds->renderFinishedSemaphores = NULL;
+		cmds->inFlightFences = NULL;
 	}
 
-	// Free command buffers
-	if (cmds->commandBuffers)
+	if (cmds->commandBuffers) {
 		free(cmds->commandBuffers);
+		cmds->commandBuffers = NULL;
+	}
 
-	// Destroy command pool
-	if (cmds->commandPool != VK_NULL_HANDLE)
+	if (cmds->commandPool != VK_NULL_HANDLE) {
 		vkDestroyCommandPool(device, cmds->commandPool, NULL);
+		cmds->commandPool = VK_NULL_HANDLE;
+	}
 }

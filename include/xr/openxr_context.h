@@ -26,7 +26,7 @@
 		goto label; \
 	}
 
-typedef struct
+typedef struct XrContext
 {
 	XrInstance instance;
 	XrSystemId system_id;

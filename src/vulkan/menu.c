@@ -223,11 +223,11 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 			QuadVertex qv[] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}, {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}}, {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}};
 			uint32_t qi[] = {0, 1, 2, 2, 3, 0};
 
-			createBuffer(r->device, r->physicalDevice, sizeof(qv), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuQuadVertexBuffer, &r->menuQuadVertexBufferMemory);
-			updateBuffer(r->device, r->menuQuadVertexBufferMemory, sizeof(qv), qv);
+			createBuffer(r->core.device, r->core.physicalDevice, sizeof(qv), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuQuadVertexBuffer, &r->menuQuadVertexBufferMemory);
+			updateBuffer(r->core.device, r->menuQuadVertexBufferMemory, sizeof(qv), qv);
 
-			createBuffer(r->device, r->physicalDevice, sizeof(qi), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuQuadIndexBuffer, &r->menuQuadIndexBufferMemory);
-			updateBuffer(r->device, r->menuQuadIndexBufferMemory, sizeof(qi), qi);
+			createBuffer(r->core.device, r->core.physicalDevice, sizeof(qi), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuQuadIndexBuffer, &r->menuQuadIndexBufferMemory);
+			updateBuffer(r->core.device, r->menuQuadIndexBufferMemory, sizeof(qi), qi);
 			r->menuQuadIndexCount = 6;
 		}
 
@@ -323,22 +323,22 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 		}
 
 		if (r->menuInstanceBuffer != VK_NULL_HANDLE) {
-			vkDeviceWaitIdle(r->device);
-			vkDestroyBuffer(r->device, r->menuInstanceBuffer, NULL);
-			vkFreeMemory(r->device, r->menuInstanceBufferMemory, NULL);
+			vkDeviceWaitIdle(r->core.device);
+			vkDestroyBuffer(r->core.device, r->menuInstanceBuffer, NULL);
+			vkFreeMemory(r->core.device, r->menuInstanceBufferMemory, NULL);
 		}
-		createBuffer(r->device, r->physicalDevice, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuInstanceBuffer, &r->menuInstanceBufferMemory);
-		updateBuffer(r->device, r->menuInstanceBufferMemory, bufferSize, instances);
+		createBuffer(r->core.device, r->core.physicalDevice, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuInstanceBuffer, &r->menuInstanceBufferMemory);
+		updateBuffer(r->core.device, r->menuInstanceBufferMemory, bufferSize, instances);
 		r->menuNodeCount = instance_count;
 
 		if (label_count > 0) {
 			VkDeviceSize labelBufferSize = sizeof(LabelInstance) * label_count;
 			if (r->menuTextInstanceBuffer != VK_NULL_HANDLE) {
-				vkDestroyBuffer(r->device, r->menuTextInstanceBuffer, NULL);
-				vkFreeMemory(r->device, r->menuTextInstanceBufferMemory, NULL);
+				vkDestroyBuffer(r->core.device, r->menuTextInstanceBuffer, NULL);
+				vkFreeMemory(r->core.device, r->menuTextInstanceBufferMemory, NULL);
 			}
-			createBuffer(r->device, r->physicalDevice, labelBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuTextInstanceBuffer, &r->menuTextInstanceBufferMemory);
-			updateBuffer(r->device, r->menuTextInstanceBufferMemory, labelBufferSize, label_instances);
+			createBuffer(r->core.device, r->core.physicalDevice, labelBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuTextInstanceBuffer, &r->menuTextInstanceBufferMemory);
+			updateBuffer(r->core.device, r->menuTextInstanceBufferMemory, labelBufferSize, label_instances);
 			r->menuTextCharCount = label_count;
 		}
 	}

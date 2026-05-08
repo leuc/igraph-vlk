@@ -53,6 +53,13 @@ add_executable(igraph-vlk
     src/vulkan/renderer_compute.c
     src/vulkan/renderer_ui.c
     src/vulkan/renderer_pipelines.c
+    src/vulkan/pipeline_graphics.c
+    src/vulkan/pipeline_ui.c
+    src/vulkan/pipeline_compute.c
+    src/vulkan/vulkan_device.c
+    src/vulkan/vulkan_swapchain.c
+    src/vulkan/vulkan_commands.c
+    src/vulkan/vulkan_render_pass.c
     src/vulkan/menu.c
     # Utilities and helpers
     src/vulkan/utils.c

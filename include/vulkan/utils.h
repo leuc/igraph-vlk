@@ -15,4 +15,16 @@ void createImage(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t widt
 void transitionImageLayout(VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
 VkResult create_shader_module(VkDevice device, const char *path, VkShaderModule *shaderModule);
 
+#define VK_CHECK(res, msg) \
+	if (res != VK_SUCCESS) { \
+		fprintf(stderr, "Vulkan Error: %s (Result: %d)\n", msg, res); \
+		exit(1); \
+	}
+
+void exit_with_error(const char *msg);
+
+#ifndef CLAMP
+#define CLAMP(x, min, max) ((x) < (min) ? (min) : ((x) > (max) ? (max) : (x)))
+#endif
+
 #endif

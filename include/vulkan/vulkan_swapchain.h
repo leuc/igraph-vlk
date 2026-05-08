@@ -1,19 +1,7 @@
 #ifndef VULKAN_SWAPCHAIN_H
 #define VULKAN_SWAPCHAIN_H
 
-#include <vulkan/vulkan.h>
-
-#include "vulkan/vulkan_device.h"
-
-typedef struct
-{
-	VkSwapchainKHR swapchain;
-	VkImage *images;
-	VkImageView *views;
-	uint32_t imageCount;
-	VkFormat imageFormat;
-	VkExtent2D extent;
-} VulkanSwapchain;
+#include "vulkan/vulkan_types.h"
 
 void vulkan_swapchain_create(VulkanSwapchain *swap, VulkanCore *core, GLFWwindow *window);
 void vulkan_swapchain_destroy(VulkanSwapchain *swap, VkDevice device);

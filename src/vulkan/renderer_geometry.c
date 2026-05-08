@@ -17,8 +17,8 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	// Ring-buffered fence sync instead of vkDeviceWaitIdle
 	uint32_t ringIdx = r->graphUpdateRingIndex;
 	if (r->nodePositionBuffer != VK_NULL_HANDLE) {
-		vkWaitForFences(r->device, 1, &r->graphUpdateFences[ringIdx], VK_TRUE, UINT64_MAX);
-		vkResetFences(r->device, 1, &r->graphUpdateFences[ringIdx]);
+		vkWaitForFences(r->core.device, 1, &r->graphUpdateFences[ringIdx], VK_TRUE, UINT64_MAX);
+		vkResetFences(r->core.device, 1, &r->graphUpdateFences[ringIdx]);
 	}
 
 	r->nodeCount = graph->node_count;
@@ -27,17 +27,17 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	// Pre-allocate or grow node buffers (split: position + attribute)
 	if (r->nodeCapacity < graph->node_count) {
 		if (r->nodePositionBuffer != VK_NULL_HANDLE) {
-			vkDestroyBuffer(r->device, r->nodePositionBuffer, NULL);
-			vkFreeMemory(r->device, r->nodePositionMemory, NULL);
-			vkDestroyBuffer(r->device, r->nodeAttributeBuffer, NULL);
-			vkFreeMemory(r->device, r->nodeAttributeMemory, NULL);
-			vkDestroyBuffer(r->device, r->nodeAttributeStagingBuffer, NULL);
-			vkFreeMemory(r->device, r->nodeAttributeStagingMemory, NULL);
+			vkDestroyBuffer(r->core.device, r->nodePositionBuffer, NULL);
+			vkFreeMemory(r->core.device, r->nodePositionMemory, NULL);
+			vkDestroyBuffer(r->core.device, r->nodeAttributeBuffer, NULL);
+			vkFreeMemory(r->core.device, r->nodeAttributeMemory, NULL);
+			vkDestroyBuffer(r->core.device, r->nodeAttributeStagingBuffer, NULL);
+			vkFreeMemory(r->core.device, r->nodeAttributeStagingMemory, NULL);
 		}
 		// Position buffer: HOST_COHERENT for fast mapped updates
-		createMappedBuffer(r->device, r->physicalDevice, sizeof(NodePosition) * graph->node_count, &r->nodePositionBuffer, &r->nodePositionMemory);
+		createMappedBuffer(r->core.device, r->core.physicalDevice, sizeof(NodePosition) * graph->node_count, &r->nodePositionBuffer, &r->nodePositionMemory);
 		// Attribute buffer: DEVICE_LOCAL with staging buffer for rare updates
-		createStagingBuffer(r->device, r->physicalDevice, sizeof(NodeAttribute) * graph->node_count, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->nodeAttributeStagingBuffer, &r->nodeAttributeStagingMemory, &r->nodeAttributeBuffer, &r->nodeAttributeMemory);
+		createStagingBuffer(r->core.device, r->core.physicalDevice, sizeof(NodeAttribute) * graph->node_count, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->nodeAttributeStagingBuffer, &r->nodeAttributeStagingMemory, &r->nodeAttributeBuffer, &r->nodeAttributeMemory);
 		r->nodeCapacity = graph->node_count;
 		r->needsAttributeUpload = VK_TRUE;
 	} else if (graph->node_count < r->nodeCount) {
@@ -51,38 +51,38 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	uint32_t neededEdgeVerts = r->edgeVertexCount;
 	if (r->edgeCapacity < neededEdgeVerts) {
 		if (r->edgePositionBuffer != VK_NULL_HANDLE) {
-			vkDestroyBuffer(r->device, r->edgePositionBuffer, NULL);
-			vkFreeMemory(r->device, r->edgePositionMemory, NULL);
-			vkDestroyBuffer(r->device, r->edgeAttributeBuffer, NULL);
-			vkFreeMemory(r->device, r->edgeAttributeMemory, NULL);
-			vkDestroyBuffer(r->device, r->edgeAttributeStagingBuffer, NULL);
-			vkFreeMemory(r->device, r->edgeAttributeStagingMemory, NULL);
+			vkDestroyBuffer(r->core.device, r->edgePositionBuffer, NULL);
+			vkFreeMemory(r->core.device, r->edgePositionMemory, NULL);
+			vkDestroyBuffer(r->core.device, r->edgeAttributeBuffer, NULL);
+			vkFreeMemory(r->core.device, r->edgeAttributeMemory, NULL);
+			vkDestroyBuffer(r->core.device, r->edgeAttributeStagingBuffer, NULL);
+			vkFreeMemory(r->core.device, r->edgeAttributeStagingMemory, NULL);
 		}
 		// Position buffer: HOST_COHERENT for fast mapped updates
-		createMappedBuffer(r->device, r->physicalDevice, sizeof(EdgePosition) * neededEdgeVerts, &r->edgePositionBuffer, &r->edgePositionMemory);
+		createMappedBuffer(r->core.device, r->core.physicalDevice, sizeof(EdgePosition) * neededEdgeVerts, &r->edgePositionBuffer, &r->edgePositionMemory);
 		// Attribute buffer: DEVICE_LOCAL with staging buffer for rare updates
-		createStagingBuffer(r->device, r->physicalDevice, sizeof(EdgeAttribute) * neededEdgeVerts, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->edgeAttributeStagingBuffer, &r->edgeAttributeStagingMemory, &r->edgeAttributeBuffer, &r->edgeAttributeMemory);
+		createStagingBuffer(r->core.device, r->core.physicalDevice, sizeof(EdgeAttribute) * neededEdgeVerts, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->edgeAttributeStagingBuffer, &r->edgeAttributeStagingMemory, &r->edgeAttributeBuffer, &r->edgeAttributeMemory);
 		r->edgeCapacity = neededEdgeVerts;
 		r->needsAttributeUpload = VK_TRUE;
 	}
 
 	// Destroy label/sphere buffers if they exist (these are always rebuilt)
 	if (r->labelInstanceBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->device, r->labelInstanceBuffer, NULL);
-		vkFreeMemory(r->device, r->labelInstanceBufferMemory, NULL);
-		vkDestroyBuffer(r->device, r->labelStagingBuffer, NULL);
-		vkFreeMemory(r->device, r->labelStagingBufferMemory, NULL);
+		vkDestroyBuffer(r->core.device, r->labelInstanceBuffer, NULL);
+		vkFreeMemory(r->core.device, r->labelInstanceBufferMemory, NULL);
+		vkDestroyBuffer(r->core.device, r->labelStagingBuffer, NULL);
+		vkFreeMemory(r->core.device, r->labelStagingBufferMemory, NULL);
 		r->labelInstanceBuffer = VK_NULL_HANDLE;
 		r->labelStagingBuffer = VK_NULL_HANDLE;
 	}
 	if (r->sphereVertexBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->device, r->sphereVertexBuffer, NULL);
-		vkFreeMemory(r->device, r->sphereVertexBufferMemory, NULL);
+		vkDestroyBuffer(r->core.device, r->sphereVertexBuffer, NULL);
+		vkFreeMemory(r->core.device, r->sphereVertexBufferMemory, NULL);
 		r->sphereVertexBuffer = VK_NULL_HANDLE;
 	}
 	if (r->sphereIndexBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->device, r->sphereIndexBuffer, NULL);
-		vkFreeMemory(r->device, r->sphereIndexBufferMemory, NULL);
+		vkDestroyBuffer(r->core.device, r->sphereIndexBuffer, NULL);
+		vkFreeMemory(r->core.device, r->sphereIndexBufferMemory, NULL);
 		r->sphereIndexBuffer = VK_NULL_HANDLE;
 	}
 	if (r->sphereIndexCounts) {
@@ -136,10 +136,10 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 		currentOffset += count;
 	}
 	// Fast path: update positions via mapped buffer
-	updateBufferMapped(r->device, r->nodePositionMemory, sizeof(NodePosition) * graph->node_count, nodePositions);
+	updateBufferMapped(r->core.device, r->nodePositionMemory, sizeof(NodePosition) * graph->node_count, nodePositions);
 	// Rare: update attributes via staged copy
 	if (r->needsAttributeUpload) {
-		updateBufferStaged(r->device, r->commandPool, r->graphicsQueue, sizeof(NodeAttribute) * graph->node_count, nodeAttributes, r->nodeAttributeStagingBuffer, r->nodeAttributeStagingMemory, r->nodeAttributeBuffer);
+		updateBufferStaged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(NodeAttribute) * graph->node_count, nodeAttributes, r->nodeAttributeStagingBuffer, r->nodeAttributeStagingMemory, r->nodeAttributeBuffer);
 	}
 	free(sorted);
 	free(nodePositions);
@@ -249,11 +249,11 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 
 	// Fast path: update positions via mapped buffer
 	if (r->edgeVertexCount > 0) {
-		updateBufferMapped(r->device, r->edgePositionMemory, sizeof(EdgePosition) * r->edgeVertexCount, edgePositions);
+		updateBufferMapped(r->core.device, r->edgePositionMemory, sizeof(EdgePosition) * r->edgeVertexCount, edgePositions);
 	}
 	// Rare: update attributes via staged copy (only when flag set)
 	if (r->needsAttributeUpload && r->edgeVertexCount > 0) {
-		updateBufferStaged(r->device, r->commandPool, r->graphicsQueue, sizeof(EdgeAttribute) * r->edgeVertexCount, edgeAttributes, r->edgeAttributeStagingBuffer, r->edgeAttributeStagingMemory, r->edgeAttributeBuffer);
+		updateBufferStaged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(EdgeAttribute) * r->edgeVertexCount, edgeAttributes, r->edgeAttributeStagingBuffer, r->edgeAttributeStagingMemory, r->edgeAttributeBuffer);
 	}
 	free(edgePositions);
 	free(edgeAttributes);
@@ -265,7 +265,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 			tc += strlen(graph->nodes[i].label);
 	r->labelCharCount = tc;
 	if (tc > 0) {
-		createStagingBuffer(r->device, r->physicalDevice, sizeof(LabelInstance) * tc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->labelStagingBuffer, &r->labelStagingBufferMemory, &r->labelInstanceBuffer, &r->labelInstanceBufferMemory);
+		createStagingBuffer(r->core.device, r->core.physicalDevice, sizeof(LabelInstance) * tc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->labelStagingBuffer, &r->labelStagingBufferMemory, &r->labelInstanceBuffer, &r->labelInstanceBufferMemory);
 		LabelInstance *li = malloc(sizeof(LabelInstance) * r->labelCharCount);
 		uint32_t k = 0;
 		for (uint32_t i = 0; i < graph->node_count; i++) {
@@ -302,14 +302,14 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 				k++;
 			}
 		}
-		updateBufferStaged(r->device, r->commandPool, r->graphicsQueue, sizeof(LabelInstance) * r->labelCharCount, li, r->labelStagingBuffer, r->labelStagingBufferMemory, r->labelInstanceBuffer);
+		updateBufferStaged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(LabelInstance) * r->labelCharCount, li, r->labelStagingBuffer, r->labelStagingBufferMemory, r->labelInstanceBuffer);
 		free(li);
 	} else {
 		r->labelInstanceBuffer = VK_NULL_HANDLE;
 	}
 
 	// Signal the ring fence for this slot so the next update can proceed
-	vkQueueSubmit(r->graphicsQueue, 0, NULL, r->graphUpdateFences[ringIdx]);
+	vkQueueSubmit(r->core.graphicsQueue, 0, NULL, r->graphUpdateFences[ringIdx]);
 }
 
 void renderer_render_ray(Renderer *r, VkCommandBuffer cmd, vec3 origin, vec3 dir, mat4 view, mat4 proj)
@@ -328,10 +328,10 @@ void renderer_render_ray(Renderer *r, VkCommandBuffer cmd, vec3 origin, vec3 dir
 
 	// Update ray buffer (host-visible)
 	if (r->rayVertexBuffer == VK_NULL_HANDLE) {
-		createBuffer(r->device, r->physicalDevice, sizeof(vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->rayVertexBuffer, &r->rayVertexBufferMemory);
+		createBuffer(r->core.device, r->core.physicalDevice, sizeof(vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->rayVertexBuffer, &r->rayVertexBufferMemory);
 		r->rayVertexCount = 2;
 	}
-	updateBuffer(r->device, r->rayVertexBufferMemory, sizeof(vertices), vertices);
+	updateBuffer(r->core.device, r->rayVertexBufferMemory, sizeof(vertices), vertices);
 
 	// Draw
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->rayPipeline);
