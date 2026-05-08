@@ -123,6 +123,7 @@ int main(int argc, char **argv)
 		} else {
 			renderer_setup_xr(&app.renderer, &app.xr_ctx);
 			xr_context_init_input(&app.xr_ctx);
+			xr_context_print_capabilities(&app.xr_ctx);
 		}
 	}
 
@@ -281,14 +282,9 @@ int main(int argc, char **argv)
 			XrFrameState frameState = {.type = XR_TYPE_FRAME_STATE};
 			xr_context_begin_frame(&app.xr_ctx, &frameState);
 
-			// Desktop sync: wait for fence BEFORE acquiring next image
+			// Wait for previous frame GPU work
 			vkWaitForFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame], VK_TRUE, UINT64_MAX);
 			vkResetFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame]);
-
-			// Desktop Presentation logic
-			uint32_t ii = -1;
-			VkResult res = vkAcquireNextImageKHR(app.renderer.device, app.renderer.swapchain, 0, app.renderer.imageAvailableSemaphores[app.renderer.currentFrame], VK_NULL_HANDLE, &ii);
-			bool has_desktop = (res == VK_SUCCESS || res == VK_SUBOPTIMAL_KHR);
 
 			vkResetCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame], 0);
 			VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -314,12 +310,6 @@ int main(int argc, char **argv)
 				VkRenderPass xrRP = app.renderer.renderPassXR != VK_NULL_HANDLE ? app.renderer.renderPassXR : app.renderer.renderPass;
 				renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], xrRP, app.renderer.xrFramebuffers[i][imageIndex], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, eye_view, eye_proj, i);
 
-				// Render to desktop companion (Left eye only) using camera view/proj, separate UBO slot
-				if (i == 0 && has_desktop) {
-					renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
-					renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], app.renderer.renderPass, app.renderer.framebuffers[ii], app.renderer.swapchainExtent, app.renderer.ubo.view, app.renderer.ubo.proj, 2);
-				}
-
 				XrSwapchainImageReleaseInfo releaseInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
 				xrReleaseSwapchainImage(app.xr_ctx.swapchains[i].handle, &releaseInfo);
 
@@ -335,24 +325,10 @@ int main(int argc, char **argv)
 
 			vkEndCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame]);
 
-			VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			VkPipelineStageFlags dummy_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT; // Unused
 			VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &app.renderer.commandBuffers[app.renderer.currentFrame]};
 
-			// Only use desktop semaphores if we successfully acquired a desktop image
-			if (has_desktop) {
-				si.waitSemaphoreCount = 1;
-				si.pWaitSemaphores = &app.renderer.imageAvailableSemaphores[app.renderer.currentFrame];
-				si.pWaitDstStageMask = &waitStage;
-				si.signalSemaphoreCount = 1;
-				si.pSignalSemaphores = &app.renderer.renderFinishedSemaphores[app.renderer.currentFrame];
-			}
-
 			vkQueueSubmit(app.renderer.graphicsQueue, 1, &si, app.renderer.inFlightFences[app.renderer.currentFrame]);
-
-			if (has_desktop) {
-				VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 1, .pWaitSemaphores = &app.renderer.renderFinishedSemaphores[app.renderer.currentFrame], .swapchainCount = 1, .pSwapchains = &app.renderer.swapchain, .pImageIndices = &ii};
-				vkQueuePresentKHR(app.renderer.presentQueue, &pi);
-			}
 
 			XrCompositionLayerProjection layer = {
 				.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,

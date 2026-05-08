@@ -5,12 +5,6 @@
 
 #include <math.h>
 
-#define XR_CHECK(res, msg)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    \
-	if (XR_FAILED(res)) {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
-		fprintf(stderr, "OpenXR Error: %s (Result: %d)\n", msg, res);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         \
-		return false;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         \
-	}
-
 static void xr_fov_to_matrix(const XrFovf fov, float nearZ, float farZ, mat4 out)
 {
 	float tanLeft = tanf(fov.angleLeft);
@@ -86,10 +80,16 @@ bool xr_context_init(XrContext *ctx, const char *app_name)
 		.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY,
 	};
 	res = xrGetSystem(ctx->instance, &systemInfo, &ctx->system_id);
-	XR_CHECK(res, "Failed to get system");
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to get system (Result: %d)\n", res);
+		return false;
+	}
 
 	res = xrEnumerateViewConfigurationViews(ctx->instance, ctx->system_id, ctx->view_config_type, 0, &ctx->view_count, NULL);
-	XR_CHECK(res, "Failed to count view configs");
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to count view configs (Result: %d)\n", res);
+		return false;
+	}
 
 	ctx->view_configs = malloc(sizeof(XrViewConfigurationView) * ctx->view_count);
 	for (uint32_t i = 0; i < ctx->view_count; i++) {
@@ -97,7 +97,10 @@ bool xr_context_init(XrContext *ctx, const char *app_name)
 		ctx->view_configs[i].next = NULL;
 	}
 	res = xrEnumerateViewConfigurationViews(ctx->instance, ctx->system_id, ctx->view_config_type, ctx->view_count, &ctx->view_count, ctx->view_configs);
-	XR_CHECK(res, "Failed to enumerate view configs");
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to enumerate view configs (Result: %d)\n", res);
+		return false;
+	}
 
 	// Re-verify view count
 	if (ctx->view_count == 0)
@@ -189,7 +192,10 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 	};
 
 	XrResult res = xrCreateSession(ctx->instance, &sessionCreateInfo, &ctx->session);
-	XR_CHECK(res, "Failed to create session");
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to create session (Result: %d)\n", res);
+		return false;
+	}
 
 	XrReferenceSpaceCreateInfo spaceCreateInfo = {
 		.type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
@@ -197,16 +203,25 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 		.poseInReferenceSpace = {{0, 0, 0, 1}, {0, 0, 0}},
 	};
 	res = xrCreateReferenceSpace(ctx->session, &spaceCreateInfo, &ctx->stage_space);
-	XR_CHECK(res, "Failed to create reference space");
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to create reference space (Result: %d)\n", res);
+		return false;
+	}
 
-	// Query supported swapchain formats
 	uint32_t formatCount = 0;
 	res = xrEnumerateSwapchainFormats(ctx->session, 0, &formatCount, NULL);
-	XR_CHECK(res, "Failed to count swapchain formats");
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to count swapchain formats (Result: %d)\n", res);
+		return false;
+	}
 
 	VkFormat *supportedFormats = malloc(sizeof(VkFormat) * formatCount);
 	res = xrEnumerateSwapchainFormats(ctx->session, formatCount, &formatCount, (int64_t *)supportedFormats);
-	XR_CHECK(res, "Failed to enumerate swapchain formats");
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to enumerate swapchain formats (Result: %d)\n", res);
+		free(supportedFormats);
+		return false;
+	}
 
 	// Preferred formats in order
 	VkFormat preferredFormats[] = {VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM};
@@ -249,10 +264,16 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 		ctx->swapchains[i].height = swapchainCreateInfo.height;
 
 		res = xrCreateSwapchain(ctx->session, &swapchainCreateInfo, &ctx->swapchains[i].handle);
-		XR_CHECK(res, "Failed to create swapchain");
+		if (XR_FAILED(res)) {
+			fprintf(stderr, "OpenXR Error: Failed to create swapchain (Result: %d)\n", res);
+			return false;
+		}
 
 		res = xrEnumerateSwapchainImages(ctx->swapchains[i].handle, 0, &ctx->swapchains[i].image_count, NULL);
-		XR_CHECK(res, "Failed to count swapchain images");
+		if (XR_FAILED(res)) {
+			fprintf(stderr, "OpenXR Error: Failed to count swapchain images (Result: %d)\n", res);
+			return false;
+		}
 
 		XrSwapchainImageVulkanKHR *images = malloc(sizeof(XrSwapchainImageVulkanKHR) * ctx->swapchains[i].image_count);
 		for (uint32_t j = 0; j < ctx->swapchains[i].image_count; j++) {
@@ -260,7 +281,11 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 			images[j].next = NULL;
 		}
 		res = xrEnumerateSwapchainImages(ctx->swapchains[i].handle, ctx->swapchains[i].image_count, &ctx->swapchains[i].image_count, (XrSwapchainImageBaseHeader *)images);
-		XR_CHECK(res, "Failed to enumerate swapchain images");
+		if (XR_FAILED(res)) {
+			fprintf(stderr, "OpenXR Error: Failed to enumerate swapchain images (Result: %d)\n", res);
+			free(images);
+			return false;
+		}
 
 		ctx->swapchains[i].images = malloc(sizeof(VkImage) * ctx->swapchains[i].image_count);
 		for (uint32_t j = 0; j < ctx->swapchains[i].image_count; j++) {
@@ -301,11 +326,17 @@ bool xr_context_begin_frame(XrContext *ctx, XrFrameState *frame_state)
 {
 	XrFrameWaitInfo waitInfo = {.type = XR_TYPE_FRAME_WAIT_INFO};
 	XrResult res = xrWaitFrame(ctx->session, &waitInfo, frame_state);
-	XR_CHECK(res, "Failed to wait frame");
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to wait frame (Result: %d)\n", res);
+		return false;
+	}
 
 	XrFrameBeginInfo beginInfo = {.type = XR_TYPE_FRAME_BEGIN_INFO};
 	res = xrBeginFrame(ctx->session, &beginInfo);
-	XR_CHECK(res, "Failed to begin frame");
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to begin frame (Result: %d)\n", res);
+		return false;
+	}
 
 	XrViewState viewState = {.type = XR_TYPE_VIEW_STATE};
 	XrViewLocateInfo locateInfo = {
@@ -315,7 +346,10 @@ bool xr_context_begin_frame(XrContext *ctx, XrFrameState *frame_state)
 		.space = ctx->stage_space,
 	};
 	res = xrLocateViews(ctx->session, &locateInfo, &viewState, ctx->view_count, &ctx->view_count, ctx->views);
-	XR_CHECK(res, "Failed to locate views");
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to locate views (Result: %d)\n", res);
+		return false;
+	}
 
 	return true;
 }
@@ -362,8 +396,43 @@ bool xr_context_end_frame(XrContext *ctx, XrFrameState *frame_state, XrCompositi
 		.layers = (const XrCompositionLayerBaseHeader *const *)layers,
 	};
 	XrResult res = xrEndFrame(ctx->session, &endInfo);
-	XR_CHECK(res, "Failed to end frame");
+	if (XR_FAILED(res)) {
+		fprintf(stderr, "OpenXR Error: Failed to end frame (Result: %d)\n", res);
+		return false;
+	}
 	return true;
+}
+
+void xr_context_print_capabilities(XrContext *ctx)
+{
+	if (!ctx->session_running) {
+		printf("No active session for controller detection.\n");
+		return;
+	}
+
+	printf("=== VR Controller Capabilities ===\n");
+
+	for (int hand = 0; hand < 2; hand++) {
+		printf("Hand %d (%s):\n", hand, hand == 0 ? "Left" : "Right");
+
+		XrInteractionProfileState state = {.type = XR_TYPE_INTERACTION_PROFILE_STATE};
+		XrResult res = xrGetCurrentInteractionProfile(ctx->session, ctx->hand_paths[hand], &state);
+		if (XR_SUCCEEDED(res) && state.interactionProfile != XR_NULL_PATH) {
+			uint32_t strLen = 0;
+			xrPathToString(ctx->instance, state.interactionProfile, 0, &strLen, NULL);
+			char profileStr[strLen + 1];
+			xrPathToString(ctx->instance, state.interactionProfile, strLen + 1, &strLen, profileStr);
+			printf("  Profile: %s\n", profileStr);
+
+			// Assumed capabilities from profile
+			if (strstr(profileStr, "touch_controller") || strstr(profileStr, "simple_controller")) {
+				printf("  Supports: Thumbsticks, Select/Trigger, Menu, A/B/X/Y buttons\n");
+			}
+		} else {
+			printf("  No profile bound.\n");
+		}
+	}
+	printf("==================================\n");
 }
 
 static XrResult create_action(XrActionSet action_set, XrPath *subaction_paths, XrAction *action, const char *name, const char *localized_name, XrActionType type)
@@ -388,20 +457,39 @@ bool xr_context_init_input(XrContext *ctx)
 		.localizedActionSetName = "Main Actions",
 		.priority = 0,
 	};
-	XR_CHECK(xrCreateActionSet(ctx->instance, &actionSetInfo, &ctx->action_set), "Failed to create action set");
+	if (XR_FAILED(xrCreateActionSet(ctx->instance, &actionSetInfo, &ctx->action_set))) {
+		fprintf(stderr, "OpenXR Error: Failed to create action set\n");
+		return false;
+	}
 
 	xrStringToPath(ctx->instance, "/user/hand/left", &ctx->hand_paths[0]);
 	xrStringToPath(ctx->instance, "/user/hand/right", &ctx->hand_paths[1]);
 
-	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->select_action, "select", "Select", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create select action");
-	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->menu_action, "menu", "Menu", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create menu action");
-	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_a_action, "button_a", "Button A", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button A action");
-	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_b_action, "button_b", "Button B", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button B action");
-	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_x_action, "button_x", "Button X", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button X action");
-	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_y_action, "button_y", "Button Y", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button Y action");
+	if (XR_FAILED(create_action(ctx->action_set, ctx->hand_paths, &ctx->select_action, "select", "Select", XR_ACTION_TYPE_BOOLEAN_INPUT))) {
+		fprintf(stderr, "OpenXR Error: Failed to create select action\n");
+		return false;
+	}
+	if (XR_FAILED(create_action(ctx->action_set, ctx->hand_paths, &ctx->menu_action, "menu", "Menu", XR_ACTION_TYPE_BOOLEAN_INPUT))) {
+		fprintf(stderr, "OpenXR Error: Failed to create menu action\n");
+		return false;
+	}
+	if (XR_FAILED(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_a_action, "button_a", "Button A", XR_ACTION_TYPE_BOOLEAN_INPUT))) {
+		fprintf(stderr, "OpenXR Error: Failed to create button A action\n");
+		return false;
+	}
+	if (XR_FAILED(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_b_action, "button_b", "Button B", XR_ACTION_TYPE_BOOLEAN_INPUT))) {
+		fprintf(stderr, "OpenXR Error: Failed to create button B action\n");
+		return false;
+	}
+	if (XR_FAILED(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_x_action, "button_x", "Button X", XR_ACTION_TYPE_BOOLEAN_INPUT))) {
+		fprintf(stderr, "OpenXR Error: Failed to create button X action\n");
+		return false;
+	}
+	if (XR_FAILED(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_y_action, "button_y", "Button Y", XR_ACTION_TYPE_BOOLEAN_INPUT))) {
+		fprintf(stderr, "OpenXR Error: Failed to create button Y action\n");
+		return false;
+	}
 
-	// Thumbstick actions - Use VECTOR2F_INPUT for 2D thumbstick per hand
-	// Left hand thumbstick (both X and Y axes)
 	XrActionCreateInfo thumbstickLeftInfo = {
 		.type = XR_TYPE_ACTION_CREATE_INFO,
 		.actionType = XR_ACTION_TYPE_VECTOR2F_INPUT,
@@ -410,7 +498,10 @@ bool xr_context_init_input(XrContext *ctx)
 	};
 	strncpy(thumbstickLeftInfo.actionName, "thumbstick_left", XR_MAX_ACTION_NAME_SIZE - 1);
 	strncpy(thumbstickLeftInfo.localizedActionName, "Left Thumbstick", XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
-	XR_CHECK(xrCreateAction(ctx->action_set, &thumbstickLeftInfo, &ctx->thumbstick_left_action), "Failed to create left thumbstick action");
+	if (XR_FAILED(xrCreateAction(ctx->action_set, &thumbstickLeftInfo, &ctx->thumbstick_left_action))) {
+		fprintf(stderr, "OpenXR Error: Failed to create left thumbstick action\n");
+		return false;
+	}
 
 	// Right hand thumbstick
 	XrActionCreateInfo thumbstickRightInfo = {
@@ -421,7 +512,10 @@ bool xr_context_init_input(XrContext *ctx)
 	};
 	strncpy(thumbstickRightInfo.actionName, "thumbstick_right", XR_MAX_ACTION_NAME_SIZE - 1);
 	strncpy(thumbstickRightInfo.localizedActionName, "Right Thumbstick", XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
-	XR_CHECK(xrCreateAction(ctx->action_set, &thumbstickRightInfo, &ctx->thumbstick_right_action), "Failed to create right thumb stick action");
+	if (XR_FAILED(xrCreateAction(ctx->action_set, &thumbstickRightInfo, &ctx->thumbstick_right_action))) {
+		fprintf(stderr, "OpenXR Error: Failed to create right thumb stick action\n");
+		return false;
+	}
 
 	// Suggest bindings for KHR Simple Controller
 	XrPath simpleProfile;
@@ -464,7 +558,10 @@ bool xr_context_init_input(XrContext *ctx)
 		.countActionSets = 1,
 		.actionSets = &ctx->action_set,
 	};
-	XR_CHECK(xrAttachSessionActionSets(ctx->session, &attachInfo), "Failed to attach action sets");
+	if (XR_FAILED(xrAttachSessionActionSets(ctx->session, &attachInfo))) {
+		fprintf(stderr, "OpenXR Error: Failed to attach action sets\n");
+		return false;
+	}
 
 	return true;
 }
