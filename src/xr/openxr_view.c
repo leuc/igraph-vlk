@@ -21,26 +21,33 @@ static void xr_fov_to_matrix(const XrFovf fov, float nearZ, float farZ, mat4 out
 	out[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
 }
 
-bool xr_context_begin_frame(XrContext *ctx, XrFrameState *frame_state)
+bool xr_context_wait_frame(XrContext *ctx, XrFrameState *frame_state)
 {
 	XrFrameWaitInfo waitInfo = {.type = XR_TYPE_FRAME_WAIT_INFO};
 	XrResult res = xrWaitFrame(ctx->session, &waitInfo, frame_state);
 	XR_CHECK(res, "Failed to wait frame");
+	return true;
+}
 
+bool xr_context_begin_frame(XrContext *ctx)
+{
 	XrFrameBeginInfo beginInfo = {.type = XR_TYPE_FRAME_BEGIN_INFO};
-	res = xrBeginFrame(ctx->session, &beginInfo);
+	XrResult res = xrBeginFrame(ctx->session, &beginInfo);
 	XR_CHECK(res, "Failed to begin frame");
+	return true;
+}
 
+bool xr_context_locate_views(XrContext *ctx, XrTime predictedDisplayTime)
+{
 	XrViewState viewState = {.type = XR_TYPE_VIEW_STATE};
 	XrViewLocateInfo locateInfo = {
 		.type = XR_TYPE_VIEW_LOCATE_INFO,
 		.viewConfigurationType = ctx->view_config_type,
-		.displayTime = frame_state->predictedDisplayTime,
+		.displayTime = predictedDisplayTime,
 		.space = ctx->stage_space,
 	};
-	res = xrLocateViews(ctx->session, &locateInfo, &viewState, ctx->view_count, &ctx->view_count, ctx->views);
+	XrResult res = xrLocateViews(ctx->session, &locateInfo, &viewState, ctx->view_count, &ctx->view_count, ctx->views);
 	XR_CHECK(res, "Failed to locate views");
-
 	return true;
 }
 

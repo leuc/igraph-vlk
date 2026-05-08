@@ -75,7 +75,9 @@ VkPhysicalDevice xr_context_get_vulkan_graphics_device(XrContext *ctx, VkInstanc
 bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDevice physical_device, VkDevice device, uint32_t queue_family_index, uint32_t queue_index);
 void xr_context_destroy_session(XrContext *ctx);
 
-bool xr_context_begin_frame(XrContext *ctx, XrFrameState *frame_state);
+bool xr_context_wait_frame(XrContext *ctx, XrFrameState *frame_state);
+bool xr_context_begin_frame(XrContext *ctx);
+bool xr_context_locate_views(XrContext *ctx, XrTime predictedDisplayTime);
 void xr_context_get_view_matrix(XrContext *ctx, uint32_t view_index, vec3 camera_pos, float camera_yaw, mat4 out);
 void xr_context_get_projection_matrix(XrContext *ctx, uint32_t view_index, float nearZ, float farZ, mat4 out);
 bool xr_context_end_frame(XrContext *ctx, XrFrameState *frame_state, XrCompositionLayerBaseHeader **layers, uint32_t layer_count);

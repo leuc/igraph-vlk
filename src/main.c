@@ -165,6 +165,11 @@ int main(int argc, char **argv)
 
 	// Main loop
 	while (!glfwWindowShouldClose(app.window)) {
+		XrFrameState frameState = {.type = XR_TYPE_FRAME_STATE};
+		if (app.vr_enabled && app.xr_ctx.session_running) {
+			xr_context_wait_frame(&app.xr_ctx, &frameState);
+		}
+
 		float currentFrame = (float)glfwGetTime();
 		float deltaTime = currentFrame - lastFrame;
 		lastFrame = currentFrame;
@@ -277,13 +282,12 @@ int main(int argc, char **argv)
 		}
 
 		if (app.vr_enabled && app.xr_ctx.session_running) {
-			// Sync with XR frame
-			XrFrameState frameState = {.type = XR_TYPE_FRAME_STATE};
-			xr_context_begin_frame(&app.xr_ctx, &frameState);
-
-			// Wait for previous frame GPU work
+			// Ensure GPU slot is ready before telling XR we are beginning
 			vkWaitForFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame], VK_TRUE, UINT64_MAX);
 			vkResetFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame]);
+
+			xr_context_begin_frame(&app.xr_ctx);
+			xr_context_locate_views(&app.xr_ctx, frameState.predictedDisplayTime);
 
 			vkResetCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame], 0);
 			VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -324,9 +328,7 @@ int main(int argc, char **argv)
 
 			vkEndCommandBuffer(app.renderer.commandBuffers[app.renderer.currentFrame]);
 
-			VkPipelineStageFlags dummy_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT; // Unused
 			VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &app.renderer.commandBuffers[app.renderer.currentFrame]};
-
 			vkQueueSubmit(app.renderer.graphicsQueue, 1, &si, app.renderer.inFlightFences[app.renderer.currentFrame]);
 
 			XrCompositionLayerProjection layer = {
