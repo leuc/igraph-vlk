@@ -123,7 +123,6 @@ int main(int argc, char **argv)
 		} else {
 			renderer_setup_xr(&app.renderer, &app.xr_ctx);
 			xr_context_init_input(&app.xr_ctx);
-			xr_context_print_capabilities(&app.xr_ctx);
 		}
 	}
 

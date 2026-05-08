@@ -25,10 +25,7 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 	};
 
 	XrResult res = xrCreateSession(ctx->instance, &sessionCreateInfo, &ctx->session);
-	if (XR_FAILED(res)) {
-		fprintf(stderr, "OpenXR Error: Failed to create session (Result: %d)\n", res);
-		return false;
-	}
+	XR_CHECK(res, "Failed to create session");
 
 	XrReferenceSpaceCreateInfo spaceCreateInfo = {
 		.type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
@@ -36,17 +33,11 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 		.poseInReferenceSpace = {{0, 0, 0, 1}, {0, 0, 0}},
 	};
 	res = xrCreateReferenceSpace(ctx->session, &spaceCreateInfo, &ctx->stage_space);
-	if (XR_FAILED(res)) {
-		fprintf(stderr, "OpenXR Error: Failed to create reference space (Result: %d)\n", res);
-		return false;
-	}
+	XR_CHECK(res, "Failed to create reference space");
 
 	uint32_t formatCount = 0;
 	res = xrEnumerateSwapchainFormats(ctx->session, 0, &formatCount, NULL);
-	if (XR_FAILED(res)) {
-		fprintf(stderr, "OpenXR Error: Failed to count swapchain formats (Result: %d)\n", res);
-		return false;
-	}
+	XR_CHECK(res, "Failed to count swapchain formats");
 
 	VkFormat *supportedFormats = malloc(sizeof(VkFormat) * formatCount);
 	res = xrEnumerateSwapchainFormats(ctx->session, formatCount, &formatCount, (int64_t *)supportedFormats);
@@ -97,16 +88,10 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 		ctx->swapchains[i].height = swapchainCreateInfo.height;
 
 		res = xrCreateSwapchain(ctx->session, &swapchainCreateInfo, &ctx->swapchains[i].handle);
-		if (XR_FAILED(res)) {
-			fprintf(stderr, "OpenXR Error: Failed to create swapchain (Result: %d)\n", res);
-			return false;
-		}
+		XR_CHECK(res, "Failed to create swapchain");
 
 		res = xrEnumerateSwapchainImages(ctx->swapchains[i].handle, 0, &ctx->swapchains[i].image_count, NULL);
-		if (XR_FAILED(res)) {
-			fprintf(stderr, "OpenXR Error: Failed to count swapchain images (Result: %d)\n", res);
-			return false;
-		}
+		XR_CHECK(res, "Failed to count swapchain images");
 
 		XrSwapchainImageVulkanKHR *images = malloc(sizeof(XrSwapchainImageVulkanKHR) * ctx->swapchains[i].image_count);
 		for (uint32_t j = 0; j < ctx->swapchains[i].image_count; j++) {
@@ -119,7 +104,6 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 			free(images);
 			return false;
 		}
-
 		ctx->swapchains[i].images = malloc(sizeof(VkImage) * ctx->swapchains[i].image_count);
 		for (uint32_t j = 0; j < ctx->swapchains[i].image_count; j++) {
 			ctx->swapchains[i].images[j] = images[j].image;

@@ -25,17 +25,11 @@ bool xr_context_begin_frame(XrContext *ctx, XrFrameState *frame_state)
 {
 	XrFrameWaitInfo waitInfo = {.type = XR_TYPE_FRAME_WAIT_INFO};
 	XrResult res = xrWaitFrame(ctx->session, &waitInfo, frame_state);
-	if (XR_FAILED(res)) {
-		fprintf(stderr, "OpenXR Error: Failed to wait frame (Result: %d)\n", res);
-		return false;
-	}
+	XR_CHECK(res, "Failed to wait frame");
 
 	XrFrameBeginInfo beginInfo = {.type = XR_TYPE_FRAME_BEGIN_INFO};
 	res = xrBeginFrame(ctx->session, &beginInfo);
-	if (XR_FAILED(res)) {
-		fprintf(stderr, "OpenXR Error: Failed to begin frame (Result: %d)\n", res);
-		return false;
-	}
+	XR_CHECK(res, "Failed to begin frame");
 
 	XrViewState viewState = {.type = XR_TYPE_VIEW_STATE};
 	XrViewLocateInfo locateInfo = {
@@ -45,10 +39,7 @@ bool xr_context_begin_frame(XrContext *ctx, XrFrameState *frame_state)
 		.space = ctx->stage_space,
 	};
 	res = xrLocateViews(ctx->session, &locateInfo, &viewState, ctx->view_count, &ctx->view_count, ctx->views);
-	if (XR_FAILED(res)) {
-		fprintf(stderr, "OpenXR Error: Failed to locate views (Result: %d)\n", res);
-		return false;
-	}
+	XR_CHECK(res, "Failed to locate views");
 
 	return true;
 }
@@ -95,9 +86,6 @@ bool xr_context_end_frame(XrContext *ctx, XrFrameState *frame_state, XrCompositi
 		.layers = (const XrCompositionLayerBaseHeader *const *)layers,
 	};
 	XrResult res = xrEndFrame(ctx->session, &endInfo);
-	if (XR_FAILED(res)) {
-		fprintf(stderr, "OpenXR Error: Failed to end frame (Result: %d)\n", res);
-		return false;
-	}
+	XR_CHECK(res, "Failed to end frame");
 	return true;
 }

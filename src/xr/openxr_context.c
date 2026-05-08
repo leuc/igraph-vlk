@@ -8,7 +8,39 @@ bool xr_context_init(XrContext *ctx, const char *app_name)
 	memset(ctx, 0, sizeof(XrContext));
 	ctx->view_config_type = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
 
-	const char *extensions[] = {XR_KHR_VULKAN_ENABLE_EXTENSION_NAME};
+	const char *wanted_extensions[] = {
+		XR_KHR_VULKAN_ENABLE_EXTENSION_NAME,
+		"XR_EXT_psvr2_controller",
+		"XR_KHR_binding_modification",
+		"XR_EXT_hp_mixed_reality_controller",
+		"XR_HTC_vive_cosmos_controller_interaction",
+	};
+	const char *enabled_extensions[16];
+	uint32_t enabled_count = 0;
+
+	uint32_t extCount = 0;
+	xrEnumerateInstanceExtensionProperties(NULL, 0, &extCount, NULL);
+	XrExtensionProperties *extProps = malloc(sizeof(XrExtensionProperties) * extCount);
+	for (uint32_t i = 0; i < extCount; i++)
+		extProps[i].type = XR_TYPE_EXTENSION_PROPERTIES;
+	xrEnumerateInstanceExtensionProperties(NULL, extCount, &extCount, extProps);
+
+	printf("=== OpenXR Extensions ===\n");
+	for (uint32_t i = 0; i < extCount; i++) {
+		bool wanted = false;
+		for (size_t j = 0; j < sizeof(wanted_extensions) / sizeof(wanted_extensions[0]); j++) {
+			if (strcmp(extProps[i].extensionName, wanted_extensions[j]) == 0) {
+				wanted = true;
+				if (enabled_count < 16) {
+					enabled_extensions[enabled_count++] = wanted_extensions[j];
+				}
+				break;
+			}
+		}
+		printf("  [%s] %s (v%u)\n", wanted ? "X" : " ", extProps[i].extensionName, extProps[i].extensionVersion);
+	}
+	printf("=========================\n");
+	free(extProps);
 
 	XrInstanceCreateInfo createInfo = {
 		.type = XR_TYPE_INSTANCE_CREATE_INFO,
@@ -24,8 +56,8 @@ bool xr_context_init(XrContext *ctx, const char *app_name)
 			},
 		.enabledApiLayerCount = 0,
 		.enabledApiLayerNames = NULL,
-		.enabledExtensionCount = 1,
-		.enabledExtensionNames = extensions,
+		.enabledExtensionCount = enabled_count,
+		.enabledExtensionNames = enabled_extensions,
 	};
 	strncpy(createInfo.applicationInfo.applicationName, app_name, XR_MAX_APPLICATION_NAME_SIZE - 1);
 
@@ -39,16 +71,10 @@ bool xr_context_init(XrContext *ctx, const char *app_name)
 		.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY,
 	};
 	res = xrGetSystem(ctx->instance, &systemInfo, &ctx->system_id);
-	if (XR_FAILED(res)) {
-		fprintf(stderr, "OpenXR Error: Failed to get system (Result: %d)\n", res);
-		return false;
-	}
+	XR_CHECK(res, "Failed to get system");
 
 	res = xrEnumerateViewConfigurationViews(ctx->instance, ctx->system_id, ctx->view_config_type, 0, &ctx->view_count, NULL);
-	if (XR_FAILED(res)) {
-		fprintf(stderr, "OpenXR Error: Failed to count view configs (Result: %d)\n", res);
-		return false;
-	}
+	XR_CHECK(res, "Failed to count view configs");
 
 	ctx->view_configs = malloc(sizeof(XrViewConfigurationView) * ctx->view_count);
 	for (uint32_t i = 0; i < ctx->view_count; i++) {
@@ -56,10 +82,7 @@ bool xr_context_init(XrContext *ctx, const char *app_name)
 		ctx->view_configs[i].next = NULL;
 	}
 	res = xrEnumerateViewConfigurationViews(ctx->instance, ctx->system_id, ctx->view_config_type, ctx->view_count, &ctx->view_count, ctx->view_configs);
-	if (XR_FAILED(res)) {
-		fprintf(stderr, "OpenXR Error: Failed to enumerate view configs (Result: %d)\n", res);
-		return false;
-	}
+	XR_CHECK(res, "Failed to enumerate view configs");
 
 	// Re-verify view count
 	if (ctx->view_count == 0)

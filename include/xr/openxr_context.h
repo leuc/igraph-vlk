@@ -9,6 +9,18 @@
 #include <stdint.h>
 #include <vulkan/vulkan.h>
 
+#define XR_CHECK(res, msg) \
+	if (XR_FAILED(res)) { \
+		fprintf(stderr, "OpenXR Error: %s (Result: %d)\n", msg, res); \
+		return false; \
+	}
+
+#define XR_CHECK_VOID(res, msg) \
+	if (XR_FAILED(res)) { \
+		fprintf(stderr, "OpenXR Error: %s (Result: %d)\n", msg, res); \
+		return; \
+	}
+
 typedef struct
 {
 	XrInstance instance;
@@ -45,6 +57,7 @@ typedef struct
 	XrAction thumbstick_left_action;
 	XrAction thumbstick_right_action;
 	XrPath hand_paths[2];
+	bool printed_capabilities;
 } XrContext;
 
 bool xr_context_init(XrContext *ctx, const char *app_name);

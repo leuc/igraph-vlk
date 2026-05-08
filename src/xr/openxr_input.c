@@ -16,6 +16,28 @@ static XrResult create_action(XrActionSet action_set, XrPath *subaction_paths, X
 	return xrCreateAction(action_set, &actionInfo, action);
 }
 
+static bool suggest_bindings(XrInstance instance, const char *profile_path, XrActionSuggestedBinding *bindings, uint32_t count)
+{
+	XrPath profile;
+	if (XR_FAILED(xrStringToPath(instance, profile_path, &profile)))
+		return false;
+
+	XrInteractionProfileSuggestedBinding suggested = {
+		.type = XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING,
+		.interactionProfile = profile,
+		.suggestedBindings = bindings,
+		.countSuggestedBindings = count,
+	};
+	XrResult res = xrSuggestInteractionProfileBindings(instance, &suggested);
+	if (XR_FAILED(res)) {
+		if (res != XR_ERROR_PATH_UNSUPPORTED) {
+			fprintf(stderr, "[OpenXR] Warning: Failed to suggest bindings for %s (Result: %d)\n", profile_path, res);
+		}
+		return false;
+	}
+	return true;
+}
+
 bool xr_context_init_input(XrContext *ctx)
 {
 	XrActionSetCreateInfo actionSetInfo = {
@@ -25,38 +47,18 @@ bool xr_context_init_input(XrContext *ctx)
 		.localizedActionSetName = "Main Actions",
 		.priority = 0,
 	};
-	if (XR_FAILED(xrCreateActionSet(ctx->instance, &actionSetInfo, &ctx->action_set))) {
-		fprintf(stderr, "OpenXR Error: Failed to create action set\n");
-		return false;
-	}
+	XrResult res = xrCreateActionSet(ctx->instance, &actionSetInfo, &ctx->action_set);
+	XR_CHECK(res, "Failed to create action set");
 
 	xrStringToPath(ctx->instance, "/user/hand/left", &ctx->hand_paths[0]);
 	xrStringToPath(ctx->instance, "/user/hand/right", &ctx->hand_paths[1]);
 
-	if (XR_FAILED(create_action(ctx->action_set, ctx->hand_paths, &ctx->select_action, "select", "Select", XR_ACTION_TYPE_BOOLEAN_INPUT))) {
-		fprintf(stderr, "OpenXR Error: Failed to create select action\n");
-		return false;
-	}
-	if (XR_FAILED(create_action(ctx->action_set, ctx->hand_paths, &ctx->menu_action, "menu", "Menu", XR_ACTION_TYPE_BOOLEAN_INPUT))) {
-		fprintf(stderr, "OpenXR Error: Failed to create menu action\n");
-		return false;
-	}
-	if (XR_FAILED(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_a_action, "button_a", "Button A", XR_ACTION_TYPE_BOOLEAN_INPUT))) {
-		fprintf(stderr, "OpenXR Error: Failed to create button A action\n");
-		return false;
-	}
-	if (XR_FAILED(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_b_action, "button_b", "Button B", XR_ACTION_TYPE_BOOLEAN_INPUT))) {
-		fprintf(stderr, "OpenXR Error: Failed to create button B action\n");
-		return false;
-	}
-	if (XR_FAILED(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_x_action, "button_x", "Button X", XR_ACTION_TYPE_BOOLEAN_INPUT))) {
-		fprintf(stderr, "OpenXR Error: Failed to create button X action\n");
-		return false;
-	}
-	if (XR_FAILED(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_y_action, "button_y", "Button Y", XR_ACTION_TYPE_BOOLEAN_INPUT))) {
-		fprintf(stderr, "OpenXR Error: Failed to create button Y action\n");
-		return false;
-	}
+	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->select_action, "select", "Select", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create select action");
+	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->menu_action, "menu", "Menu", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create menu action");
+	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_a_action, "button_a", "Button A", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button A action");
+	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_b_action, "button_b", "Button B", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button B action");
+	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_x_action, "button_x", "Button X", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button X action");
+	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_y_action, "button_y", "Button Y", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button Y action");
 
 	XrActionCreateInfo thumbstickLeftInfo = {
 		.type = XR_TYPE_ACTION_CREATE_INFO,
@@ -66,10 +68,8 @@ bool xr_context_init_input(XrContext *ctx)
 	};
 	strncpy(thumbstickLeftInfo.actionName, "thumbstick_left", XR_MAX_ACTION_NAME_SIZE - 1);
 	strncpy(thumbstickLeftInfo.localizedActionName, "Left Thumbstick", XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
-	if (XR_FAILED(xrCreateAction(ctx->action_set, &thumbstickLeftInfo, &ctx->thumbstick_left_action))) {
-		fprintf(stderr, "OpenXR Error: Failed to create left thumbstick action\n");
-		return false;
-	}
+	res = xrCreateAction(ctx->action_set, &thumbstickLeftInfo, &ctx->thumbstick_left_action);
+	XR_CHECK(res, "Failed to create left thumbstick action");
 
 	// Right hand thumbstick
 	XrActionCreateInfo thumbstickRightInfo = {
@@ -80,56 +80,122 @@ bool xr_context_init_input(XrContext *ctx)
 	};
 	strncpy(thumbstickRightInfo.actionName, "thumbstick_right", XR_MAX_ACTION_NAME_SIZE - 1);
 	strncpy(thumbstickRightInfo.localizedActionName, "Right Thumbstick", XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
-	if (XR_FAILED(xrCreateAction(ctx->action_set, &thumbstickRightInfo, &ctx->thumbstick_right_action))) {
-		fprintf(stderr, "OpenXR Error: Failed to create right thumb stick action\n");
-		return false;
-	}
+	res = xrCreateAction(ctx->action_set, &thumbstickRightInfo, &ctx->thumbstick_right_action);
+	XR_CHECK(res, "Failed to create right thumb stick action");
 
-	// Suggest bindings for KHR Simple Controller
-	XrPath simpleProfile;
-	xrStringToPath(ctx->instance, "/interaction_profiles/khr/simple_controller", &simpleProfile);
-
-	XrPath selectLeft, selectRight, menuLeft, menuRight;
+	// Common paths
+	XrPath selectLeft, selectRight, menuLeft, menuRight, thumbstickLeft, thumbstickRight;
 	xrStringToPath(ctx->instance, "/user/hand/left/input/select/click", &selectLeft);
 	xrStringToPath(ctx->instance, "/user/hand/right/input/select/click", &selectRight);
 	xrStringToPath(ctx->instance, "/user/hand/left/input/menu/click", &menuLeft);
 	xrStringToPath(ctx->instance, "/user/hand/right/input/menu/click", &menuRight);
+	xrStringToPath(ctx->instance, "/user/hand/left/input/thumbstick", &thumbstickLeft);
+	xrStringToPath(ctx->instance, "/user/hand/right/input/thumbstick", &thumbstickRight);
 
-	XrActionSuggestedBinding simpleBindings[] = {{ctx->select_action, selectLeft}, {ctx->select_action, selectRight}, {ctx->menu_action, menuLeft}, {ctx->menu_action, menuRight}};
-
-	XrInteractionProfileSuggestedBinding simpleProfileBindings = {.type = XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING, .interactionProfile = simpleProfile, .suggestedBindings = simpleBindings, .countSuggestedBindings = 4};
-	xrSuggestInteractionProfileBindings(ctx->instance, &simpleProfileBindings);
-
-	// Suggest bindings for Oculus Touch (broadly compatible)
-	XrPath touchProfile;
-	xrStringToPath(ctx->instance, "/interaction_profiles/oculus/touch_controller", &touchProfile);
-
-	XrPath aClick, bClick, xClick, yClick;
+	XrPath aClick, bClick, xClick, yClick, triggerLeft, triggerRight, squeezeLeft, squeezeRight, gripLeft, gripRight;
 	xrStringToPath(ctx->instance, "/user/hand/right/input/a/click", &aClick);
 	xrStringToPath(ctx->instance, "/user/hand/right/input/b/click", &bClick);
 	xrStringToPath(ctx->instance, "/user/hand/left/input/x/click", &xClick);
 	xrStringToPath(ctx->instance, "/user/hand/left/input/y/click", &yClick);
-	XrPath triggerLeft, triggerRight;
 	xrStringToPath(ctx->instance, "/user/hand/left/input/trigger/value", &triggerLeft);
 	xrStringToPath(ctx->instance, "/user/hand/right/input/trigger/value", &triggerRight);
-	XrPath thumbstickLeft, thumbstickRight;
-	xrStringToPath(ctx->instance, "/user/hand/left/input/thumbstick", &thumbstickLeft);
-	xrStringToPath(ctx->instance, "/user/hand/right/input/thumbstick", &thumbstickRight);
+	xrStringToPath(ctx->instance, "/user/hand/left/input/squeeze/value", &squeezeLeft);
+	xrStringToPath(ctx->instance, "/user/hand/right/input/squeeze/value", &squeezeRight);
+	xrStringToPath(ctx->instance, "/user/hand/left/input/grip/click", &gripLeft);
+	xrStringToPath(ctx->instance, "/user/hand/right/input/grip/click", &gripRight);
 
-	XrActionSuggestedBinding touchBindings[] = {{ctx->select_action, triggerLeft}, {ctx->select_action, triggerRight}, {ctx->menu_action, menuLeft}, {ctx->button_a_action, aClick}, {ctx->button_b_action, bClick}, {ctx->button_x_action, xClick}, {ctx->button_y_action, yClick}, {ctx->thumbstick_left_action, thumbstickLeft}, {ctx->thumbstick_right_action, thumbstickRight}};
+	printf("=== OpenXR Interaction Profiles ===\n");
 
-	XrInteractionProfileSuggestedBinding touchProfileBindings = {.type = XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING, .interactionProfile = touchProfile, .suggestedBindings = touchBindings, .countSuggestedBindings = 9};
-	xrSuggestInteractionProfileBindings(ctx->instance, &touchProfileBindings);
+	// KHR Simple Controller
+	XrActionSuggestedBinding simpleBindings[] = {
+		{ctx->select_action, selectLeft},
+		{ctx->select_action, selectRight},
+		{ctx->menu_action, menuLeft},
+		{ctx->menu_action, menuRight},
+	};
+	if (suggest_bindings(ctx->instance, "/interaction_profiles/khr/simple_controller", simpleBindings, 4))
+		printf("  [X] KHR Simple Controller\n");
+
+	// Oculus Touch
+	XrActionSuggestedBinding touchBindings[] = {
+		{ctx->select_action, triggerLeft},
+		{ctx->select_action, triggerRight},
+		{ctx->menu_action, menuLeft},
+		{ctx->button_a_action, aClick},
+		{ctx->button_b_action, bClick},
+		{ctx->button_x_action, xClick},
+		{ctx->button_y_action, yClick},
+		{ctx->thumbstick_left_action, thumbstickLeft},
+		{ctx->thumbstick_right_action, thumbstickRight},
+	};
+	if (suggest_bindings(ctx->instance, "/interaction_profiles/oculus/touch_controller", touchBindings, 9))
+		printf("  [X] Oculus Touch Controller\n");
+
+	// Valve Index
+	XrActionSuggestedBinding indexBindings[] = {
+		{ctx->select_action, triggerLeft},
+		{ctx->select_action, triggerRight},
+		{ctx->button_a_action, aClick},
+		{ctx->button_b_action, bClick},
+		{ctx->thumbstick_left_action, thumbstickLeft},
+		{ctx->thumbstick_right_action, thumbstickRight},
+	};
+	if (suggest_bindings(ctx->instance, "/interaction_profiles/valve/index_controller", indexBindings, 6))
+		printf("  [X] Valve Index Controller\n");
+
+	// HTC Vive
+	XrActionSuggestedBinding viveBindings[] = {
+		{ctx->select_action, triggerLeft},
+		{ctx->select_action, triggerRight},
+		{ctx->menu_action, menuLeft},
+		{ctx->menu_action, menuRight},
+		{ctx->button_a_action, gripLeft},
+		{ctx->button_b_action, gripRight},
+	};
+	if (suggest_bindings(ctx->instance, "/interaction_profiles/htc/vive_controller", viveBindings, 6))
+		printf("  [X] HTC Vive Controller\n");
+
+	// Microsoft Motion Controller
+	XrActionSuggestedBinding mrBindings[] = {
+		{ctx->select_action, triggerLeft},
+		{ctx->select_action, triggerRight},
+		{ctx->menu_action, menuLeft},
+		{ctx->thumbstick_left_action, thumbstickLeft},
+		{ctx->thumbstick_right_action, thumbstickRight},
+	};
+	if (suggest_bindings(ctx->instance, "/interaction_profiles/microsoft/motion_controller", mrBindings, 5))
+		printf("  [X] Microsoft Motion Controller\n");
+
+	// PS VR2 Controller (via XR_EXT_psvr2_controller)
+	XrPath squareClick, triangleClick, circleClick, crossClick;
+	xrStringToPath(ctx->instance, "/user/hand/left/input/square/click", &squareClick);
+	xrStringToPath(ctx->instance, "/user/hand/left/input/triangle/click", &triangleClick);
+	xrStringToPath(ctx->instance, "/user/hand/right/input/circle/click", &circleClick);
+	xrStringToPath(ctx->instance, "/user/hand/right/input/cross/click", &crossClick);
+
+	XrActionSuggestedBinding psvr2Bindings[] = {
+		{ctx->select_action, triggerLeft},
+		{ctx->select_action, triggerRight},
+		{ctx->menu_action, menuLeft},
+		{ctx->button_x_action, squareClick},
+		{ctx->button_y_action, triangleClick},
+		{ctx->button_a_action, crossClick},
+		{ctx->button_b_action, circleClick},
+		{ctx->thumbstick_left_action, thumbstickLeft},
+		{ctx->thumbstick_right_action, thumbstickRight},
+	};
+	if (suggest_bindings(ctx->instance, "/interaction_profiles/sony/psvr2_controller", psvr2Bindings, 9))
+		printf("  [X] PS VR2 Controller\n");
+	
+	printf("===================================\n");
 
 	XrSessionActionSetsAttachInfo attachInfo = {
 		.type = XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO,
 		.countActionSets = 1,
 		.actionSets = &ctx->action_set,
 	};
-	if (XR_FAILED(xrAttachSessionActionSets(ctx->session, &attachInfo))) {
-		fprintf(stderr, "OpenXR Error: Failed to attach action sets\n");
-		return false;
-	}
+	res = xrAttachSessionActionSets(ctx->session, &attachInfo);
+	XR_CHECK(res, "Failed to attach action sets");
 
 	return true;
 }
@@ -175,6 +241,17 @@ void xr_context_sync_input(XrContext *ctx)
 
 	xrSyncActions(ctx->session, &syncInfo);
 
+	if (!ctx->printed_capabilities) {
+		for (int i = 0; i < 2; i++) {
+			XrInteractionProfileState state = {.type = XR_TYPE_INTERACTION_PROFILE_STATE};
+			if (XR_SUCCEEDED(xrGetCurrentInteractionProfile(ctx->session, ctx->hand_paths[i], &state)) && state.interactionProfile != XR_NULL_PATH) {
+				xr_context_print_capabilities(ctx);
+				ctx->printed_capabilities = true;
+				break;
+			}
+		}
+	}
+
 	check_button(ctx, ctx->select_action, "Select");
 	check_button(ctx, ctx->menu_action, "Menu");
 	check_button(ctx, ctx->button_a_action, "Button A");
@@ -218,11 +295,6 @@ float xr_context_get_thumbstick(XrContext *ctx, uint32_t hand_index, uint32_t ax
 
 void xr_context_print_capabilities(XrContext *ctx)
 {
-	if (!ctx->session_running) {
-		printf("No active session for controller detection.\n");
-		return;
-	}
-
 	printf("=== VR Controller Capabilities ===\n");
 
 	for (int hand = 0; hand < 2; hand++) {
@@ -237,12 +309,27 @@ void xr_context_print_capabilities(XrContext *ctx)
 			xrPathToString(ctx->instance, state.interactionProfile, strLen + 1, &strLen, profileStr);
 			printf("  Profile: %s\n", profileStr);
 
-			// Assumed capabilities from profile
-			if (strstr(profileStr, "touch_controller") || strstr(profileStr, "simple_controller")) {
-				printf("  Supports: Thumbsticks, Select/Trigger, Menu, A/B/X/Y buttons\n");
+			// Capability detection
+			printf("  Supports: ");
+			bool first = true;
+			if (strstr(profileStr, "touch_controller") || strstr(profileStr, "index_controller") || strstr(profileStr, "psvr2_controller") || strstr(profileStr, "motion_controller") || strstr(profileStr, "vive_cosmos_controller")) {
+				printf("Thumbsticks");
+				first = false;
 			}
+			if (strstr(profileStr, "vive_controller") || strstr(profileStr, "psvr2_controller") || strstr(profileStr, "index_controller") || strstr(profileStr, "touch_controller") || strstr(profileStr, "simple_controller") || strstr(profileStr, "vive_cosmos_controller")) {
+				printf("%sSelect/Trigger", first ? "" : ", ");
+				first = false;
+			}
+			if (strstr(profileStr, "vive_controller") || strstr(profileStr, "psvr2_controller") || strstr(profileStr, "index_controller") || strstr(profileStr, "touch_controller") || strstr(profileStr, "simple_controller") || strstr(profileStr, "vive_cosmos_controller")) {
+				printf("%sMenu", first ? "" : ", ");
+				first = false;
+			}
+			if (strstr(profileStr, "psvr2_controller") || strstr(profileStr, "index_controller") || strstr(profileStr, "touch_controller")) {
+				printf("%sA/B/X/Y (or Shape) buttons", first ? "" : ", ");
+			}
+			printf("\n");
 		} else {
-			printf("  No profile bound.\n");
+			printf("  No profile bound or controller disconnected.\n");
 		}
 	}
 	printf("==================================\n");
