@@ -12,7 +12,25 @@ void interaction_menu_toggle(AppState *state)
 		state->app_ctx.current_state = STATE_MENU_OPEN;
 		state->app_ctx.root_menu->target_radius = 1.0f;
 
-		spatial_calculate_basis(state->camera.pos, state->camera.front, state->camera.up, &state->app_ctx.menu_spawn_basis);
+		if (state->vr_enabled) {
+			// Get headset position and forward vector
+			vec3 head_pos, head_fwd, head_up = {0.0f, 1.0f, 0.0f};
+			// We use the first eye's pose as the headset reference, plus play offset
+			XrVector3f pos = state->xr_ctx.views[0].pose.position;
+			head_pos[0] = pos.x + state->vr_play_offset[0];
+			head_pos[1] = pos.y + state->vr_play_offset[1];
+			head_pos[2] = pos.z + state->vr_play_offset[2];
+			// Extract forward from the view pose orientation
+			XrQuaternionf rot = state->xr_ctx.views[0].pose.orientation;
+			mat4 rot_mat;
+			glm_quat_mat4((float *)&rot, rot_mat);
+			head_fwd[0] = -rot_mat[2][0];
+			head_fwd[1] = -rot_mat[2][1];
+			head_fwd[2] = -rot_mat[2][2];
+			spatial_calculate_basis(head_pos, head_fwd, head_up, &state->app_ctx.menu_spawn_basis);
+		} else {
+			spatial_calculate_basis(state->camera.pos, state->camera.front, state->camera.up, &state->app_ctx.menu_spawn_basis);
+		}
 
 		if (state->window) {
 			glfwSetInputMode(state->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
