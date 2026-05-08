@@ -163,6 +163,10 @@ int main(int argc, char **argv)
 	int frameCount = 0;
 	float currentFps = 0.0f;
 
+	// OpenXR frame drop tracking
+	XrTime last_predicted_display_time = 0;
+	int consecutive_missed_frames = 0;
+
 	// Main loop
 	while (!glfwWindowShouldClose(app.window)) {
 		float currentFrame = (float)glfwGetTime();
@@ -283,6 +287,25 @@ int main(int argc, char **argv)
 
 			// OpenXR dictates we MUST ONLY render if shouldRender is true
 			if (frameState.shouldRender) {
+				// --- FRAME DROP DETECTION ---
+				if (last_predicted_display_time != 0) {
+					XrDuration time_delta = frameState.predictedDisplayTime - last_predicted_display_time;
+
+					// If the time between frames is more than 1.5x the hardware refresh period, we missed a vsync
+					if (time_delta > (frameState.predictedDisplayPeriod * 1.5)) {
+						// Calculate exactly how many frames were dropped
+						int dropped_count = (int)((time_delta + (frameState.predictedDisplayPeriod / 2)) / frameState.predictedDisplayPeriod - 1);
+						consecutive_missed_frames += dropped_count;
+
+						printf("WARNING: Dropped %d frame(s). Delta: %.2f ms\n", dropped_count, time_delta / 1000000.0f);
+					} else {
+						// Frame hit successfully, reset missed count
+						consecutive_missed_frames = 0;
+					}
+				}
+				last_predicted_display_time = frameState.predictedDisplayTime;
+				// ----------------------------
+
 				// 1. Ensure GPU slot is ready AFTER xrWaitFrame has unblocked
 				vkWaitForFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame], VK_TRUE, UINT64_MAX);
 				vkResetFences(app.renderer.device, 1, &app.renderer.inFlightFences[app.renderer.currentFrame]);
