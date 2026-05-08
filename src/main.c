@@ -337,9 +337,26 @@ int main(int argc, char **argv)
 					eye_proj[1][1] *= -1.0f;
 
 					VkRenderPass xrRP = app.renderer.renderPassXR != VK_NULL_HANDLE ? app.renderer.renderPassXR : app.renderer.renderPass;
-					renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], xrRP, app.renderer.xrFramebuffers[i][imageIndices[i]], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, eye_view, eye_proj, i);
 
-					projectionViews[i] = (XrCompositionLayerProjectionView){.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
+					XrPosef hand_pose;
+					bool has_ray = xr_context_get_hand_pose(&app.xr_ctx, 1, frameState.predictedDisplayTime, &hand_pose);
+					vec3 ray_origin = {0}, ray_dir = {0};
+					if (has_ray) {
+						ray_origin[0] = hand_pose.position.x + app.vr_play_offset[0];
+						ray_origin[1] = hand_pose.position.y + app.vr_play_offset[1];
+						ray_origin[2] = hand_pose.position.z + app.vr_play_offset[2];
+						XrQuaternionf rot = hand_pose.orientation;
+						mat4 rot_mat;
+						glm_quat_mat4((float *)&rot, rot_mat);
+						ray_dir[0] = -rot_mat[2][0];
+						ray_dir[1] = -rot_mat[2][1];
+						ray_dir[2] = -rot_mat[2][2];
+					}
+
+					renderer_render_scene(&app.renderer, app.renderer.commandBuffers[app.renderer.currentFrame], xrRP, app.renderer.xrFramebuffers[i][imageIndices[i]], (VkExtent2D){app.xr_ctx.swapchains[i].width, app.xr_ctx.swapchains[i].height}, eye_view, eye_proj, i, has_ray, ray_origin, ray_dir);
+
+					projectionViews[i] = (XrCompositionLayerProjectionView){
+.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
 																			.pose = app.xr_ctx.views[i].pose,
 																			.fov = app.xr_ctx.views[i].fov,
 																			.subImage = {

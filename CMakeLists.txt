@@ -26,6 +26,8 @@ set(SHADERS
     shaders/transparent_sphere.vert
     shaders/transparent_sphere.frag
     shaders/routing.comp
+    shaders/ray.vert
+    shaders/ray.frag
 )
 
 foreach(SHADER ${SHADERS})
@@ -146,4 +148,6 @@ target_compile_definitions(igraph-vlk PRIVATE
     SPHERE_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/transparent_sphere.vert.spv"
     SPHERE_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/transparent_sphere.frag.spv"
     ROUTING_COMP_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/routing.comp.spv"
+    RAY_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/ray.vert.spv"
+    RAY_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/ray.frag.spv"
 )

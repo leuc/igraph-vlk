@@ -8,7 +8,7 @@
 
 int renderer_create_pipelines(Renderer *r)
 {
-	VkShaderModule vMod, fMod, eVMod, efMod, lVMod, lfMod, uiVMod, uiFMod, menuVMod, menuFMod;
+	VkShaderModule vMod, fMod, eVMod, efMod, lVMod, lfMod, uiVMod, uiFMod, menuVMod, menuFMod, rayVMod, rayFMod;
 	create_shader_module(r->device, VERT_SHADER_PATH, &vMod);
 	create_shader_module(r->device, FRAG_SHADER_PATH, &fMod);
 	create_shader_module(r->device, EDGE_VERT_SHADER_PATH, &eVMod);
@@ -19,6 +19,9 @@ int renderer_create_pipelines(Renderer *r)
 	create_shader_module(r->device, UI_FRAG_SHADER_PATH, &uiFMod);
 	create_shader_module(r->device, MENU_VERT_SHADER_PATH, &menuVMod);
 	create_shader_module(r->device, MENU_FRAG_SHADER_PATH, &menuFMod);
+	create_shader_module(r->device, RAY_VERT_SHADER_PATH, &rayVMod);
+	create_shader_module(r->device, RAY_FRAG_SHADER_PATH, &rayFMod);
+
 
 	// Viewport - Dynamic state
 	VkPipelineViewportStateCreateInfo vpS = {
@@ -214,6 +217,37 @@ int renderer_create_pipelines(Renderer *r)
 
 	vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &menuPInfo, NULL, &r->menuPipeline);
 
+	// --- POINTER RAY PIPELINE ---
+	VkPipelineShaderStageCreateInfo rayStages[] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, rayVMod, "main", NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, rayFMod, "main", NULL}};
+
+	// Ray vertices (pos: vec3, color: vec4)
+	VkVertexInputBindingDescription rayB = {0, sizeof(float) * 7, VK_VERTEX_INPUT_RATE_VERTEX};
+	VkVertexInputAttributeDescription rayA[] = {
+		{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0},
+		{1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 12},
+	};
+	VkPipelineVertexInputStateCreateInfo rayVI = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 1, .pVertexBindingDescriptions = &rayB, .vertexAttributeDescriptionCount = 2, .pVertexAttributeDescriptions = rayA};
+	VkPipelineInputAssemblyStateCreateInfo rayIA = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST};
+
+	VkGraphicsPipelineCreateInfo rayPInfo = {
+		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+		.stageCount = 2,
+		.pStages = rayStages,
+		.pVertexInputState = &rayVI,
+		.pInputAssemblyState = &rayIA,
+		.pViewportState = &vpS,
+		.pRasterizationState = &ras,
+		.pMultisampleState = &mul,
+		.pColorBlendState = &colS,
+		.pDepthStencilState = &nodeDS, // Use same depth as nodes
+		.pDynamicState = &dynS,
+		.layout = r->pipelineLayout,
+		.renderPass = r->renderPass,
+	};
+	vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &rayPInfo, NULL, &r->rayPipeline);
+
+	vkDestroyShaderModule(r->device, rayFMod, NULL);
+	vkDestroyShaderModule(r->device, rayVMod, NULL);
 	vkDestroyShaderModule(r->device, menuFMod, NULL);
 	vkDestroyShaderModule(r->device, menuVMod, NULL);
 

@@ -1,7 +1,7 @@
 #include "xr/openxr_context.h"
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
-#include <math.h>
 
 static XrResult create_action(XrActionSet action_set, XrPath *subaction_paths, XrAction *action, const char *name, const char *localized_name, XrActionType type)
 {
@@ -83,14 +83,34 @@ bool xr_context_init_input(XrContext *ctx)
 	res = xrCreateAction(ctx->action_set, &thumbstickRightInfo, &ctx->thumbstick_right_action);
 	XR_CHECK(res, "Failed to create right thumb stick action");
 
+	XrActionCreateInfo rightHandPoseInfo = {
+		.type = XR_TYPE_ACTION_CREATE_INFO,
+		.actionType = XR_ACTION_TYPE_POSE_INPUT,
+		.countSubactionPaths = 1,
+		.subactionPaths = &ctx->hand_paths[1],
+	};
+	strncpy(rightHandPoseInfo.actionName, "right_hand_pose", XR_MAX_ACTION_NAME_SIZE - 1);
+	strncpy(rightHandPoseInfo.localizedActionName, "Right Hand Pose", XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
+	res = xrCreateAction(ctx->action_set, &rightHandPoseInfo, &ctx->right_hand_pose_action);
+	XR_CHECK(res, "Failed to create right hand pose action");
+
+	XrActionSpaceCreateInfo spaceInfo = {
+		.type = XR_TYPE_ACTION_SPACE_CREATE_INFO,
+		.action = ctx->right_hand_pose_action,
+		.poseInActionSpace = {{0, 0, 0, 1}, {0, 0, 0}},
+	};
+	res = xrCreateActionSpace(ctx->session, &spaceInfo, &ctx->right_hand_space);
+	XR_CHECK(res, "Failed to create right hand action space");
+
 	// Common paths
-	XrPath selectLeft, selectRight, menuLeft, menuRight, thumbstickLeft, thumbstickRight;
+	XrPath selectLeft, selectRight, menuLeft, menuRight, thumbstickLeft, thumbstickRight, rightHandPose;
 	xrStringToPath(ctx->instance, "/user/hand/left/input/select/click", &selectLeft);
 	xrStringToPath(ctx->instance, "/user/hand/right/input/select/click", &selectRight);
 	xrStringToPath(ctx->instance, "/user/hand/left/input/menu/click", &menuLeft);
 	xrStringToPath(ctx->instance, "/user/hand/right/input/menu/click", &menuRight);
 	xrStringToPath(ctx->instance, "/user/hand/left/input/thumbstick", &thumbstickLeft);
 	xrStringToPath(ctx->instance, "/user/hand/right/input/thumbstick", &thumbstickRight);
+	xrStringToPath(ctx->instance, "/user/hand/right/input/grip/pose", &rightHandPose);
 
 	XrPath aClick, bClick, xClick, yClick, triggerLeft, triggerRight, squeezeLeft, squeezeRight, gripLeft, gripRight;
 	xrStringToPath(ctx->instance, "/user/hand/right/input/a/click", &aClick);
@@ -118,50 +138,28 @@ bool xr_context_init_input(XrContext *ctx)
 
 	// Oculus Touch
 	XrActionSuggestedBinding touchBindings[] = {
-		{ctx->select_action, triggerLeft},
-		{ctx->select_action, triggerRight},
-		{ctx->menu_action, menuLeft},
-		{ctx->button_a_action, aClick},
-		{ctx->button_b_action, bClick},
-		{ctx->button_x_action, xClick},
-		{ctx->button_y_action, yClick},
-		{ctx->thumbstick_left_action, thumbstickLeft},
-		{ctx->thumbstick_right_action, thumbstickRight},
+		{ctx->select_action, triggerLeft}, {ctx->select_action, triggerRight}, {ctx->menu_action, menuLeft}, {ctx->button_a_action, aClick}, {ctx->button_b_action, bClick}, {ctx->button_x_action, xClick}, {ctx->button_y_action, yClick}, {ctx->thumbstick_left_action, thumbstickLeft}, {ctx->thumbstick_right_action, thumbstickRight}, {ctx->right_hand_pose_action, rightHandPose},
 	};
-	if (suggest_bindings(ctx->instance, "/interaction_profiles/oculus/touch_controller", touchBindings, 9))
+	if (suggest_bindings(ctx->instance, "/interaction_profiles/oculus/touch_controller", touchBindings, 10))
 		printf("  [X] Oculus Touch Controller\n");
 
 	// Valve Index
 	XrActionSuggestedBinding indexBindings[] = {
-		{ctx->select_action, triggerLeft},
-		{ctx->select_action, triggerRight},
-		{ctx->button_a_action, aClick},
-		{ctx->button_b_action, bClick},
-		{ctx->thumbstick_left_action, thumbstickLeft},
-		{ctx->thumbstick_right_action, thumbstickRight},
+		{ctx->select_action, triggerLeft}, {ctx->select_action, triggerRight}, {ctx->button_a_action, aClick}, {ctx->button_b_action, bClick}, {ctx->thumbstick_left_action, thumbstickLeft}, {ctx->thumbstick_right_action, thumbstickRight},
 	};
 	if (suggest_bindings(ctx->instance, "/interaction_profiles/valve/index_controller", indexBindings, 6))
 		printf("  [X] Valve Index Controller\n");
 
 	// HTC Vive
 	XrActionSuggestedBinding viveBindings[] = {
-		{ctx->select_action, triggerLeft},
-		{ctx->select_action, triggerRight},
-		{ctx->menu_action, menuLeft},
-		{ctx->menu_action, menuRight},
-		{ctx->button_a_action, gripLeft},
-		{ctx->button_b_action, gripRight},
+		{ctx->select_action, triggerLeft}, {ctx->select_action, triggerRight}, {ctx->menu_action, menuLeft}, {ctx->menu_action, menuRight}, {ctx->button_a_action, gripLeft}, {ctx->button_b_action, gripRight},
 	};
 	if (suggest_bindings(ctx->instance, "/interaction_profiles/htc/vive_controller", viveBindings, 6))
 		printf("  [X] HTC Vive Controller\n");
 
 	// Microsoft Motion Controller
 	XrActionSuggestedBinding mrBindings[] = {
-		{ctx->select_action, triggerLeft},
-		{ctx->select_action, triggerRight},
-		{ctx->menu_action, menuLeft},
-		{ctx->thumbstick_left_action, thumbstickLeft},
-		{ctx->thumbstick_right_action, thumbstickRight},
+		{ctx->select_action, triggerLeft}, {ctx->select_action, triggerRight}, {ctx->menu_action, menuLeft}, {ctx->thumbstick_left_action, thumbstickLeft}, {ctx->thumbstick_right_action, thumbstickRight},
 	};
 	if (suggest_bindings(ctx->instance, "/interaction_profiles/microsoft/motion_controller", mrBindings, 5))
 		printf("  [X] Microsoft Motion Controller\n");
@@ -174,19 +172,11 @@ bool xr_context_init_input(XrContext *ctx)
 	xrStringToPath(ctx->instance, "/user/hand/right/input/cross/click", &crossClick);
 
 	XrActionSuggestedBinding psvr2Bindings[] = {
-		{ctx->select_action, triggerLeft},
-		{ctx->select_action, triggerRight},
-		{ctx->menu_action, menuLeft},
-		{ctx->button_x_action, squareClick},
-		{ctx->button_y_action, triangleClick},
-		{ctx->button_a_action, crossClick},
-		{ctx->button_b_action, circleClick},
-		{ctx->thumbstick_left_action, thumbstickLeft},
-		{ctx->thumbstick_right_action, thumbstickRight},
+		{ctx->select_action, triggerLeft}, {ctx->select_action, triggerRight}, {ctx->menu_action, menuLeft}, {ctx->button_x_action, squareClick}, {ctx->button_y_action, triangleClick}, {ctx->button_a_action, crossClick}, {ctx->button_b_action, circleClick}, {ctx->thumbstick_left_action, thumbstickLeft}, {ctx->thumbstick_right_action, thumbstickRight},
 	};
 	if (suggest_bindings(ctx->instance, "/interaction_profiles/sony/psvr2_controller", psvr2Bindings, 9))
 		printf("  [X] PS VR2 Controller\n");
-	
+
 	printf("===================================\n");
 
 	XrSessionActionSetsAttachInfo attachInfo = {
@@ -291,6 +281,21 @@ float xr_context_get_thumbstick(XrContext *ctx, uint32_t hand_index, uint32_t ax
 		return 0.0f;
 
 	return value;
+}
+
+bool xr_context_get_hand_pose(XrContext *ctx, uint32_t hand_index, XrTime time, XrPosef *out_pose)
+{
+	if (!ctx->session_running || hand_index != 1 || time == 0) // Only right hand for now
+		return false;
+
+	XrSpaceLocation location = {.type = XR_TYPE_SPACE_LOCATION};
+	XrResult res = xrLocateSpace(ctx->right_hand_space, ctx->stage_space, time, &location);
+
+	if (XR_SUCCEEDED(res) && (location.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) && (location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT)) {
+		*out_pose = location.pose;
+		return true;
+	}
+	return false;
 }
 
 void xr_context_print_capabilities(XrContext *ctx)

@@ -465,7 +465,7 @@ void renderer_setup_xr(Renderer *r, XrContext *xr)
 	}
 }
 
-void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index)
+void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index, bool has_ray, vec3 ray_origin, vec3 ray_dir)
 {
 	uint32_t ubo_idx = r->currentFrame * MAX_VIEWS + view_index;
 	UniformBufferObject eye_ubo = r->ubo;
@@ -575,6 +575,10 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		}
 	}
 
+	if (has_ray) {
+		renderer_render_ray(r, cmd, ray_origin, ray_dir, view, proj);
+	}
+
 	vkCmdEndRenderPass(cmd);
 }
 
@@ -589,7 +593,7 @@ void renderer_draw_frame(Renderer *r)
 	VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 	vkBeginCommandBuffer(r->commandBuffers[r->currentFrame], &bi);
 
-	renderer_render_scene(r, r->commandBuffers[r->currentFrame], r->renderPass, r->framebuffers[ii], r->swapchainExtent, r->ubo.view, r->ubo.proj, 0);
+	renderer_render_scene(r, r->commandBuffers[r->currentFrame], r->renderPass, r->framebuffers[ii], r->swapchainExtent, r->ubo.view, r->ubo.proj, 0, false, (vec3){0}, (vec3){0});
 
 	vkEndCommandBuffer(r->commandBuffers[r->currentFrame]);
 

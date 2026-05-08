@@ -383,3 +383,40 @@ void renderer_update_numeric_widget(Renderer *r, NumericInputWidget *widget, Cam
 
 	free(instances);
 }
+
+void renderer_render_ray(Renderer *r, VkCommandBuffer cmd, vec3 origin, vec3 dir, mat4 view, mat4 proj)
+{
+	// Ray length
+	float length = 5.0f;
+	vec3 end;
+	glm_vec3_scale(dir, length, end);
+	glm_vec3_add(origin, end, end);
+
+	// Ray vertices (pos: vec3, color: vec4)
+	float vertices[] = {
+		origin[0], origin[1], origin[2], 1.0f, 1.0f, 1.0f, 1.0f, // Origin (white)
+		end[0], end[1], end[2], 1.0f, 0.0f, 0.0f, 0.5f			// End (red, semi-transparent)
+	};
+
+	// Update ray buffer (host-visible)
+	if (r->rayVertexBuffer == VK_NULL_HANDLE) {
+		createBuffer(r->device, r->physicalDevice, sizeof(vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->rayVertexBuffer, &r->rayVertexBufferMemory);
+		r->rayVertexCount = 2;
+	}
+	updateBuffer(r->device, r->rayVertexBufferMemory, sizeof(vertices), vertices);
+
+	// Draw
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->rayPipeline);
+
+	struct {
+		mat4 view;
+		mat4 proj;
+	} push;
+	glm_mat4_copy(view, push.view);
+	glm_mat4_copy(proj, push.proj);
+	vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
+
+	VkDeviceSize offset = 0;
+	vkCmdBindVertexBuffers(cmd, 0, 1, &r->rayVertexBuffer, &offset);
+	vkCmdDraw(cmd, 2, 1, 0, 0);
+}
