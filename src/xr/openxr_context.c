@@ -9,11 +9,7 @@ bool xr_context_init(XrContext *ctx, const char *app_name)
 	ctx->view_config_type = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
 
 	const char *wanted_extensions[] = {
-		XR_KHR_VULKAN_ENABLE_EXTENSION_NAME,
-		"XR_EXT_psvr2_controller",
-		"XR_KHR_binding_modification",
-		"XR_EXT_hp_mixed_reality_controller",
-		"XR_HTC_vive_cosmos_controller_interaction",
+		XR_KHR_VULKAN_ENABLE_EXTENSION_NAME, "XR_EXT_psvr2_controller", "XR_KHR_binding_modification", "XR_EXT_hp_mixed_reality_controller", "XR_HTC_vive_cosmos_controller_interaction",
 	};
 	const char *enabled_extensions[16];
 	uint32_t enabled_count = 0;
@@ -21,6 +17,8 @@ bool xr_context_init(XrContext *ctx, const char *app_name)
 	uint32_t extCount = 0;
 	xrEnumerateInstanceExtensionProperties(NULL, 0, &extCount, NULL);
 	XrExtensionProperties *extProps = malloc(sizeof(XrExtensionProperties) * extCount);
+	if (!extProps)
+		return false;
 	for (uint32_t i = 0; i < extCount; i++)
 		extProps[i].type = XR_TYPE_EXTENSION_PROPERTIES;
 	xrEnumerateInstanceExtensionProperties(NULL, extCount, &extCount, extProps);
@@ -62,39 +60,55 @@ bool xr_context_init(XrContext *ctx, const char *app_name)
 	strncpy(createInfo.applicationInfo.applicationName, app_name, XR_MAX_APPLICATION_NAME_SIZE - 1);
 
 	XrResult res = xrCreateInstance(&createInfo, &ctx->instance);
-	if (XR_FAILED(res)) {
-		return false;
-	}
+	XR_CHECK(res, "Failed to create instance");
 
 	XrSystemGetInfo systemInfo = {
 		.type = XR_TYPE_SYSTEM_GET_INFO,
 		.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY,
 	};
 	res = xrGetSystem(ctx->instance, &systemInfo, &ctx->system_id);
-	XR_CHECK(res, "Failed to get system");
+	XR_CHECK_GOTO(res, "Failed to get system", cleanup);
 
 	res = xrEnumerateViewConfigurationViews(ctx->instance, ctx->system_id, ctx->view_config_type, 0, &ctx->view_count, NULL);
-	XR_CHECK(res, "Failed to count view configs");
+	XR_CHECK_GOTO(res, "Failed to count view configs", cleanup);
 
 	ctx->view_configs = malloc(sizeof(XrViewConfigurationView) * ctx->view_count);
+	if (!ctx->view_configs)
+		goto cleanup;
 	for (uint32_t i = 0; i < ctx->view_count; i++) {
 		ctx->view_configs[i].type = XR_TYPE_VIEW_CONFIGURATION_VIEW;
 		ctx->view_configs[i].next = NULL;
 	}
 	res = xrEnumerateViewConfigurationViews(ctx->instance, ctx->system_id, ctx->view_config_type, ctx->view_count, &ctx->view_count, ctx->view_configs);
-	XR_CHECK(res, "Failed to enumerate view configs");
+	XR_CHECK_GOTO(res, "Failed to enumerate view configs", cleanup);
 
-	// Re-verify view count
 	if (ctx->view_count == 0)
-		return false;
+		goto cleanup;
 
 	ctx->views = malloc(sizeof(XrView) * ctx->view_count);
+	if (!ctx->views)
+		goto cleanup;
 	for (uint32_t i = 0; i < ctx->view_count; i++) {
 		ctx->views[i].type = XR_TYPE_VIEW;
 		ctx->views[i].next = NULL;
 	}
 
 	return true;
+
+cleanup:
+	if (ctx->views) {
+		free(ctx->views);
+		ctx->views = NULL;
+	}
+	if (ctx->view_configs) {
+		free(ctx->view_configs);
+		ctx->view_configs = NULL;
+	}
+	if (ctx->instance != XR_NULL_HANDLE) {
+		xrDestroyInstance(ctx->instance);
+		ctx->instance = XR_NULL_HANDLE;
+	}
+	return false;
 }
 
 void xr_context_cleanup(XrContext *ctx)

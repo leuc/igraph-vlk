@@ -244,6 +244,7 @@ int main(int argc, char **argv)
 	graph_free_data(&app.current_graph);
 	animation_manager_cleanup(&app.anim_manager);
 	renderer_cleanup(&app.renderer);
+	xr_context_cleanup(&app.xr_ctx);
 	glfwDestroyWindow(app.window);
 	glfwTerminate();
 

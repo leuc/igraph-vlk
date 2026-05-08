@@ -48,17 +48,19 @@ bool xr_context_init_input(XrContext *ctx)
 		.priority = 0,
 	};
 	XrResult res = xrCreateActionSet(ctx->instance, &actionSetInfo, &ctx->action_set);
-	XR_CHECK(res, "Failed to create action set");
+	XR_CHECK_GOTO(res, "Failed to create action set", cleanup);
 
-	xrStringToPath(ctx->instance, "/user/hand/left", &ctx->hand_paths[0]);
-	xrStringToPath(ctx->instance, "/user/hand/right", &ctx->hand_paths[1]);
+	res = xrStringToPath(ctx->instance, "/user/hand/left", &ctx->hand_paths[0]);
+	XR_CHECK_GOTO(res, "Failed to create hand path left", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/right", &ctx->hand_paths[1]);
+	XR_CHECK_GOTO(res, "Failed to create hand path right", cleanup);
 
-	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->select_action, "select", "Select", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create select action");
-	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->menu_action, "menu", "Menu", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create menu action");
-	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_a_action, "button_a", "Button A", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button A action");
-	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_b_action, "button_b", "Button B", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button B action");
-	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_x_action, "button_x", "Button X", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button X action");
-	XR_CHECK(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_y_action, "button_y", "Button Y", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button Y action");
+	XR_CHECK_GOTO(create_action(ctx->action_set, ctx->hand_paths, &ctx->select_action, "select", "Select", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create select action", cleanup);
+	XR_CHECK_GOTO(create_action(ctx->action_set, ctx->hand_paths, &ctx->menu_action, "menu", "Menu", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create menu action", cleanup);
+	XR_CHECK_GOTO(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_a_action, "button_a", "Button A", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button A action", cleanup);
+	XR_CHECK_GOTO(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_b_action, "button_b", "Button B", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button B action", cleanup);
+	XR_CHECK_GOTO(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_x_action, "button_x", "Button X", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button X action", cleanup);
+	XR_CHECK_GOTO(create_action(ctx->action_set, ctx->hand_paths, &ctx->button_y_action, "button_y", "Button Y", XR_ACTION_TYPE_BOOLEAN_INPUT), "Failed to create button Y action", cleanup);
 
 	XrActionCreateInfo thumbstickLeftInfo = {
 		.type = XR_TYPE_ACTION_CREATE_INFO,
@@ -69,9 +71,8 @@ bool xr_context_init_input(XrContext *ctx)
 	strncpy(thumbstickLeftInfo.actionName, "thumbstick_left", XR_MAX_ACTION_NAME_SIZE - 1);
 	strncpy(thumbstickLeftInfo.localizedActionName, "Left Thumbstick", XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
 	res = xrCreateAction(ctx->action_set, &thumbstickLeftInfo, &ctx->thumbstick_left_action);
-	XR_CHECK(res, "Failed to create left thumbstick action");
+	XR_CHECK_GOTO(res, "Failed to create left thumbstick action", cleanup);
 
-	// Right hand thumbstick
 	XrActionCreateInfo thumbstickRightInfo = {
 		.type = XR_TYPE_ACTION_CREATE_INFO,
 		.actionType = XR_ACTION_TYPE_VECTOR2F_INPUT,
@@ -81,7 +82,7 @@ bool xr_context_init_input(XrContext *ctx)
 	strncpy(thumbstickRightInfo.actionName, "thumbstick_right", XR_MAX_ACTION_NAME_SIZE - 1);
 	strncpy(thumbstickRightInfo.localizedActionName, "Right Thumbstick", XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
 	res = xrCreateAction(ctx->action_set, &thumbstickRightInfo, &ctx->thumbstick_right_action);
-	XR_CHECK(res, "Failed to create right thumb stick action");
+	XR_CHECK_GOTO(res, "Failed to create right thumb stick action", cleanup);
 
 	XrActionCreateInfo rightHandPoseInfo = {
 		.type = XR_TYPE_ACTION_CREATE_INFO,
@@ -92,7 +93,7 @@ bool xr_context_init_input(XrContext *ctx)
 	strncpy(rightHandPoseInfo.actionName, "right_hand_pose", XR_MAX_ACTION_NAME_SIZE - 1);
 	strncpy(rightHandPoseInfo.localizedActionName, "Right Hand Pose", XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
 	res = xrCreateAction(ctx->action_set, &rightHandPoseInfo, &ctx->right_hand_pose_action);
-	XR_CHECK(res, "Failed to create right hand pose action");
+	XR_CHECK_GOTO(res, "Failed to create right hand pose action", cleanup);
 
 	XrActionSpaceCreateInfo spaceInfo = {
 		.type = XR_TYPE_ACTION_SPACE_CREATE_INFO,
@@ -100,34 +101,48 @@ bool xr_context_init_input(XrContext *ctx)
 		.poseInActionSpace = {{0, 0, 0, 1}, {0, 0, 0}},
 	};
 	res = xrCreateActionSpace(ctx->session, &spaceInfo, &ctx->right_hand_space);
-	XR_CHECK(res, "Failed to create right hand action space");
+	XR_CHECK_GOTO(res, "Failed to create right hand action space", cleanup);
 
-	// Common paths
 	XrPath selectLeft, selectRight, menuLeft, menuRight, thumbstickLeft, thumbstickRight, rightHandPose;
-	xrStringToPath(ctx->instance, "/user/hand/left/input/select/click", &selectLeft);
-	xrStringToPath(ctx->instance, "/user/hand/right/input/select/click", &selectRight);
-	xrStringToPath(ctx->instance, "/user/hand/left/input/menu/click", &menuLeft);
-	xrStringToPath(ctx->instance, "/user/hand/right/input/menu/click", &menuRight);
-	xrStringToPath(ctx->instance, "/user/hand/left/input/thumbstick", &thumbstickLeft);
-	xrStringToPath(ctx->instance, "/user/hand/right/input/thumbstick", &thumbstickRight);
-	// CHANGED: Use 'aim/pose' instead of 'grip/pose' for pointer rays
-	xrStringToPath(ctx->instance, "/user/hand/right/input/aim/pose", &rightHandPose);
+	res = xrStringToPath(ctx->instance, "/user/hand/left/input/select/click", &selectLeft);
+	XR_CHECK_GOTO(res, "Failed to get select/left path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/right/input/select/click", &selectRight);
+	XR_CHECK_GOTO(res, "Failed to get select/right path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/left/input/menu/click", &menuLeft);
+	XR_CHECK_GOTO(res, "Failed to get menu/left path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/right/input/menu/click", &menuRight);
+	XR_CHECK_GOTO(res, "Failed to get menu/right path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/left/input/thumbstick", &thumbstickLeft);
+	XR_CHECK_GOTO(res, "Failed to get thumbstick/left path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/right/input/thumbstick", &thumbstickRight);
+	XR_CHECK_GOTO(res, "Failed to get thumbstick/right path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/right/input/aim/pose", &rightHandPose);
+	XR_CHECK_GOTO(res, "Failed to get aim/pose path", cleanup);
 
 	XrPath aClick, bClick, xClick, yClick, triggerLeft, triggerRight, squeezeLeft, squeezeRight, gripLeft, gripRight;
-	xrStringToPath(ctx->instance, "/user/hand/right/input/a/click", &aClick);
-	xrStringToPath(ctx->instance, "/user/hand/right/input/b/click", &bClick);
-	xrStringToPath(ctx->instance, "/user/hand/left/input/x/click", &xClick);
-	xrStringToPath(ctx->instance, "/user/hand/left/input/y/click", &yClick);
-	xrStringToPath(ctx->instance, "/user/hand/left/input/trigger/value", &triggerLeft);
-	xrStringToPath(ctx->instance, "/user/hand/right/input/trigger/value", &triggerRight);
-	xrStringToPath(ctx->instance, "/user/hand/left/input/squeeze/value", &squeezeLeft);
-	xrStringToPath(ctx->instance, "/user/hand/right/input/squeeze/value", &squeezeRight);
-	xrStringToPath(ctx->instance, "/user/hand/left/input/grip/click", &gripLeft);
-	xrStringToPath(ctx->instance, "/user/hand/right/input/grip/click", &gripRight);
+	res = xrStringToPath(ctx->instance, "/user/hand/right/input/a/click", &aClick);
+	XR_CHECK_GOTO(res, "Failed to get a/click path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/right/input/b/click", &bClick);
+	XR_CHECK_GOTO(res, "Failed to get b/click path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/left/input/x/click", &xClick);
+	XR_CHECK_GOTO(res, "Failed to get x/click path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/left/input/y/click", &yClick);
+	XR_CHECK_GOTO(res, "Failed to get y/click path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/left/input/trigger/value", &triggerLeft);
+	XR_CHECK_GOTO(res, "Failed to get trigger/left path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/right/input/trigger/value", &triggerRight);
+	XR_CHECK_GOTO(res, "Failed to get trigger/right path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/left/input/squeeze/value", &squeezeLeft);
+	XR_CHECK_GOTO(res, "Failed to get squeeze/left path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/right/input/squeeze/value", &squeezeRight);
+	XR_CHECK_GOTO(res, "Failed to get squeeze/right path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/left/input/grip/click", &gripLeft);
+	XR_CHECK_GOTO(res, "Failed to get grip/left path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/right/input/grip/click", &gripRight);
+	XR_CHECK_GOTO(res, "Failed to get grip/right path", cleanup);
 
 	printf("=== OpenXR Interaction Profiles ===\n");
 
-	// KHR Simple Controller
 	XrActionSuggestedBinding simpleBindings[] = {
 		{ctx->select_action, selectLeft},
 		{ctx->select_action, selectRight},
@@ -137,40 +152,39 @@ bool xr_context_init_input(XrContext *ctx)
 	if (suggest_bindings(ctx->instance, "/interaction_profiles/khr/simple_controller", simpleBindings, 4))
 		printf("  [X] KHR Simple Controller\n");
 
-	// Oculus Touch
 	XrActionSuggestedBinding touchBindings[] = {
 		{ctx->select_action, triggerLeft}, {ctx->select_action, triggerRight}, {ctx->menu_action, menuLeft}, {ctx->button_a_action, aClick}, {ctx->button_b_action, bClick}, {ctx->button_x_action, xClick}, {ctx->button_y_action, yClick}, {ctx->thumbstick_left_action, thumbstickLeft}, {ctx->thumbstick_right_action, thumbstickRight}, {ctx->right_hand_pose_action, rightHandPose},
 	};
 	if (suggest_bindings(ctx->instance, "/interaction_profiles/oculus/touch_controller", touchBindings, 10))
 		printf("  [X] Oculus Touch Controller\n");
 
-	// Valve Index
 	XrActionSuggestedBinding indexBindings[] = {
 		{ctx->select_action, triggerLeft}, {ctx->select_action, triggerRight}, {ctx->button_a_action, aClick}, {ctx->button_b_action, bClick}, {ctx->thumbstick_left_action, thumbstickLeft}, {ctx->thumbstick_right_action, thumbstickRight},
 	};
 	if (suggest_bindings(ctx->instance, "/interaction_profiles/valve/index_controller", indexBindings, 6))
 		printf("  [X] Valve Index Controller\n");
 
-	// HTC Vive
 	XrActionSuggestedBinding viveBindings[] = {
 		{ctx->select_action, triggerLeft}, {ctx->select_action, triggerRight}, {ctx->menu_action, menuLeft}, {ctx->menu_action, menuRight}, {ctx->button_a_action, gripLeft}, {ctx->button_b_action, gripRight},
 	};
 	if (suggest_bindings(ctx->instance, "/interaction_profiles/htc/vive_controller", viveBindings, 6))
 		printf("  [X] HTC Vive Controller\n");
 
-	// Microsoft Motion Controller
 	XrActionSuggestedBinding mrBindings[] = {
 		{ctx->select_action, triggerLeft}, {ctx->select_action, triggerRight}, {ctx->menu_action, menuLeft}, {ctx->thumbstick_left_action, thumbstickLeft}, {ctx->thumbstick_right_action, thumbstickRight},
 	};
 	if (suggest_bindings(ctx->instance, "/interaction_profiles/microsoft/motion_controller", mrBindings, 5))
 		printf("  [X] Microsoft Motion Controller\n");
 
-	// PS VR2 Controller (via XR_EXT_psvr2_controller)
 	XrPath squareClick, triangleClick, circleClick, crossClick;
-	xrStringToPath(ctx->instance, "/user/hand/left/input/square/click", &squareClick);
-	xrStringToPath(ctx->instance, "/user/hand/left/input/triangle/click", &triangleClick);
-	xrStringToPath(ctx->instance, "/user/hand/right/input/circle/click", &circleClick);
-	xrStringToPath(ctx->instance, "/user/hand/right/input/cross/click", &crossClick);
+	res = xrStringToPath(ctx->instance, "/user/hand/left/input/square/click", &squareClick);
+	XR_CHECK_GOTO(res, "Failed to get square/click path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/left/input/triangle/click", &triangleClick);
+	XR_CHECK_GOTO(res, "Failed to get triangle/click path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/right/input/circle/click", &circleClick);
+	XR_CHECK_GOTO(res, "Failed to get circle/click path", cleanup);
+	res = xrStringToPath(ctx->instance, "/user/hand/right/input/cross/click", &crossClick);
+	XR_CHECK_GOTO(res, "Failed to get cross/click path", cleanup);
 
 	XrActionSuggestedBinding psvr2Bindings[] = {
 		{ctx->select_action, triggerLeft}, {ctx->select_action, triggerRight}, {ctx->menu_action, menuLeft}, {ctx->button_x_action, squareClick}, {ctx->button_y_action, triangleClick}, {ctx->button_a_action, crossClick}, {ctx->button_b_action, circleClick}, {ctx->thumbstick_left_action, thumbstickLeft}, {ctx->thumbstick_right_action, thumbstickRight},
@@ -186,9 +200,20 @@ bool xr_context_init_input(XrContext *ctx)
 		.actionSets = &ctx->action_set,
 	};
 	res = xrAttachSessionActionSets(ctx->session, &attachInfo);
-	XR_CHECK(res, "Failed to attach action sets");
+	XR_CHECK_GOTO(res, "Failed to attach action sets", cleanup);
 
 	return true;
+
+cleanup:
+	if (ctx->right_hand_space != XR_NULL_HANDLE) {
+		xrDestroySpace(ctx->right_hand_space);
+		ctx->right_hand_space = XR_NULL_HANDLE;
+	}
+	if (ctx->action_set != XR_NULL_HANDLE) {
+		xrDestroyActionSet(ctx->action_set);
+		ctx->action_set = XR_NULL_HANDLE;
+	}
+	return false;
 }
 
 bool xr_context_is_action_pressed(XrContext *ctx, XrAction action, uint32_t hand_index)
@@ -256,7 +281,6 @@ float xr_context_get_thumbstick(XrContext *ctx, uint32_t hand_index, uint32_t ax
 	if (!ctx->session_running || hand_index >= 2 || axis >= 2)
 		return 0.0f;
 
-	// Get thumbstick vector2f state
 	XrAction action = (hand_index == 0) ? ctx->thumbstick_left_action : ctx->thumbstick_right_action;
 	if (action == XR_NULL_HANDLE)
 		return 0.0f;
@@ -275,7 +299,6 @@ float xr_context_get_thumbstick(XrContext *ctx, uint32_t hand_index, uint32_t ax
 	if (XR_FAILED(res) || !state.isActive)
 		return 0.0f;
 
-	// Apply deadzone to ignore small drift
 	const float deadzone = 0.15f;
 	float value = (axis == 0) ? state.currentState.x : state.currentState.y;
 	if (fabsf(value) < deadzone)
@@ -286,7 +309,7 @@ float xr_context_get_thumbstick(XrContext *ctx, uint32_t hand_index, uint32_t ax
 
 bool xr_context_get_hand_pose(XrContext *ctx, uint32_t hand_index, XrTime time, XrPosef *out_pose)
 {
-	if (!ctx->session_running || hand_index != 1 || time == 0) // Only right hand for now
+	if (!ctx->session_running || hand_index != 1 || time == 0)
 		return false;
 
 	XrSpaceLocation location = {.type = XR_TYPE_SPACE_LOCATION};
@@ -315,7 +338,6 @@ void xr_context_print_capabilities(XrContext *ctx)
 			xrPathToString(ctx->instance, state.interactionProfile, strLen + 1, &strLen, profileStr);
 			printf("  Profile: %s\n", profileStr);
 
-			// Capability detection
 			printf("  Supports: ");
 			bool first = true;
 			if (strstr(profileStr, "touch_controller") || strstr(profileStr, "index_controller") || strstr(profileStr, "psvr2_controller") || strstr(profileStr, "motion_controller") || strstr(profileStr, "vive_cosmos_controller")) {

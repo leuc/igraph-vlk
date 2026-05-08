@@ -1,6 +1,7 @@
 #include "xr/openxr_context.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDevice physical_device, VkDevice device, uint32_t queue_family_index, uint32_t queue_index)
 {
@@ -25,7 +26,7 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 	};
 
 	XrResult res = xrCreateSession(ctx->instance, &sessionCreateInfo, &ctx->session);
-	XR_CHECK(res, "Failed to create session");
+	XR_CHECK_GOTO(res, "Failed to create session", cleanup);
 
 	XrReferenceSpaceCreateInfo spaceCreateInfo = {
 		.type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
@@ -33,21 +34,22 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 		.poseInReferenceSpace = {{0, 0, 0, 1}, {0, 0, 0}},
 	};
 	res = xrCreateReferenceSpace(ctx->session, &spaceCreateInfo, &ctx->stage_space);
-	XR_CHECK(res, "Failed to create reference space");
+	XR_CHECK_GOTO(res, "Failed to create reference space", cleanup);
 
 	uint32_t formatCount = 0;
 	res = xrEnumerateSwapchainFormats(ctx->session, 0, &formatCount, NULL);
-	XR_CHECK(res, "Failed to count swapchain formats");
+	XR_CHECK_GOTO(res, "Failed to count swapchain formats", cleanup);
 
 	VkFormat *supportedFormats = malloc(sizeof(VkFormat) * formatCount);
+	if (!supportedFormats)
+		goto cleanup;
 	res = xrEnumerateSwapchainFormats(ctx->session, formatCount, &formatCount, (int64_t *)supportedFormats);
 	if (XR_FAILED(res)) {
 		fprintf(stderr, "OpenXR Error: Failed to enumerate swapchain formats (Result: %d)\n", res);
 		free(supportedFormats);
-		return false;
+		goto cleanup;
 	}
 
-	// Preferred formats in order
 	VkFormat preferredFormats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB};
 
 	ctx->swapchain_format = VK_FORMAT_UNDEFINED;
@@ -68,8 +70,10 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 	}
 	free(supportedFormats);
 
-	// Create swapchains
-	ctx->swapchains = malloc(sizeof(*ctx->swapchains) * ctx->view_count);
+	ctx->swapchains = calloc(ctx->view_count, sizeof(*ctx->swapchains));
+	if (!ctx->swapchains)
+		goto cleanup;
+
 	for (uint32_t i = 0; i < ctx->view_count; i++) {
 		printf("[OpenXR] View %u: %ux%u (recommended)\n", i, ctx->view_configs[i].recommendedImageRectWidth, ctx->view_configs[i].recommendedImageRectHeight);
 
@@ -88,23 +92,29 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 		ctx->swapchains[i].height = swapchainCreateInfo.height;
 
 		res = xrCreateSwapchain(ctx->session, &swapchainCreateInfo, &ctx->swapchains[i].handle);
-		XR_CHECK(res, "Failed to create swapchain");
+		XR_CHECK_GOTO(res, "Failed to create swapchain", cleanup);
 
 		res = xrEnumerateSwapchainImages(ctx->swapchains[i].handle, 0, &ctx->swapchains[i].image_count, NULL);
-		XR_CHECK(res, "Failed to count swapchain images");
+		XR_CHECK_GOTO(res, "Failed to count swapchain images", cleanup);
 
 		XrSwapchainImageVulkanKHR *images = malloc(sizeof(XrSwapchainImageVulkanKHR) * ctx->swapchains[i].image_count);
+		if (!images)
+			goto cleanup;
+		memset(images, 0, sizeof(XrSwapchainImageVulkanKHR) * ctx->swapchains[i].image_count);
 		for (uint32_t j = 0; j < ctx->swapchains[i].image_count; j++) {
 			images[j].type = XR_TYPE_SWAPCHAIN_IMAGE_VULKAN_KHR;
-			images[j].next = NULL;
 		}
 		res = xrEnumerateSwapchainImages(ctx->swapchains[i].handle, ctx->swapchains[i].image_count, &ctx->swapchains[i].image_count, (XrSwapchainImageBaseHeader *)images);
 		if (XR_FAILED(res)) {
 			fprintf(stderr, "OpenXR Error: Failed to enumerate swapchain images (Result: %d)\n", res);
 			free(images);
-			return false;
+			goto cleanup;
 		}
 		ctx->swapchains[i].images = malloc(sizeof(VkImage) * ctx->swapchains[i].image_count);
+		if (!ctx->swapchains[i].images) {
+			free(images);
+			goto cleanup;
+		}
 		for (uint32_t j = 0; j < ctx->swapchains[i].image_count; j++) {
 			ctx->swapchains[i].images[j] = images[j].image;
 		}
@@ -112,6 +122,32 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 	}
 
 	return true;
+
+cleanup:
+	if (ctx->swapchains) {
+		for (uint32_t i = 0; i < ctx->view_count; i++) {
+			if (ctx->swapchains[i].images) {
+				free(ctx->swapchains[i].images);
+				ctx->swapchains[i].images = NULL;
+			}
+			if (ctx->swapchains[i].handle != XR_NULL_HANDLE) {
+				xrDestroySwapchain(ctx->swapchains[i].handle);
+				ctx->swapchains[i].handle = XR_NULL_HANDLE;
+			}
+		}
+		free(ctx->swapchains);
+		ctx->swapchains = NULL;
+	}
+	if (ctx->stage_space != XR_NULL_HANDLE) {
+		xrDestroySpace(ctx->stage_space);
+		ctx->stage_space = XR_NULL_HANDLE;
+	}
+	if (ctx->session != XR_NULL_HANDLE) {
+		xrDestroySession(ctx->session);
+		ctx->session = XR_NULL_HANDLE;
+	}
+	ctx->session_running = false;
+	return false;
 }
 
 void xr_context_destroy_session(XrContext *ctx)

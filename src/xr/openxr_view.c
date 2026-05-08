@@ -1,6 +1,6 @@
 #include "xr/openxr_context.h"
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
 
 static void xr_fov_to_matrix(const XrFovf fov, float nearZ, float farZ, mat4 out)
 {
@@ -11,14 +11,23 @@ static void xr_fov_to_matrix(const XrFovf fov, float nearZ, float farZ, mat4 out
 	float tanWidth = tanRight - tanLeft;
 	float tanHeight = tanUp - tanDown;
 
+	if (tanWidth < 1e-6f)
+		tanWidth = 1e-6f;
+	if (tanHeight < 1e-6f)
+		tanHeight = 1e-6f;
+
+	float nearFarExtent = farZ - nearZ;
+	if (nearFarExtent < 1e-6f)
+		nearFarExtent = 1e-6f;
+
 	glm_mat4_zero(out);
 	out[0][0] = 2.0f / tanWidth;
 	out[1][1] = 2.0f / tanHeight;
 	out[2][0] = (tanRight + tanLeft) / tanWidth;
 	out[2][1] = (tanUp + tanDown) / tanHeight;
-	out[2][2] = -(farZ + nearZ) / (farZ - nearZ);
+	out[2][2] = -(farZ + nearZ) / nearFarExtent;
 	out[2][3] = -1.0f;
-	out[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
+	out[3][2] = -(2.0f * farZ * nearZ) / nearFarExtent;
 }
 
 bool xr_context_wait_frame(XrContext *ctx, XrFrameState *frame_state)

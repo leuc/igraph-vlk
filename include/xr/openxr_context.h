@@ -7,7 +7,6 @@
 #include <openxr/openxr_platform.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <vulkan/vulkan.h>
 
 #define XR_CHECK(res, msg) \
 	if (XR_FAILED(res)) { \
@@ -21,6 +20,11 @@
 		return; \
 	}
 
+#define XR_CHECK_GOTO(res, msg, label) \
+	if (XR_FAILED(res)) { \
+		fprintf(stderr, "OpenXR Error: %s (Result: %d)\n", msg, res); \
+		goto label; \
+	}
 
 typedef struct
 {
