@@ -5,8 +5,17 @@
 
 bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDevice physical_device, VkDevice device, uint32_t queue_family_index, uint32_t queue_index)
 {
-	PFN_xrGetVulkanGraphicsRequirementsKHR xrGetVulkanGraphicsRequirementsKHR;
+	if (ctx->session != XR_NULL_HANDLE || ctx->swapchains != NULL) {
+		fprintf(stderr, "OpenXR Error: Session already initialized\n");
+		return false;
+	}
+
+	PFN_xrGetVulkanGraphicsRequirementsKHR xrGetVulkanGraphicsRequirementsKHR = NULL;
 	xrGetInstanceProcAddr(ctx->instance, "xrGetVulkanGraphicsRequirementsKHR", (PFN_xrVoidFunction *)&xrGetVulkanGraphicsRequirementsKHR);
+	if (!xrGetVulkanGraphicsRequirementsKHR) {
+		fprintf(stderr, "OpenXR Error: Failed to get xrGetVulkanGraphicsRequirementsKHR function pointer\n");
+		goto cleanup;
+	}
 	XrGraphicsRequirementsVulkanKHR graphicsRequirements = {.type = XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN_KHR};
 	xrGetVulkanGraphicsRequirementsKHR(ctx->instance, ctx->system_id, &graphicsRequirements);
 
@@ -40,10 +49,10 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 	res = xrEnumerateSwapchainFormats(ctx->session, 0, &formatCount, NULL);
 	XR_CHECK_GOTO(res, "Failed to count swapchain formats", cleanup);
 
-	VkFormat *supportedFormats = malloc(sizeof(VkFormat) * formatCount);
+	int64_t *supportedFormats = malloc(sizeof(int64_t) * formatCount);
 	if (!supportedFormats)
 		goto cleanup;
-	res = xrEnumerateSwapchainFormats(ctx->session, formatCount, &formatCount, (int64_t *)supportedFormats);
+	res = xrEnumerateSwapchainFormats(ctx->session, formatCount, &formatCount, supportedFormats);
 	if (XR_FAILED(res)) {
 		fprintf(stderr, "OpenXR Error: Failed to enumerate swapchain formats (Result: %d)\n", res);
 		free(supportedFormats);
@@ -55,7 +64,7 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 	ctx->swapchain_format = VK_FORMAT_UNDEFINED;
 	for (size_t p = 0; p < sizeof(preferredFormats) / sizeof(preferredFormats[0]); p++) {
 		for (uint32_t s = 0; s < formatCount; s++) {
-			if (supportedFormats[s] == preferredFormats[p]) {
+			if ((VkFormat)supportedFormats[s] == preferredFormats[p]) {
 				ctx->swapchain_format = preferredFormats[p];
 				break;
 			}
@@ -126,6 +135,10 @@ bool xr_context_create_session(XrContext *ctx, VkInstance instance, VkPhysicalDe
 cleanup:
 	if (ctx->swapchains) {
 		for (uint32_t i = 0; i < ctx->view_count; i++) {
+			if (ctx->swapchains[i].image_views) {
+				free(ctx->swapchains[i].image_views);
+				ctx->swapchains[i].image_views = NULL;
+			}
 			if (ctx->swapchains[i].images) {
 				free(ctx->swapchains[i].images);
 				ctx->swapchains[i].images = NULL;
