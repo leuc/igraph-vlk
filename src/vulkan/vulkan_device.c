@@ -84,10 +84,10 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, XrContext *xr)
 	uint32_t glfwExtCount = 0;
 	const char **glfwExts = glfwGetRequiredInstanceExtensions(&glfwExtCount);
 
-	const char *instExts[64];
-	uint32_t instExtCount = 0;
-	char *instStrdup[64];
-	uint32_t instStrdupCount = 0;
+	const char *instanceExtensions[64];
+	uint32_t instanceExtensionCount = 0;
+	char *instanceExtensionStrdup[64];
+	uint32_t instanceExtensionStrdupCount = 0;
 
 	for (uint32_t i = 0; i < glfwExtCount; i++) {
 		bool supported = false;
@@ -99,18 +99,18 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, XrContext *xr)
 		}
 		if (supported) {
 			printf("[Vulkan] Enabling GLFW Extension: %s\n", glfwExts[i]);
-			instExts[instExtCount++] = glfwExts[i];
+			instanceExtensions[instanceExtensionCount++] = glfwExts[i];
 		} else {
 			fprintf(stderr, "[Vulkan] Warning: GLFW requested extension %s not supported by loader.\n", glfwExts[i]);
 		}
 	}
 
 	if (xr) {
-		char xrInstExts[4096];
-		uint32_t xrInstExtsSize = sizeof(xrInstExts);
-		xr_context_get_vulkan_instance_extensions(xr, xrInstExts, &xrInstExtsSize);
+		char xrInstanceExtensions[4096];
+		uint32_t xrInstanceExtensionsSize = sizeof(xrInstanceExtensions);
+		xr_context_get_vulkan_instance_extensions(xr, xrInstanceExtensions, &xrInstanceExtensionsSize);
 
-		char *token = strtok(xrInstExts, " ");
+		char *token = strtok(xrInstanceExtensions, " ");
 		while (token) {
 			bool supported = false;
 			for (uint32_t j = 0; j < availableExtCount; j++) {
@@ -122,8 +122,8 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, XrContext *xr)
 			if (supported) {
 				printf("[Vulkan] Enabling XR Extension: %s\n", token);
 				char *dup = strdup(token);
-				instExts[instExtCount++] = dup;
-				instStrdup[instStrdupCount++] = dup;
+				instanceExtensions[instanceExtensionCount++] = dup;
+				instanceExtensionStrdup[instanceExtensionStrdupCount++] = dup;
 			} else {
 				fprintf(stderr, "[Vulkan] Warning: XR requested extension %s not supported by loader.\n", token);
 			}
@@ -140,15 +140,15 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, XrContext *xr)
 	}
 	if (hasPortability) {
 		bool alreadyAdded = false;
-		for (uint32_t i = 0; i < instExtCount; i++) {
-			if (strcmp(instExts[i], "VK_KHR_portability_enumeration") == 0) {
+		for (uint32_t i = 0; i < instanceExtensionCount; i++) {
+			if (strcmp(instanceExtensions[i], "VK_KHR_portability_enumeration") == 0) {
 				alreadyAdded = true;
 				break;
 			}
 		}
 		if (!alreadyAdded) {
 			printf("[Vulkan] Enabling Portability Extension\n");
-			instExts[instExtCount++] = "VK_KHR_portability_enumeration";
+			instanceExtensions[instanceExtensionCount++] = "VK_KHR_portability_enumeration";
 		}
 	}
 	free(availableExts);
@@ -181,31 +181,31 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, XrContext *xr)
 
 	VkApplicationInfo appInfo = {VK_STRUCTURE_TYPE_APPLICATION_INFO, .pApplicationName = "igraph-vlk", .applicationVersion = VK_MAKE_VERSION(1, 0, 0), .pEngineName = "No Engine", .engineVersion = VK_MAKE_VERSION(1, 0, 0), .apiVersion = VK_API_VERSION_1_0};
 
-	VkInstanceCreateInfo instInfo = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pApplicationInfo = &appInfo, .ppEnabledExtensionNames = instExts, .enabledExtensionCount = instExtCount, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
+	VkInstanceCreateInfo instanceInfo = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pApplicationInfo = &appInfo, .ppEnabledExtensionNames = instanceExtensions, .enabledExtensionCount = instanceExtensionCount, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
 
 	if (hasPortability) {
-		instInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+		instanceInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 	}
 
-	VK_CHECK(vkCreateInstance(&instInfo, NULL, &core->instance), "Failed to create Vulkan instance");
+	VK_CHECK(vkCreateInstance(&instanceInfo, NULL, &core->instance), "Failed to create Vulkan instance");
 
-	for (uint32_t i = 0; i < instStrdupCount; i++)
-		free(instStrdup[i]);
+	for (uint32_t i = 0; i < instanceExtensionStrdupCount; i++)
+		free(instanceExtensionStrdup[i]);
 
 	VK_CHECK(glfwCreateWindowSurface(core->instance, window, NULL, &core->surface), "Failed to create window surface");
 
 	if (xr) {
 		core->physicalDevice = xr_context_get_vulkan_graphics_device(xr, core->instance);
 	} else {
-		uint32_t devCount = 0;
-		vkEnumeratePhysicalDevices(core->instance, &devCount, NULL);
-		if (devCount == 0)
+		uint32_t deviceCount = 0;
+		vkEnumeratePhysicalDevices(core->instance, &deviceCount, NULL);
+		if (deviceCount == 0)
 			exit_with_error("Failed to find GPUs with Vulkan support");
-		VkPhysicalDevice *devices = malloc(sizeof(VkPhysicalDevice) * devCount);
-		vkEnumeratePhysicalDevices(core->instance, &devCount, devices);
+		VkPhysicalDevice *devices = malloc(sizeof(VkPhysicalDevice) * deviceCount);
+		vkEnumeratePhysicalDevices(core->instance, &deviceCount, devices);
 
 		int bestScore = -1;
-		for (uint32_t i = 0; i < devCount; i++) {
+		for (uint32_t i = 0; i < deviceCount; i++) {
 			int score = rate_device_suitability(devices[i]);
 			if (score > bestScore) {
 				bestScore = score;
@@ -218,52 +218,52 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, XrContext *xr)
 	if (core->physicalDevice == VK_NULL_HANDLE)
 		exit_with_error("Failed to find a suitable GPU");
 
-	VkQueueFamilyInfo qFam = find_queue_families(core->physicalDevice, core->surface);
-	if (qFam.graphicsFamily == -1 || qFam.presentFamily == -1)
+	VkQueueFamilyInfo queueFamilyInfo = find_queue_families(core->physicalDevice, core->surface);
+	if (queueFamilyInfo.graphicsFamily == -1 || queueFamilyInfo.presentFamily == -1)
 		exit_with_error("Failed to find required queue families");
 
-	core->graphicsQueueFamily = qFam.graphicsFamily;
-	core->presentQueueFamily = qFam.presentFamily;
+	core->graphicsQueueFamily = queueFamilyInfo.graphicsFamily;
+	core->presentQueueFamily = queueFamilyInfo.presentFamily;
 
-	float qPrio = 1.0f;
-	VkDeviceQueueCreateInfo qInfos[2];
-	uint32_t qInfoCount = 0;
-	qInfos[qInfoCount++] = (VkDeviceQueueCreateInfo){.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = qFam.graphicsFamily, .queueCount = 1, .pQueuePriorities = &qPrio};
-	if (qFam.graphicsFamily != qFam.presentFamily) {
-		qInfos[qInfoCount++] = (VkDeviceQueueCreateInfo){.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = qFam.presentFamily, .queueCount = 1, .pQueuePriorities = &qPrio};
+	float queuePriority = 1.0f;
+	VkDeviceQueueCreateInfo queueCreateInfos[2];
+	uint32_t queueCreateInfoCount = 0;
+	queueCreateInfos[queueCreateInfoCount++] = (VkDeviceQueueCreateInfo){.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = queueFamilyInfo.graphicsFamily, .queueCount = 1, .pQueuePriorities = &queuePriority};
+	if (queueFamilyInfo.graphicsFamily != queueFamilyInfo.presentFamily) {
+		queueCreateInfos[queueCreateInfoCount++] = (VkDeviceQueueCreateInfo){.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = queueFamilyInfo.presentFamily, .queueCount = 1, .pQueuePriorities = &queuePriority};
 	}
 
-	const char *devExts[64];
-	uint32_t devExtCount = 0;
-	char *devStrdup[64];
-	uint32_t devStrdupCount = 0;
+	const char *deviceExtensions[64];
+	uint32_t deviceExtensionCount = 0;
+	char *deviceExtensionStrdup[64];
+	uint32_t deviceExtensionStrdupCount = 0;
 	for (int i = 0; i < BASE_DEVICE_EXTENSION_COUNT; i++)
-		devExts[devExtCount++] = BASE_DEVICE_EXTENSIONS[i];
+		deviceExtensions[deviceExtensionCount++] = BASE_DEVICE_EXTENSIONS[i];
 
 	if (xr) {
-		char xrDevExts[4096];
-		uint32_t xrDevExtsSize = sizeof(xrDevExts);
-		xr_context_get_vulkan_device_extensions(xr, xrDevExts, &xrDevExtsSize);
+		char xrDeviceExtensions[4096];
+		uint32_t xrDeviceExtensionsSize = sizeof(xrDeviceExtensions);
+		xr_context_get_vulkan_device_extensions(xr, xrDeviceExtensions, &xrDeviceExtensionsSize);
 
-		char *token = strtok(xrDevExts, " ");
+		char *token = strtok(xrDeviceExtensions, " ");
 		while (token) {
 			char *dup = strdup(token);
-			devExts[devExtCount++] = dup;
-			devStrdup[devStrdupCount++] = dup;
+			deviceExtensions[deviceExtensionCount++] = dup;
+			deviceExtensionStrdup[deviceExtensionStrdupCount++] = dup;
 			token = strtok(NULL, " ");
 		}
 	}
 
-	VkPhysicalDeviceFeatures devFeat = {.geometryShader = VK_TRUE};
-	VkDeviceCreateInfo devInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .queueCreateInfoCount = qInfoCount, .pQueueCreateInfos = qInfos, .enabledExtensionCount = devExtCount, .ppEnabledExtensionNames = devExts, .pEnabledFeatures = &devFeat, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
+	VkPhysicalDeviceFeatures deviceFeatures = {.geometryShader = VK_TRUE};
+	VkDeviceCreateInfo deviceInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .queueCreateInfoCount = queueCreateInfoCount, .pQueueCreateInfos = queueCreateInfos, .enabledExtensionCount = deviceExtensionCount, .ppEnabledExtensionNames = deviceExtensions, .pEnabledFeatures = &deviceFeatures, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
 
-	VK_CHECK(vkCreateDevice(core->physicalDevice, &devInfo, NULL, &core->device), "Failed to create logical device");
+	VK_CHECK(vkCreateDevice(core->physicalDevice, &deviceInfo, NULL, &core->device), "Failed to create logical device");
 
-	for (uint32_t i = 0; i < devStrdupCount; i++)
-		free(devStrdup[i]);
+	for (uint32_t i = 0; i < deviceExtensionStrdupCount; i++)
+		free(deviceExtensionStrdup[i]);
 
-	vkGetDeviceQueue(core->device, qFam.graphicsFamily, 0, &core->graphicsQueue);
-	vkGetDeviceQueue(core->device, qFam.presentFamily, 0, &core->presentQueue);
+	vkGetDeviceQueue(core->device, queueFamilyInfo.graphicsFamily, 0, &core->graphicsQueue);
+	vkGetDeviceQueue(core->device, queueFamilyInfo.presentFamily, 0, &core->presentQueue);
 }
 
 void vulkan_device_destroy(VulkanCore *core)

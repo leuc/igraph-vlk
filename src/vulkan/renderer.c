@@ -53,13 +53,13 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 	vulkan_render_pass_create(&r->renderPass, &r->core, &r->swapchain);
 	vulkan_commands_create(&r->commands, &r->core, r->swapchain.imageCount);
 
-	VkDescriptorSetLayoutBinding dslb[] = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL}};
-	VkDescriptorSetLayoutCreateInfo layInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 2, .pBindings = dslb};
-	VK_CHECK(vkCreateDescriptorSetLayout(r->core.device, &layInfo, NULL, &r->descriptorSetLayout), "Failed to create descriptor set layout");
+	VkDescriptorSetLayoutBinding descriptorSetLayoutBindings[] = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL}};
+	VkDescriptorSetLayoutCreateInfo layoutInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 2, .pBindings = descriptorSetLayoutBindings};
+	VK_CHECK(vkCreateDescriptorSetLayout(r->core.device, &layoutInfo, NULL, &r->descriptorSetLayout), "Failed to create descriptor set layout");
 
 	VkPushConstantRange pushConstantRange = {.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, .offset = 0, .size = sizeof(float)};
-	VkPipelineLayoutCreateInfo plyLayInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->descriptorSetLayout, .pushConstantRangeCount = 1, .pPushConstantRanges = &pushConstantRange};
-	VK_CHECK(vkCreatePipelineLayout(r->core.device, &plyLayInfo, NULL, &r->pipelineLayout), "Failed to create pipeline layout");
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->descriptorSetLayout, .pushConstantRangeCount = 1, .pPushConstantRanges = &pushConstantRange};
+	VK_CHECK(vkCreatePipelineLayout(r->core.device, &pipelineLayoutInfo, NULL, &r->pipelineLayout), "Failed to create pipeline layout");
 
 	if (!atlasLoaded) {
 		text_generate_atlas(FONT_PATH, &globalAtlas);
@@ -67,35 +67,35 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 	}
 	createImage(r->core.device, r->core.physicalDevice, globalAtlas.width, globalAtlas.height, VK_FORMAT_R8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->textureImage, &r->textureImageMemory);
 	VkDeviceSize imgSize = globalAtlas.width * globalAtlas.height;
-	VkBuffer sBuf;
-	VkDeviceMemory sBufM;
-	createBuffer(r->core.device, r->core.physicalDevice, imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &sBuf, &sBufM);
-	void *dPtr;
-	vkMapMemory(r->core.device, sBufM, 0, imgSize, 0, &dPtr);
-	memcpy(dPtr, globalAtlas.atlasData, imgSize);
-	vkUnmapMemory(r->core.device, sBufM);
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingBufferMemory;
+	createBuffer(r->core.device, r->core.physicalDevice, imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory);
+	void *dataPtr;
+	vkMapMemory(r->core.device, stagingBufferMemory, 0, imgSize, 0, &dataPtr);
+	memcpy(dataPtr, globalAtlas.atlasData, imgSize);
+	vkUnmapMemory(r->core.device, stagingBufferMemory);
 	transitionImageLayout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-	VkCommandBufferAllocateInfo aI = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandPool = r->commands.commandPool, .commandBufferCount = 1};
-	VkCommandBuffer cB;
-	vkAllocateCommandBuffers(r->core.device, &aI, &cB);
-	VkCommandBufferBeginInfo bI = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-	vkBeginCommandBuffer(cB, &bI);
-	VkBufferImageCopy bReg = {.bufferOffset = 0, .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .imageExtent = {(uint32_t)globalAtlas.width, (uint32_t)globalAtlas.height, 1}};
-	vkCmdCopyBufferToImage(cB, sBuf, r->textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bReg);
-	vkEndCommandBuffer(cB);
-	VkSubmitInfo sI = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cB};
-	vkQueueSubmit(r->core.graphicsQueue, 1, &sI, VK_NULL_HANDLE);
+	VkCommandBufferAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandPool = r->commands.commandPool, .commandBufferCount = 1};
+	VkCommandBuffer commandBuffer;
+	vkAllocateCommandBuffers(r->core.device, &allocInfo, &commandBuffer);
+	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+	vkBeginCommandBuffer(commandBuffer, &beginInfo);
+	VkBufferImageCopy bufferImageCopy = {.bufferOffset = 0, .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .imageExtent = {(uint32_t)globalAtlas.width, (uint32_t)globalAtlas.height, 1}};
+	vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, r->textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopy);
+	vkEndCommandBuffer(commandBuffer);
+	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &commandBuffer};
+	vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
 	vkQueueWaitIdle(r->core.graphicsQueue);
-	vkFreeCommandBuffers(r->core.device, r->commands.commandPool, 1, &cB);
-	vkDestroyBuffer(r->core.device, sBuf, NULL);
-	vkFreeMemory(r->core.device, sBufM, NULL);
+	vkFreeCommandBuffers(r->core.device, r->commands.commandPool, 1, &commandBuffer);
+	vkDestroyBuffer(r->core.device, stagingBuffer, NULL);
+	vkFreeMemory(r->core.device, stagingBufferMemory, NULL);
 	transitionImageLayout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-	VkImageViewCreateInfo viewI = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->textureImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_R8_UNORM, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
-	vkCreateImageView(r->core.device, &viewI, NULL, &r->textureImageView);
-	VkSamplerCreateInfo sampI = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = VK_FILTER_LINEAR, .minFilter = VK_FILTER_LINEAR, .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR, .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE};
-	vkCreateSampler(r->core.device, &sampI, NULL, &r->textureSampler);
+	VkImageViewCreateInfo imageViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->textureImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_R8_UNORM, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+	vkCreateImageView(r->core.device, &imageViewInfo, NULL, &r->textureImageView);
+	VkSamplerCreateInfo samplerInfo = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = VK_FILTER_LINEAR, .minFilter = VK_FILTER_LINEAR, .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR, .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE};
+	vkCreateSampler(r->core.device, &samplerInfo, NULL, &r->textureSampler);
 
 	renderer_create_pipelines(r);
 
@@ -161,28 +161,28 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 		vkMapMemory(r->core.device, r->uniformBuffersMemory[i], 0, sizeof(UniformBufferObject), 0, &r->uboMapped[i]);
 	}
 
-	VkDescriptorPoolSize dps[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS}};
-	VkDescriptorPoolCreateInfo dpi = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .poolSizeCount = 2, .pPoolSizes = dps, .maxSets = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS};
-	vkCreateDescriptorPool(r->core.device, &dpi, NULL, &r->descriptorPool);
+	VkDescriptorPoolSize descriptorPoolSizes[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS}};
+	VkDescriptorPoolCreateInfo descriptorPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .poolSizeCount = 2, .pPoolSizes = descriptorPoolSizes, .maxSets = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS};
+	vkCreateDescriptorPool(r->core.device, &descriptorPoolInfo, NULL, &r->descriptorPool);
 
-	VkDescriptorSetLayout dsls[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
+	VkDescriptorSetLayout descriptorSetLayouts[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++)
-		dsls[i] = r->descriptorSetLayout;
-	VkDescriptorSetAllocateInfo dsa = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->descriptorPool, .descriptorSetCount = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS, .pSetLayouts = dsls};
+		descriptorSetLayouts[i] = r->descriptorSetLayout;
+	VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->descriptorPool, .descriptorSetCount = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS, .pSetLayouts = descriptorSetLayouts};
 	r->descriptorSets = malloc(sizeof(VkDescriptorSet) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
-	vkAllocateDescriptorSets(r->core.device, &dsa, r->descriptorSets);
+	vkAllocateDescriptorSets(r->core.device, &descriptorSetAllocInfo, r->descriptorSets);
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-		VkDescriptorBufferInfo bi = {r->uniformBuffers[i], 0, sizeof(UniformBufferObject)};
-		VkDescriptorImageInfo ii = {r->textureSampler, r->textureImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-		VkWriteDescriptorSet dw[] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &bi, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &ii, NULL, NULL}};
-		vkUpdateDescriptorSets(r->core.device, 2, dw, 0, NULL);
+		VkDescriptorBufferInfo bufferInfo = {r->uniformBuffers[i], 0, sizeof(UniformBufferObject)};
+		VkDescriptorImageInfo imageInfo = {r->textureSampler, r->textureImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+		VkWriteDescriptorSet descriptorWrites[] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &bufferInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imageInfo, NULL, NULL}};
+		vkUpdateDescriptorSets(r->core.device, 2, descriptorWrites, 0, NULL);
 	}
 
-	VkFenceCreateInfo fi = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
+	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
 	r->graphUpdateRingIndex = 0;
 	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++)
-		vkCreateFence(r->core.device, &fi, NULL, &r->graphUpdateFences[i]);
+		vkCreateFence(r->core.device, &fenceInfo, NULL, &r->graphUpdateFences[i]);
 
 	r->computeCtx.initialized = VK_FALSE;
 	glm_mat4_identity(r->ubo.model);
@@ -349,24 +349,24 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 void renderer_draw_frame(Renderer *r)
 {
 	vkWaitForFences(r->core.device, 1, &r->commands.inFlightFences[r->commands.currentFrame], VK_TRUE, UINT64_MAX);
-	uint32_t ii;
-	VkResult res = vkAcquireNextImageKHR(r->core.device, r->swapchain.swapchain, UINT64_MAX, r->commands.imageAvailableSemaphores[r->commands.currentFrame], VK_NULL_HANDLE, &ii);
+	uint32_t imageIndex;
+	VkResult res = vkAcquireNextImageKHR(r->core.device, r->swapchain.swapchain, UINT64_MAX, r->commands.imageAvailableSemaphores[r->commands.currentFrame], VK_NULL_HANDLE, &imageIndex);
 	if (res == VK_ERROR_OUT_OF_DATE_KHR)
 		return;
 
 	vkResetFences(r->core.device, 1, &r->commands.inFlightFences[r->commands.currentFrame]);
 	vkResetCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], 0);
-	VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-	vkBeginCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], &bi);
-	renderer_render_scene(r, r->commands.commandBuffers[r->commands.currentFrame], r->renderPass.renderPass, r->renderPass.framebuffers[ii], r->swapchain.extent, r->ubo.view, r->ubo.proj, 0, false, (vec3){0}, (vec3){0});
+	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+	vkBeginCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], &beginInfo);
+	renderer_render_scene(r, r->commands.commandBuffers[r->commands.currentFrame], r->renderPass.renderPass, r->renderPass.framebuffers[imageIndex], r->swapchain.extent, r->ubo.view, r->ubo.proj, 0, false, (vec3){0}, (vec3){0});
 	vkEndCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame]);
 
-	VkPipelineStageFlags ws = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .waitSemaphoreCount = 1, .pWaitSemaphores = &r->commands.imageAvailableSemaphores[r->commands.currentFrame], .pWaitDstStageMask = &ws, .commandBufferCount = 1, .pCommandBuffers = &r->commands.commandBuffers[r->commands.currentFrame], .signalSemaphoreCount = 1, .pSignalSemaphores = &r->commands.renderFinishedSemaphores[r->commands.currentFrame]};
-	vkQueueSubmit(r->core.graphicsQueue, 1, &si, r->commands.inFlightFences[r->commands.currentFrame]);
+	VkPipelineStageFlags waitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .waitSemaphoreCount = 1, .pWaitSemaphores = &r->commands.imageAvailableSemaphores[r->commands.currentFrame], .pWaitDstStageMask = &waitStages, .commandBufferCount = 1, .pCommandBuffers = &r->commands.commandBuffers[r->commands.currentFrame], .signalSemaphoreCount = 1, .pSignalSemaphores = &r->commands.renderFinishedSemaphores[r->commands.currentFrame]};
+	vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, r->commands.inFlightFences[r->commands.currentFrame]);
 
-	VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 1, .pWaitSemaphores = &r->commands.renderFinishedSemaphores[r->commands.currentFrame], .swapchainCount = 1, .pSwapchains = &r->swapchain.swapchain, .pImageIndices = &ii};
-	vkQueuePresentKHR(r->core.presentQueue, &pi);
+	VkPresentInfoKHR presentInfo = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 1, .pWaitSemaphores = &r->commands.renderFinishedSemaphores[r->commands.currentFrame], .swapchainCount = 1, .pSwapchains = &r->swapchain.swapchain, .pImageIndices = &imageIndex};
+	vkQueuePresentKHR(r->core.presentQueue, &presentInfo);
 	r->commands.currentFrame = (r->commands.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 

@@ -40,21 +40,21 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 
 	// Allocate persistent resources on first use
 	if (!ctx->initialized) {
-		VkCommandPoolCreateInfo cpInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = 0};
-		vkCreateCommandPool(r->core.device, &cpInfo, NULL, &ctx->cmdPool);
+		VkCommandPoolCreateInfo commandPoolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = 0};
+		vkCreateCommandPool(r->core.device, &commandPoolInfo, NULL, &ctx->cmdPool);
 
-		VkCommandBufferAllocateInfo cbAlloc = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = ctx->cmdPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
-		vkAllocateCommandBuffers(r->core.device, &cbAlloc, &ctx->cmdBuf);
+		VkCommandBufferAllocateInfo commandBufferAllocInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = ctx->cmdPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
+		vkAllocateCommandBuffers(r->core.device, &commandBufferAllocInfo, &ctx->cmdBuf);
 
-		VkFenceCreateInfo fi = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
-		vkCreateFence(r->core.device, &fi, NULL, &ctx->fence);
+		VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
+		vkCreateFence(r->core.device, &fenceInfo, NULL, &ctx->fence);
 
-		VkDescriptorPoolSize dps = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3};
-		VkDescriptorPoolCreateInfo dpInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &dps};
-		vkCreateDescriptorPool(r->core.device, &dpInfo, NULL, &ctx->pool);
+		VkDescriptorPoolSize descriptorPoolSizes = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3};
+		VkDescriptorPoolCreateInfo descriptorPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &descriptorPoolSizes};
+		vkCreateDescriptorPool(r->core.device, &descriptorPoolInfo, NULL, &ctx->pool);
 
-		VkDescriptorSetAllocateInfo dsAlloc = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = ctx->pool, .descriptorSetCount = 1, .pSetLayouts = &r->computeDescriptorSetLayout};
-		vkAllocateDescriptorSets(r->core.device, &dsAlloc, &ctx->descSet);
+		VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = ctx->pool, .descriptorSetCount = 1, .pSetLayouts = &r->computeDescriptorSetLayout};
+		vkAllocateDescriptorSets(r->core.device, &descriptorSetAllocInfo, &ctx->descSet);
 
 		ctx->initialized = VK_TRUE;
 	}
@@ -99,14 +99,14 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	updateBuffer(r->core.device, ctx->edgeMem, edgeSize, cEdges);
 
 	// Update descriptor set with storage buffers
-	VkDescriptorBufferInfo nbi = {ctx->nodeBuf, 0, VK_WHOLE_SIZE}, ebi = {ctx->edgeBuf, 0, VK_WHOLE_SIZE}, hbi = {ctx->hubBuf, 0, VK_WHOLE_SIZE};
-	VkWriteDescriptorSet writes[3] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 0, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &nbi, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 1, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &ebi, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &hbi, NULL}};
+	VkDescriptorBufferInfo nodeBufferInfo = {ctx->nodeBuf, 0, VK_WHOLE_SIZE}, edgeBufferInfo = {ctx->edgeBuf, 0, VK_WHOLE_SIZE}, hubBufferInfo = {ctx->hubBuf, 0, VK_WHOLE_SIZE};
+	VkWriteDescriptorSet writes[3] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 0, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &nodeBufferInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 1, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeBufferInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &hubBufferInfo, NULL}};
 	vkUpdateDescriptorSets(r->core.device, 3, writes, 0, NULL);
 
 	// Record command buffer
 	vkResetCommandBuffer(ctx->cmdBuf, 0);
-	VkCommandBufferBeginInfo bInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-	vkBeginCommandBuffer(ctx->cmdBuf, &bInfo);
+	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+	vkBeginCommandBuffer(ctx->cmdBuf, &beginInfo);
 
 	vkCmdBindPipeline(ctx->cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computeSphericalPipeline);
 	vkCmdBindDescriptorSets(ctx->cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computePipelineLayout, 0, 1, &ctx->descSet, 0, NULL);
@@ -123,8 +123,8 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	vkEndCommandBuffer(ctx->cmdBuf);
 
 	// Submit with fence (no vkQueueWaitIdle)
-	VkSubmitInfo sInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &ctx->cmdBuf};
-	VkResult result = vkQueueSubmit(r->core.graphicsQueue, 1, &sInfo, ctx->fence);
+	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &ctx->cmdBuf};
+	VkResult result = vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, ctx->fence);
 	if (result != VK_SUCCESS) {
 		free(cNodes);
 		free(cEdges);
