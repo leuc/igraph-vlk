@@ -268,8 +268,8 @@ int main(int argc, char **argv)
 	worker_thread_cleanup(&app.worker_ctx);
 	app_context_destroy(&app.app_ctx);
 	destroy_menu_tree(root_menu);
-	graph_free_data(&app.current_graph);
 	animation_manager_cleanup(&app.anim_manager);
+	graph_free_data(&app.current_graph);
 	renderer_cleanup(&app.renderer);
 #ifdef USE_OPENXR
 	xr_context_cleanup(&app.xr_ctx);

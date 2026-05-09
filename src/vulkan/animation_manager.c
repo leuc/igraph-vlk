@@ -9,6 +9,7 @@ void animation_manager_init(AnimationManager *am, Renderer *r, GraphData *gd)
 	am->animations = (EdgeAnimation *)malloc(sizeof(EdgeAnimation) * MAX_ANIMATIONS);
 	if (!am->animations) {
 		fprintf(stderr, "Failed to allocate memory for EdgeAnimation array.\n");
+		am->animations = NULL;
 		am->num_animations = 0;
 		am->max_animations = 0;
 		return;
@@ -23,9 +24,11 @@ void animation_manager_cleanup(AnimationManager *am)
 {
 	if (am->animations) {
 		// Before freeing, ensure all edges are marked as not animating
-		for (uint32_t i = 0; i < am->num_animations; ++i) {
-			if (am->animations[i].is_active) {
-				am->graph_data_ptr->edges[am->animations[i].edge_id].is_animating = false;
+		if (am->graph_data_ptr) {
+			for (uint32_t i = 0; i < am->num_animations; ++i) {
+				if (am->animations[i].is_active) {
+					am->graph_data_ptr->edges[am->animations[i].edge_id].is_animating = false;
+				}
 			}
 		}
 		free(am->animations);
