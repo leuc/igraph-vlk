@@ -41,20 +41,20 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	// Allocate persistent resources on first use
 	if (!ctx->initialized) {
 		VkCommandPoolCreateInfo commandPoolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = 0};
-		vkCreateCommandPool(r->core.device, &commandPoolInfo, NULL, &ctx->cmdPool);
+		VK_CHECK(vkCreateCommandPool(r->core.device, &commandPoolInfo, NULL, &ctx->cmdPool), "Failed to create compute command pool");
 
 		VkCommandBufferAllocateInfo commandBufferAllocInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = ctx->cmdPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
-		vkAllocateCommandBuffers(r->core.device, &commandBufferAllocInfo, &ctx->cmdBuf);
+		VK_CHECK(vkAllocateCommandBuffers(r->core.device, &commandBufferAllocInfo, &ctx->cmdBuf), "Failed to allocate compute command buffer");
 
 		VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
-		vkCreateFence(r->core.device, &fenceInfo, NULL, &ctx->fence);
+		VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &ctx->fence), "Failed to create compute fence");
 
 		VkDescriptorPoolSize descriptorPoolSizes = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3};
 		VkDescriptorPoolCreateInfo descriptorPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &descriptorPoolSizes};
-		vkCreateDescriptorPool(r->core.device, &descriptorPoolInfo, NULL, &ctx->pool);
+		VK_CHECK(vkCreateDescriptorPool(r->core.device, &descriptorPoolInfo, NULL, &ctx->pool), "Failed to create compute descriptor pool");
 
 		VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = ctx->pool, .descriptorSetCount = 1, .pSetLayouts = &r->computeDescriptorSetLayout};
-		vkAllocateDescriptorSets(r->core.device, &descriptorSetAllocInfo, &ctx->descSet);
+		VK_CHECK(vkAllocateDescriptorSets(r->core.device, &descriptorSetAllocInfo, &ctx->descSet), "Failed to allocate compute descriptor set");
 
 		ctx->initialized = VK_TRUE;
 	}
@@ -135,7 +135,7 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	vkWaitForFences(r->core.device, 1, &ctx->fence, VK_TRUE, UINT64_MAX);
 
 	void *mapped;
-	vkMapMemory(r->core.device, ctx->edgeMem, 0, edgeSize, 0, &mapped);
+	VK_CHECK(vkMapMemory(r->core.device, ctx->edgeMem, 0, edgeSize, 0, &mapped), "Failed to map compute edge buffer memory");
 	memcpy(edgeResults, mapped, sizeof(CompEdge) * graph->edge_count);
 	vkUnmapMemory(r->core.device, ctx->edgeMem);
 

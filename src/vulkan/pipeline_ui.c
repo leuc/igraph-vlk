@@ -31,7 +31,7 @@ void renderer_create_ui_pipelines(Renderer *r)
 	VkPipelineVertexInputStateCreateInfo uiVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 2, .pVertexBindingDescriptions = uiBindings, .vertexAttributeDescriptionCount = 6, .pVertexAttributeDescriptions = uiAttributes};
 	VkPipelineInputAssemblyStateCreateInfo labelInputAssembly = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP};
 	VkGraphicsPipelineCreateInfo uiPipelineInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = uiShaderStages, .pVertexInputState = &uiVertexInput, .pInputAssemblyState = &labelInputAssembly, .pViewportState = &viewportState, .pRasterizationState = &rasterizationState, .pMultisampleState = &multisampleState, .pColorBlendState = &colorBlendState, .pDepthStencilState = &uiDepthStencilState, .pDynamicState = &dynamicState, .layout = r->pipelineLayout, .renderPass = r->renderPass.renderPass};
-	vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &uiPipelineInfo, NULL, &r->uiPipeline);
+	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &uiPipelineInfo, NULL, &r->uiPipeline), "Failed to create UI graphics pipeline");
 
 	// Labels
 	VkPipelineShaderStageCreateInfo labelShaderStages[] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, labelVertexShaderModule, "main", NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, labelFragmentShaderModule, "main", NULL}};
@@ -39,7 +39,7 @@ void renderer_create_ui_pipelines(Renderer *r)
 	VkVertexInputAttributeDescription labelAttributes[] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LabelVertex, pos)}, {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(LabelVertex, tex)}, {2, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LabelInstance, nodePos)}, {3, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(LabelInstance, charRect)}, {4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(LabelInstance, charUV)}, {5, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LabelInstance, right)}, {6, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(LabelInstance, up)}};
 	VkPipelineVertexInputStateCreateInfo labelVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 2, .pVertexBindingDescriptions = labelBindings, .vertexAttributeDescriptionCount = 7, .pVertexAttributeDescriptions = labelAttributes};
 	VkGraphicsPipelineCreateInfo labelPipelineInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = labelShaderStages, .pVertexInputState = &labelVertexInput, .pInputAssemblyState = &labelInputAssembly, .pViewportState = &viewportState, .pRasterizationState = &rasterizationState, .pMultisampleState = &multisampleState, .pColorBlendState = &colorBlendState, .pDepthStencilState = &menuDepthStencilState, .pDynamicState = &dynamicState, .layout = r->pipelineLayout, .renderPass = r->renderPass.renderPass};
-	vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &labelPipelineInfo, NULL, &r->labelPipeline);
+	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &labelPipelineInfo, NULL, &r->labelPipeline), "Failed to create label graphics pipeline");
 
 	// Menu
 	VkPipelineShaderStageCreateInfo menuShaderStages[] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, menuVertexShaderModule, "main", NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, menuFragmentShaderModule, "main", NULL}};
@@ -48,7 +48,7 @@ void renderer_create_ui_pipelines(Renderer *r)
 	VkPipelineVertexInputStateCreateInfo menuVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 2, .pVertexBindingDescriptions = menuBindings, .vertexAttributeDescriptionCount = 8, .pVertexAttributeDescriptions = menuAttributes};
 	VkPipelineInputAssemblyStateCreateInfo menuInputAssembly = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
 	VkGraphicsPipelineCreateInfo menuPipelineInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = menuShaderStages, .pVertexInputState = &menuVertexInput, .pInputAssemblyState = &menuInputAssembly, .pViewportState = &viewportState, .pRasterizationState = &rasterizationState, .pMultisampleState = &multisampleState, .pColorBlendState = &colorBlendState, .pDepthStencilState = &menuDepthStencilState, .pDynamicState = &dynamicState, .layout = r->pipelineLayout, .renderPass = r->renderPass.renderPass};
-	vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &menuPipelineInfo, NULL, &r->menuPipeline);
+	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &menuPipelineInfo, NULL, &r->menuPipeline), "Failed to create menu graphics pipeline");
 
 	vkDestroyShaderModule(r->core.device, menuFragmentShaderModule, NULL);
 	vkDestroyShaderModule(r->core.device, menuVertexShaderModule, NULL);

@@ -78,14 +78,14 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 
 	VkCommandBufferAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandPool = r->commands.commandPool, .commandBufferCount = 1};
 	VkCommandBuffer commandBuffer;
-	vkAllocateCommandBuffers(r->core.device, &allocInfo, &commandBuffer);
+	VK_CHECK(vkAllocateCommandBuffers(r->core.device, &allocInfo, &commandBuffer), "Failed to allocate command buffer for texture upload");
 	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
 	vkBeginCommandBuffer(commandBuffer, &beginInfo);
 	VkBufferImageCopy bufferImageCopy = {.bufferOffset = 0, .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .imageExtent = {(uint32_t)globalAtlas.width, (uint32_t)globalAtlas.height, 1}};
 	vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, r->textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopy);
 	vkEndCommandBuffer(commandBuffer);
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &commandBuffer};
-	vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit texture upload command buffer");
 	vkQueueWaitIdle(r->core.graphicsQueue);
 	vkFreeCommandBuffers(r->core.device, r->commands.commandPool, 1, &commandBuffer);
 	vkDestroyBuffer(r->core.device, stagingBuffer, NULL);
@@ -163,14 +163,14 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 
 	VkDescriptorPoolSize descriptorPoolSizes[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS}};
 	VkDescriptorPoolCreateInfo descriptorPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .poolSizeCount = 2, .pPoolSizes = descriptorPoolSizes, .maxSets = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS};
-	vkCreateDescriptorPool(r->core.device, &descriptorPoolInfo, NULL, &r->descriptorPool);
+	VK_CHECK(vkCreateDescriptorPool(r->core.device, &descriptorPoolInfo, NULL, &r->descriptorPool), "Failed to create descriptor pool");
 
 	VkDescriptorSetLayout descriptorSetLayouts[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++)
 		descriptorSetLayouts[i] = r->descriptorSetLayout;
 	VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->descriptorPool, .descriptorSetCount = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS, .pSetLayouts = descriptorSetLayouts};
 	r->descriptorSets = malloc(sizeof(VkDescriptorSet) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
-	vkAllocateDescriptorSets(r->core.device, &descriptorSetAllocInfo, r->descriptorSets);
+	VK_CHECK(vkAllocateDescriptorSets(r->core.device, &descriptorSetAllocInfo, r->descriptorSets), "Failed to allocate descriptor sets");
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 		VkDescriptorBufferInfo bufferInfo = {r->uniformBuffers[i], 0, sizeof(UniformBufferObject)};
@@ -181,8 +181,9 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 
 	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
 	r->graphUpdateRingIndex = 0;
-	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++)
-		vkCreateFence(r->core.device, &fenceInfo, NULL, &r->graphUpdateFences[i]);
+	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++) {
+		VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &r->graphUpdateFences[i]), "Failed to create graph update fence");
+	}
 
 	r->computeCtx.initialized = VK_FALSE;
 	glm_mat4_identity(r->ubo.model);
