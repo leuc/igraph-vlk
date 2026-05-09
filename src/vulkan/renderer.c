@@ -76,18 +76,10 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *
 	vkUnmapMemory(r->core.device, stagingBufferMemory);
 	transitionImageLayout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-	VkCommandBufferAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandPool = r->commands.commandPool, .commandBufferCount = 1};
-	VkCommandBuffer commandBuffer;
-	VK_CHECK(vkAllocateCommandBuffers(r->core.device, &allocInfo, &commandBuffer), "Failed to allocate command buffer for texture upload");
-	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-	vkBeginCommandBuffer(commandBuffer, &beginInfo);
+	VkCommandBuffer commandBuffer = begin_single_time_commands(r->core.device, r->commands.commandPool);
 	VkBufferImageCopy bufferImageCopy = {.bufferOffset = 0, .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .imageExtent = {(uint32_t)globalAtlas.width, (uint32_t)globalAtlas.height, 1}};
 	vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, r->textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopy);
-	vkEndCommandBuffer(commandBuffer);
-	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &commandBuffer};
-	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit texture upload command buffer");
-	vkQueueWaitIdle(r->core.graphicsQueue);
-	vkFreeCommandBuffers(r->core.device, r->commands.commandPool, 1, &commandBuffer);
+	end_single_time_commands(r->core.device, r->commands.commandPool, r->core.graphicsQueue, commandBuffer);
 	vkDestroyBuffer(r->core.device, stagingBuffer, NULL);
 	vkFreeMemory(r->core.device, stagingBufferMemory, NULL);
 	transitionImageLayout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
