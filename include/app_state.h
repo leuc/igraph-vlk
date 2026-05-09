@@ -13,7 +13,10 @@
 #include "interaction/state.h"
 #include "vulkan/animation_manager.h"
 #include "vulkan/renderer.h"
+
+#ifdef USE_OPENXR
 #include "xr/openxr_context.h"
+#endif
 
 /**
  * Central application state that glues together all modules.
@@ -23,7 +26,9 @@ typedef struct AppState
 {
 	/* Core Subsystems */
 	Renderer renderer;
+#ifdef USE_OPENXR
 	XrContext xr_ctx;
+#endif
 	bool vr_enabled;
 	GraphData current_graph;
 	AnimationManager anim_manager;
@@ -46,8 +51,10 @@ typedef struct AppState
 	int last_picked_node;
 	int last_picked_edge;
 	int prev_left_mouse_button;
+#ifdef USE_OPENXR
 	vec3 vr_play_offset; // XR offset applied to stage space (thumbstick movement)
 	float vr_play_yaw;	 // XR virtual body rotation (in radians)
+#endif
 
 	/* Timing */
 	float last_frame_time;

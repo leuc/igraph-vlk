@@ -8,7 +8,10 @@
 #include <vulkan/vulkan.h>
 
 #include "vulkan/utils.h"
+
+#ifdef USE_OPENXR
 #include "xr/openxr_context.h"
+#endif
 
 // Validation layers for debug builds
 #ifdef NDEBUG
@@ -65,7 +68,7 @@ static VkQueueFamilyInfo find_queue_families(VkPhysicalDevice device, VkSurfaceK
 	return info;
 }
 
-void vulkan_device_create(VulkanCore *core, GLFWwindow *window, XrContext *xr)
+void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 {
 	core->instance = VK_NULL_HANDLE;
 	core->device = VK_NULL_HANDLE;
@@ -105,10 +108,12 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, XrContext *xr)
 		}
 	}
 
+#ifdef USE_OPENXR
 	if (xr) {
+		XrContext *xr_ctx = (XrContext *)xr;
 		char xrInstanceExtensions[4096];
 		uint32_t xrInstanceExtensionsSize = sizeof(xrInstanceExtensions);
-		xr_context_get_vulkan_instance_extensions(xr, xrInstanceExtensions, &xrInstanceExtensionsSize);
+		xr_context_get_vulkan_instance_extensions(xr_ctx, xrInstanceExtensions, &xrInstanceExtensionsSize);
 
 		char *token = strtok(xrInstanceExtensions, " ");
 		while (token) {
@@ -130,6 +135,7 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, XrContext *xr)
 			token = strtok(NULL, " ");
 		}
 	}
+#endif
 
 	bool hasPortability = false;
 	for (uint32_t i = 0; i < availableExtCount; i++) {
@@ -194,26 +200,33 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, XrContext *xr)
 
 	VK_CHECK(glfwCreateWindowSurface(core->instance, window, NULL, &core->surface), "Failed to create window surface");
 
+#ifdef USE_OPENXR
 	if (xr) {
-		core->physicalDevice = xr_context_get_vulkan_graphics_device(xr, core->instance);
+		XrContext *xr_ctx = (XrContext *)xr;
+		core->physicalDevice = xr_context_get_vulkan_graphics_device(xr_ctx, core->instance);
 	} else {
-		uint32_t deviceCount = 0;
-		vkEnumeratePhysicalDevices(core->instance, &deviceCount, NULL);
-		if (deviceCount == 0)
-			exit_with_error("Failed to find GPUs with Vulkan support");
-		VkPhysicalDevice *devices = malloc(sizeof(VkPhysicalDevice) * deviceCount);
-		vkEnumeratePhysicalDevices(core->instance, &deviceCount, devices);
+#endif
+		{
+			uint32_t deviceCount = 0;
+			vkEnumeratePhysicalDevices(core->instance, &deviceCount, NULL);
+			if (deviceCount == 0)
+				exit_with_error("Failed to find GPUs with Vulkan support");
+			VkPhysicalDevice *devices = malloc(sizeof(VkPhysicalDevice) * deviceCount);
+			vkEnumeratePhysicalDevices(core->instance, &deviceCount, devices);
 
-		int bestScore = -1;
-		for (uint32_t i = 0; i < deviceCount; i++) {
-			int score = rate_device_suitability(devices[i]);
-			if (score > bestScore) {
-				bestScore = score;
-				core->physicalDevice = devices[i];
+			int bestScore = -1;
+			for (uint32_t i = 0; i < deviceCount; i++) {
+				int score = rate_device_suitability(devices[i]);
+				if (score > bestScore) {
+					bestScore = score;
+					core->physicalDevice = devices[i];
+				}
 			}
+			free(devices);
 		}
-		free(devices);
+#ifdef USE_OPENXR
 	}
+#endif
 
 	if (core->physicalDevice == VK_NULL_HANDLE)
 		exit_with_error("Failed to find a suitable GPU");
@@ -240,10 +253,12 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, XrContext *xr)
 	for (int i = 0; i < BASE_DEVICE_EXTENSION_COUNT; i++)
 		deviceExtensions[deviceExtensionCount++] = BASE_DEVICE_EXTENSIONS[i];
 
+#ifdef USE_OPENXR
 	if (xr) {
+		XrContext *xr_ctx = (XrContext *)xr;
 		char xrDeviceExtensions[4096];
 		uint32_t xrDeviceExtensionsSize = sizeof(xrDeviceExtensions);
-		xr_context_get_vulkan_device_extensions(xr, xrDeviceExtensions, &xrDeviceExtensionsSize);
+		xr_context_get_vulkan_device_extensions(xr_ctx, xrDeviceExtensions, &xrDeviceExtensionsSize);
 
 		char *token = strtok(xrDeviceExtensions, " ");
 		while (token) {
@@ -253,6 +268,7 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, XrContext *xr)
 			token = strtok(NULL, " ");
 		}
 	}
+#endif
 
 	VkPhysicalDeviceFeatures deviceFeatures = {.geometryShader = VK_TRUE};
 	VkDeviceCreateInfo deviceInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .queueCreateInfoCount = queueCreateInfoCount, .pQueueCreateInfos = queueCreateInfos, .enabledExtensionCount = deviceExtensionCount, .ppEnabledExtensionNames = deviceExtensions, .pEnabledFeatures = &deviceFeatures, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};

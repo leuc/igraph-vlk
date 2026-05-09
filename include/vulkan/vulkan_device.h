@@ -3,9 +3,7 @@
 
 #include "vulkan/vulkan_types.h"
 
-struct XrContext;
-
-void vulkan_device_create(VulkanCore *core, GLFWwindow *window, struct XrContext *xr);
+void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr);
 void vulkan_device_destroy(VulkanCore *core);
 
 #endif // VULKAN_DEVICE_H

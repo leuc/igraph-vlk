@@ -19,7 +19,7 @@
 FontAtlas globalAtlas;
 bool atlasLoaded = false;
 
-int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, XrContext *xr)
+int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 {
 	r->window = window;
 	r->nodeCount = graph->node_count;
@@ -194,6 +194,7 @@ void renderer_update_view(Renderer *r, vec3 pos, vec3 front, vec3 up)
 	glm_lookat(pos, c, up, r->ubo.view);
 }
 
+#ifdef USE_OPENXR
 void renderer_setup_xr(Renderer *r, XrContext *xr)
 {
 	r->xr_view_count = xr->view_count;
@@ -237,6 +238,7 @@ void renderer_setup_xr(Renderer *r, XrContext *xr)
 		}
 	}
 }
+#endif
 
 void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index, bool has_ray, vec3 ray_origin, vec3 ray_dir)
 {

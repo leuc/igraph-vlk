@@ -12,6 +12,7 @@ void interaction_menu_toggle(AppState *state)
 		state->app_ctx.current_state = STATE_MENU_OPEN;
 		state->app_ctx.root_menu->target_radius = 1.0f;
 
+#ifdef USE_OPENXR
 		if (state->vr_enabled) {
 			// Get headset position and forward vector
 			vec3 head_pos, head_fwd, head_up = {0.0f, 1.0f, 0.0f};
@@ -29,8 +30,11 @@ void interaction_menu_toggle(AppState *state)
 			head_fwd[2] = -rot_mat[2][2];
 			spatial_calculate_basis(head_pos, head_fwd, head_up, &state->app_ctx.menu_spawn_basis);
 		} else {
+#endif
 			spatial_calculate_basis(state->camera.pos, state->camera.front, state->camera.up, &state->app_ctx.menu_spawn_basis);
+#ifdef USE_OPENXR
 		}
+#endif
 
 		if (state->window) {
 			glfwSetInputMode(state->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);

@@ -11,7 +11,11 @@
 #include "vulkan/animation_manager.h"
 #include "vulkan/menu.h"
 #include "vulkan/renderer.h"
+
+#ifdef USE_OPENXR
 #include "xr/openxr_frame.h"
+#endif
+
 #include <GLFW/glfw3.h>
 
 #include <getopt.h>
@@ -102,26 +106,37 @@ int main(int argc, char **argv)
 	interaction_init(app.window);
 
 	// Initialize OpenXR (Display Only)
+#ifdef USE_OPENXR
 	app.vr_enabled = xr_context_init(&app.xr_ctx, "igraph-vlk");
 	if (app.vr_enabled) {
 		printf("OpenXR HMD detected, enabling VR mode.\n");
 	} else {
 		printf("No HMD detected, running in desktop mode.\n");
 	}
+#else
+	app.vr_enabled = false;
+	printf("VR support disabled at compile time.\n");
+#endif
 
 	// Initialize renderer
-	if (renderer_init(&app.renderer, app.window, &app.current_graph, app.vr_enabled ? &app.xr_ctx : NULL) != 0) {
+#ifdef USE_OPENXR
+	if (renderer_init(&app.renderer, app.window, &app.current_graph, app.vr_enabled ? (void *)&app.xr_ctx : NULL) != 0) {
+#else
+	if (renderer_init(&app.renderer, app.window, &app.current_graph, NULL) != 0) {
+#endif
 		fprintf(stderr, "Failed to initialize renderer\n");
 		glfwDestroyWindow(app.window);
 		glfwTerminate();
 		return EXIT_FAILURE;
 	}
 
+#ifdef USE_OPENXR
 	if (app.vr_enabled) {
 		if (!xr_init_vr(&app)) {
 			app.vr_enabled = false;
 		}
 	}
+#endif
 
 	// Initialize animation manager
 	animation_manager_init(&app.anim_manager, &app.renderer, &app.current_graph);
@@ -160,9 +175,10 @@ int main(int argc, char **argv)
 	int frameCount = 0;
 	float currentFps = 0.0f;
 
-	// OpenXR frame drop tracking
+#ifdef USE_OPENXR
 	XrTime last_predicted_display_time = 0;
 	int consecutive_missed_frames = 0;
+#endif
 
 	// Main loop
 	while (!glfwWindowShouldClose(app.window)) {
@@ -221,6 +237,7 @@ int main(int argc, char **argv)
 			app.renderer.menuTextCharCount = 0;
 		}
 
+#ifdef USE_OPENXR
 		if (app.vr_enabled) {
 			xr_process_input(&app, deltaTime);
 		}
@@ -228,23 +245,35 @@ int main(int argc, char **argv)
 		if (app.vr_enabled && app.xr_ctx.session_running) {
 			xr_render_frame(&app, &last_predicted_display_time, &consecutive_missed_frames);
 		} else {
-			// Update base view matrix from camera
-			renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
+#endif
+			{
+				// Update base view matrix from camera
+				renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
 
-			renderer_draw_frame(&app.renderer);
+				renderer_draw_frame(&app.renderer);
+			}
+#ifdef USE_OPENXR
 		}
 
 		glfwPollEvents();
 	}
 
 	// Cleanup
+#else
+		glfwPollEvents();
+	}
+
+	// Cleanup
+#endif
 	worker_thread_cleanup(&app.worker_ctx);
 	app_context_destroy(&app.app_ctx);
 	destroy_menu_tree(root_menu);
 	graph_free_data(&app.current_graph);
 	animation_manager_cleanup(&app.anim_manager);
 	renderer_cleanup(&app.renderer);
+#ifdef USE_OPENXR
 	xr_context_cleanup(&app.xr_ctx);
+#endif
 	glfwDestroyWindow(app.window);
 	glfwTerminate();
 

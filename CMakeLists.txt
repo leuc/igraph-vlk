@@ -7,7 +7,28 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(igraph REQUIRED)
-find_package(OpenXR REQUIRED)
+
+option(USE_OPENXR "Enable OpenXR/VR support" ON)
+
+set(OPENXR_SOURCES
+    src/xr/openxr_context.c
+    src/xr/openxr_vulkan.c
+    src/xr/openxr_session.c
+    src/xr/openxr_input.c
+    src/xr/openxr_view.c
+    src/xr/openxr_frame.c
+)
+
+if(USE_OPENXR)
+    find_package(OpenXR)
+    if(OpenXR_FOUND)
+        message(STATUS "OpenXR support enabled")
+        add_compile_definitions(USE_OPENXR=1)
+    else()
+        message(STATUS "OpenXR not found, disabling VR support")
+        set(USE_OPENXR OFF CACHE BOOL "Enable OpenXR/VR support" FORCE)
+    endif()
+endif()
 
 find_path(CGLM_INCLUDE_DIR cglm/cglm.h)
 find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
@@ -109,14 +130,6 @@ src/graph/wrappers_constructors.c
     src/interaction/spatial.c
     src/interaction/state.c
 
-    # XR modules
-    src/xr/openxr_context.c
-    src/xr/openxr_vulkan.c
-    src/xr/openxr_session.c
-    src/xr/openxr_input.c
-    src/xr/openxr_view.c
-    src/xr/openxr_frame.c
-
     # UI modules
     src/ui/hud.c
     src/ui/menu.c
@@ -137,10 +150,14 @@ target_link_libraries(igraph-vlk PRIVATE
     Vulkan::Vulkan
     glfw
     igraph::igraph
-    OpenXR::openxr_loader
     m
     OpenMP::OpenMP_C
 )
+
+if(USE_OPENXR)
+    target_sources(igraph-vlk PRIVATE ${OPENXR_SOURCES})
+    target_link_libraries(igraph-vlk PRIVATE OpenXR::openxr_loader)
+endif()
 
 target_compile_definitions(igraph-vlk PRIVATE
     VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/shader.vert.spv"
