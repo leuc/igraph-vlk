@@ -2,6 +2,7 @@
 #include "vulkan/renderer_compute.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -11,6 +12,69 @@
 #include "vulkan/utils.h"
 
 extern FontAtlas globalAtlas;
+
+static int build_node_display_label(GraphData *graph, int node_idx, char *buf, int buf_size)
+{
+	if (graph->nodes[node_idx].selected > 0.5f) {
+		igraph_strvector_t vnames;
+		igraph_vector_int_t vtypes;
+		igraph_strvector_init(&vnames, 0);
+		igraph_vector_int_init(&vtypes, 0);
+
+		igraph_cattribute_list(&graph->g, NULL, NULL, &vnames, &vtypes, NULL, NULL);
+
+		int num_attrs = igraph_strvector_size(&vnames);
+		int pos = 0;
+
+		for (int i = 0; i < num_attrs && pos < buf_size - 1; i++) {
+			const char *attr_name = igraph_strvector_get(&vnames, i);
+			int type = igraph_vector_int_get(&vtypes, i);
+
+			if (i > 0) {
+				int n = snprintf(buf + pos, buf_size - pos, " | ");
+				if (n > 0)
+					pos += (n < buf_size - pos ? n : buf_size - pos - 1);
+				if (pos >= buf_size - 1)
+					break;
+			}
+
+			if (type == IGRAPH_ATTRIBUTE_STRING) {
+				const char *val = VAS(&graph->g, attr_name, node_idx);
+				int n = snprintf(buf + pos, buf_size - pos, "%s: %s", attr_name, val ? val : "null");
+				if (n > 0)
+					pos += (n < buf_size - pos ? n : buf_size - pos - 1);
+			} else if (type == IGRAPH_ATTRIBUTE_NUMERIC) {
+				igraph_real_t val = VAN(&graph->g, attr_name, node_idx);
+				int n = snprintf(buf + pos, buf_size - pos, "%s: %.4g", attr_name, (double)val);
+				if (n > 0)
+					pos += (n < buf_size - pos ? n : buf_size - pos - 1);
+			} else if (type == IGRAPH_ATTRIBUTE_BOOLEAN) {
+				igraph_bool_t val = VAB(&graph->g, attr_name, node_idx);
+				int n = snprintf(buf + pos, buf_size - pos, "%s: %s", attr_name, val ? "true" : "false");
+				if (n > 0)
+					pos += (n < buf_size - pos ? n : buf_size - pos - 1);
+			}
+		}
+
+		igraph_strvector_destroy(&vnames);
+		igraph_vector_int_destroy(&vtypes);
+
+		buf[pos < buf_size ? pos : buf_size - 1] = '\0';
+		return pos < buf_size ? pos : buf_size - 1;
+	}
+
+	if (graph->nodes[node_idx].label) {
+		int len = strlen(graph->nodes[node_idx].label);
+		if (len >= buf_size)
+			len = buf_size - 1;
+		memcpy(buf, graph->nodes[node_idx].label, len);
+		buf[len] = '\0';
+		return len;
+	}
+
+	buf[0] = '\0';
+	return 0;
+}
 
 void renderer_update_graph(Renderer *r, GraphData *graph)
 {
@@ -260,23 +324,27 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	r->needsAttributeUpload = VK_FALSE;
 
 	uint32_t tc = 0;
-	for (uint32_t i = 0; i < r->nodeCount; i++)
-		if (graph->nodes[i].label)
-			tc += strlen(graph->nodes[i].label);
+	for (uint32_t i = 0; i < r->nodeCount; i++) {
+		char label_buf[2048];
+		int len = build_node_display_label(graph, i, label_buf, sizeof(label_buf));
+		if (len > 0)
+			tc += len;
+	}
 	r->labelCharCount = tc;
 	if (tc > 0) {
 		createStagingBuffer(r->core.device, r->core.physicalDevice, sizeof(LabelInstance) * tc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->labelStagingBuffer, &r->labelStagingBufferMemory, &r->labelInstanceBuffer, &r->labelInstanceBufferMemory);
 		LabelInstance *li = malloc(sizeof(LabelInstance) * r->labelCharCount);
 		uint32_t k = 0;
 		for (uint32_t i = 0; i < graph->node_count; i++) {
-			if (!graph->nodes[i].label)
+			char label_buf[2048];
+			int len = build_node_display_label(graph, i, label_buf, sizeof(label_buf));
+			if (len <= 0)
 				continue;
-			int len = strlen(graph->nodes[i].label);
 			float xoff = 0;
 			vec3 pos;
 			glm_vec3_scale(graph->nodes[i].position, r->layoutScale, pos);
 			for (int j = 0; j < len; j++) {
-				unsigned char c = graph->nodes[i].label[j];
+				unsigned char c = label_buf[j];
 				CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
 				memcpy(li[k].nodePos, pos, 12);
 				li[k].nodePos[1] += (0.5f * graph->nodes[i].size) + 0.3f;
