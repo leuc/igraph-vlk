@@ -324,28 +324,75 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	r->needsAttributeUpload = VK_FALSE;
 
 	uint32_t tc = 0;
+	uint32_t bgc = 0;
 	for (uint32_t i = 0; i < r->nodeCount; i++) {
 		char label_buf[2048];
 		int len = build_node_display_label(graph, i, label_buf, sizeof(label_buf));
 		for (int j = 0; j < len; j++)
 			if (label_buf[j] != '\n')
 				tc++;
+		if (graph->nodes[i].selected > 0.5f && len > 0)
+			bgc++;
 	}
-	r->labelCharCount = tc;
-	if (tc > 0) {
-		createStagingBuffer(r->core.device, r->core.physicalDevice, sizeof(LabelInstance) * tc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->labelStagingBuffer, &r->labelStagingBufferMemory, &r->labelInstanceBuffer, &r->labelInstanceBufferMemory);
-		LabelInstance *li = malloc(sizeof(LabelInstance) * r->labelCharCount);
+	uint32_t total = tc + bgc;
+	r->labelCharCount = total;
+	if (total > 0) {
+		createStagingBuffer(r->core.device, r->core.physicalDevice, sizeof(LabelInstance) * total, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->labelStagingBuffer, &r->labelStagingBufferMemory, &r->labelInstanceBuffer, &r->labelInstanceBufferMemory);
+		LabelInstance *li = malloc(sizeof(LabelInstance) * total);
 		uint32_t k = 0;
 		for (uint32_t i = 0; i < graph->node_count; i++) {
 			char label_buf[2048];
 			int len = build_node_display_label(graph, i, label_buf, sizeof(label_buf));
 			if (len <= 0)
 				continue;
-			float xoff = 0;
-			int line = 0;
+
+			// Pre-scan to compute label bounds (width + line count)
+			float line_width = 0.0f;
+			float max_line_width = 0.0f;
+			int num_lines = 1;
+			for (int j = 0; j < len; j++) {
+				unsigned char c = label_buf[j];
+				if (c == '\n') {
+					num_lines++;
+					if (line_width > max_line_width)
+						max_line_width = line_width;
+					line_width = 0;
+					continue;
+				}
+				CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
+				line_width += ci->xadvance;
+			}
+			if (line_width > max_line_width)
+				max_line_width = line_width;
+
 			vec3 pos;
 			float line_height = 0.01f * 55.0f;
 			glm_vec3_scale(graph->nodes[i].position, r->layoutScale, pos);
+
+			// Emit a single background quad if selected (drawn first, behind text)
+			if (graph->nodes[i].selected > 0.5f) {
+				memcpy(li[k].nodePos, pos, 12);
+				li[k].nodePos[1] += (0.5f * graph->nodes[i].size) + 0.3f;
+				li[k].charRect[0] = 0.0f;
+				li[k].charRect[1] = -25.0f;
+				li[k].charRect[2] = max_line_width;
+				li[k].charRect[3] = num_lines * 55.0f + 5.0f;
+				li[k].charUV[0] = 0.0f;
+				li[k].charUV[1] = 0.0f;
+				li[k].charUV[2] = 0.0f;
+				li[k].charUV[3] = 0.0f;
+				li[k].right[0] = 0.01f;
+				li[k].right[1] = 0.0f;
+				li[k].right[2] = 0.0f;
+				li[k].up[0] = 0.0f;
+				li[k].up[1] = 0.01f;
+				li[k].up[2] = 0.0f;
+				li[k].selected = 2.0f;
+				k++;
+			}
+
+			float xoff = 0;
+			int line = 0;
 			for (int j = 0; j < len; j++) {
 				unsigned char c = label_buf[j];
 				if (c == '\n') {
@@ -365,20 +412,19 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 				li[k].charUV[2] = ci->u1;
 				li[k].charUV[3] = ci->v1;
 
-				// Standard billboard orientation for node labels, scaled to 0.01f
-				float node_text_scale = 0.01f;
-				li[k].right[0] = node_text_scale;
+				li[k].right[0] = 0.01f;
 				li[k].right[1] = 0.0f;
 				li[k].right[2] = 0.0f;
 				li[k].up[0] = 0.0f;
-				li[k].up[1] = node_text_scale;
+				li[k].up[1] = 0.01f;
 				li[k].up[2] = 0.0f;
+				li[k].selected = graph->nodes[i].selected;
 
 				xoff += ci->xadvance;
 				k++;
 			}
 		}
-		updateBufferStaged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(LabelInstance) * r->labelCharCount, li, r->labelStagingBuffer, r->labelStagingBufferMemory, r->labelInstanceBuffer);
+		updateBufferStaged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(LabelInstance) * total, li, r->labelStagingBuffer, r->labelStagingBufferMemory, r->labelInstanceBuffer);
 		free(li);
 	} else {
 		r->labelInstanceBuffer = VK_NULL_HANDLE;

@@ -19,8 +19,10 @@ layout(location = 4) in vec4 charUV;   // u0, v0, u1, v1
 // Fixed orientation vectors from CPU
 layout(location = 5) in vec3 fixedRight;
 layout(location = 6) in vec3 fixedUp;
+layout(location = 7) in float inSelected;
 
 layout(location = 0) out vec2 fragTexCoord;
+layout(location = 1) out float outSelected;
 
 void main()
 {
@@ -74,4 +76,5 @@ void main()
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(pos, 1.0);
 
 	fragTexCoord = vec2(mix(charUV.x, charUV.z, inTexCoord.x), mix(charUV.y, charUV.w, inTexCoord.y));
+	outSelected = inSelected;
 }

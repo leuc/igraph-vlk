@@ -68,6 +68,7 @@ static void render_text_at_position(MenuNode *node, const char *text, vec3 base_
 		float dynamic_scale = world_text_scale;
 		glm_vec3_scale(node->right_vec, dynamic_scale, (*label_instances)[*label_count].right);
 		glm_vec3_scale(node->up_vec, dynamic_scale, (*label_instances)[*label_count].up);
+		(*label_instances)[*label_count].selected = 0.0f;
 
 		x_cursor += ci->xadvance;
 		(*label_count)++;

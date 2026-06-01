@@ -72,6 +72,7 @@ typedef struct
 	vec4 charUV;
 	vec3 right;
 	vec3 up;
+	float selected;
 } LabelInstance;
 
 typedef struct
