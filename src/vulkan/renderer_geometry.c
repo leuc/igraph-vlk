@@ -31,7 +31,7 @@ static int build_node_display_label(GraphData *graph, int node_idx, char *buf, i
 			int type = igraph_vector_int_get(&vtypes, i);
 
 			if (i > 0) {
-				int n = snprintf(buf + pos, buf_size - pos, " | ");
+				int n = snprintf(buf + pos, buf_size - pos, "\n");
 				if (n > 0)
 					pos += (n < buf_size - pos ? n : buf_size - pos - 1);
 				if (pos >= buf_size - 1)
@@ -327,8 +327,9 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	for (uint32_t i = 0; i < r->nodeCount; i++) {
 		char label_buf[2048];
 		int len = build_node_display_label(graph, i, label_buf, sizeof(label_buf));
-		if (len > 0)
-			tc += len;
+		for (int j = 0; j < len; j++)
+			if (label_buf[j] != '\n')
+				tc++;
 	}
 	r->labelCharCount = tc;
 	if (tc > 0) {
@@ -341,13 +342,20 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 			if (len <= 0)
 				continue;
 			float xoff = 0;
+			int line = 0;
 			vec3 pos;
+			float line_height = 0.01f * 55.0f;
 			glm_vec3_scale(graph->nodes[i].position, r->layoutScale, pos);
 			for (int j = 0; j < len; j++) {
 				unsigned char c = label_buf[j];
+				if (c == '\n') {
+					line++;
+					xoff = 0;
+					continue;
+				}
 				CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
 				memcpy(li[k].nodePos, pos, 12);
-				li[k].nodePos[1] += (0.5f * graph->nodes[i].size) + 0.3f;
+				li[k].nodePos[1] += (0.5f * graph->nodes[i].size) + 0.3f - line * line_height;
 				li[k].charRect[0] = xoff + ci->x0;
 				li[k].charRect[1] = ci->y0;
 				li[k].charRect[2] = xoff + ci->x1;
