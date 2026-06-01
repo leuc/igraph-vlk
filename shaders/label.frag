@@ -8,12 +8,8 @@ layout(location = 0) out vec4 outColor;
 void main()
 {
 	float a = texture(texSampler, fragTexCoord).r;
-	if (inSelected > 1.5) {
-		outColor = vec4(0.0, 0.0, 0.0, 1.0);
-	} else if (inSelected > 0.5) {
-		if (a < 0.1)
-			discard;
-		outColor = vec4(1.0, 1.0, 1.0, 1.0);
+	if (inSelected > 0.5) {
+		outColor = vec4(vec3(a), 1.0);
 	} else {
 		if (a < 0.1)
 			discard;
