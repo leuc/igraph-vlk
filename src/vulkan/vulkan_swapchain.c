@@ -22,10 +22,10 @@ VkSurfaceFormatKHR choose_swap_surface_format(VkSurfaceFormatKHR *formats, uint3
 VkPresentModeKHR choose_swap_present_mode(VkPresentModeKHR *modes, uint32_t count)
 {
 	for (uint32_t i = 0; i < count; i++) {
-		if (modes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
+		if (modes[i] == VK_PRESENT_MODE_FIFO_KHR)
 			return modes[i];
 	}
-	return VK_PRESENT_MODE_FIFO_KHR;
+	return VK_PRESENT_MODE_MAILBOX_KHR;
 }
 
 VkExtent2D choose_swap_extent(VkSurfaceCapabilitiesKHR *caps, GLFWwindow *window)
