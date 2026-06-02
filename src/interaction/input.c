@@ -16,16 +16,33 @@
 // Edge routing mode count (must match renderer.h enum count)
 #define EDGE_ROUTING_COUNT 2
 
+static bool window_focused = true;
+
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 static void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
 static void mouse_callback(GLFWwindow *window, double xpos, double ypos);
+static void focus_callback(GLFWwindow *window, int focused);
 
 void interaction_init(GLFWwindow *window)
 {
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetMouseButtonCallback(window, mouse_button_callback);
 	glfwSetCursorPosCallback(window, mouse_callback);
+	glfwSetWindowFocusCallback(window, focus_callback);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+}
+
+static void focus_callback(GLFWwindow *window, int focused)
+{
+	window_focused = focused;
+	if (focused) {
+		AppState *state = (AppState *)glfwGetWindowUserPointer(window);
+		if (state)
+			state->camera.first_mouse = true;
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	} else {
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	}
 }
 
 void interaction_process_continuous_input(AppState *state, float delta_time)
@@ -194,6 +211,9 @@ static void mouse_button_callback(GLFWwindow *window, int button, int action, in
 
 static void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 {
+	if (!window_focused)
+		return;
+
 	AppState *state = (AppState *)glfwGetWindowUserPointer(window);
 	if (!state)
 		return;
