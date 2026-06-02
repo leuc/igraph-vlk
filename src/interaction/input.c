@@ -1,6 +1,7 @@
 #include "interaction/input.h"
 #include "graph/graph_actions.h"
 #include "interaction/camera.h"
+#include "interaction/gamepad.h"
 #include "interaction/menu.h"
 #include "interaction/picking.h"
 #include "interaction/spatial.h"
@@ -17,11 +18,13 @@
 #define EDGE_ROUTING_COUNT 2
 
 static bool window_focused = true;
+static int gamepad_id = -1;
 
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 static void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
 static void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 static void focus_callback(GLFWwindow *window, int focused);
+static void joystick_callback(int jid, int event);
 
 void interaction_init(GLFWwindow *window)
 {
@@ -29,7 +32,21 @@ void interaction_init(GLFWwindow *window)
 	glfwSetMouseButtonCallback(window, mouse_button_callback);
 	glfwSetCursorPosCallback(window, mouse_callback);
 	glfwSetWindowFocusCallback(window, focus_callback);
+	glfwSetJoystickCallback(joystick_callback);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+	gamepad_id = gamepad_get_first_active();
+	if (gamepad_id >= 0) {
+		printf("[INPUT] Gamepad detected on joystick %d\n", gamepad_id);
+	}
+}
+
+static void joystick_callback(int jid, int event)
+{
+	if (event == GLFW_DISCONNECTED && jid == gamepad_id) {
+		printf("[INPUT] Gamepad %d disconnected\n", jid);
+		gamepad_id = -1;
+	}
 }
 
 static void focus_callback(GLFWwindow *window, int focused)
@@ -72,6 +89,16 @@ void interaction_process_continuous_input(AppState *state, float delta_time)
 		camera_process_keyboard(&state->camera, CAMERA_DIR_LEFT, adjusted_delta);
 	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
 		camera_process_keyboard(&state->camera, CAMERA_DIR_RIGHT, adjusted_delta);
+
+	// Process gamepad input if one is connected
+	if (gamepad_id >= 0) {
+		if (!process_gamepad_input(gamepad_id, state, delta_time)) {
+			gamepad_id = -1;
+		}
+	}
+	if (gamepad_id < 0) {
+		gamepad_id = gamepad_get_first_active();
+	}
 }
 
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)

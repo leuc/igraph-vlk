@@ -129,6 +129,7 @@ src/graph/wrappers_constructors.c
     src/interaction/picking.c
     src/interaction/spatial.c
     src/interaction/state.c
+    src/interaction/gamepad.c
 
     # UI modules
     src/ui/hud.c
