@@ -46,6 +46,8 @@ static void joystick_callback(int jid, int event)
 	if (event == GLFW_DISCONNECTED && jid == gamepad_id) {
 		printf("[INPUT] Gamepad %d disconnected\n", jid);
 		gamepad_id = -1;
+	} else if (event == GLFW_CONNECTED && gamepad_id < 0) {
+		gamepad_id = gamepad_get_first_active();
 	}
 }
 
@@ -95,9 +97,6 @@ void interaction_process_continuous_input(AppState *state, float delta_time)
 		if (!process_gamepad_input(gamepad_id, state, delta_time)) {
 			gamepad_id = -1;
 		}
-	}
-	if (gamepad_id < 0) {
-		gamepad_id = gamepad_get_first_active();
 	}
 }
 

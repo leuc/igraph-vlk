@@ -25,22 +25,6 @@ static float apply_deadzone(float value)
 	return (value > 0.0f) ? (value - GAMEPAD_DEADZONE) / (1.0f - GAMEPAD_DEADZONE) : (value + GAMEPAD_DEADZONE) / (1.0f - GAMEPAD_DEADZONE);
 }
 
-static bool button_pressed(const GLFWgamepadstate *current, int button)
-{
-	if (first_frame)
-		return false;
-	return current->buttons[button] == GLFW_PRESS && prev_state.buttons[button] == GLFW_RELEASE;
-}
-
-static bool raw_button_pressed(const unsigned char *buttons, int count, int idx)
-{
-	if (first_frame)
-		return false;
-	if (idx < 0 || idx >= count)
-		return false;
-	return buttons[idx] == GLFW_PRESS && raw_prev_buttons[idx] == GLFW_RELEASE;
-}
-
 int gamepad_get_first_active(void)
 {
 	printf("[GAMEPAD] Scanning for joysticks...\n");
@@ -64,7 +48,6 @@ int gamepad_get_first_active(void)
 			int axes = 0, buttons = 0;
 			glfwGetJoystickAxes(i, &axes);
 			glfwGetJoystickButtons(i, &buttons);
-			// Require at least 4 axes and 8 buttons to be a plausible gamepad
 			if (axes >= 4 && buttons >= 8) {
 				printf("[GAMEPAD] Using joystick %d in raw mode\n", i);
 				return i;
@@ -97,7 +80,7 @@ static bool process_axes_and_buttons(AppState *state, float lx, float ly, float 
 	}
 
 	// Debug: log any button press
-	for (int i = 0; i < max_btn && i < 15; i++) {
+	for (int i = 0; i < max_btn && i <= GLFW_GAMEPAD_BUTTON_LAST; i++) {
 		int prev = is_gamepad ? prev_state.buttons[i] : raw_prev_buttons[i];
 		if (buttons[i] == GLFW_PRESS && prev == GLFW_RELEASE) {
 			printf("[GAMEPAD] %s (%d) pressed\n", button_names[i], i);
