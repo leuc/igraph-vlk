@@ -134,6 +134,7 @@ typedef struct
 	VkSurfaceKHR surface;
 	int graphicsQueueFamily;
 	int presentQueueFamily;
+	VkPhysicalDeviceProperties deviceProperties;
 } VulkanCore;
 
 typedef struct

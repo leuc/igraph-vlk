@@ -280,6 +280,8 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 
 	vkGetDeviceQueue(core->device, queueFamilyInfo.graphicsFamily, 0, &core->graphicsQueue);
 	vkGetDeviceQueue(core->device, queueFamilyInfo.presentFamily, 0, &core->presentQueue);
+
+	vkGetPhysicalDeviceProperties(core->physicalDevice, &core->deviceProperties);
 }
 
 void vulkan_device_destroy(VulkanCore *core)

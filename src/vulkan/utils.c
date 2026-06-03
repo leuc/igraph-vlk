@@ -21,7 +21,11 @@ void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize
 	vkCreateBuffer(device, &bufferInfo, NULL, buffer);
 	VkMemoryRequirements memReqs;
 	vkGetBufferMemoryRequirements(device, *buffer, &memReqs);
-	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = memReqs.size, .memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, properties)};
+	VkPhysicalDeviceProperties props;
+	vkGetPhysicalDeviceProperties(physicalDevice, &props);
+	VkDeviceSize atomSize = props.limits.nonCoherentAtomSize;
+	VkDeviceSize allocSize = (memReqs.size + atomSize - 1) & ~(atomSize - 1);
+	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, properties)};
 	vkAllocateMemory(device, &allocInfo, NULL, bufferMemory);
 	vkBindBufferMemory(device, *buffer, *bufferMemory, 0);
 }
@@ -34,14 +38,16 @@ void updateBuffer(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, con
 	vkUnmapMemory(device, memory);
 }
 
-void updateBufferMapped(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, const void *data)
+void updateBufferMapped(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, const void *data, const VkPhysicalDeviceProperties *deviceProps)
 {
 	if (size == 0)
 		return;
+	VkDeviceSize atomSize = deviceProps->limits.nonCoherentAtomSize;
+	VkDeviceSize alignedSize = (size + atomSize - 1) & ~(atomSize - 1);
 	void *mapped;
-	vkMapMemory(device, memory, 0, size, 0, &mapped);
+	vkMapMemory(device, memory, 0, alignedSize, 0, &mapped);
 	memcpy(mapped, data, size);
-	VkMappedMemoryRange range = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, .memory = memory, .size = size};
+	VkMappedMemoryRange range = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, .memory = memory, .size = alignedSize};
 	vkFlushMappedMemoryRanges(device, 1, &range);
 	vkUnmapMemory(device, memory);
 }
@@ -54,7 +60,11 @@ void createMappedBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDevi
 	VkMemoryRequirements req;
 	vkGetBufferMemoryRequirements(device, *buffer, &req);
 
-	VkMemoryAllocateInfo alloc = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = req.size, .memoryTypeIndex = findMemoryType(physicalDevice, req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)};
+	VkPhysicalDeviceProperties props;
+	vkGetPhysicalDeviceProperties(physicalDevice, &props);
+	VkDeviceSize atomSize = props.limits.nonCoherentAtomSize;
+	VkDeviceSize allocSize = (req.size + atomSize - 1) & ~(atomSize - 1);
+	VkMemoryAllocateInfo alloc = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = findMemoryType(physicalDevice, req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)};
 	vkAllocateMemory(device, &alloc, NULL, memory);
 	vkBindBufferMemory(device, *buffer, *memory, 0);
 }
@@ -65,7 +75,11 @@ void createStagingBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDev
 	vkCreateBuffer(device, &bufferInfo, NULL, stagingBuf);
 	VkMemoryRequirements memReqs;
 	vkGetBufferMemoryRequirements(device, *stagingBuf, &memReqs);
-	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = memReqs.size, .memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)};
+	VkPhysicalDeviceProperties props;
+	vkGetPhysicalDeviceProperties(physicalDevice, &props);
+	VkDeviceSize atomSize = props.limits.nonCoherentAtomSize;
+	VkDeviceSize allocSize = (memReqs.size + atomSize - 1) & ~(atomSize - 1);
+	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)};
 	vkAllocateMemory(device, &allocInfo, NULL, stagingMem);
 	vkBindBufferMemory(device, *stagingBuf, *stagingMem, 0);
 
@@ -78,12 +92,14 @@ void createStagingBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDev
 	vkBindBufferMemory(device, *deviceBuf, *deviceMem, 0);
 }
 
-void updateBufferStaged(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkDeviceSize size, const void *data, VkBuffer stagingBuf, VkDeviceMemory stagingMem, VkBuffer deviceBuf)
+void updateBufferStaged(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkDeviceSize size, const void *data, VkBuffer stagingBuf, VkDeviceMemory stagingMem, VkBuffer deviceBuf, const VkPhysicalDeviceProperties *deviceProps)
 {
+	VkDeviceSize atomSize = deviceProps->limits.nonCoherentAtomSize;
+	VkDeviceSize alignedSize = (size + atomSize - 1) & ~(atomSize - 1);
 	void *mapped;
-	vkMapMemory(device, stagingMem, 0, size, 0, &mapped);
+	vkMapMemory(device, stagingMem, 0, alignedSize, 0, &mapped);
 	memcpy(mapped, data, size);
-	VkMappedMemoryRange range = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, .memory = stagingMem, .size = size};
+	VkMappedMemoryRange range = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, .memory = stagingMem, .size = alignedSize};
 	vkFlushMappedMemoryRanges(device, 1, &range);
 	vkUnmapMemory(device, stagingMem);
 

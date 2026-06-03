@@ -200,10 +200,10 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 		currentOffset += count;
 	}
 	// Fast path: update positions via mapped buffer
-	updateBufferMapped(r->core.device, r->nodePositionMemory, sizeof(NodePosition) * graph->node_count, nodePositions);
+	updateBufferMapped(r->core.device, r->nodePositionMemory, sizeof(NodePosition) * graph->node_count, nodePositions, &r->core.deviceProperties);
 	// Rare: update attributes via staged copy
 	if (r->needsAttributeUpload) {
-		updateBufferStaged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(NodeAttribute) * graph->node_count, nodeAttributes, r->nodeAttributeStagingBuffer, r->nodeAttributeStagingMemory, r->nodeAttributeBuffer);
+		updateBufferStaged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(NodeAttribute) * graph->node_count, nodeAttributes, r->nodeAttributeStagingBuffer, r->nodeAttributeStagingMemory, r->nodeAttributeBuffer, &r->core.deviceProperties);
 	}
 	free(sorted);
 	free(nodePositions);
@@ -313,11 +313,11 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 
 	// Fast path: update positions via mapped buffer
 	if (r->edgeVertexCount > 0) {
-		updateBufferMapped(r->core.device, r->edgePositionMemory, sizeof(EdgePosition) * r->edgeVertexCount, edgePositions);
+		updateBufferMapped(r->core.device, r->edgePositionMemory, sizeof(EdgePosition) * r->edgeVertexCount, edgePositions, &r->core.deviceProperties);
 	}
 	// Rare: update attributes via staged copy (only when flag set)
 	if (r->needsAttributeUpload && r->edgeVertexCount > 0) {
-		updateBufferStaged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(EdgeAttribute) * r->edgeVertexCount, edgeAttributes, r->edgeAttributeStagingBuffer, r->edgeAttributeStagingMemory, r->edgeAttributeBuffer);
+		updateBufferStaged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(EdgeAttribute) * r->edgeVertexCount, edgeAttributes, r->edgeAttributeStagingBuffer, r->edgeAttributeStagingMemory, r->edgeAttributeBuffer, &r->core.deviceProperties);
 	}
 	free(edgePositions);
 	free(edgeAttributes);
@@ -377,7 +377,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 				k++;
 			}
 		}
-		updateBufferStaged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(LabelInstance) * r->labelCharCount, li, r->labelStagingBuffer, r->labelStagingBufferMemory, r->labelInstanceBuffer);
+		updateBufferStaged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(LabelInstance) * r->labelCharCount, li, r->labelStagingBuffer, r->labelStagingBufferMemory, r->labelInstanceBuffer, &r->core.deviceProperties);
 		free(li);
 	} else {
 		r->labelInstanceBuffer = VK_NULL_HANDLE;
