@@ -177,6 +177,17 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 		VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &r->graphUpdateFences[i]), "Failed to create graph update fence");
 	}
 
+	r->computeCtx.nodeBuf = VK_NULL_HANDLE;
+	r->computeCtx.nodeMem = VK_NULL_HANDLE;
+	r->computeCtx.edgeBuf = VK_NULL_HANDLE;
+	r->computeCtx.edgeMem = VK_NULL_HANDLE;
+	r->computeCtx.hubBuf = VK_NULL_HANDLE;
+	r->computeCtx.hubMem = VK_NULL_HANDLE;
+	r->computeCtx.pool = VK_NULL_HANDLE;
+	r->computeCtx.descSet = VK_NULL_HANDLE;
+	r->computeCtx.cmdBuf = VK_NULL_HANDLE;
+	r->computeCtx.cmdPool = VK_NULL_HANDLE;
+	r->computeCtx.fence = VK_NULL_HANDLE;
 	r->computeCtx.initialized = VK_FALSE;
 	glm_mat4_identity(r->ubo.model);
 	glm_mat4_identity(r->ubo.view);
@@ -375,27 +386,25 @@ void renderer_cleanup(Renderer *r)
 	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++)
 		vkDestroyFence(r->core.device, r->graphUpdateFences[i], NULL);
 
-	if (r->computeCtx.initialized) {
-		if (r->computeCtx.fence != VK_NULL_HANDLE)
-			vkDestroyFence(r->core.device, r->computeCtx.fence, NULL);
-		if (r->computeCtx.cmdBuf != VK_NULL_HANDLE)
-			vkFreeCommandBuffers(r->core.device, r->computeCtx.cmdPool, 1, &r->computeCtx.cmdBuf);
-		if (r->computeCtx.cmdPool != VK_NULL_HANDLE)
-			vkDestroyCommandPool(r->core.device, r->computeCtx.cmdPool, NULL);
-		if (r->computeCtx.pool != VK_NULL_HANDLE)
-			vkDestroyDescriptorPool(r->core.device, r->computeCtx.pool, NULL);
-		if (r->computeCtx.nodeBuf != VK_NULL_HANDLE) {
-			vkDestroyBuffer(r->core.device, r->computeCtx.nodeBuf, NULL);
-			vkFreeMemory(r->core.device, r->computeCtx.nodeMem, NULL);
-		}
-		if (r->computeCtx.edgeBuf != VK_NULL_HANDLE) {
-			vkDestroyBuffer(r->core.device, r->computeCtx.edgeBuf, NULL);
-			vkFreeMemory(r->core.device, r->computeCtx.edgeMem, NULL);
-		}
-		if (r->computeCtx.hubBuf != VK_NULL_HANDLE) {
-			vkDestroyBuffer(r->core.device, r->computeCtx.hubBuf, NULL);
-			vkFreeMemory(r->core.device, r->computeCtx.hubMem, NULL);
-		}
+	if (r->computeCtx.fence != VK_NULL_HANDLE)
+		vkDestroyFence(r->core.device, r->computeCtx.fence, NULL);
+	if (r->computeCtx.cmdBuf != VK_NULL_HANDLE)
+		vkFreeCommandBuffers(r->core.device, r->computeCtx.cmdPool, 1, &r->computeCtx.cmdBuf);
+	if (r->computeCtx.cmdPool != VK_NULL_HANDLE)
+		vkDestroyCommandPool(r->core.device, r->computeCtx.cmdPool, NULL);
+	if (r->computeCtx.pool != VK_NULL_HANDLE)
+		vkDestroyDescriptorPool(r->core.device, r->computeCtx.pool, NULL);
+	if (r->computeCtx.nodeBuf != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->core.device, r->computeCtx.nodeBuf, NULL);
+		vkFreeMemory(r->core.device, r->computeCtx.nodeMem, NULL);
+	}
+	if (r->computeCtx.edgeBuf != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->core.device, r->computeCtx.edgeBuf, NULL);
+		vkFreeMemory(r->core.device, r->computeCtx.edgeMem, NULL);
+	}
+	if (r->computeCtx.hubBuf != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->core.device, r->computeCtx.hubBuf, NULL);
+		vkFreeMemory(r->core.device, r->computeCtx.hubMem, NULL);
 	}
 
 	if (r->labelInstanceBuffer != VK_NULL_HANDLE) {
