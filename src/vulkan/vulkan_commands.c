@@ -14,6 +14,7 @@ void vulkan_commands_create(VulkanCommands *cmds, VulkanCore *core, uint32_t ima
 	cmds->renderFinishedSemaphores = NULL;
 	cmds->inFlightFences = NULL;
 	cmds->currentFrame = 0;
+	cmds->imageCount = imageCount;
 
 	// Create command pool
 	VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = core->graphicsQueueFamily, .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT};
@@ -26,7 +27,7 @@ void vulkan_commands_create(VulkanCommands *cmds, VulkanCore *core, uint32_t ima
 
 	// Create synchronization primitives
 	cmds->imageAvailableSemaphores = malloc(sizeof(VkSemaphore) * MAX_FRAMES_IN_FLIGHT);
-	cmds->renderFinishedSemaphores = malloc(sizeof(VkSemaphore) * MAX_FRAMES_IN_FLIGHT);
+	cmds->renderFinishedSemaphores = malloc(sizeof(VkSemaphore) * imageCount);
 	cmds->inFlightFences = malloc(sizeof(VkFence) * MAX_FRAMES_IN_FLIGHT);
 
 	VkSemaphoreCreateInfo semaphoreInfo = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
@@ -34,8 +35,11 @@ void vulkan_commands_create(VulkanCommands *cmds, VulkanCore *core, uint32_t ima
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 		VK_CHECK(vkCreateSemaphore(core->device, &semaphoreInfo, NULL, &cmds->imageAvailableSemaphores[i]), "Failed to create image available semaphore");
+		VK_CHECK(vkCreateFence(core->device, &fenceInfo, NULL, &cmds->inFlightFences[i]), "Failed to create in-flight fence");
+	}
+
+	for (uint32_t i = 0; i < imageCount; i++) {
 		VK_CHECK(vkCreateSemaphore(core->device, &semaphoreInfo, NULL, &cmds->renderFinishedSemaphores[i]), "Failed to create render finished semaphore");
-		VK_CHECK(vkCreateFence(core->device, &fenceInfo, NULL, &cmds->inFlightFences[i]), "Failed to create fence");
 	}
 }
 
@@ -45,10 +49,12 @@ void vulkan_commands_destroy(VulkanCommands *cmds, VkDevice device)
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			if (cmds->imageAvailableSemaphores[i] != VK_NULL_HANDLE)
 				vkDestroySemaphore(device, cmds->imageAvailableSemaphores[i], NULL);
-			if (cmds->renderFinishedSemaphores[i] != VK_NULL_HANDLE)
-				vkDestroySemaphore(device, cmds->renderFinishedSemaphores[i], NULL);
 			if (cmds->inFlightFences[i] != VK_NULL_HANDLE)
 				vkDestroyFence(device, cmds->inFlightFences[i], NULL);
+		}
+		for (uint32_t i = 0; i < cmds->imageCount; i++) {
+			if (cmds->renderFinishedSemaphores[i] != VK_NULL_HANDLE)
+				vkDestroySemaphore(device, cmds->renderFinishedSemaphores[i], NULL);
 		}
 		free(cmds->imageAvailableSemaphores);
 		free(cmds->renderFinishedSemaphores);

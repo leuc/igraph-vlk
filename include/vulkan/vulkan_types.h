@@ -167,6 +167,7 @@ typedef struct
 	VkSemaphore *renderFinishedSemaphores;
 	VkFence *inFlightFences;
 	uint32_t currentFrame;
+	uint32_t imageCount;
 } VulkanCommands;
 
 typedef struct Renderer
