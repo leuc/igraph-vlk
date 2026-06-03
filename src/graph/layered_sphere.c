@@ -19,8 +19,10 @@
 static double geodesic_distance(double ux, double uy, double uz, double nx, double ny, double nz, double radius)
 {
 	double cos_angle = ux * nx + uy * ny + uz * nz;
-	if (cos_angle > 1.0) cos_angle = 1.0;
-	if (cos_angle < -1.0) cos_angle = -1.0;
+	if (cos_angle > 1.0)
+		cos_angle = 1.0;
+	if (cos_angle < -1.0)
+		cos_angle = -1.0;
 	return radius * acos(cos_angle);
 }
 
@@ -65,7 +67,6 @@ typedef struct LayeredSphereContext
 	SphereGrid *grids;
 	int *node_to_sphere_id;
 	int *node_to_slot_idx;
-	int *node_to_comm_id;
 	int inter_sphere_pass;
 	int vcount;
 	igraph_matrix_t *layout;
@@ -251,8 +252,6 @@ static double calculate_move_delta_inter(const igraph_t *ig, const igraph_matrix
 		if (neighbor == v)
 			continue;
 
-		int n_sphere = ctx->node_to_sphere_id[neighbor];
-		double n_r = ctx->grids[n_sphere].radius;
 		double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
 		double n_len = sqrt(nx * nx + ny * ny + nz * nz);
 		if (n_len < 0.001)
@@ -274,8 +273,6 @@ static double calculate_move_delta_inter(const igraph_t *ig, const igraph_matrix
 			if (neighbor == u)
 				continue;
 
-			int n_sphere = ctx->node_to_sphere_id[neighbor];
-			double n_r = ctx->grids[n_sphere].radius;
 			double nx = MATRIX(*layout, neighbor, 0), ny = MATRIX(*layout, neighbor, 1), nz = MATRIX(*layout, neighbor, 2);
 			double n_len = sqrt(nx * nx + ny * ny + nz * nz);
 			if (n_len < 0.001)
@@ -319,7 +316,6 @@ static bool layered_sphere_iterate(LayeredSphereContext *ctx, const igraph_t *ig
 	if (ctx->phase == PHASE_INIT) {
 		ctx->node_to_sphere_id = malloc(vcount * sizeof(int));
 		ctx->node_to_slot_idx = malloc(vcount * sizeof(int));
-		ctx->node_to_comm_id = malloc(vcount * sizeof(int));
 
 		igraph_t undirected_ig;
 		igraph_copy(&undirected_ig, ig);
@@ -336,7 +332,7 @@ static bool layered_sphere_iterate(LayeredSphereContext *ctx, const igraph_t *ig
 		double graph_density = (vcount > 1) ? (2.0 * ecount) / ((double)vcount * (vcount - 1)) : 0.0;
 		double cpm_resolution = fmax(graph_density * 3.0, 0.001);
 
-		igraph_community_leiden(&undirected_ig, NULL, NULL, NULL, cpm_resolution, 0.01, true, 2, &membership, NULL, NULL);
+		igraph_community_leiden_simple(ig, NULL, IGRAPH_LEIDEN_OBJECTIVE_CPM, cpm_resolution, 0.01, true, 2, &membership, NULL, NULL);
 
 		int num_communities = get_vector_int_max(&membership) + 1;
 
@@ -396,7 +392,8 @@ static bool layered_sphere_iterate(LayeredSphereContext *ctx, const igraph_t *ig
 		igraph_transitivity_local_undirected(&undirected_ig, &transitivity, igraph_vss_all(), IGRAPH_TRANSITIVITY_ZERO);
 
 		int *intra_degree = calloc(vcount, sizeof(int));
-		for (int e = 0; e < ecount; e++) {
+		igraph_integer_t uecount = igraph_ecount(&undirected_ig);
+		for (int e = 0; e < uecount; e++) {
 			igraph_integer_t from, to;
 			igraph_edge(&undirected_ig, e, &from, &to);
 			if (VECTOR(membership)[from] == VECTOR(membership)[to]) {
@@ -638,7 +635,6 @@ void *compute_layout_layered_sphere(igraph_t *graph)
 
 	igraph_progress("Layered Sphere layout", 0.0, NULL);
 
-	const int total_iters = MAX_INTRA_ITERS + MAX_INTER_ITERS;
 	const double intra_weight = 50.0;
 	const double inter_weight = 50.0;
 
