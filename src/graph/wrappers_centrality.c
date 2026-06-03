@@ -203,6 +203,35 @@ void *compute_igraph_strength(igraph_t *graph)
 	return result;
 }
 
+// Coreness (k-core decomposition)
+void *compute_igraph_coreness(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
+	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
+		free(result);
+		return NULL;
+	}
+
+	igraph_vector_int_t coreness;
+	igraph_vector_int_init(&coreness, vcount);
+	igraph_error_t code = igraph_coreness(graph, &coreness, IGRAPH_ALL);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(&coreness);
+		igraph_vector_destroy(result);
+		free(result);
+		return NULL;
+	}
+
+	for (igraph_integer_t i = 0; i < vcount; i++) {
+		VECTOR(*result)[i] = (igraph_real_t)VECTOR(coreness)[i];
+	}
+
+	igraph_vector_int_destroy(&coreness);
+	return result;
+}
+
 // Constraint (structural holes)
 void *compute_igraph_constraint(igraph_t *graph)
 {

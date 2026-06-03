@@ -28,6 +28,9 @@ void *compute_igraph_hub_and_authority_scores(igraph_t *graph);
 // Harmonic centrality
 void *compute_igraph_harmonic_centrality(igraph_t *graph);
 
+// Coreness (k-core)
+void *compute_igraph_coreness(igraph_t *graph);
+
 // Strength (weighted degree)
 void *compute_igraph_strength(igraph_t *graph);
 

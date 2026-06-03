@@ -115,6 +115,7 @@ const CommandDef g_command_registry[] = {
 	{"Analysis/Centrality", "igraph_harmonic_centrality", "Harmonic", compute_igraph_harmonic_centrality, apply_centrality_scores, free_centrality_scores},
 	{"Analysis/Centrality", "igraph_strength", "Strength (Weighted Degree)", compute_igraph_strength, apply_centrality_scores, free_centrality_scores},
 	{"Analysis/Centrality", "igraph_constraint", "Constraint (Structural Holes)", compute_igraph_constraint, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality", "igraph_coreness", "Coreness (k-Core)", compute_igraph_coreness, apply_centrality_scores, free_centrality_scores},
 
 	// =========================================================================
 	// Analysis menu - Global Network Properties
