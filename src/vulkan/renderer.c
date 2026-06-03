@@ -433,6 +433,20 @@ void renderer_cleanup(Renderer *r)
 		vkDestroyBuffer(r->core.device, r->indexBuffers[i], NULL);
 		vkFreeMemory(r->core.device, r->indexBufferMemories[i], NULL);
 	}
+	if (r->rayVertexBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->core.device, r->rayVertexBuffer, NULL);
+		vkFreeMemory(r->core.device, r->rayVertexBufferMemory, NULL);
+	}
+	if (r->sphereVertexBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->core.device, r->sphereVertexBuffer, NULL);
+		vkFreeMemory(r->core.device, r->sphereVertexBufferMemory, NULL);
+	}
+	if (r->sphereIndexBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->core.device, r->sphereIndexBuffer, NULL);
+		vkFreeMemory(r->core.device, r->sphereIndexBufferMemory, NULL);
+	}
+	free(r->sphereIndexCounts);
+	free(r->sphereIndexOffsets);
 	vkDestroyBuffer(r->core.device, r->uiBgVertexBuffer, NULL);
 	vkFreeMemory(r->core.device, r->uiBgVertexBufferMemory, NULL);
 	vkDestroyBuffer(r->core.device, r->uiTextInstanceBuffer, NULL);
@@ -501,6 +515,9 @@ void renderer_cleanup(Renderer *r)
 	vkDestroyDescriptorSetLayout(r->core.device, r->computeDescriptorSetLayout, NULL);
 	vkDestroyPipeline(r->core.device, r->uiPipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->labelPipeline, NULL);
+	vkDestroyPipeline(r->core.device, r->menuPipeline, NULL);
+	vkDestroyPipeline(r->core.device, r->spherePipeline, NULL);
+	vkDestroyPipeline(r->core.device, r->rayPipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->edgePipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->graphicsPipeline, NULL);
 	vkDestroyPipelineLayout(r->core.device, r->pipelineLayout, NULL);

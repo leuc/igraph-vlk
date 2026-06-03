@@ -65,6 +65,7 @@ void vulkan_commands_destroy(VulkanCommands *cmds, VkDevice device)
 	}
 
 	if (cmds->commandBuffers) {
+		vkFreeCommandBuffers(device, cmds->commandPool, MAX_FRAMES_IN_FLIGHT, cmds->commandBuffers);
 		free(cmds->commandBuffers);
 		cmds->commandBuffers = NULL;
 	}
