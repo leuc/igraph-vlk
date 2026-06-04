@@ -41,7 +41,7 @@ jobs:
         git clone https://github.com/leuc/igraph
         cd igraph
         git checkout testing
-        
+        echo "1.0.1-testing" > IGRAPH_VERSION
         # Build statically using Clang
         cmake -S . -B build -G Ninja \
           -DCMAKE_C_COMPILER=clang \
