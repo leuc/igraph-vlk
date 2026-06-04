@@ -27,6 +27,7 @@ jobs:
             libomp-dev \
             glslang-tools \
             libopenxr-dev \
+            libstb-dev \
             libfuse2
       - name: Build patched igraph
         run: |
