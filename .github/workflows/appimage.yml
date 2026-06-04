@@ -48,7 +48,6 @@ jobs:
         uses: AppImageCrafters/build-appimage-action@master
         with:
           recipe: 'AppImageBuilder.yml'
-          args: '--appdir build/AppDir --skip-script --skip-build --skip-tests'
       - uses: actions/upload-artifact@v4
         with:
           name: AppImage
