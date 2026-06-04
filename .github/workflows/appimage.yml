@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/checkout@v6
         with:
-          repository: https://github.com/leuc/igraph
+          repository: leuc/igraph
           ref: testing
           path: igraph-testing
       - name: Install dependencies
