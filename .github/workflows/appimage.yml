@@ -5,11 +5,11 @@ on:
 
 jobs:
   build-appimage:
-    runs-on: ubuntu-22.04
+
+    runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@v2
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -22,10 +22,7 @@ jobs:
             libomp-dev \
             glslang-tools \
             libopenxr-dev \
-            libfuse2 \
-            python3-pip
-          sudo pip3 install appimage-builder
-
+            libfuse2
       - name: Build patched igraph
         run: |
           git clone https://github.com/leuc/igraph
@@ -35,25 +32,17 @@ jobs:
             -DCMAKE_INSTALL_PREFIX=local_install \
             -DIGRAPH_ENABLE_TLS=ON \
             -DCMAKE_BUILD_TYPE=Release
-          cmake --build build/ --parallel $(nproc) --target install
-
-      - name: Configure igraph-vlk
-        run: |
-          cmake -B build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/usr \
-            -Digraph_ROOT=$(pwd)/../igraph/local_install/
-
-      - name: Build igraph-vlk
-        run: cmake --build build --parallel $(nproc)
-
+          cmake --build build/ --parallel --target install
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -Digraph_ROOT=$(pwd)/../igraph/local_install/
+      - name: Build
+        run: cmake --build build/ --parallel
       - name: Build AppDir
-        run: cmake --build build --target appdir
-
+        run: cmake --build build/ --target appdir
       - name: Build AppImage
-        run: appimage-builder --appdir build/AppDir/ --skip-build --skip-tests
-
-      - uses: actions/upload-artifact@v4
+        uses: AppImageCrafters/build-appimage-action@master
+        with:
+          recipe: AppImageBuilder.yml
+      - uses: actions/upload-artifact@v2
         with:
           name: AppImage
-          path: "*.AppImage"
