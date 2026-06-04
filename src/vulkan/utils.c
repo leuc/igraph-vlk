@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vulkan/vulkan.h>
+
+#include "vulkan/app_path.h"
 
 uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties)
 {
@@ -160,11 +163,14 @@ void end_single_time_commands(VkDevice device, VkCommandPool commandPool, VkQueu
 	vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 
-VkResult create_shader_module(VkDevice device, const char *path, VkShaderModule *shaderModule)
+VkResult create_shader_module(VkDevice device, const char *rel, VkShaderModule *shaderModule)
 {
+	const char *path = app_path_resolve(rel);
 	FILE *file = fopen(path, "rb");
-	if (!file)
+	if (!file) {
+		fprintf(stderr, "Failed to open shader: %s\n", path);
 		return VK_ERROR_INITIALIZATION_FAILED;
+	}
 	fseek(file, 0, SEEK_END);
 	long size = ftell(file);
 	fseek(file, 0, SEEK_SET);

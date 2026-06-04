@@ -84,6 +84,7 @@ add_executable(igraph-vlk
     src/vulkan/menu.c
     # Utilities and helpers
     src/vulkan/utils.c
+    src/vulkan/app_path.c
     src/vulkan/polyhedron.c
     src/vulkan/text.c
     src/vulkan/animation_manager.c
@@ -161,19 +162,38 @@ if(USE_OPENXR)
 endif()
 
 target_compile_definitions(igraph-vlk PRIVATE
-    VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/shader.vert.spv"
-    FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/shader.frag.spv"
-    EDGE_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/edge.vert.spv"
-    EDGE_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/edge.frag.spv"
-    LABEL_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/label.vert.spv"
-    LABEL_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/label.frag.spv"
-    UI_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/ui.vert.spv"
-    UI_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/ui.frag.spv"
-    MENU_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/menu.vert.spv"
-    MENU_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/menu.frag.spv"
-    SPHERE_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/transparent_sphere.vert.spv"
-    SPHERE_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/transparent_sphere.frag.spv"
-    ROUTING_COMP_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/routing.comp.spv"
-    RAY_VERT_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/ray.vert.spv"
-    RAY_FRAG_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/ray.frag.spv"
+    VERT_SHADER_PATH="shaders/shader.vert.spv"
+    FRAG_SHADER_PATH="shaders/shader.frag.spv"
+    EDGE_VERT_SHADER_PATH="shaders/edge.vert.spv"
+    EDGE_FRAG_SHADER_PATH="shaders/edge.frag.spv"
+    LABEL_VERT_SHADER_PATH="shaders/label.vert.spv"
+    LABEL_FRAG_SHADER_PATH="shaders/label.frag.spv"
+    UI_VERT_SHADER_PATH="shaders/ui.vert.spv"
+    UI_FRAG_SHADER_PATH="shaders/ui.frag.spv"
+    MENU_VERT_SHADER_PATH="shaders/menu.vert.spv"
+    MENU_FRAG_SHADER_PATH="shaders/menu.frag.spv"
+    SPHERE_VERT_SHADER_PATH="shaders/transparent_sphere.vert.spv"
+    SPHERE_FRAG_SHADER_PATH="shaders/transparent_sphere.frag.spv"
+    ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv"
+    RAY_VERT_SHADER_PATH="shaders/ray.vert.spv"
+    RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv"
+)
+
+install(TARGETS igraph-vlk DESTINATION bin)
+install(DIRECTORY ${CMAKE_BINARY_DIR}/shaders/ DESTINATION share/igraph-vlk/shaders FILES_MATCHING PATTERN "*.spv")
+
+add_custom_target(appdir
+    COMMENT "Building AppDir for AppImage..."
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/AppDir/usr/bin
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/AppDir/usr/share/igraph-vlk/shaders
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/AppDir/usr/share/icons/hicolor/scalable/apps
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:igraph-vlk> ${CMAKE_BINARY_DIR}/AppDir/usr/bin/igraph-vlk
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/shaders ${CMAKE_BINARY_DIR}/AppDir/usr/share/igraph-vlk/shaders
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/packaging/igraph-vlk.desktop ${CMAKE_BINARY_DIR}/AppDir/igraph-vlk.desktop
+    COMMAND ${CMAKE_COMMAND}
+        -DBINARY=$<TARGET_FILE:igraph-vlk>
+        -DAPPDIR=${CMAKE_BINARY_DIR}/AppDir
+        -P ${CMAKE_SOURCE_DIR}/packaging/bundle-deps.cmake
+    COMMAND ${CMAKE_COMMAND} -E create_symlink usr/bin/igraph-vlk ${CMAKE_BINARY_DIR}/AppDir/AppRun
+    DEPENDS igraph-vlk
 )

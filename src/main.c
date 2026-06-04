@@ -9,6 +9,7 @@
 #include "ui/hud.h"
 #include "ui/menu.h"
 #include "vulkan/animation_manager.h"
+#include "vulkan/app_path.h"
 #include "vulkan/menu.h"
 #include "vulkan/renderer.h"
 
@@ -35,6 +36,8 @@ int main(int argc, char **argv)
 	// Parse command line arguments
 	int opt;
 	static struct option long_options[] = {{"layout", 1, 0, 'l'}, {"node-attr", 1, 0, 1}, {"edge-attr", 1, 0, 2}, {0, 0, 0, 0}};
+
+	app_path_init();
 
 	AppState app = {0};
 

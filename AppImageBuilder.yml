@@ -1,0 +1,34 @@
+version: 1
+AppDir:
+  path: ./build/AppDir
+  app_info:
+    id: com.github.igraph-vlk
+    name: igraph-vlk
+    icon: igraph-vlk
+    version: 0.1.0
+    exec: usr/bin/igraph-vlk
+    exec_args: $@
+  runtime:
+    env:
+      APPDIR_LIBRARY_PATH: $APPDIR/usr/lib
+  files:
+    exclude:
+      - usr/share/man
+      - usr/share/doc
+  test:
+    fedora:
+      image: appimagecrafters/tests-env:fedora-30
+      command: ./AppRun
+      use_host_x: true
+    debian:
+      image: appimagecrafters/tests-env:debian-stable
+      command: ./AppRun
+      use_host_x: true
+    arch:
+      image: appimagecrafters/tests-env:archlinux-latest
+      command: ./AppRun
+      use_host_x: true
+AppImage:
+  arch: x86_64
+  update-information: None
+  sign-key: None

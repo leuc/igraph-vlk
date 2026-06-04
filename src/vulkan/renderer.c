@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "interaction/state.h"
+#include "vulkan/app_path.h"
 #include "vulkan/pipeline_compute.h"
 #include "vulkan/pipeline_graphics.h"
 #include "vulkan/pipeline_ui.h"
@@ -62,7 +63,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	VK_CHECK(vkCreatePipelineLayout(r->core.device, &pipelineLayoutInfo, NULL, &r->pipelineLayout), "Failed to create pipeline layout");
 
 	if (!atlasLoaded) {
-		text_generate_atlas(FONT_PATH, &globalAtlas);
+		text_generate_atlas(app_path_resolve(FONT_PATH), &globalAtlas);
 		atlasLoaded = true;
 	}
 	createImage(r->core.device, r->core.physicalDevice, globalAtlas.width, globalAtlas.height, VK_FORMAT_R8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->textureImage, &r->textureImageMemory);
