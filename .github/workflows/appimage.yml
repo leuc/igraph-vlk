@@ -10,6 +10,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repo: https://github.com/leuc/igraph
+          ref: testing
+          path: igraph-testing
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -25,16 +30,15 @@ jobs:
             libfuse2
       - name: Build patched igraph
         run: |
-          git clone https://github.com/leuc/igraph
-          cd igraph
-          git checkout testing
+          cd igraph-testing
+          echo "1.0.1-testing" > IGRAPH_VERSION
           cmake -S . -B build \
             -DCMAKE_INSTALL_PREFIX=local_install \
             -DIGRAPH_ENABLE_TLS=ON \
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build/ --parallel --target install
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -Digraph_ROOT=$(pwd)/../igraph/local_install/
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -Digraph_ROOT=igraph-testing/local_install/
       - name: Build
         run: cmake --build build/ --parallel
       - name: Build AppDir
