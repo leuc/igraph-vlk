@@ -1,17 +1,16 @@
-name: Windows Portable Build
+name: Windows Portable Build (Clang)
 
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch: # Allows you to trigger the build manually
+  workflow_dispatch:
 
 jobs:
   build-windows:
     runs-on: windows-latest
     
-    # Run all steps inside the MSYS2 shell
     defaults:
       run:
         shell: msys2 {0}
@@ -20,31 +19,35 @@ jobs:
     - name: Checkout igraph-vlk
       uses: actions/checkout@v4
 
-    - name: Setup MSYS2 and Install Dependencies
+    - name: Setup MSYS2 Clang64 and Install Dependencies
       uses: msys2/setup-msys2@v2
       with:
-        msystem: UCRT64
+        # Switch to CLANG64 to support explicit OpenMP packaging
+        msystem: CLANG64
         update: true
-        # Install the toolchain and dependencies required by CMakeLists.txt
+        # Use clang prefixes for all packages
         install: >-
           git
-          mingw-w64-ucrt-x86_64-toolchain
-          mingw-w64-ucrt-x86_64-cmake
-          mingw-w64-ucrt-x86_64-ninja
-          mingw-w64-ucrt-x86_64-vulkan-devel
-          mingw-w64-ucrt-x86_64-glfw
-          mingw-w64-ucrt-x86_64-cglm
-          mingw-w64-ucrt-x86_64-openxr
-          mingw-w64-ucrt-x86_64-glslang
-          mingw-w64-ucrt-x86_64-openmp
+          mingw-w64-clang-x86_64-toolchain
+          mingw-w64-clang-x86_64-cmake
+          mingw-w64-clang-x86_64-ninja
+          mingw-w64-clang-x86_64-vulkan-devel
+          mingw-w64-clang-x86_64-glfw
+          mingw-w64-clang-x86_64-cglm
+          mingw-w64-clang-x86_64-openxr
+          mingw-w64-clang-x86_64-glslang
+          mingw-w64-clang-x86_64-openmp
 
     - name: Build custom igraph (Static)
       run: |
         git clone https://github.com/leuc/igraph
         cd igraph
         git checkout testing
-        # Build as a static library to embed it directly into the final .exe
+        
+        # Build statically using Clang
         cmake -S . -B build -G Ninja \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++ \
           -DCMAKE_INSTALL_PREFIX=../local_install \
           -DIGRAPH_ENABLE_TLS=OFF \
           -DBUILD_SHARED_LIBS=OFF \
@@ -54,8 +57,10 @@ jobs:
 
     - name: Configure and Build igraph-vlk
       run: |
-        # Configure with release settings and point to the custom igraph install
+        # Use Clang compilers for the main project
         cmake -S . -B build -G Ninja \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++ \
           -Digraph_ROOT=$PWD/local_install/ \
           -DCMAKE_BUILD_TYPE=Release
         cmake --build build
@@ -70,10 +75,10 @@ jobs:
         # 2. Copy the compiled SPIR-V shaders
         cp build/shaders/*.spv portable_release/shaders/
         
-        # 3. Gather MinGW dependency DLLs to make it self-contained
-        # This uses ldd to find all non-Windows-system DLLs (like libglfw3, libgomp, libgcc) 
-        # and copies them next to the executable.
-        ldd build/igraph-vlk.exe | grep "msys64" | awk '{print $3}' | xargs -I '{}' cp '{}' portable_release/ || true
+        # 3. Gather Clang64 dependency DLLs
+        # Updated to grep for "clang64" instead of generic msys64
+        # This will grab glfw, libc++, libomp (OpenMP), etc.
+        ldd build/igraph-vlk.exe | grep -i "clang64" | awk '{print $3}' | xargs -I '{}' cp '{}' portable_release/ || true
 
     - name: Upload Portable Release Artifact
       uses: actions/upload-artifact@v4
