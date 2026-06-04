@@ -189,7 +189,9 @@ add_custom_target(appdir
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/AppDir/usr/share/icons/hicolor/scalable/apps
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:igraph-vlk> ${CMAKE_BINARY_DIR}/AppDir/usr/bin/igraph-vlk
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/shaders ${CMAKE_BINARY_DIR}/AppDir/usr/share/igraph-vlk/shaders
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/packaging/igraph-vlk.desktop ${CMAKE_BINARY_DIR}/AppDir/igraph-vlk.desktop
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/packaging/igraph-vlk.desktop ${CMAKE_BINARY_DIR}/AppDir/usr/share/applications/igraph-vlk.desktop
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/packaging/igraph-vlk.svg ${CMAKE_BINARY_DIR}/AppDir/usr/share/icons/igraph-vlk.svg
+    COMMAND ${CMAKE_COMMAND} -E copy /usr/share/fonts/truetype/inconsolata/Inconsolata.otf ${CMAKE_BINARY_DIR}/AppDir/usr/share/fonts/truetype/inconsolata/Inconsolata.otf
     COMMAND ${CMAKE_COMMAND}
         -DBINARY=$<TARGET_FILE:igraph-vlk>
         -DAPPDIR=${CMAKE_BINARY_DIR}/AppDir
