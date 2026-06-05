@@ -29,11 +29,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->showNodes = true;
 	r->showEdges = true;
 	r->showUI = true;
-	r->showSpheres = true;
 	r->layoutScale = 1.0f;
-	r->numSpheres = 0;
-	r->sphereIndexCounts = NULL;
-	r->sphereIndexOffsets = NULL;
 	r->xrFramebuffers = NULL;
 	r->xrFramebufferImageCount = NULL;
 	r->xr_view_count = 0;
@@ -43,9 +39,6 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->renderPassXR = VK_NULL_HANDLE;
 	r->xrFormat = VK_FORMAT_UNDEFINED;
 	r->currentRoutingMode = ROUTING_MODE_SPHERICAL_PCB;
-	r->sphereVertexBuffer = VK_NULL_HANDLE;
-	r->sphereIndexBuffer = VK_NULL_HANDLE;
-
 	glfwSetWindowTitle(window, "igraph-vlk");
 
 	vulkan_device_create(&r->core, window, xr);
@@ -324,17 +317,6 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdBindIndexBuffer(cmd, r->numericQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdDrawIndexed(cmd, r->numericQuadIndexCount, r->numericInstanceCount, 0, 0, 0);
 	}
-	if (r->showSpheres && r->numSpheres > 0 && r->sphereVertexBuffer != VK_NULL_HANDLE) {
-		float as = fmaxf(0.02f, 0.2f / (float)r->numSpheres);
-		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 4, &as);
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->spherePipeline);
-		VkBuffer svbs[] = {r->sphereVertexBuffer};
-		VkDeviceSize svos[] = {0};
-		vkCmdBindVertexBuffers(cmd, 0, 1, svbs, svos);
-		vkCmdBindIndexBuffer(cmd, r->sphereIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-		for (int s = 0; s < r->numSpheres; s++)
-			vkCmdDrawIndexed(cmd, r->sphereIndexCounts[s], 1, r->sphereIndexOffsets[s], 0, 0);
-	}
 	if (r->showUI) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->uiPipeline);
 		VkBuffer bVs[] = {r->uiBgVertexBuffer, r->uiBgInstanceBuffer};
@@ -439,16 +421,6 @@ void renderer_cleanup(Renderer *r)
 		vkDestroyBuffer(r->core.device, r->rayVertexBuffer, NULL);
 		vkFreeMemory(r->core.device, r->rayVertexBufferMemory, NULL);
 	}
-	if (r->sphereVertexBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->sphereVertexBuffer, NULL);
-		vkFreeMemory(r->core.device, r->sphereVertexBufferMemory, NULL);
-	}
-	if (r->sphereIndexBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->sphereIndexBuffer, NULL);
-		vkFreeMemory(r->core.device, r->sphereIndexBufferMemory, NULL);
-	}
-	free(r->sphereIndexCounts);
-	free(r->sphereIndexOffsets);
 	vkDestroyBuffer(r->core.device, r->uiBgVertexBuffer, NULL);
 	vkFreeMemory(r->core.device, r->uiBgVertexBufferMemory, NULL);
 	vkDestroyBuffer(r->core.device, r->uiTextInstanceBuffer, NULL);
@@ -518,7 +490,6 @@ void renderer_cleanup(Renderer *r)
 	vkDestroyPipeline(r->core.device, r->uiPipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->labelPipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->menuPipeline, NULL);
-	vkDestroyPipeline(r->core.device, r->spherePipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->rayPipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->edgePipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->graphicsPipeline, NULL);

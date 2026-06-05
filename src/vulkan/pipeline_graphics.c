@@ -6,13 +6,11 @@
 
 void renderer_create_graphics_pipelines(Renderer *r)
 {
-	VkShaderModule vertexShaderModule, fragmentShaderModule, edgeVertexShaderModule, edgeFragmentShaderModule, sphereVertexShaderModule, sphereFragmentShaderModule, rayVertexShaderModule, rayFragmentShaderModule;
+	VkShaderModule vertexShaderModule, fragmentShaderModule, edgeVertexShaderModule, edgeFragmentShaderModule, rayVertexShaderModule, rayFragmentShaderModule;
 	VK_CHECK(create_shader_module(r->core.device, VERT_SHADER_PATH, &vertexShaderModule), "Failed to create vertex shader module");
 	VK_CHECK(create_shader_module(r->core.device, FRAG_SHADER_PATH, &fragmentShaderModule), "Failed to create fragment shader module");
 	VK_CHECK(create_shader_module(r->core.device, EDGE_VERT_SHADER_PATH, &edgeVertexShaderModule), "Failed to create edge vertex shader module");
 	VK_CHECK(create_shader_module(r->core.device, EDGE_FRAG_SHADER_PATH, &edgeFragmentShaderModule), "Failed to create edge fragment shader module");
-	VK_CHECK(create_shader_module(r->core.device, SPHERE_VERT_SHADER_PATH, &sphereVertexShaderModule), "Failed to create sphere vertex shader module");
-	VK_CHECK(create_shader_module(r->core.device, SPHERE_FRAG_SHADER_PATH, &sphereFragmentShaderModule), "Failed to create sphere fragment shader module");
 	VK_CHECK(create_shader_module(r->core.device, RAY_VERT_SHADER_PATH, &rayVertexShaderModule), "Failed to create ray vertex shader module");
 	VK_CHECK(create_shader_module(r->core.device, RAY_FRAG_SHADER_PATH, &rayFragmentShaderModule), "Failed to create ray fragment shader module");
 
@@ -34,17 +32,6 @@ void renderer_create_graphics_pipelines(Renderer *r)
 	VkGraphicsPipelineCreateInfo nodePipelineInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = nodeShaderStages, .pVertexInputState = &nodeVertexInput, .pInputAssemblyState = &nodeInputAssembly, .pViewportState = &viewportState, .pRasterizationState = &rasterizationState, .pMultisampleState = &multisampleState, .pColorBlendState = &colorBlendState, .pDepthStencilState = &nodeDepthStencilState, .pDynamicState = &dynamicState, .layout = r->pipelineLayout, .renderPass = r->renderPass.renderPass};
 	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &nodePipelineInfo, NULL, &r->graphicsPipeline), "Failed to create node graphics pipeline");
 
-	// Spheres
-	VkPipelineShaderStageCreateInfo sphereShaderStages[] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, sphereVertexShaderModule, "main", NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, sphereFragmentShaderModule, "main", NULL}};
-	VkVertexInputBindingDescription sphereBindings[] = {{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX}};
-	VkVertexInputAttributeDescription sphereAttributes[] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0}, {1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12}, {2, 0, VK_FORMAT_R32G32_SFLOAT, 24}};
-	VkPipelineVertexInputStateCreateInfo sphereVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 1, .pVertexBindingDescriptions = sphereBindings, .vertexAttributeDescriptionCount = 3, .pVertexAttributeDescriptions = sphereAttributes};
-	VkPipelineDepthStencilStateCreateInfo sphereDepthStencilState = VK_DEPTH_STENCIL_STATE_TEST_NO_WRITE_LESS_EQUAL;
-	VkPipelineRasterizationStateCreateInfo sphereRasterizationState = rasterizationState;
-	sphereRasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
-	VkGraphicsPipelineCreateInfo spherePipelineInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = sphereShaderStages, .pVertexInputState = &sphereVertexInput, .pInputAssemblyState = &nodeInputAssembly, .pViewportState = &viewportState, .pRasterizationState = &sphereRasterizationState, .pMultisampleState = &multisampleState, .pColorBlendState = &colorBlendState, .pDepthStencilState = &sphereDepthStencilState, .pDynamicState = &dynamicState, .layout = r->pipelineLayout, .renderPass = r->renderPass.renderPass};
-	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &spherePipelineInfo, NULL, &r->spherePipeline), "Failed to create sphere graphics pipeline");
-
 	// Edges
 	VkPipelineShaderStageCreateInfo edgeShaderStages[] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, edgeVertexShaderModule, "main", NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, edgeFragmentShaderModule, "main", NULL}};
 	VkVertexInputBindingDescription edgeBindings[] = {{0, sizeof(EdgePosition), VK_VERTEX_INPUT_RATE_VERTEX}, {1, sizeof(EdgeAttribute), VK_VERTEX_INPUT_RATE_VERTEX}};
@@ -64,8 +51,6 @@ void renderer_create_graphics_pipelines(Renderer *r)
 
 	vkDestroyShaderModule(r->core.device, rayFragmentShaderModule, NULL);
 	vkDestroyShaderModule(r->core.device, rayVertexShaderModule, NULL);
-	vkDestroyShaderModule(r->core.device, sphereFragmentShaderModule, NULL);
-	vkDestroyShaderModule(r->core.device, sphereVertexShaderModule, NULL);
 	vkDestroyShaderModule(r->core.device, edgeFragmentShaderModule, NULL);
 	vkDestroyShaderModule(r->core.device, edgeVertexShaderModule, NULL);
 	vkDestroyShaderModule(r->core.device, fragmentShaderModule, NULL);

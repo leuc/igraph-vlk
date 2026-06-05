@@ -64,28 +64,6 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 		r->needsAttributeUpload = VK_TRUE;
 	}
 
-	// Destroy sphere buffers if they exist (these are always rebuilt)
-	if (r->sphereVertexBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->sphereVertexBuffer, NULL);
-		vkFreeMemory(r->core.device, r->sphereVertexBufferMemory, NULL);
-		r->sphereVertexBuffer = VK_NULL_HANDLE;
-	}
-	if (r->sphereIndexBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->sphereIndexBuffer, NULL);
-		vkFreeMemory(r->core.device, r->sphereIndexBufferMemory, NULL);
-		r->sphereIndexBuffer = VK_NULL_HANDLE;
-	}
-	if (r->sphereIndexCounts) {
-		free(r->sphereIndexCounts);
-		r->sphereIndexCounts = NULL;
-	}
-	if (r->sphereIndexOffsets) {
-		free(r->sphereIndexOffsets);
-		r->sphereIndexOffsets = NULL;
-	}
-
-	r->numSpheres = 0;
-
 	// Build node instances sorted by platonic type
 	Node *sorted = malloc(sizeof(Node) * graph->node_count);
 	NodePosition *nodePositions = malloc(sizeof(NodePosition) * graph->node_count);

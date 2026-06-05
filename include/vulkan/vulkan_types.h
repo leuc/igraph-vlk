@@ -181,7 +181,6 @@ typedef struct Renderer
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
 	VkPipeline graphicsPipeline;
-	VkPipeline spherePipeline; // Pipeline for semi-transparent spheres
 	VkPipeline edgePipeline;
 	VkPipeline labelPipeline;
 	VkPipeline uiPipeline;
@@ -305,16 +304,6 @@ typedef struct Renderer
 
 	// Persistent compute context
 	ComputeContext computeCtx;
-
-	// Layered Spheres (Transparent)
-	VkBuffer sphereVertexBuffer;
-	VkDeviceMemory sphereVertexBufferMemory;
-	VkBuffer sphereIndexBuffer;
-	VkDeviceMemory sphereIndexBufferMemory;
-	uint32_t *sphereIndexCounts;  // Array of index counts per sphere
-	uint32_t *sphereIndexOffsets; // Array of offsets into the index buffer
-	uint32_t numSpheres;		  // Number of spheres to draw
-	bool showSpheres;			  // Toggle
 } Renderer;
 
 #endif // VULKAN_TYPES_H
