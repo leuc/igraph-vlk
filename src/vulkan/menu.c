@@ -277,16 +277,11 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 					tq->textUV[2] = titleRegion.u1;
 					tq->textUV[3] = titleRegion.v1;
 
-					// Text region: offset from quad center to text position, normalized
-					vec3 text_offset;
-					glm_vec3_sub(title_pos, title_bg_pos, text_offset);
-					float right_proj = glm_vec3_dot(text_offset, current->right_vec);
-					float up_proj = glm_vec3_dot(text_offset, current->up_vec);
+					// Text region: use left padding, center vertically
 					float text_w_norm = titleRegion.width_px * world_text_scale / current->card_width;
 					float text_h_norm = titleRegion.height_px * world_text_scale / 0.10f;
-					// quad-local: x = 0.5 + right_proj/scale_x, y = 0.5 - up_proj/scale_y
-					float left = 0.5f + right_proj / current->card_width;
-					float top = 0.5f - up_proj / 0.10f;
+					float left = 0.05f / current->card_width;
+					float top = (1.0f - text_h_norm) * 0.5f;
 					tq->textRegion[0] = left;
 					tq->textRegion[1] = top;
 					tq->textRegion[2] = left + text_w_norm;
@@ -388,14 +383,10 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 			tq->textUV[2] = titleRegion.u1;
 			tq->textUV[3] = titleRegion.v1;
 
-			vec3 text_offset;
-			glm_vec3_sub(title_pos, info_title_bg, text_offset);
-			float right_proj = glm_vec3_dot(text_offset, node->right_vec);
-			float up_proj = glm_vec3_dot(text_offset, node->up_vec);
 			float text_w_norm = titleRegion.width_px * world_text_scale / card_w;
 			float text_h_norm = titleRegion.height_px * world_text_scale / 0.10f;
-			float left = 0.5f + right_proj / card_w;
-			float top = 0.5f - up_proj / 0.10f;
+			float left = 0.05f / card_w;
+			float top = (1.0f - text_h_norm) * 0.5f;
 			tq->textRegion[0] = left;
 			tq->textRegion[1] = top;
 			tq->textRegion[2] = left + text_w_norm;

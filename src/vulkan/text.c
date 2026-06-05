@@ -41,6 +41,10 @@ int text_generate_atlas(const char *fontPath, FontAtlas *atlas)
 			atlas->chars[i].y0 = b->yoff;
 			atlas->chars[i].x1 = b->xoff + (b->x1 - b->x0);
 			atlas->chars[i].y1 = b->yoff + (b->y1 - b->y0);
+			atlas->chars[i].src_x0 = b->x0;
+			atlas->chars[i].src_y0 = b->y0;
+			atlas->chars[i].src_x1 = b->x1;
+			atlas->chars[i].src_y1 = b->y1;
 			atlas->chars[i].u0 = (float)b->x0 / atlas->width;
 			atlas->chars[i].v0 = (float)b->y0 / atlas->height;
 			atlas->chars[i].u1 = (float)b->x1 / atlas->width;
@@ -138,12 +142,12 @@ void text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, T
 
 			// Blit glyph from font atlas into text atlas
 			for (int gy = 0; gy < glyph_h; gy++) {
-				int sy = (int)ci->y0 + gy;
+				int sy = ci->src_y0 + gy;
 				int dy = dst_y + gy;
 				if (sy < 0 || sy >= font->height || dy < 0 || dy >= ta->height)
 					continue;
 				for (int gx = 0; gx < glyph_w; gx++) {
-					int sx = (int)ci->x0 + gx;
+					int sx = ci->src_x0 + gx;
 					int dx = dst_x + gx;
 					if (sx < 0 || sx >= font->width || dx < 0 || dx >= ta->width)
 						continue;
@@ -158,13 +162,13 @@ void text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, T
 	// Output UV and pixel dimensions
 	out->u0 = (float)ta->cursor_x / ta->width;
 	out->v0 = (float)ta->cursor_y / ta->height;
-	out->u1 = (float)(ta->cursor_x + (int)total_width) / ta->width;
+	out->u1 = (float)(ta->cursor_x + (int)(total_width + 0.5f)) / ta->width;
 	out->v1 = (float)(ta->cursor_y + text_h) / ta->height;
 	out->width_px = total_width;
 	out->height_px = (float)text_h;
 
 	// Advance cursor
-	ta->cursor_x += (int)total_width + 1;
+	ta->cursor_x += (int)(total_width + 0.5f) + 1;
 	if (text_h > ta->row_height)
 		ta->row_height = text_h;
 	ta->dirty = true;

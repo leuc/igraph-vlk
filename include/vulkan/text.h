@@ -8,8 +8,10 @@
 
 typedef struct
 {
-	float x0, y0, x1, y1; // Quad bounds
-	float u0, v0, u1, v1; // Texture coordinates
+	float x0, y0, x1, y1; // Pen offsets (pen-to-bitmap placement)
+	int src_x0, src_y0;	  // Bitmap pixel position in font atlas
+	int src_x1, src_y1;
+	float u0, v0, u1, v1; // Normalized UV coordinates in font atlas
 	float xadvance;
 } CharInfo;
 
