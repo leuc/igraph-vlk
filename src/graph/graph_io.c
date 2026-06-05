@@ -29,7 +29,7 @@ int graph_load_graphml(const char *filename, GraphData *data, LayoutType layout_
 	data->hub_count = 0;
 
 	igraph_matrix_init(&data->current_layout, 0, 0);
-	if (layout_type == LAYOUT_OPENORD_3D || layout_type == LAYOUT_RANDOM_3D) {
+	if (layout_type == LAYOUT_RANDOM_3D) {
 		igraph_layout_random_3d(&data->g, &data->current_layout);
 	} else {
 		// Use grid layout as default

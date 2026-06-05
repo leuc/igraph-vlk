@@ -42,7 +42,7 @@ int main(int argc, char **argv)
 	AppState app = {0};
 
 	// Set defaults
-	app.current_layout = LAYOUT_OPENORD_3D;
+	app.current_layout = LAYOUT_GRID_3D;
 	app.current_cluster = CLUSTER_FASTGREEDY;
 	app.current_comm_arrangement = COMMUNITY_ARRANGEMENT_NONE;
 	app.last_picked_node = -1;
@@ -228,9 +228,6 @@ int main(int argc, char **argv)
 		if (app.anim_manager.num_animations > 0) {
 			renderer_update_graph(&app.renderer, &app.current_graph);
 		}
-
-		// Step background layout
-		graph_action_step_background_layout(&app);
 
 		// Generate menu buffers if menu is open or processing
 		if (app.app_ctx.current_state == STATE_MENU_OPEN || app.app_ctx.current_state == STATE_JOB_IN_PROGRESS || app.app_ctx.current_state == STATE_EXECUTING) {

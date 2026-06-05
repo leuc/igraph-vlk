@@ -48,20 +48,6 @@ void graph_action_highlight_infrastructure(AppState *state);
 void graph_action_reset(AppState *state);
 
 /**
- * Step the background layout (OpenOrd / Layered Sphere).
- * Called each frame for incremental layout computation.
- * @param state Pointer to the application state
- * @return true if layout was updated, false otherwise
- */
-bool graph_action_step_background_layout(AppState *state);
-
-/**
- * Cycle to the next layout type.
- * @param state Pointer to the application state
- */
-void graph_action_cycle_layout(AppState *state);
-
-/**
  * Cycle to the next clustering algorithm.
  * @param state Pointer to the application state
  */

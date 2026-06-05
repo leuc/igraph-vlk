@@ -6,15 +6,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// Forward declare complex contexts from layout engines
-typedef struct OpenOrdContext OpenOrdContext;
-
 /* ============================================================================
  * Enums (defined first as they're used by GraphData)
  * ============================================================================ */
 
 /* Layout Type Enum */
-typedef enum { LAYOUT_FR_3D, LAYOUT_KK_3D, LAYOUT_RANDOM_3D, LAYOUT_SPHERE, LAYOUT_GRID_3D, LAYOUT_UMAP_3D, LAYOUT_DRL_3D, LAYOUT_OPENORD_3D, LAYOUT_COUNT } LayoutType;
+typedef enum { LAYOUT_FR_3D, LAYOUT_KK_3D, LAYOUT_RANDOM_3D, LAYOUT_SPHERE, LAYOUT_GRID_3D, LAYOUT_UMAP_3D, LAYOUT_DRL_3D } LayoutType;
 
 /* Cluster Type Enum */
 typedef enum { CLUSTER_FASTGREEDY, CLUSTER_WALKTRAP, CLUSTER_LABEL_PROP, CLUSTER_MULTILEVEL, CLUSTER_LEIDEN, CLUSTER_COUNT } ClusterType;
@@ -77,7 +74,6 @@ typedef struct
 	char *edge_attr_name;
 	GraphProperties props;
 	LayoutType active_layout;
-	OpenOrdContext *openord;
 	Hub *hubs;
 	int hub_count;
 } GraphData;

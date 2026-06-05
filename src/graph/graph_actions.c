@@ -4,7 +4,6 @@
 #include "graph/graph_filter.h"
 #include "graph/graph_io.h"
 #include "graph/graph_layout.h"
-#include "graph/layout_openord.h"
 #include "vulkan/animation_manager.h"
 #include "vulkan/renderer.h"
 #include <stdio.h>
@@ -53,29 +52,13 @@ void graph_action_highlight_infrastructure(AppState *state)
 void graph_action_reset(AppState *state)
 {
 	graph_free_data(&state->current_graph);
-	state->current_layout = LAYOUT_OPENORD_3D;
+	state->current_layout = LAYOUT_GRID_3D;
 	state->renderer.layoutScale = 1.0f;
 	state->current_graph.props.coreness_filter = 0;
 
 	if (graph_load_graphml(state->current_filename, &state->current_graph, state->current_layout, state->node_attr, state->edge_attr) == 0) {
 		renderer_update_graph(&state->renderer, &state->current_graph);
 	}
-}
-
-bool graph_action_step_background_layout(AppState *state)
-{
-	if (state->current_layout == LAYOUT_OPENORD_3D && state->current_graph.openord && state->current_graph.openord->stage_id < 5) {
-		graph_layout_step(&state->current_graph, state->current_layout, 1);
-		renderer_update_graph(&state->renderer, &state->current_graph);
-		return true;
-	}
-	return false;
-}
-
-void graph_action_cycle_layout(AppState *state)
-{
-	state->current_layout = (state->current_layout + 1) % LAYOUT_COUNT;
-	graph_action_update_layout(state);
 }
 
 void graph_action_cycle_cluster(AppState *state)

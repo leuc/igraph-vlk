@@ -1,13 +1,7 @@
 #include "ui/hud.h"
-#include "graph/layout_openord.h"
 #include "vulkan/renderer_ui.h"
 #include <stdio.h>
 #include <string.h>
-
-/**
- * Layout type names for UI display.
- */
-static const char *layout_names[] = {"Fruchterman-Reingold", "Kamada-Kawai", "Random", "Sphere", "Grid", "UMAP", "DrL", "OpenOrd"};
 
 /**
  * Cluster algorithm names for UI display.
@@ -26,13 +20,6 @@ void ui_hud_init(void)
 
 void ui_hud_update(AppState *state, float fps)
 {
-	char stage_info[64] = "";
-
-	// Get stage info for OpenOrd layout
-	if (state->current_layout == LAYOUT_OPENORD_3D && state->current_graph.openord) {
-		snprintf(stage_info, sizeof(stage_info), " [%s:%d]", openord_get_stage_name(state->current_graph.openord->stage_id), state->current_graph.openord->current_iter);
-	}
-
 	char buf[1024];
 	char menu_state[512] = "";
 	if (state->app_ctx.current_state == STATE_MENU_OPEN) {
@@ -48,10 +35,10 @@ void ui_hud_update(AppState *state, float fps)
 	}
 
 	snprintf(buf, sizeof(buf),
-			 "[L]ayout:%s%s [Y]SubGraph:%s [I]terate [C]ommunity:%s "
+			 "[Y]SubGraph:%s [I]terate [C]ommunity:%s "
 			 "[N]ode:%d [E]dge:%d Filter:1-9 [K]Core:%d "
 			 "[R]eset [H]ide FPS:%.1f%s",
-			 layout_names[state->current_layout], stage_info, comm_arrangement_names[state->current_comm_arrangement], cluster_names[state->current_cluster], state->current_graph.props.node_count, state->current_graph.props.edge_count, state->current_graph.props.coreness_filter, fps, menu_state);
+			 comm_arrangement_names[state->current_comm_arrangement], cluster_names[state->current_cluster], state->current_graph.props.node_count, state->current_graph.props.edge_count, state->current_graph.props.coreness_filter, fps, menu_state);
 
 	renderer_update_ui(&state->renderer, buf);
 }

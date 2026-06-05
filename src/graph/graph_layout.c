@@ -8,7 +8,6 @@
 
 #include "graph/graph_core.h"
 #include "graph/graph_layout.h"
-#include "graph/layout_openord.h"
 
 void graph_layout_step(GraphData *data, LayoutType type, int iterations)
 {
@@ -40,18 +39,6 @@ void graph_layout_step(GraphData *data, LayoutType type, int iterations)
 		igraph_layout_drl_options_t options;
 		igraph_layout_drl_options_init(&options, IGRAPH_LAYOUT_DRL_DEFAULT);
 		igraph_layout_drl_3d(&data->g, &data->current_layout, 0, &options, NULL);
-		break;
-	}
-	case LAYOUT_OPENORD_3D: {
-		if (!data->openord) {
-			data->openord = malloc(sizeof(OpenOrdContext));
-			openord_init(data->openord, data->node_count, 128);
-			igraph_layout_random_3d(&data->g, &data->current_layout);
-		}
-		for (int i = 0; i < iterations; i++) {
-			if (!openord_step(data->openord, data))
-				break;
-		}
 		break;
 	}
 	}

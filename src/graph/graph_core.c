@@ -6,8 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "graph/layout_openord.h"
-
 void graph_sync_node_positions(GraphData *data)
 {
 	if (!data->nodes)
@@ -95,11 +93,6 @@ void graph_free_data(GraphData *data)
 		igraph_destroy(&data->g);
 		igraph_matrix_destroy(&data->current_layout);
 		data->graph_initialized = false;
-	}
-	if (data->openord) {
-		openord_cleanup(data->openord);
-		free(data->openord);
-		data->openord = NULL;
 	}
 	if (data->node_attr_name) {
 		free(data->node_attr_name);

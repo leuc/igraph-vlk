@@ -122,9 +122,6 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 		state->renderer.showEdges = !state->renderer.showEdges;
 		renderer_update_graph(&state->renderer, &state->current_graph);
 		break;
-	case GLFW_KEY_L:
-		graph_action_cycle_layout(state);
-		break;
 	case GLFW_KEY_Y:
 		graph_action_cycle_community_arrangement(state);
 		break;
