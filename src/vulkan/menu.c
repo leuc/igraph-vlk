@@ -324,7 +324,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 		}
 
 		if (r->menuInstanceBuffer != VK_NULL_HANDLE) {
-			vkDeviceWaitIdle(r->core.device);
+			VK_CHECK(vkDeviceWaitIdle(r->core.device), "Failed to wait for device idle before menu buffer rebuild");
 			vkDestroyBuffer(r->core.device, r->menuInstanceBuffer, NULL);
 			vkFreeMemory(r->core.device, r->menuInstanceBufferMemory, NULL);
 		}

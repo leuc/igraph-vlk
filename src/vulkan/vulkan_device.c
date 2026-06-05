@@ -57,7 +57,7 @@ static VkQueueFamilyInfo find_queue_families(VkPhysicalDevice device, VkSurfaceK
 			info.graphicsFamily = i;
 
 		VkBool32 presentSupport = false;
-		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+		VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport), "Failed to query physical device surface support");
 		if (presentSupport)
 			info.presentFamily = i;
 
@@ -79,9 +79,9 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 
 	// Query available extensions
 	uint32_t availableExtCount = 0;
-	vkEnumerateInstanceExtensionProperties(NULL, &availableExtCount, NULL);
+	VK_CHECK(vkEnumerateInstanceExtensionProperties(NULL, &availableExtCount, NULL), "Failed to enumerate instance extension properties (count)");
 	VkExtensionProperties *availableExts = malloc(sizeof(VkExtensionProperties) * availableExtCount);
-	vkEnumerateInstanceExtensionProperties(NULL, &availableExtCount, availableExts);
+	VK_CHECK(vkEnumerateInstanceExtensionProperties(NULL, &availableExtCount, availableExts), "Failed to enumerate instance extension properties");
 
 	// Instance Extensions
 	uint32_t glfwExtCount = 0;
@@ -161,9 +161,9 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 
 	// Query available layers
 	uint32_t availableLayerCount = 0;
-	vkEnumerateInstanceLayerProperties(&availableLayerCount, NULL);
+	VK_CHECK(vkEnumerateInstanceLayerProperties(&availableLayerCount, NULL), "Failed to enumerate instance layer properties (count)");
 	VkLayerProperties *availableLayers = malloc(sizeof(VkLayerProperties) * availableLayerCount);
-	vkEnumerateInstanceLayerProperties(&availableLayerCount, availableLayers);
+	VK_CHECK(vkEnumerateInstanceLayerProperties(&availableLayerCount, availableLayers), "Failed to enumerate instance layer properties");
 
 	const char *enabledLayers[16];
 	uint32_t enabledLayerCount = 0;
@@ -208,11 +208,11 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 #endif
 		{
 			uint32_t deviceCount = 0;
-			vkEnumeratePhysicalDevices(core->instance, &deviceCount, NULL);
+			VK_CHECK(vkEnumeratePhysicalDevices(core->instance, &deviceCount, NULL), "Failed to enumerate physical devices (count)");
 			if (deviceCount == 0)
 				exit_with_error("Failed to find GPUs with Vulkan support");
 			VkPhysicalDevice *devices = malloc(sizeof(VkPhysicalDevice) * deviceCount);
-			vkEnumeratePhysicalDevices(core->instance, &deviceCount, devices);
+			VK_CHECK(vkEnumeratePhysicalDevices(core->instance, &deviceCount, devices), "Failed to enumerate physical devices");
 
 			int bestScore = -1;
 			for (uint32_t i = 0; i < deviceCount; i++) {

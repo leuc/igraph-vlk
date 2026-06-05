@@ -72,7 +72,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	VkDeviceMemory stagingBufferMemory;
 	createBuffer(r->core.device, r->core.physicalDevice, imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory);
 	void *dataPtr;
-	vkMapMemory(r->core.device, stagingBufferMemory, 0, imgSize, 0, &dataPtr);
+	VK_CHECK(vkMapMemory(r->core.device, stagingBufferMemory, 0, imgSize, 0, &dataPtr), "Failed to map texture staging buffer memory");
 	memcpy(dataPtr, globalAtlas.atlasData, imgSize);
 	vkUnmapMemory(r->core.device, stagingBufferMemory);
 	transitionImageLayout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -86,9 +86,9 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	transitionImageLayout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	VkImageViewCreateInfo imageViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->textureImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_R8_UNORM, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
-	vkCreateImageView(r->core.device, &imageViewInfo, NULL, &r->textureImageView);
+	VK_CHECK(vkCreateImageView(r->core.device, &imageViewInfo, NULL, &r->textureImageView), "Failed to create texture image view");
 	VkSamplerCreateInfo samplerInfo = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = VK_FILTER_LINEAR, .minFilter = VK_FILTER_LINEAR, .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR, .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE};
-	vkCreateSampler(r->core.device, &samplerInfo, NULL, &r->textureSampler);
+	VK_CHECK(vkCreateSampler(r->core.device, &samplerInfo, NULL, &r->textureSampler), "Failed to create texture sampler");
 
 	renderer_create_pipelines(r);
 
@@ -151,7 +151,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->uniformBuffersMemory = malloc(sizeof(VkDeviceMemory) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 		createBuffer(r->core.device, r->core.physicalDevice, sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uniformBuffers[i], &r->uniformBuffersMemory[i]);
-		vkMapMemory(r->core.device, r->uniformBuffersMemory[i], 0, sizeof(UniformBufferObject), 0, &r->uboMapped[i]);
+		VK_CHECK(vkMapMemory(r->core.device, r->uniformBuffersMemory[i], 0, sizeof(UniformBufferObject), 0, &r->uboMapped[i]), "Failed to map UBO memory");
 	}
 
 	VkDescriptorPoolSize descriptorPoolSizes[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS}};
@@ -223,7 +223,7 @@ void renderer_setup_xr(Renderer *r, XrContext *xr)
 		VkSubpassDescription subXR = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS, .colorAttachmentCount = 1, .pColorAttachments = &cAttRefXR, .pDepthStencilAttachment = &dAttRefXR};
 		VkAttachmentDescription attsXR[] = {cAttXR, dAttXR};
 		VkRenderPassCreateInfo rpInfoXR = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, .attachmentCount = 2, .pAttachments = attsXR, .subpassCount = 1, .pSubpasses = &subXR};
-		vkCreateRenderPass(r->core.device, &rpInfoXR, NULL, &r->renderPassXR);
+		VK_CHECK(vkCreateRenderPass(r->core.device, &rpInfoXR, NULL, &r->renderPassXR), "Failed to create XR render pass");
 		xrRenderPass = r->renderPassXR;
 	}
 
@@ -238,15 +238,15 @@ void renderer_setup_xr(Renderer *r, XrContext *xr)
 
 		createImage(r->core.device, r->core.physicalDevice, xr->swapchains[i].width, xr->swapchains[i].height, r->swapchain.depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->xrDepthImages[i], &r->xrDepthImageMemories[i]);
 		VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->xrDepthImages[i], .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->swapchain.depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
-		vkCreateImageView(r->core.device, &depthViewInfo, NULL, &r->xrDepthImageViews[i]);
+		VK_CHECK(vkCreateImageView(r->core.device, &depthViewInfo, NULL, &r->xrDepthImageViews[i]), "Failed to create XR depth image view");
 		transitionImageLayout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->xrDepthImages[i], r->swapchain.depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
 		for (uint32_t j = 0; j < xr->swapchains[i].image_count; j++) {
 			VkImageViewCreateInfo ivInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = xr->swapchains[i].images[j], .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = xr->swapchain_format, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
-			vkCreateImageView(r->core.device, &ivInfo, NULL, &xr->swapchains[i].image_views[j]);
+			VK_CHECK(vkCreateImageView(r->core.device, &ivInfo, NULL, &xr->swapchains[i].image_views[j]), "Failed to create XR swapchain image view");
 			VkImageView attachments[] = {xr->swapchains[i].image_views[j], r->xrDepthImageViews[i]};
 			VkFramebufferCreateInfo fbInfo = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = xrRenderPass, .attachmentCount = 2, .pAttachments = attachments, .width = xr->swapchains[i].width, .height = xr->swapchains[i].height, .layers = 1};
-			vkCreateFramebuffer(r->core.device, &fbInfo, NULL, &r->xrFramebuffers[i][j]);
+			VK_CHECK(vkCreateFramebuffer(r->core.device, &fbInfo, NULL, &r->xrFramebuffers[i][j]), "Failed to create XR framebuffer");
 		}
 	}
 }
@@ -355,31 +355,31 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 
 void renderer_draw_frame(Renderer *r)
 {
-	vkWaitForFences(r->core.device, 1, &r->commands.inFlightFences[r->commands.currentFrame], VK_TRUE, UINT64_MAX);
+	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->commands.inFlightFences[r->commands.currentFrame], VK_TRUE, UINT64_MAX), "Failed to wait for in-flight fences");
 	uint32_t imageIndex;
 	VkResult res = vkAcquireNextImageKHR(r->core.device, r->swapchain.swapchain, UINT64_MAX, r->commands.imageAvailableSemaphores[r->commands.currentFrame], VK_NULL_HANDLE, &imageIndex);
 	if (res == VK_ERROR_OUT_OF_DATE_KHR)
 		return;
 
-	vkResetFences(r->core.device, 1, &r->commands.inFlightFences[r->commands.currentFrame]);
-	vkResetCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], 0);
+	VK_CHECK(vkResetFences(r->core.device, 1, &r->commands.inFlightFences[r->commands.currentFrame]), "Failed to reset in-flight fences");
+	VK_CHECK(vkResetCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], 0), "Failed to reset command buffer");
 	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-	vkBeginCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], &beginInfo);
+	VK_CHECK(vkBeginCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], &beginInfo), "Failed to begin command buffer");
 	renderer_render_scene(r, r->commands.commandBuffers[r->commands.currentFrame], r->renderPass.renderPass, r->renderPass.framebuffers[imageIndex], r->swapchain.extent, r->ubo.view, r->ubo.proj, 0, false, (vec3){0}, (vec3){0});
-	vkEndCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame]);
+	VK_CHECK(vkEndCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame]), "Failed to end command buffer");
 
 	VkPipelineStageFlags waitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .waitSemaphoreCount = 1, .pWaitSemaphores = &r->commands.imageAvailableSemaphores[r->commands.currentFrame], .pWaitDstStageMask = &waitStages, .commandBufferCount = 1, .pCommandBuffers = &r->commands.commandBuffers[r->commands.currentFrame], .signalSemaphoreCount = 1, .pSignalSemaphores = &r->commands.renderFinishedSemaphores[imageIndex]};
-	vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, r->commands.inFlightFences[r->commands.currentFrame]);
+	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, r->commands.inFlightFences[r->commands.currentFrame]), "Failed to submit draw command buffer");
 
 	VkPresentInfoKHR presentInfo = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 1, .pWaitSemaphores = &r->commands.renderFinishedSemaphores[imageIndex], .swapchainCount = 1, .pSwapchains = &r->swapchain.swapchain, .pImageIndices = &imageIndex};
-	vkQueuePresentKHR(r->core.presentQueue, &presentInfo);
+	VK_CHECK(vkQueuePresentKHR(r->core.presentQueue, &presentInfo), "Failed to present swapchain image");
 	r->commands.currentFrame = (r->commands.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
 void renderer_cleanup(Renderer *r)
 {
-	vkDeviceWaitIdle(r->core.device);
+	VK_CHECK(vkDeviceWaitIdle(r->core.device), "Failed to wait for device idle on cleanup");
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 		vkDestroyBuffer(r->core.device, r->uniformBuffers[i], NULL);
 		vkFreeMemory(r->core.device, r->uniformBuffersMemory[i], NULL);

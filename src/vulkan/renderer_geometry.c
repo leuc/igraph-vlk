@@ -81,8 +81,8 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	// Ring-buffered fence sync instead of vkDeviceWaitIdle
 	uint32_t ringIdx = r->graphUpdateRingIndex;
 	if (r->nodePositionBuffer != VK_NULL_HANDLE) {
-		vkWaitForFences(r->core.device, 1, &r->graphUpdateFences[ringIdx], VK_TRUE, UINT64_MAX);
-		vkResetFences(r->core.device, 1, &r->graphUpdateFences[ringIdx]);
+		VK_CHECK(vkWaitForFences(r->core.device, 1, &r->graphUpdateFences[ringIdx], VK_TRUE, UINT64_MAX), "Failed to wait for graph update fences");
+		VK_CHECK(vkResetFences(r->core.device, 1, &r->graphUpdateFences[ringIdx]), "Failed to reset graph update fences");
 	}
 
 	r->nodeCount = graph->node_count;
@@ -384,7 +384,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	}
 
 	// Signal the ring fence for this slot so the next update can proceed
-	vkQueueSubmit(r->core.graphicsQueue, 0, NULL, r->graphUpdateFences[ringIdx]);
+	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 0, NULL, r->graphUpdateFences[ringIdx]), "Failed to signal graph update fence");
 }
 
 void renderer_render_ray(Renderer *r, VkCommandBuffer cmd, vec3 origin, vec3 dir, mat4 view, mat4 proj)

@@ -21,7 +21,7 @@ uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, Vk
 void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer, VkDeviceMemory *bufferMemory)
 {
 	VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size, .usage = usage, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-	vkCreateBuffer(device, &bufferInfo, NULL, buffer);
+	VK_CHECK(vkCreateBuffer(device, &bufferInfo, NULL, buffer), "Failed to create buffer");
 	VkMemoryRequirements memReqs;
 	vkGetBufferMemoryRequirements(device, *buffer, &memReqs);
 	VkPhysicalDeviceProperties props;
@@ -29,14 +29,14 @@ void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize
 	VkDeviceSize atomSize = props.limits.nonCoherentAtomSize;
 	VkDeviceSize allocSize = (memReqs.size + atomSize - 1) & ~(atomSize - 1);
 	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, properties)};
-	vkAllocateMemory(device, &allocInfo, NULL, bufferMemory);
-	vkBindBufferMemory(device, *buffer, *bufferMemory, 0);
+	VK_CHECK(vkAllocateMemory(device, &allocInfo, NULL, bufferMemory), "Failed to allocate buffer memory");
+	VK_CHECK(vkBindBufferMemory(device, *buffer, *bufferMemory, 0), "Failed to bind buffer memory");
 }
 
 void updateBuffer(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, const void *data)
 {
 	void *mapped;
-	vkMapMemory(device, memory, 0, size, 0, &mapped);
+	VK_CHECK(vkMapMemory(device, memory, 0, size, 0, &mapped), "Failed to map buffer memory for update");
 	memcpy(mapped, data, size);
 	vkUnmapMemory(device, memory);
 }
@@ -48,17 +48,17 @@ void updateBufferMapped(VkDevice device, VkDeviceMemory memory, VkDeviceSize siz
 	VkDeviceSize atomSize = deviceProps->limits.nonCoherentAtomSize;
 	VkDeviceSize alignedSize = (size + atomSize - 1) & ~(atomSize - 1);
 	void *mapped;
-	vkMapMemory(device, memory, 0, alignedSize, 0, &mapped);
+	VK_CHECK(vkMapMemory(device, memory, 0, alignedSize, 0, &mapped), "Failed to map buffer memory for updateMapped");
 	memcpy(mapped, data, size);
 	VkMappedMemoryRange range = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, .memory = memory, .size = alignedSize};
-	vkFlushMappedMemoryRanges(device, 1, &range);
+	VK_CHECK(vkFlushMappedMemoryRanges(device, 1, &range), "Failed to flush mapped memory ranges");
 	vkUnmapMemory(device, memory);
 }
 
 void createMappedBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBuffer *buffer, VkDeviceMemory *memory)
 {
 	VkBufferCreateInfo info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size, .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-	vkCreateBuffer(device, &info, NULL, buffer);
+	VK_CHECK(vkCreateBuffer(device, &info, NULL, buffer), "Failed to create mapped buffer");
 
 	VkMemoryRequirements req;
 	vkGetBufferMemoryRequirements(device, *buffer, &req);
@@ -68,14 +68,14 @@ void createMappedBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDevi
 	VkDeviceSize atomSize = props.limits.nonCoherentAtomSize;
 	VkDeviceSize allocSize = (req.size + atomSize - 1) & ~(atomSize - 1);
 	VkMemoryAllocateInfo alloc = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = findMemoryType(physicalDevice, req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)};
-	vkAllocateMemory(device, &alloc, NULL, memory);
-	vkBindBufferMemory(device, *buffer, *memory, 0);
+	VK_CHECK(vkAllocateMemory(device, &alloc, NULL, memory), "Failed to allocate mapped buffer memory");
+	VK_CHECK(vkBindBufferMemory(device, *buffer, *memory, 0), "Failed to bind mapped buffer memory");
 }
 
 void createStagingBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *stagingBuf, VkDeviceMemory *stagingMem, VkBuffer *deviceBuf, VkDeviceMemory *deviceMem)
 {
 	VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size, .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-	vkCreateBuffer(device, &bufferInfo, NULL, stagingBuf);
+	VK_CHECK(vkCreateBuffer(device, &bufferInfo, NULL, stagingBuf), "Failed to create staging buffer");
 	VkMemoryRequirements memReqs;
 	vkGetBufferMemoryRequirements(device, *stagingBuf, &memReqs);
 	VkPhysicalDeviceProperties props;
@@ -83,16 +83,16 @@ void createStagingBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDev
 	VkDeviceSize atomSize = props.limits.nonCoherentAtomSize;
 	VkDeviceSize allocSize = (memReqs.size + atomSize - 1) & ~(atomSize - 1);
 	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)};
-	vkAllocateMemory(device, &allocInfo, NULL, stagingMem);
-	vkBindBufferMemory(device, *stagingBuf, *stagingMem, 0);
+	VK_CHECK(vkAllocateMemory(device, &allocInfo, NULL, stagingMem), "Failed to allocate staging buffer memory");
+	VK_CHECK(vkBindBufferMemory(device, *stagingBuf, *stagingMem, 0), "Failed to bind staging buffer memory");
 
 	bufferInfo.usage = usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-	vkCreateBuffer(device, &bufferInfo, NULL, deviceBuf);
+	VK_CHECK(vkCreateBuffer(device, &bufferInfo, NULL, deviceBuf), "Failed to create device-local buffer");
 	vkGetBufferMemoryRequirements(device, *deviceBuf, &memReqs);
 	allocInfo.allocationSize = memReqs.size;
 	allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	vkAllocateMemory(device, &allocInfo, NULL, deviceMem);
-	vkBindBufferMemory(device, *deviceBuf, *deviceMem, 0);
+	VK_CHECK(vkAllocateMemory(device, &allocInfo, NULL, deviceMem), "Failed to allocate device-local buffer memory");
+	VK_CHECK(vkBindBufferMemory(device, *deviceBuf, *deviceMem, 0), "Failed to bind device-local buffer memory");
 }
 
 void updateBufferStaged(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkDeviceSize size, const void *data, VkBuffer stagingBuf, VkDeviceMemory stagingMem, VkBuffer deviceBuf, const VkPhysicalDeviceProperties *deviceProps)
@@ -100,10 +100,10 @@ void updateBufferStaged(VkDevice device, VkCommandPool commandPool, VkQueue queu
 	VkDeviceSize atomSize = deviceProps->limits.nonCoherentAtomSize;
 	VkDeviceSize alignedSize = (size + atomSize - 1) & ~(atomSize - 1);
 	void *mapped;
-	vkMapMemory(device, stagingMem, 0, alignedSize, 0, &mapped);
+	VK_CHECK(vkMapMemory(device, stagingMem, 0, alignedSize, 0, &mapped), "Failed to map staging buffer memory");
 	memcpy(mapped, data, size);
 	VkMappedMemoryRange range = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, .memory = stagingMem, .size = alignedSize};
-	vkFlushMappedMemoryRanges(device, 1, &range);
+	VK_CHECK(vkFlushMappedMemoryRanges(device, 1, &range), "Failed to flush staging mapped memory ranges");
 	vkUnmapMemory(device, stagingMem);
 
 	VkCommandBuffer commandBuffer = begin_single_time_commands(device, commandPool);
@@ -115,12 +115,12 @@ void updateBufferStaged(VkDevice device, VkCommandPool commandPool, VkQueue queu
 void createImage(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage *image, VkDeviceMemory *imageMemory)
 {
 	VkImageCreateInfo imageInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .extent = {width, height, 1}, .mipLevels = 1, .arrayLayers = 1, .format = format, .tiling = tiling, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .usage = usage, .samples = VK_SAMPLE_COUNT_1_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-	vkCreateImage(device, &imageInfo, NULL, image);
+	VK_CHECK(vkCreateImage(device, &imageInfo, NULL, image), "Failed to create image");
 	VkMemoryRequirements memReqs;
 	vkGetImageMemoryRequirements(device, *image, &memReqs);
 	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = memReqs.size, .memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, properties)};
-	vkAllocateMemory(device, &allocInfo, NULL, imageMemory);
-	vkBindImageMemory(device, *image, *imageMemory, 0);
+	VK_CHECK(vkAllocateMemory(device, &allocInfo, NULL, imageMemory), "Failed to allocate image memory");
+	VK_CHECK(vkBindImageMemory(device, *image, *imageMemory, 0), "Failed to bind image memory");
 }
 
 void transitionImageLayout(VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
@@ -150,16 +150,16 @@ VkCommandBuffer begin_single_time_commands(VkDevice device, VkCommandPool comman
 	VkCommandBuffer commandBuffer;
 	VK_CHECK(vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer), "Failed to allocate one-time command buffer");
 	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-	vkBeginCommandBuffer(commandBuffer, &beginInfo);
+	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed to begin one-time command buffer");
 	return commandBuffer;
 }
 
 void end_single_time_commands(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkCommandBuffer commandBuffer)
 {
-	vkEndCommandBuffer(commandBuffer);
+	VK_CHECK(vkEndCommandBuffer(commandBuffer), "Failed to end one-time command buffer");
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &commandBuffer};
 	VK_CHECK(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit one-time command buffer");
-	vkQueueWaitIdle(queue);
+	VK_CHECK(vkQueueWaitIdle(queue), "Failed to wait for one-time command queue idle");
 	vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 

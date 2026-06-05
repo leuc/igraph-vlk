@@ -7,14 +7,14 @@
 void renderer_create_graphics_pipelines(Renderer *r)
 {
 	VkShaderModule vertexShaderModule, fragmentShaderModule, edgeVertexShaderModule, edgeFragmentShaderModule, sphereVertexShaderModule, sphereFragmentShaderModule, rayVertexShaderModule, rayFragmentShaderModule;
-	create_shader_module(r->core.device, VERT_SHADER_PATH, &vertexShaderModule);
-	create_shader_module(r->core.device, FRAG_SHADER_PATH, &fragmentShaderModule);
-	create_shader_module(r->core.device, EDGE_VERT_SHADER_PATH, &edgeVertexShaderModule);
-	create_shader_module(r->core.device, EDGE_FRAG_SHADER_PATH, &edgeFragmentShaderModule);
-	create_shader_module(r->core.device, SPHERE_VERT_SHADER_PATH, &sphereVertexShaderModule);
-	create_shader_module(r->core.device, SPHERE_FRAG_SHADER_PATH, &sphereFragmentShaderModule);
-	create_shader_module(r->core.device, RAY_VERT_SHADER_PATH, &rayVertexShaderModule);
-	create_shader_module(r->core.device, RAY_FRAG_SHADER_PATH, &rayFragmentShaderModule);
+	VK_CHECK(create_shader_module(r->core.device, VERT_SHADER_PATH, &vertexShaderModule), "Failed to create vertex shader module");
+	VK_CHECK(create_shader_module(r->core.device, FRAG_SHADER_PATH, &fragmentShaderModule), "Failed to create fragment shader module");
+	VK_CHECK(create_shader_module(r->core.device, EDGE_VERT_SHADER_PATH, &edgeVertexShaderModule), "Failed to create edge vertex shader module");
+	VK_CHECK(create_shader_module(r->core.device, EDGE_FRAG_SHADER_PATH, &edgeFragmentShaderModule), "Failed to create edge fragment shader module");
+	VK_CHECK(create_shader_module(r->core.device, SPHERE_VERT_SHADER_PATH, &sphereVertexShaderModule), "Failed to create sphere vertex shader module");
+	VK_CHECK(create_shader_module(r->core.device, SPHERE_FRAG_SHADER_PATH, &sphereFragmentShaderModule), "Failed to create sphere fragment shader module");
+	VK_CHECK(create_shader_module(r->core.device, RAY_VERT_SHADER_PATH, &rayVertexShaderModule), "Failed to create ray vertex shader module");
+	VK_CHECK(create_shader_module(r->core.device, RAY_FRAG_SHADER_PATH, &rayFragmentShaderModule), "Failed to create ray fragment shader module");
 
 	VkPipelineViewportStateCreateInfo viewportState = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, .viewportCount = 1, .scissorCount = 1};
 	VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};

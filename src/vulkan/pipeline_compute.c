@@ -13,7 +13,7 @@ void renderer_create_compute_pipelines(Renderer *r)
 	VK_CHECK(vkCreatePipelineLayout(r->core.device, &computePipelineLayoutInfo, NULL, &r->computePipelineLayout), "Failed to create compute pipeline layout");
 
 	VkShaderModule sphericalShaderModule = VK_NULL_HANDLE;
-	create_shader_module(r->core.device, ROUTING_COMP_SHADER_PATH, &sphericalShaderModule);
+	VK_CHECK(create_shader_module(r->core.device, ROUTING_COMP_SHADER_PATH, &sphericalShaderModule), "Failed to create compute shader module");
 	VkPipelineShaderStageCreateInfo computeStageSpherical = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = sphericalShaderModule, .pName = "main"};
 	VkComputePipelineCreateInfo computePipelineInfoSpherical = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = computeStageSpherical, .layout = r->computePipelineLayout};
 	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &computePipelineInfoSpherical, NULL, &r->computeSphericalPipeline), "Failed to create compute spherical pipeline");

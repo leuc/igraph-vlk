@@ -7,12 +7,12 @@
 void renderer_create_ui_pipelines(Renderer *r)
 {
 	VkShaderModule uiVertexShaderModule, uiFragmentShaderModule, labelVertexShaderModule, labelFragmentShaderModule, menuVertexShaderModule, menuFragmentShaderModule;
-	create_shader_module(r->core.device, UI_VERT_SHADER_PATH, &uiVertexShaderModule);
-	create_shader_module(r->core.device, UI_FRAG_SHADER_PATH, &uiFragmentShaderModule);
-	create_shader_module(r->core.device, LABEL_VERT_SHADER_PATH, &labelVertexShaderModule);
-	create_shader_module(r->core.device, LABEL_FRAG_SHADER_PATH, &labelFragmentShaderModule);
-	create_shader_module(r->core.device, MENU_VERT_SHADER_PATH, &menuVertexShaderModule);
-	create_shader_module(r->core.device, MENU_FRAG_SHADER_PATH, &menuFragmentShaderModule);
+	VK_CHECK(create_shader_module(r->core.device, UI_VERT_SHADER_PATH, &uiVertexShaderModule), "Failed to create UI vertex shader module");
+	VK_CHECK(create_shader_module(r->core.device, UI_FRAG_SHADER_PATH, &uiFragmentShaderModule), "Failed to create UI fragment shader module");
+	VK_CHECK(create_shader_module(r->core.device, LABEL_VERT_SHADER_PATH, &labelVertexShaderModule), "Failed to create label vertex shader module");
+	VK_CHECK(create_shader_module(r->core.device, LABEL_FRAG_SHADER_PATH, &labelFragmentShaderModule), "Failed to create label fragment shader module");
+	VK_CHECK(create_shader_module(r->core.device, MENU_VERT_SHADER_PATH, &menuVertexShaderModule), "Failed to create menu vertex shader module");
+	VK_CHECK(create_shader_module(r->core.device, MENU_FRAG_SHADER_PATH, &menuFragmentShaderModule), "Failed to create menu fragment shader module");
 
 	VkPipelineViewportStateCreateInfo viewportState = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, .viewportCount = 1, .scissorCount = 1};
 	VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};

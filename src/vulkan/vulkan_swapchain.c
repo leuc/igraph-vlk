@@ -51,17 +51,17 @@ void vulkan_swapchain_create(VulkanSwapchain *swapchain, VulkanCore *core, GLFWw
 	swapchain->depthMemory = VK_NULL_HANDLE;
 
 	VkSurfaceCapabilitiesKHR capabilities;
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(core->physicalDevice, core->surface, &capabilities);
+	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(core->physicalDevice, core->surface, &capabilities), "Failed to get physical device surface capabilities");
 
 	uint32_t formatCount;
-	vkGetPhysicalDeviceSurfaceFormatsKHR(core->physicalDevice, core->surface, &formatCount, NULL);
+	VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(core->physicalDevice, core->surface, &formatCount, NULL), "Failed to get physical device surface formats (count)");
 	VkSurfaceFormatKHR *surfaceFormats = malloc(sizeof(VkSurfaceFormatKHR) * formatCount);
-	vkGetPhysicalDeviceSurfaceFormatsKHR(core->physicalDevice, core->surface, &formatCount, surfaceFormats);
+	VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(core->physicalDevice, core->surface, &formatCount, surfaceFormats), "Failed to get physical device surface formats");
 
 	uint32_t presentModeCount;
-	vkGetPhysicalDeviceSurfacePresentModesKHR(core->physicalDevice, core->surface, &presentModeCount, NULL);
+	VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(core->physicalDevice, core->surface, &presentModeCount, NULL), "Failed to get physical device surface present modes (count)");
 	VkPresentModeKHR *presentModes = malloc(sizeof(VkPresentModeKHR) * presentModeCount);
-	vkGetPhysicalDeviceSurfacePresentModesKHR(core->physicalDevice, core->surface, &presentModeCount, presentModes);
+	VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(core->physicalDevice, core->surface, &presentModeCount, presentModes), "Failed to get physical device surface present modes");
 
 	VkSurfaceFormatKHR surfaceFormat = choose_swap_surface_format(surfaceFormats, formatCount);
 	VkPresentModeKHR presentMode = choose_swap_present_mode(presentModes, presentModeCount);
@@ -79,9 +79,9 @@ void vulkan_swapchain_create(VulkanSwapchain *swapchain, VulkanCore *core, GLFWw
 	swapchain->extent = extent;
 	swapchain->imageCount = imageCount;
 
-	vkGetSwapchainImagesKHR(core->device, swapchain->swapchain, &imageCount, NULL);
+	VK_CHECK(vkGetSwapchainImagesKHR(core->device, swapchain->swapchain, &imageCount, NULL), "Failed to get swapchain images (count)");
 	swapchain->images = malloc(sizeof(VkImage) * imageCount);
-	vkGetSwapchainImagesKHR(core->device, swapchain->swapchain, &imageCount, swapchain->images);
+	VK_CHECK(vkGetSwapchainImagesKHR(core->device, swapchain->swapchain, &imageCount, swapchain->images), "Failed to get swapchain images");
 
 	swapchain->views = malloc(sizeof(VkImageView) * imageCount);
 	for (uint32_t i = 0; i < imageCount; i++) {

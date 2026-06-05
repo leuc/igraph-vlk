@@ -8,6 +8,8 @@
 
 #include <stdio.h>
 
+#include "vulkan/utils.h"
+
 bool xr_init_vr(AppState *app)
 {
 	if (!xr_context_create_session(&app->xr_ctx, app->renderer.core.instance, app->renderer.core.physicalDevice, app->renderer.core.device, app->renderer.core.graphicsQueueFamily, 0)) {
@@ -105,7 +107,7 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 			xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);
 			return;
 		}
-		vkResetFences(app->renderer.core.device, 1, &app->renderer.commands.inFlightFences[app->renderer.commands.currentFrame]);
+		VK_CHECK(vkResetFences(app->renderer.core.device, 1, &app->renderer.commands.inFlightFences[app->renderer.commands.currentFrame]), "XR: Failed to reset fences");
 
 		if (!xr_context_locate_views(&app->xr_ctx, frameState.predictedDisplayTime)) {
 			fprintf(stderr, "XR: xrLocateViews failed\n");
@@ -132,7 +134,7 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 			}
 		}
 
-		vkResetCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], 0);
+		VK_CHECK(vkResetCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], 0), "XR: Failed to reset command buffer");
 		VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 		vkRes = vkBeginCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], &bi);
 		if (vkRes != VK_SUCCESS) {
@@ -207,13 +209,13 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 																	}};
 		}
 
-		vkEndCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame]);
+		VK_CHECK(vkEndCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame]), "XR: Failed to end command buffer");
 
 		VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame]};
 		vkRes = vkQueueSubmit(app->renderer.core.graphicsQueue, 1, &si, app->renderer.commands.inFlightFences[app->renderer.commands.currentFrame]);
 		if (vkRes != VK_SUCCESS) {
 			fprintf(stderr, "XR: vkQueueSubmit failed: %d\n", vkRes);
-			vkResetFences(app->renderer.core.device, 1, &app->renderer.commands.inFlightFences[app->renderer.commands.currentFrame]);
+			VK_CHECK(vkResetFences(app->renderer.core.device, 1, &app->renderer.commands.inFlightFences[app->renderer.commands.currentFrame]), "XR: Failed to reset fences after submit failure");
 			xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);
 			app->renderer.commands.currentFrame = (app->renderer.commands.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 			return;

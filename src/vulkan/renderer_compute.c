@@ -15,8 +15,8 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 
 	// Wait for previous compute job to complete
 	if (ctx->initialized && ctx->fence != VK_NULL_HANDLE) {
-		vkWaitForFences(r->core.device, 1, &ctx->fence, VK_TRUE, UINT64_MAX);
-		vkResetFences(r->core.device, 1, &ctx->fence);
+		VK_CHECK(vkWaitForFences(r->core.device, 1, &ctx->fence, VK_TRUE, UINT64_MAX), "Failed to wait for compute fences");
+		VK_CHECK(vkResetFences(r->core.device, 1, &ctx->fence), "Failed to reset compute fences");
 	}
 
 	// Prepare compute shader input data
@@ -104,9 +104,9 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	vkUpdateDescriptorSets(r->core.device, 3, writes, 0, NULL);
 
 	// Record command buffer
-	vkResetCommandBuffer(ctx->cmdBuf, 0);
+	VK_CHECK(vkResetCommandBuffer(ctx->cmdBuf, 0), "Failed to reset compute command buffer");
 	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-	vkBeginCommandBuffer(ctx->cmdBuf, &beginInfo);
+	VK_CHECK(vkBeginCommandBuffer(ctx->cmdBuf, &beginInfo), "Failed to begin compute command buffer");
 
 	vkCmdBindPipeline(ctx->cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computeSphericalPipeline);
 	vkCmdBindDescriptorSets(ctx->cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computePipelineLayout, 0, 1, &ctx->descSet, 0, NULL);
@@ -120,7 +120,7 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	vkCmdPushConstants(ctx->cmdBuf, r->computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcVals), &pcVals);
 
 	vkCmdDispatch(ctx->cmdBuf, (graph->edge_count + 255) / 256, 1, 1);
-	vkEndCommandBuffer(ctx->cmdBuf);
+	VK_CHECK(vkEndCommandBuffer(ctx->cmdBuf), "Failed to end compute command buffer");
 
 	// Submit with fence (no vkQueueWaitIdle)
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &ctx->cmdBuf};
@@ -132,7 +132,7 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	}
 
 	// Wait for completion and read back
-	vkWaitForFences(r->core.device, 1, &ctx->fence, VK_TRUE, UINT64_MAX);
+	VK_CHECK(vkWaitForFences(r->core.device, 1, &ctx->fence, VK_TRUE, UINT64_MAX), "Failed to wait for compute fence on readback");
 
 	void *mapped;
 	VK_CHECK(vkMapMemory(r->core.device, ctx->edgeMem, 0, edgeSize, 0, &mapped), "Failed to map compute edge buffer memory");
