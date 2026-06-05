@@ -249,24 +249,14 @@ typedef struct Renderer
 
 	bool needsAttributeUpload;
 
-	VkBuffer labelStagingBuffer;
-	VkDeviceMemory labelStagingBufferMemory;
 	VkBuffer labelVertexBuffer;
 	VkDeviceMemory labelVertexBufferMemory;
-	VkBuffer labelInstanceBuffer;
-	VkDeviceMemory labelInstanceBufferMemory;
-	uint32_t labelCharCount;
 
 	// Visibility toggles
-	bool showLabels;
 	bool showNodes;
 	bool showEdges;
 	bool showUI;
 	float layoutScale;
-
-	// Label LOD
-	vec3 cameraPos;
-	float labelLODDistance;
 
 	// UI
 	VkBuffer uiBgVertexBuffer;

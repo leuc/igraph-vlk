@@ -110,10 +110,6 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 		return;
 
 	switch (key) {
-	case GLFW_KEY_T:
-		state->renderer.showLabels = !state->renderer.showLabels;
-		renderer_update_graph(&state->renderer, &state->current_graph);
-		break;
 	case GLFW_KEY_N:
 		state->renderer.showNodes = !state->renderer.showNodes;
 		renderer_update_graph(&state->renderer, &state->current_graph);

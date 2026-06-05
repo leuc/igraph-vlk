@@ -8,73 +8,7 @@
 
 #include "interaction/camera.h"
 #include "interaction/state.h"
-#include "vulkan/text.h"
 #include "vulkan/utils.h"
-
-extern FontAtlas globalAtlas;
-
-static int build_node_display_label(GraphData *graph, int node_idx, char *buf, int buf_size)
-{
-	if (graph->nodes[node_idx].selected > 0.5f) {
-		igraph_strvector_t vnames;
-		igraph_vector_int_t vtypes;
-		igraph_strvector_init(&vnames, 0);
-		igraph_vector_int_init(&vtypes, 0);
-
-		igraph_cattribute_list(&graph->g, NULL, NULL, &vnames, &vtypes, NULL, NULL);
-
-		int num_attrs = igraph_strvector_size(&vnames);
-		int pos = 0;
-
-		for (int i = 0; i < num_attrs && pos < buf_size - 1; i++) {
-			const char *attr_name = igraph_strvector_get(&vnames, i);
-			int type = igraph_vector_int_get(&vtypes, i);
-
-			if (i > 0) {
-				int n = snprintf(buf + pos, buf_size - pos, "\n");
-				if (n > 0)
-					pos += (n < buf_size - pos ? n : buf_size - pos - 1);
-				if (pos >= buf_size - 1)
-					break;
-			}
-
-			if (type == IGRAPH_ATTRIBUTE_STRING) {
-				const char *val = VAS(&graph->g, attr_name, node_idx);
-				int n = snprintf(buf + pos, buf_size - pos, "%s: %s", attr_name, val ? val : "null");
-				if (n > 0)
-					pos += (n < buf_size - pos ? n : buf_size - pos - 1);
-			} else if (type == IGRAPH_ATTRIBUTE_NUMERIC) {
-				igraph_real_t val = VAN(&graph->g, attr_name, node_idx);
-				int n = snprintf(buf + pos, buf_size - pos, "%s: %.4g", attr_name, (double)val);
-				if (n > 0)
-					pos += (n < buf_size - pos ? n : buf_size - pos - 1);
-			} else if (type == IGRAPH_ATTRIBUTE_BOOLEAN) {
-				igraph_bool_t val = VAB(&graph->g, attr_name, node_idx);
-				int n = snprintf(buf + pos, buf_size - pos, "%s: %s", attr_name, val ? "true" : "false");
-				if (n > 0)
-					pos += (n < buf_size - pos ? n : buf_size - pos - 1);
-			}
-		}
-
-		igraph_strvector_destroy(&vnames);
-		igraph_vector_int_destroy(&vtypes);
-
-		buf[pos < buf_size ? pos : buf_size - 1] = '\0';
-		return pos < buf_size ? pos : buf_size - 1;
-	}
-
-	if (graph->nodes[node_idx].label) {
-		int len = strlen(graph->nodes[node_idx].label);
-		if (len >= buf_size)
-			len = buf_size - 1;
-		memcpy(buf, graph->nodes[node_idx].label, len);
-		buf[len] = '\0';
-		return len;
-	}
-
-	buf[0] = '\0';
-	return 0;
-}
 
 void renderer_update_graph(Renderer *r, GraphData *graph)
 {
@@ -130,15 +64,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 		r->needsAttributeUpload = VK_TRUE;
 	}
 
-	// Destroy label/sphere buffers if they exist (these are always rebuilt)
-	if (r->labelInstanceBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->labelInstanceBuffer, NULL);
-		vkFreeMemory(r->core.device, r->labelInstanceBufferMemory, NULL);
-		vkDestroyBuffer(r->core.device, r->labelStagingBuffer, NULL);
-		vkFreeMemory(r->core.device, r->labelStagingBufferMemory, NULL);
-		r->labelInstanceBuffer = VK_NULL_HANDLE;
-		r->labelStagingBuffer = VK_NULL_HANDLE;
-	}
+	// Destroy sphere buffers if they exist (these are always rebuilt)
 	if (r->sphereVertexBuffer != VK_NULL_HANDLE) {
 		vkDestroyBuffer(r->core.device, r->sphereVertexBuffer, NULL);
 		vkFreeMemory(r->core.device, r->sphereVertexBufferMemory, NULL);
@@ -322,112 +248,6 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	free(edgePositions);
 	free(edgeAttributes);
 	r->needsAttributeUpload = VK_FALSE;
-
-	uint32_t tc = 0;
-	uint32_t bg_count = 0;
-	for (uint32_t i = 0; i < r->nodeCount; i++) {
-		char label_buf[2048];
-		int len = build_node_display_label(graph, i, label_buf, sizeof(label_buf));
-		for (int j = 0; j < len; j++)
-			if (label_buf[j] != '\n')
-				tc++;
-		if (graph->nodes[i].selected > 0.5f && len > 0)
-			bg_count++;
-	}
-	r->labelCharCount = tc + bg_count;
-	if (r->labelCharCount > 0) {
-		createStagingBuffer(r->core.device, r->core.physicalDevice, sizeof(LabelInstance) * r->labelCharCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->labelStagingBuffer, &r->labelStagingBufferMemory, &r->labelInstanceBuffer, &r->labelInstanceBufferMemory);
-		LabelInstance *li = malloc(sizeof(LabelInstance) * r->labelCharCount);
-		uint32_t k = 0;
-		float line_height_atlas = 55.0f;
-		for (uint32_t i = 0; i < graph->node_count; i++) {
-			char label_buf[2048];
-			int len = build_node_display_label(graph, i, label_buf, sizeof(label_buf));
-			if (len <= 0)
-				continue;
-			float xoff = 0;
-			int line = 0;
-			vec3 pos;
-			float line_height = 0.01f * line_height_atlas;
-			glm_vec3_scale(graph->nodes[i].position, r->layoutScale, pos);
-
-			if (graph->nodes[i].selected > 0.5f) {
-				int num_lines = 1;
-				float max_line_width = 0;
-				float current_line_width = 0;
-				for (int j = 0; j < len; j++) {
-					if (label_buf[j] == '\n') {
-						if (current_line_width > max_line_width)
-							max_line_width = current_line_width;
-						current_line_width = 0;
-						num_lines++;
-					} else {
-						unsigned char c = label_buf[j];
-						CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
-						current_line_width += ci->xadvance;
-					}
-				}
-				if (current_line_width > max_line_width)
-					max_line_width = current_line_width;
-
-				memcpy(li[k].nodePos, pos, 12);
-				li[k].nodePos[1] += (0.5f * graph->nodes[i].size) + 0.3f;
-				li[k].charRect[0] = 0;
-				li[k].charRect[1] = (num_lines - 1) * line_height_atlas + (-globalAtlas.descent);
-				li[k].charRect[2] = max_line_width;
-				li[k].charRect[3] = -globalAtlas.ascent;
-				li[k].charUV[0] = 0;
-				li[k].charUV[1] = 0;
-				li[k].charUV[2] = 0;
-				li[k].charUV[3] = 0;
-				li[k].right[0] = 0.01f;
-				li[k].right[1] = 0.0f;
-				li[k].right[2] = 0.0f;
-				li[k].up[0] = 0.0f;
-				li[k].up[1] = 0.01f;
-				li[k].up[2] = 0.0f;
-				li[k].selected = 2.0f;
-				k++;
-			}
-
-			xoff = 0;
-			line = 0;
-			for (int j = 0; j < len; j++) {
-				unsigned char c = label_buf[j];
-				if (c == '\n') {
-					line++;
-					xoff = 0;
-					continue;
-				}
-				CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
-				memcpy(li[k].nodePos, pos, 12);
-				li[k].nodePos[1] += (0.5f * graph->nodes[i].size) + 0.3f - line * line_height;
-				li[k].charRect[0] = xoff + ci->x0;
-				li[k].charRect[1] = ci->y0;
-				li[k].charRect[2] = (graph->nodes[i].selected > 0.5f) ? (xoff + ci->xadvance) : (xoff + ci->x1);
-				li[k].charRect[3] = ci->y1;
-				li[k].charUV[0] = ci->u0;
-				li[k].charUV[1] = ci->v0;
-				li[k].charUV[2] = ci->u1;
-				li[k].charUV[3] = ci->v1;
-
-				li[k].right[0] = 0.01f;
-				li[k].right[1] = 0.0f;
-				li[k].right[2] = 0.0f;
-				li[k].up[0] = 0.0f;
-				li[k].up[1] = 0.01f;
-				li[k].up[2] = 0.0f;
-				li[k].selected = graph->nodes[i].selected;
-
-				xoff += ci->xadvance;
-				k++;
-			}
-		}
-		updateBufferStaged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(LabelInstance) * r->labelCharCount, li, r->labelStagingBuffer, r->labelStagingBufferMemory, r->labelInstanceBuffer, &r->core.deviceProperties);
-		free(li);
-	} else {
-		r->labelInstanceBuffer = VK_NULL_HANDLE;
-	}
 
 	// Signal the ring fence for this slot so the next update can proceed
 	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 0, NULL, r->graphUpdateFences[ringIdx]), "Failed to signal graph update fence");
