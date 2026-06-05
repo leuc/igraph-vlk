@@ -108,11 +108,10 @@ void graph_free_data(GraphData *data)
 		free(data->hubs);
 		data->hubs = NULL;
 	}
-	for (uint32_t i = 0; i < data->node_count; i++) {
-		if (data->nodes && data->nodes[i].label)
-			free(data->nodes[i].label);
-	}
 	if (data->nodes) {
+		for (uint32_t i = 0; i < data->node_count; i++)
+			if (data->nodes[i].label)
+				free(data->nodes[i].label);
 		free(data->nodes);
 		data->nodes = NULL;
 	}
