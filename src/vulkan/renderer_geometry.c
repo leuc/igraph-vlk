@@ -324,18 +324,22 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	r->needsAttributeUpload = VK_FALSE;
 
 	uint32_t tc = 0;
+	uint32_t bg_count = 0;
 	for (uint32_t i = 0; i < r->nodeCount; i++) {
 		char label_buf[2048];
 		int len = build_node_display_label(graph, i, label_buf, sizeof(label_buf));
 		for (int j = 0; j < len; j++)
 			if (label_buf[j] != '\n')
 				tc++;
+		if (graph->nodes[i].selected > 0.5f && len > 0)
+			bg_count++;
 	}
-	r->labelCharCount = tc;
-	if (tc > 0) {
-		createStagingBuffer(r->core.device, r->core.physicalDevice, sizeof(LabelInstance) * tc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->labelStagingBuffer, &r->labelStagingBufferMemory, &r->labelInstanceBuffer, &r->labelInstanceBufferMemory);
+	r->labelCharCount = tc + bg_count;
+	if (r->labelCharCount > 0) {
+		createStagingBuffer(r->core.device, r->core.physicalDevice, sizeof(LabelInstance) * r->labelCharCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->labelStagingBuffer, &r->labelStagingBufferMemory, &r->labelInstanceBuffer, &r->labelInstanceBufferMemory);
 		LabelInstance *li = malloc(sizeof(LabelInstance) * r->labelCharCount);
 		uint32_t k = 0;
+		float line_height_atlas = 55.0f;
 		for (uint32_t i = 0; i < graph->node_count; i++) {
 			char label_buf[2048];
 			int len = build_node_display_label(graph, i, label_buf, sizeof(label_buf));
@@ -344,8 +348,50 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 			float xoff = 0;
 			int line = 0;
 			vec3 pos;
-			float line_height = 0.01f * 55.0f;
+			float line_height = 0.01f * line_height_atlas;
 			glm_vec3_scale(graph->nodes[i].position, r->layoutScale, pos);
+
+			if (graph->nodes[i].selected > 0.5f) {
+				int num_lines = 1;
+				float max_line_width = 0;
+				float current_line_width = 0;
+				for (int j = 0; j < len; j++) {
+					if (label_buf[j] == '\n') {
+						if (current_line_width > max_line_width)
+							max_line_width = current_line_width;
+						current_line_width = 0;
+						num_lines++;
+					} else {
+						unsigned char c = label_buf[j];
+						CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
+						current_line_width += ci->xadvance;
+					}
+				}
+				if (current_line_width > max_line_width)
+					max_line_width = current_line_width;
+
+				memcpy(li[k].nodePos, pos, 12);
+				li[k].nodePos[1] += (0.5f * graph->nodes[i].size) + 0.3f;
+				li[k].charRect[0] = 0;
+				li[k].charRect[1] = (num_lines - 1) * line_height_atlas + (-globalAtlas.descent);
+				li[k].charRect[2] = max_line_width;
+				li[k].charRect[3] = -globalAtlas.ascent;
+				li[k].charUV[0] = 0;
+				li[k].charUV[1] = 0;
+				li[k].charUV[2] = 0;
+				li[k].charUV[3] = 0;
+				li[k].right[0] = 0.01f;
+				li[k].right[1] = 0.0f;
+				li[k].right[2] = 0.0f;
+				li[k].up[0] = 0.0f;
+				li[k].up[1] = 0.01f;
+				li[k].up[2] = 0.0f;
+				li[k].selected = 2.0f;
+				k++;
+			}
+
+			xoff = 0;
+			line = 0;
 			for (int j = 0; j < len; j++) {
 				unsigned char c = label_buf[j];
 				if (c == '\n') {

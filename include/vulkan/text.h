@@ -15,6 +15,8 @@ typedef struct
 	uint8_t *atlasData;
 	int width, height;
 	CharInfo chars[128];
+	float ascent;
+	float descent;
 } FontAtlas;
 
 int text_generate_atlas(const char *fontPath, FontAtlas *atlas);

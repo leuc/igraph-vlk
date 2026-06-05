@@ -24,6 +24,14 @@ int text_generate_atlas(const char *fontPath, FontAtlas *atlas)
 	stbtt_bakedchar baked[96]; // ASCII 32..126
 	stbtt_BakeFontBitmap(fontBuffer, 0, 32.0, atlas->atlasData, atlas->width, atlas->height, 32, 96, baked);
 
+	stbtt_fontinfo finfo;
+	stbtt_InitFont(&finfo, fontBuffer, stbtt_GetFontOffsetForIndex(fontBuffer, 0));
+	int asc, desc, lineGap;
+	stbtt_GetFontVMetrics(&finfo, &asc, &desc, &lineGap);
+	float scale = stbtt_ScaleForPixelHeight(&finfo, 32.0f);
+	atlas->ascent = asc * scale;
+	atlas->descent = desc * scale;
+
 	for (int i = 0; i < 128; i++) {
 		if (i >= 32 && i < 128) {
 			stbtt_bakedchar *b = &baked[i - 32];
