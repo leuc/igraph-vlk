@@ -44,7 +44,6 @@ int main(int argc, char **argv)
 	// Set defaults
 	app.current_layout = LAYOUT_GRID_3D;
 	app.current_cluster = CLUSTER_FASTGREEDY;
-	app.current_comm_arrangement = COMMUNITY_ARRANGEMENT_NONE;
 	app.last_picked_node = -1;
 	app.last_picked_edge = -1;
 	app.win_w = 3440;

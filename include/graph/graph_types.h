@@ -16,9 +16,6 @@ typedef enum { LAYOUT_FR_3D, LAYOUT_KK_3D, LAYOUT_RANDOM_3D, LAYOUT_SPHERE, LAYO
 /* Cluster Type Enum */
 typedef enum { CLUSTER_FASTGREEDY, CLUSTER_WALKTRAP, CLUSTER_LABEL_PROP, CLUSTER_MULTILEVEL, CLUSTER_LEIDEN, CLUSTER_COUNT } ClusterType;
 
-/* Community Arrangement Mode Enum */
-typedef enum { COMMUNITY_ARRANGEMENT_NONE, COMMUNITY_ARRANGEMENT_KECECI_2D, COMMUNITY_ARRANGEMENT_KECECI_TETRA_3D, COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_2D, COMMUNITY_ARRANGEMENT_COMPACT_ORTHO_3D, COMMUNITY_ARRANGEMENT_COUNT } CommunityArrangementMode;
-
 /* ============================================================================
  * Core Data Structures
  * ============================================================================ */

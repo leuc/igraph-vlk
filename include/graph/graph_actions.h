@@ -52,9 +52,3 @@ void graph_action_reset(AppState *state);
  * @param state Pointer to the application state
  */
 void graph_action_cycle_cluster(AppState *state);
-
-/**
- * Cycle to the next community arrangement mode.
- * @param state Pointer to the application state
- */
-void graph_action_cycle_community_arrangement(AppState *state);

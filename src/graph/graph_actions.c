@@ -66,15 +66,3 @@ void graph_action_cycle_cluster(AppState *state)
 	state->current_cluster = (state->current_cluster + 1) % CLUSTER_COUNT;
 	graph_action_run_clustering(state);
 }
-
-void graph_action_cycle_community_arrangement(AppState *state)
-{
-	state->current_comm_arrangement = (state->current_comm_arrangement + 1) % COMMUNITY_ARRANGEMENT_COUNT;
-	if (state->current_comm_arrangement == COMMUNITY_ARRANGEMENT_NONE) {
-		graph_action_update_layout(state);
-	} else {
-		graph_apply_community_arrangement(&state->current_graph, state->current_comm_arrangement);
-		state->renderer.needsAttributeUpload = VK_TRUE;
-		renderer_update_graph(&state->renderer, &state->current_graph);
-	}
-}

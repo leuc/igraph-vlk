@@ -8,11 +8,6 @@
  */
 static const char *cluster_names[] = {"Fast Greedy", "Walktrap", "Label Propagation", "Multilevel", "Leiden"};
 
-/**
- * Community arrangement mode names for UI display.
- */
-static const char *comm_arrangement_names[] = {"None", "Kececi 2D", "Kececi Tetra 3D", "Compact Ortho 2D", "Compact Ortho 3D"};
-
 void ui_hud_init(void)
 {
 	// No initialization needed currently
@@ -35,10 +30,10 @@ void ui_hud_update(AppState *state, float fps)
 	}
 
 	snprintf(buf, sizeof(buf),
-			 "[Y]SubGraph:%s [I]terate [C]ommunity:%s "
+			 "[I]terate [C]ommunity:%s "
 			 "[N]ode:%d [E]dge:%d Filter:1-9 [K]Core:%d "
 			 "[R]eset [H]ide FPS:%.1f%s",
-			 comm_arrangement_names[state->current_comm_arrangement], cluster_names[state->current_cluster], state->current_graph.props.node_count, state->current_graph.props.edge_count, state->current_graph.props.coreness_filter, fps, menu_state);
+			 cluster_names[state->current_cluster], state->current_graph.props.node_count, state->current_graph.props.edge_count, state->current_graph.props.coreness_filter, fps, menu_state);
 
 	renderer_update_ui(&state->renderer, buf);
 }
