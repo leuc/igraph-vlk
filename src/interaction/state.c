@@ -201,13 +201,9 @@ void update_app_state(AppState *state)
 		break;
 
 	case STATE_DISPLAY_RESULTS: {
-		// Dismiss on left click or Space/Escape key
-		int left = glfwGetMouseButton(state->window, GLFW_MOUSE_BUTTON_LEFT);
-		int space = glfwGetKey(state->window, GLFW_KEY_SPACE);
-		int esc = glfwGetKey(state->window, GLFW_KEY_ESCAPE);
-		if (left == GLFW_PRESS || space == GLFW_PRESS || esc == GLFW_PRESS) {
+		// Dismiss on left click or Escape key
+		if (glfwGetMouseButton(state->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS || glfwGetKey(state->window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
 			app->has_visual_results = false;
-			app->results_data = NULL;
 			app->pending_command = NULL;
 			app->current_state = STATE_GRAPH_VIEW;
 		}
