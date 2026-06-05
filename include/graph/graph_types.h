@@ -13,9 +13,6 @@
 /* Layout Type Enum */
 typedef enum { LAYOUT_FR_3D, LAYOUT_KK_3D, LAYOUT_RANDOM_3D, LAYOUT_SPHERE, LAYOUT_GRID_3D, LAYOUT_UMAP_3D, LAYOUT_DRL_3D } LayoutType;
 
-/* Cluster Type Enum */
-typedef enum { CLUSTER_FASTGREEDY, CLUSTER_WALKTRAP, CLUSTER_LABEL_PROP, CLUSTER_MULTILEVEL, CLUSTER_LEIDEN, CLUSTER_COUNT } ClusterType;
-
 /* ============================================================================
  * Core Data Structures
  * ============================================================================ */

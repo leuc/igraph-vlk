@@ -4,12 +4,6 @@
 #include <stdbool.h>
 
 /**
- * Run clustering on the current graph.
- * @param state Pointer to the application state
- */
-void graph_action_run_clustering(AppState *state);
-
-/**
  * Filter nodes by degree.
  * @param state Pointer to the application state
  * @param min_deg Minimum degree threshold

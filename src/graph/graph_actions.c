@@ -1,18 +1,10 @@
 #include "graph/graph_actions.h"
-#include "graph/graph_clustering.h"
 #include "graph/graph_core.h"
 #include "graph/graph_filter.h"
 #include "graph/graph_io.h"
 #include "vulkan/renderer.h"
 #include <stdio.h>
 #include <string.h>
-
-void graph_action_run_clustering(AppState *state)
-{
-	graph_cluster(&state->current_graph, state->current_cluster);
-	state->renderer.needsAttributeUpload = VK_TRUE;
-	renderer_update_graph(&state->renderer, &state->current_graph);
-}
 
 void graph_action_filter_degree(AppState *state, int min_deg)
 {

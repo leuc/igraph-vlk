@@ -40,7 +40,6 @@ typedef struct AppState
 	/* Application Logic State */
 	char *current_filename;
 	LayoutType current_layout;
-	ClusterType current_cluster;
 	char *node_attr;
 	char *edge_attr;
 
