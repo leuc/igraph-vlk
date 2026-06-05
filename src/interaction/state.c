@@ -22,7 +22,10 @@ void app_context_init(AppContext *ctx, igraph_t *graph, MenuNode *root_menu)
 
 void app_context_destroy(AppContext *ctx)
 {
-	// Cleanup if anything was allocated
+	// Stub: AppContext owns no dynamically-allocated resources directly.
+	// The menu tree, graph data, renderer, and worker thread are
+	// cleaned up by their own dedicated functions in main.c shutdown.
+	(void)ctx;
 }
 
 void update_app_state(AppState *state)
@@ -197,11 +200,19 @@ void update_app_state(AppState *state)
 		}
 		break;
 
-	case STATE_DISPLAY_RESULTS:
-		// Results are displayed. Wait for user to close/dismiss them.
-		// For now, any keypress or click will return to graph view
-		// TODO: Implement proper dismissal (e.g., ESC key, or "Close" button in UI)
+	case STATE_DISPLAY_RESULTS: {
+		// Dismiss on left click or Space/Escape key
+		int left = glfwGetMouseButton(state->window, GLFW_MOUSE_BUTTON_LEFT);
+		int space = glfwGetKey(state->window, GLFW_KEY_SPACE);
+		int esc = glfwGetKey(state->window, GLFW_KEY_ESCAPE);
+		if (left == GLFW_PRESS || space == GLFW_PRESS || esc == GLFW_PRESS) {
+			app->has_visual_results = false;
+			app->results_data = NULL;
+			app->pending_command = NULL;
+			app->current_state = STATE_GRAPH_VIEW;
+		}
 		break;
+	}
 	}
 }
 

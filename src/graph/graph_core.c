@@ -19,6 +19,8 @@ void graph_sync_node_positions(GraphData *data)
 
 void graph_refresh_data(GraphData *data)
 {
+	uint32_t old_node_count = data->node_count;
+
 	data->node_count = igraph_vcount(&data->g);
 	data->edge_count = igraph_ecount(&data->g);
 
@@ -27,7 +29,7 @@ void graph_refresh_data(GraphData *data)
 
 	// Re-calculate basic node properties
 	if (data->nodes) {
-		for (uint32_t i = 0; i < data->node_count; i++)
+		for (uint32_t i = 0; i < old_node_count; i++)
 			if (data->nodes[i].label)
 				free(data->nodes[i].label);
 		free(data->nodes);

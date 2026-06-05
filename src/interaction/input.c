@@ -224,15 +224,13 @@ static void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 	cam->last_x = xpos;
 	cam->last_y = ypos;
 
-	if (1) {
-		cam->yaw += xoffset;
-		cam->pitch += yoffset;
+	cam->yaw += xoffset;
+	cam->pitch += yoffset;
 
-		if (cam->pitch > 89.0f)
-			cam->pitch = 89.0f;
-		if (cam->pitch < -89.0f)
-			cam->pitch = -89.0f;
+	if (cam->pitch > 89.0f)
+		cam->pitch = 89.0f;
+	if (cam->pitch < -89.0f)
+		cam->pitch = -89.0f;
 
-		camera_update_vectors(cam);
-	}
+	camera_update_vectors(cam);
 }
