@@ -25,10 +25,15 @@ void main()
 				mix(fragTextUV.x, fragTextUV.z, localUV.x),
 				mix(fragTextUV.y, fragTextUV.w, localUV.y)
 			);
-			float a = texture(textAtlas, atlasUV).r;
-			// Mix text color (white) over the quad's background using the font's alpha
-			color.rgb = mix(color.rgb, vec3(1.0), a);
-			color.a = max(color.a, a);
+			
+			// Use textureLod to bypass mipmap derivative errors inside dynamic branches
+			float a = textureLod(textAtlas, atlasUV, 0.0).r;
+			
+			if (a > 0.1) {
+				// Mix text color (white) over the background using the font's alpha
+				color.rgb = mix(color.rgb, vec3(1.0), a);
+				color.a = max(color.a, a);
+			}
 		}
 	}
 

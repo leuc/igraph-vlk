@@ -52,6 +52,9 @@ void main()
 	vec3 finalPos = worldPos + scaledPos;
 	gl_Position = ubo.proj * ubo.view * vec4(finalPos, 1.0);
 
+	// Pull the depth slightly toward the camera to prevent Z-fighting with MenuInstance quads
+	gl_Position.z -= 0.001 * gl_Position.w;
+
 	// Quad-local UV: (0,0) = top-left, (1,1) = bottom-right
 	fragQuadUV = vec2(inPosition.x + 0.5, 0.5 - inPosition.y);
 	fragBgColor = bgColor;

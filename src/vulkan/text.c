@@ -166,9 +166,9 @@ void text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, T
 
 	// Output UV and pixel dimensions
 	out->u0 = (float)ta->cursor_x / ta->width;
-	out->v0 = (float)(ta->cursor_y + baseline) / ta->height;
+	out->v0 = (float)(ta->cursor_y) / ta->height;
 	out->u1 = (float)(ta->cursor_x + (int)(total_width + 0.5f)) / ta->width;
-	out->v1 = (float)(ta->cursor_y + baseline + (int)(max_y - min_y)) / ta->height;
+	out->v1 = (float)(ta->cursor_y + (int)(max_y - min_y)) / ta->height;
 	out->width_px = total_width;
 	out->height_px = max_y - min_y;
 
