@@ -32,11 +32,8 @@ static MenuNode *create_menu_node(const char *label, MenuNodeType type)
 	node->command = NULL;
 	node->is_expanded = false;
 	node->hovered = false;
-	node->is_focused = false;
-	node->toggle_state = false;
 	node->card_width = 0.0f;
 	node->card_height = 0.0f;
-	memset(node->input_buffer, 0, sizeof(node->input_buffer));
 	return node;
 }
 
@@ -70,11 +67,8 @@ void init_menu_tree(MenuNode *root)
 	root->command = NULL;
 	root->is_expanded = true;
 	root->hovered = false;
-	root->is_focused = false;
-	root->toggle_state = false;
 	root->card_width = 0.0f;
 	root->card_height = 0.0f;
-	memset(root->input_buffer, 0, sizeof(root->input_buffer));
 
 	for (int i = 0; i < g_command_registry_size; i++) {
 		const CommandDef *cmd_def = &g_command_registry[i];
@@ -174,12 +168,6 @@ static void calculate_card_dimensions(MenuNode *node)
 		for (int i = 0; i < node->num_children; i++) {
 			MenuNode *child = node->children[i];
 			float child_w = measure_text_width(child->label);
-
-			if (child->type == NODE_INPUT_TEXT && child->input_buffer[0]) {
-				float input_w = measure_text_width(child->input_buffer);
-				if (input_w > child_w)
-					child_w = input_w;
-			}
 
 			if (child->type == NODE_BRANCH) {
 				child_w += 0.15f;

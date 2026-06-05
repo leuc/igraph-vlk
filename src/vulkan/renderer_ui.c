@@ -43,34 +43,6 @@ void renderer_update_ui(Renderer *r, const char *text)
 		total_len++;
 	}
 
-	// Optionally add numeric widget value as HUD element
-	if (r->showNumericValue && r->numericValueString[0] != '\0') {
-		xoff = -0.98f;
-		len = strlen(r->numericValueString);
-		if (total_len + len < 1024 - 1) {
-			for (int i = 0; i < len; i++) {
-				unsigned char c = r->numericValueString[i];
-				CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
-				instances[total_len].screenPos[0] = xoff;
-				instances[total_len].screenPos[1] = -0.85f; // bottom HUD
-				instances[total_len].charRect[0] = ci->x0 * scale;
-				instances[total_len].charRect[1] = ci->y0 * scale;
-				instances[total_len].charRect[2] = ci->x1 * scale;
-				instances[total_len].charRect[3] = ci->y1 * scale;
-				instances[total_len].charUV[0] = ci->u0;
-				instances[total_len].charUV[1] = ci->v0;
-				instances[total_len].charUV[2] = ci->u1;
-				instances[total_len].charUV[3] = ci->v1;
-				instances[total_len].color[0] = 1.0f;
-				instances[total_len].color[1] = 1.0f;
-				instances[total_len].color[2] = 0.0f; // yellow
-				instances[total_len].color[3] = 1.0f;
-				xoff += (ci->xadvance * scale) / 1720.0f;
-				total_len++;
-			}
-		}
-	}
-
 	// Add crosshair at the center
 	unsigned char crossChar = '+';
 	CharInfo *ci_cross = &globalAtlas.chars[crossChar];

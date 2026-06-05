@@ -30,7 +30,7 @@ void update_app_state(AppState *state)
 	AppContext *app = &state->app_ctx;
 
 	// Perform crosshair raycasting to track hover in menu-related states
-	if (app->current_state == STATE_MENU_OPEN || app->current_state == STATE_AWAITING_SELECTION || app->current_state == STATE_AWAITING_INPUT) {
+	if (app->current_state == STATE_MENU_OPEN || app->current_state == STATE_AWAITING_SELECTION) {
 
 		// Raycast from camera through screen center (crosshair)
 		MenuNode *hovered = raycast_menu_crosshair(state);
@@ -73,10 +73,6 @@ void update_app_state(AppState *state)
 				app->current_state = STATE_EXECUTING;
 			}
 		}
-		break;
-
-	case STATE_AWAITING_INPUT:
-		// Handle floating forms
 		break;
 
 	case STATE_EXECUTING:
@@ -291,13 +287,6 @@ void handle_menu_selection(AppContext *app, MenuNode *selected_node)
 		}
 
 		check_pending_command_requirements(app);
-	} else if (selected_node->type == NODE_INPUT_TEXT) {
-		selected_node->is_focused = !selected_node->is_focused;
-		if (selected_node->is_focused) {
-			memset(selected_node->input_buffer, 0, sizeof(selected_node->input_buffer));
-		}
-	} else if (selected_node->type == NODE_INPUT_TOGGLE) {
-		selected_node->toggle_state = !selected_node->toggle_state;
 	}
 }
 
@@ -307,26 +296,18 @@ void check_pending_command_requirements(AppContext *app)
 		return;
 
 	bool needs_selection = false;
-	bool has_numeric_input = false;
-	int numeric_param_idx = -1;
 
 	for (int i = 0; i < app->pending_command->num_params; i++) {
 		ParameterType type = app->pending_command->params[i].type;
 		if (type == PARAM_TYPE_NODE_SELECTION || type == PARAM_TYPE_EDGE_SELECTION) {
 			needs_selection = true;
-		} else if (type == PARAM_TYPE_FLOAT || type == PARAM_TYPE_INT) {
-			has_numeric_input = true;
-			numeric_param_idx = i;
 		}
 	}
 
 	if (needs_selection) {
 		app->current_state = STATE_AWAITING_SELECTION;
-	} else if (has_numeric_input) {
-		// TODO: Implement numeric input widget properly
-		app->current_state = STATE_EXECUTING;
 	} else {
-		// No selection or numeric input needed, can execute directly
+		// No selection needed, can execute directly
 		app->current_state = STATE_EXECUTING;
 	}
 }

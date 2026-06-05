@@ -117,16 +117,6 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->menuNodeCount = 0;
 	r->menuQuadIndexCount = 0;
 
-	QuadVertex numV[] = {{{-0.5f, -0.02f, 0}, {0, 0}}, {{0.5f, -0.02f, 0}, {1, 0}}, {{-0.5f, 0.02f, 0}, {0, 1}}, {{0.5f, 0.02f, 0}, {1, 1}}, {{-0.03f, -0.05f, 0}, {0, 0}}, {{0.03f, -0.05f, 0}, {1, 0}}, {{-0.03f, 0.05f, 0}, {0, 1}}, {{0.03f, 0.05f, 0}, {1, 1}}};
-	uint32_t numI[] = {0, 1, 2, 2, 1, 3, 4, 5, 6, 6, 5, 7};
-	createBuffer(r->core.device, r->core.physicalDevice, sizeof(numV), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->numericQuadVertexBuffer, &r->numericQuadVertexBufferMemory);
-	updateBuffer(r->core.device, r->numericQuadVertexBufferMemory, sizeof(numV), numV);
-	createBuffer(r->core.device, r->core.physicalDevice, sizeof(numI), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->numericQuadIndexBuffer, &r->numericQuadIndexBufferMemory);
-	updateBuffer(r->core.device, r->numericQuadIndexBufferMemory, sizeof(numI), numI);
-	r->numericQuadIndexCount = 12;
-	r->numericInstanceBuffer = VK_NULL_HANDLE;
-	r->numericInstanceCount = 0;
-
 	r->nodePositionBuffer = VK_NULL_HANDLE;
 	r->nodeAttributeBuffer = VK_NULL_HANDLE;
 	r->nodeAttributeStagingBuffer = VK_NULL_HANDLE;
@@ -309,14 +299,6 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 			vkCmdDraw(cmd, 4, r->menuTextCharCount, 0, 0);
 		}
 	}
-	if (r->numericInstanceCount > 0 && r->numericInstanceBuffer != VK_NULL_HANDLE) {
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->menuPipeline);
-		VkBuffer nVs[] = {r->numericQuadVertexBuffer, r->numericInstanceBuffer};
-		VkDeviceSize nOs[] = {0, 0};
-		vkCmdBindVertexBuffers(cmd, 0, 2, nVs, nOs);
-		vkCmdBindIndexBuffer(cmd, r->numericQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexed(cmd, r->numericQuadIndexCount, r->numericInstanceCount, 0, 0, 0);
-	}
 	if (r->showUI) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->uiPipeline);
 		VkBuffer bVs[] = {r->uiBgVertexBuffer, r->uiBgInstanceBuffer};
@@ -446,19 +428,6 @@ void renderer_cleanup(Renderer *r)
 		vkDestroyBuffer(r->core.device, r->menuTextInstanceBuffer, NULL);
 		vkFreeMemory(r->core.device, r->menuTextInstanceBufferMemory, NULL);
 	}
-	if (r->numericQuadVertexBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->numericQuadVertexBuffer, NULL);
-		vkFreeMemory(r->core.device, r->numericQuadVertexBufferMemory, NULL);
-	}
-	if (r->numericQuadIndexBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->numericQuadIndexBuffer, NULL);
-		vkFreeMemory(r->core.device, r->numericQuadIndexBufferMemory, NULL);
-	}
-	if (r->numericInstanceBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->numericInstanceBuffer, NULL);
-		vkFreeMemory(r->core.device, r->numericInstanceBufferMemory, NULL);
-	}
-
 	if (r->xrFramebuffers) {
 		for (uint32_t i = 0; i < r->xr_view_count; i++) {
 			if (r->xrDepthImageViews[i] != VK_NULL_HANDLE)

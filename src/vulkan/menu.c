@@ -116,24 +116,6 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 			memcpy(instances[instance_count].rotation, current->rotation, sizeof(versor));
 
 			const char *display_text = current->label;
-			char input_display[300] = {0};
-
-			if (current->type == NODE_INPUT_TEXT) {
-				if (current->input_buffer[0]) {
-					strncpy(input_display, current->input_buffer, sizeof(input_display) - 1);
-					if (current->is_focused) {
-						size_t len = strlen(input_display);
-						if (len < sizeof(input_display) - 2) {
-							input_display[len] = '_';
-							input_display[len + 1] = '\0';
-						}
-					}
-				} else if (current->is_focused) {
-					input_display[0] = '_';
-					input_display[1] = '\0';
-				}
-				display_text = input_display;
-			}
 
 			if (display_text && display_text[0]) {
 				render_text_at_position(current, display_text, current->text_anchor_pos, &label_count, &label_instances, &label_capacity);

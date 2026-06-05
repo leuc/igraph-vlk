@@ -281,23 +281,6 @@ typedef struct Renderer
 	VkDeviceMemory rayVertexBufferMemory;
 	uint32_t rayVertexCount;
 
-	// Numeric Input Widget (world-space)
-	VkBuffer numericQuadVertexBuffer;
-	VkDeviceMemory numericQuadVertexBufferMemory;
-	VkBuffer numericQuadIndexBuffer;
-	VkDeviceMemory numericQuadIndexBufferMemory;
-	VkBuffer numericInstanceBuffer;
-	VkDeviceMemory numericInstanceBufferMemory;
-	uint32_t numericInstanceCount;
-	uint32_t numericQuadIndexCount;
-
-	// Numeric widget value string (HUD display)
-	char numericValueString[32];
-	bool showNumericValue;
-
-	// App context pointer for state checking
-	struct AppContext *app_ctx_ptr;
-
 	// Ring-buffered sync for graph updates
 	VkFence graphUpdateFences[GRAPH_UPDATE_RING_SIZE];
 	uint32_t graphUpdateRingIndex;
