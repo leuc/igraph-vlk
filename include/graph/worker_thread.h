@@ -69,4 +69,7 @@ bool worker_thread_poll_snapshot(WorkerJob *job, igraph_matrix_t *out_matrix);
 // Clean up worker thread system
 void worker_thread_cleanup(WorkerThreadContext *context);
 
+// Free a completed/failed worker job and its resources
+void worker_job_free(WorkerThreadContext *context, WorkerJob *job);
+
 #endif // WORKER_THREAD_H

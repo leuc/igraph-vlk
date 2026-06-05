@@ -306,6 +306,28 @@ bool worker_thread_poll_snapshot(WorkerJob *job, igraph_matrix_t *out_matrix)
 	return false;
 }
 
+// Free a completed/failed worker job and its resources
+void worker_job_free(WorkerThreadContext *context, WorkerJob *job)
+{
+	if (!job)
+		return;
+
+	// Clear from worker context if it's the current job
+	if (context && context->current_job == job) {
+		context->current_job = NULL;
+	}
+
+	pthread_mutex_destroy(&job->snapshot_mutex);
+	if (job->snapshot_initialized) {
+		igraph_matrix_destroy(&job->snapshot_matrix);
+	}
+	pthread_mutex_destroy(&job->mutex);
+	if (job->ctx) {
+		free(job->ctx);
+	}
+	free(job);
+}
+
 // Wait for job completion (blocking)
 // Clean up worker thread system
 void worker_thread_cleanup(WorkerThreadContext *context)
@@ -334,15 +356,7 @@ void worker_thread_cleanup(WorkerThreadContext *context)
 			if (job->result_data && job->free_func) {
 				job->free_func(job->result_data);
 			}
-			if (job->ctx) {
-				free(job->ctx);
-			}
-			pthread_mutex_destroy(&job->snapshot_mutex);
-			if (job->snapshot_initialized) {
-				igraph_matrix_destroy(&job->snapshot_matrix);
-			}
-			pthread_mutex_destroy(&job->mutex);
-			free(job);
+			worker_job_free(context, job);
 		}
 	}
 
@@ -350,15 +364,7 @@ void worker_thread_cleanup(WorkerThreadContext *context)
 		if (context->current_job->result_data && context->current_job->free_func) {
 			context->current_job->free_func(context->current_job->result_data);
 		}
-		if (context->current_job->ctx) {
-			free(context->current_job->ctx);
-		}
-		pthread_mutex_destroy(&context->current_job->snapshot_mutex);
-		if (context->current_job->snapshot_initialized) {
-			igraph_matrix_destroy(&context->current_job->snapshot_matrix);
-		}
-		pthread_mutex_destroy(&context->current_job->mutex);
-		free(context->current_job);
+		worker_job_free(context, context->current_job);
 	}
 
 	free(context->job_queue);

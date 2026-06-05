@@ -165,22 +165,7 @@ void update_app_state(AppState *state)
 						job->free_func(job->result_data);
 					}
 
-					// Cleanup job and its resources
-					pthread_mutex_lock(&state->worker_ctx.queue_mutex);
-					if (state->worker_ctx.current_job == job) {
-						state->worker_ctx.current_job = NULL;
-					}
-					pthread_mutex_unlock(&state->worker_ctx.queue_mutex);
-
-					pthread_mutex_destroy(&job->snapshot_mutex);
-					if (job->snapshot_initialized) {
-						igraph_matrix_destroy(&job->snapshot_matrix);
-					}
-					pthread_mutex_destroy(&job->mutex);
-					if (job->ctx) {
-						free(job->ctx);
-					}
-					free(job);
+					worker_job_free(&state->worker_ctx, job);
 				}
 
 				state->job_in_progress = false;
@@ -200,21 +185,7 @@ void update_app_state(AppState *state)
 
 				WorkerJob *job = state->current_worker_job;
 				if (job) {
-					pthread_mutex_lock(&state->worker_ctx.queue_mutex);
-					if (state->worker_ctx.current_job == job) {
-						state->worker_ctx.current_job = NULL;
-					}
-					pthread_mutex_unlock(&state->worker_ctx.queue_mutex);
-
-					pthread_mutex_destroy(&job->snapshot_mutex);
-					if (job->snapshot_initialized) {
-						igraph_matrix_destroy(&job->snapshot_matrix);
-					}
-					pthread_mutex_destroy(&job->mutex);
-					if (job->ctx) {
-						free(job->ctx);
-					}
-					free(job);
+					worker_job_free(&state->worker_ctx, job);
 				}
 
 				state->job_in_progress = false;
