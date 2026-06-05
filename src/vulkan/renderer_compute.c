@@ -48,6 +48,7 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 
 		VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
 		VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &ctx->fence), "Failed to create compute fence");
+		VK_CHECK(vkResetFences(r->core.device, 1, &ctx->fence), "Failed to reset compute fence after creation");
 
 		VkDescriptorPoolSize descriptorPoolSizes = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3};
 		VkDescriptorPoolCreateInfo descriptorPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &descriptorPoolSizes};
