@@ -152,8 +152,7 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 		if (new_k > 20)
 			new_k = 0;
 		state->current_graph.props.coreness_filter = new_k;
-		if (new_k > 0)
-			graph_action_filter_coreness(state, new_k);
+		graph_action_filter_coreness(state, new_k);
 		renderer_update_graph(&state->renderer, &state->current_graph);
 		break;
 	}
