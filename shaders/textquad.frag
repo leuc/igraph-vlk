@@ -26,10 +26,9 @@ void main()
 				mix(fragTextUV.y, fragTextUV.w, localUV.y)
 			);
 			float a = texture(textAtlas, atlasUV).r;
-			if (a > 0.1) {
-				// White text with atlas alpha
-				color = vec4(1.0, 1.0, 1.0, a);
-			}
+			// Mix text color (white) over the quad's background using the font's alpha
+			color.rgb = mix(color.rgb, vec3(1.0), a);
+			color.a = max(color.a, a);
 		}
 	}
 

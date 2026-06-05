@@ -96,22 +96,27 @@ void text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, T
 
 	int len = (int)strlen(text);
 
-	// Compute total width and row height
+	// Compute total width and bounding box (accounting for negative yoff)
 	float total_width = 0;
-	float max_h = 0;
+	float min_y = 0;
+	float max_y = 0;
 	for (int i = 0; i < len; i++) {
 		unsigned char c = (unsigned char)text[i];
 		CharInfo *ci = (c < 128) ? &((FontAtlas *)font)->chars[c] : &((FontAtlas *)font)->chars[32];
 		total_width += ci->xadvance;
-		float h = ci->y1 - ci->y0;
-		if (h > max_h)
-			max_h = h;
+		if (ci->y0 < min_y)
+			min_y = ci->y0;
+		if (ci->y1 > max_y)
+			max_y = ci->y1;
 	}
 
 	// Round up row height to power-of-two-ish for alignment
-	int text_h = (int)(max_h + 1.5f) & ~1; // round to even, minimum padding
+	int text_h = (int)(max_y - min_y + 1.5f) & ~1; // round to even, minimum padding
 	if (text_h < 1)
 		text_h = 1;
+
+	// Baseline offset: shift all glyphs down so negative y0 doesn't clip above the row
+	int baseline = (int)(-min_y);
 
 	// Advance to new row if needed
 	if (ta->cursor_x + (int)total_width + 1 > ta->width) {
@@ -138,7 +143,7 @@ void text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, T
 
 		if (glyph_w > 0 && glyph_h > 0) {
 			int dst_x = ta->cursor_x + (int)(x_cursor + ci->x0);
-			int dst_y = ta->cursor_y + (int)ci->y0;
+			int dst_y = ta->cursor_y + baseline + (int)ci->y0;
 
 			// Blit glyph from font atlas into text atlas
 			for (int gy = 0; gy < glyph_h; gy++) {
@@ -161,11 +166,11 @@ void text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, T
 
 	// Output UV and pixel dimensions
 	out->u0 = (float)ta->cursor_x / ta->width;
-	out->v0 = (float)ta->cursor_y / ta->height;
+	out->v0 = (float)(ta->cursor_y + baseline) / ta->height;
 	out->u1 = (float)(ta->cursor_x + (int)(total_width + 0.5f)) / ta->width;
-	out->v1 = (float)(ta->cursor_y + text_h) / ta->height;
+	out->v1 = (float)(ta->cursor_y + baseline + (int)(max_y - min_y)) / ta->height;
 	out->width_px = total_width;
-	out->height_px = (float)text_h;
+	out->height_px = max_y - min_y;
 
 	// Advance cursor
 	ta->cursor_x += (int)(total_width + 0.5f) + 1;
