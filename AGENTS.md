@@ -1,5 +1,7 @@
 # Agents Build & Code Documentation
 
+DO NOT EXECUTE GIT
+
 This document serves as the primary guide for AI coding agents and developers working on the `igraph-vlk` project. It outlines the build process, linting/formatting/testing, and provides a comprehensive map of the codebase with style guidelines.
 
 ## Build Instructions
