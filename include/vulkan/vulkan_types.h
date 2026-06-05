@@ -264,6 +264,10 @@ typedef struct Renderer
 	bool showUI;
 	float layoutScale;
 
+	// Label LOD
+	vec3 cameraPos;
+	float labelLODDistance;
+
 	// UI
 	VkBuffer uiBgVertexBuffer;
 	VkDeviceMemory uiBgVertexBufferMemory;

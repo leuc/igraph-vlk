@@ -32,6 +32,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->showUI = true;
 	r->showSpheres = true;
 	r->layoutScale = 1.0f;
+	r->labelLODDistance = 50.0f;
 	r->numSpheres = 0;
 	r->sphereIndexCounts = NULL;
 	r->sphereIndexOffsets = NULL;
@@ -201,6 +202,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 
 void renderer_update_view(Renderer *r, vec3 pos, vec3 front, vec3 up)
 {
+	glm_vec3_copy(pos, r->cameraPos);
 	vec3 c;
 	glm_vec3_add(pos, front, c);
 	glm_lookat(pos, c, up, r->ubo.view);
@@ -295,7 +297,15 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		}
 	}
 	if (r->showLabels && r->labelCharCount > 0 && r->labelInstanceBuffer != VK_NULL_HANDLE) {
+		struct
+		{
+			vec3 cameraPos;
+			float lodThreshold;
+		} labelLOD;
+		glm_vec3_copy(r->cameraPos, labelLOD.cameraPos);
+		labelLOD.lodThreshold = r->labelLODDistance;
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
+		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(labelLOD), &labelLOD);
 		VkBuffer lbs[] = {r->labelVertexBuffer, r->labelInstanceBuffer};
 		VkDeviceSize los[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, lbs, los);
@@ -310,6 +320,8 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdDrawIndexed(cmd, r->menuQuadIndexCount, r->menuNodeCount, 0, 0, 0);
 		if (r->menuTextCharCount > 0 && r->menuTextInstanceBuffer != VK_NULL_HANDLE) {
 			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
+			float noLOD = 1e30f;
+			vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 12, 4, &noLOD);
 			VkBuffer mTs[] = {r->labelVertexBuffer, r->menuTextInstanceBuffer};
 			VkDeviceSize mTOs[] = {0, 0};
 			vkCmdBindVertexBuffers(cmd, 0, 2, mTs, mTOs);
