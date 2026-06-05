@@ -122,12 +122,6 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 		state->renderer.showEdges = !state->renderer.showEdges;
 		renderer_update_graph(&state->renderer, &state->current_graph);
 		break;
-	case GLFW_KEY_I:
-		graph_action_run_iteration(state);
-		break;
-	case GLFW_KEY_C:
-		graph_action_cycle_cluster(state);
-		break;
 	case GLFW_KEY_M:
 		// Cycle through edge routing modes
 		state->renderer.currentRoutingMode = (state->renderer.currentRoutingMode + 1) % EDGE_ROUTING_COUNT;

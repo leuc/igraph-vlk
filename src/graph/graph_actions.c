@@ -22,12 +22,6 @@ void graph_action_run_clustering(AppState *state)
 	renderer_update_graph(&state->renderer, &state->current_graph);
 }
 
-void graph_action_run_iteration(AppState *state)
-{
-	graph_layout_step(&state->current_graph, state->current_layout, 1);
-	renderer_update_graph(&state->renderer, &state->current_graph);
-}
-
 void graph_action_filter_degree(AppState *state, int min_deg)
 {
 	graph_filter_degree(&state->current_graph, min_deg);
@@ -59,10 +53,4 @@ void graph_action_reset(AppState *state)
 	if (graph_load_graphml(state->current_filename, &state->current_graph, state->current_layout, state->node_attr, state->edge_attr) == 0) {
 		renderer_update_graph(&state->renderer, &state->current_graph);
 	}
-}
-
-void graph_action_cycle_cluster(AppState *state)
-{
-	state->current_cluster = (state->current_cluster + 1) % CLUSTER_COUNT;
-	graph_action_run_clustering(state);
 }

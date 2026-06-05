@@ -16,12 +16,6 @@ void graph_action_update_layout(AppState *state);
 void graph_action_run_clustering(AppState *state);
 
 /**
- * Run a single iteration step of the layout.
- * @param state Pointer to the application state
- */
-void graph_action_run_iteration(AppState *state);
-
-/**
  * Filter nodes by degree.
  * @param state Pointer to the application state
  * @param min_deg Minimum degree threshold
@@ -46,9 +40,3 @@ void graph_action_highlight_infrastructure(AppState *state);
  * @param state Pointer to the application state
  */
 void graph_action_reset(AppState *state);
-
-/**
- * Cycle to the next clustering algorithm.
- * @param state Pointer to the application state
- */
-void graph_action_cycle_cluster(AppState *state);
