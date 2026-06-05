@@ -4,12 +4,6 @@
 #include <stdbool.h>
 
 /**
- * Run one iteration of the current layout algorithm.
- * @param state Pointer to the application state
- */
-void graph_action_update_layout(AppState *state);
-
-/**
  * Run clustering on the current graph.
  * @param state Pointer to the application state
  */

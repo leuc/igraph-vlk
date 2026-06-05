@@ -3,17 +3,10 @@
 #include "graph/graph_core.h"
 #include "graph/graph_filter.h"
 #include "graph/graph_io.h"
-#include "graph/graph_layout.h"
 #include "vulkan/animation_manager.h"
 #include "vulkan/renderer.h"
 #include <stdio.h>
 #include <string.h>
-
-void graph_action_update_layout(AppState *state)
-{
-	graph_layout_step(&state->current_graph, state->current_layout, 50);
-	renderer_update_graph(&state->renderer, &state->current_graph);
-}
 
 void graph_action_run_clustering(AppState *state)
 {

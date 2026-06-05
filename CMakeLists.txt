@@ -94,7 +94,6 @@ add_executable(igraph-vlk
     src/graph/graph_io.c
     src/graph/graph_clustering.c
     src/graph/graph_filter.c
-    src/graph/graph_layout.c
     src/graph/layered_sphere.c
     src/graph/graph_actions.c
      # Layout wrappers (split by algorithm)
