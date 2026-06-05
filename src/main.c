@@ -8,7 +8,6 @@
 #include "interaction/state.h"
 #include "ui/hud.h"
 #include "ui/menu.h"
-#include "vulkan/animation_manager.h"
 #include "vulkan/app_path.h"
 #include "vulkan/menu.h"
 #include "vulkan/renderer.h"
@@ -140,9 +139,6 @@ int main(int argc, char **argv)
 	}
 #endif
 
-	// Initialize animation manager
-	animation_manager_init(&app.anim_manager, &app.renderer, &app.current_graph);
-
 	// Initialize camera
 	camera_init(&app.camera);
 
@@ -160,7 +156,6 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Failed to initialize worker thread\n");
 		destroy_menu_tree(root_menu);
 		graph_free_data(&app.current_graph);
-		animation_manager_cleanup(&app.anim_manager);
 		renderer_cleanup(&app.renderer);
 		glfwDestroyWindow(app.window);
 		glfwTerminate();
@@ -222,12 +217,6 @@ int main(int argc, char **argv)
 			igraph_matrix_destroy(&snap);
 		}
 
-		// Update animations
-		animation_manager_update(&app.anim_manager, deltaTime);
-		if (app.anim_manager.num_animations > 0) {
-			renderer_update_graph(&app.renderer, &app.current_graph);
-		}
-
 		// Generate menu buffers if menu is open or processing
 		if (app.app_ctx.current_state == STATE_MENU_OPEN || app.app_ctx.current_state == STATE_JOB_IN_PROGRESS || app.app_ctx.current_state == STATE_EXECUTING) {
 			generate_vulkan_menu_buffers(&app.app_ctx, &app.renderer);
@@ -267,7 +256,6 @@ int main(int argc, char **argv)
 	worker_thread_cleanup(&app.worker_ctx);
 	app_context_destroy(&app.app_ctx);
 	destroy_menu_tree(root_menu);
-	animation_manager_cleanup(&app.anim_manager);
 	graph_free_data(&app.current_graph);
 	renderer_cleanup(&app.renderer);
 #ifdef USE_OPENXR

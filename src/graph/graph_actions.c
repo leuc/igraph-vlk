@@ -3,7 +3,6 @@
 #include "graph/graph_core.h"
 #include "graph/graph_filter.h"
 #include "graph/graph_io.h"
-#include "vulkan/animation_manager.h"
 #include "vulkan/renderer.h"
 #include <stdio.h>
 #include <string.h>

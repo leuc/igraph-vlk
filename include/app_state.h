@@ -11,7 +11,6 @@
 #include "graph/worker_thread.h"
 #include "interaction/camera.h"
 #include "interaction/state.h"
-#include "vulkan/animation_manager.h"
 #include "vulkan/renderer.h"
 
 #ifdef USE_OPENXR
@@ -31,7 +30,6 @@ typedef struct AppState
 #endif
 	bool vr_enabled;
 	GraphData current_graph;
-	AnimationManager anim_manager;
 	Camera camera;
 
 	/* Window / System State */

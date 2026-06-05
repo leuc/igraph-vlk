@@ -2,7 +2,6 @@
 #include "app_state.h"
 #include "graph/graph_io.h"
 #include "interaction/state.h"
-#include "vulkan/animation_manager.h"
 #include "vulkan/renderer.h"
 #include <igraph.h>
 #include <math.h>
@@ -422,9 +421,6 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 		return;
 	}
 
-	// Clear any active animations before replacing the graph
-	animation_manager_cleanup(&state->anim_manager);
-
 	// Free current graph data (nodes, edges, layout, igraph_t, etc.)
 	graph_free_data(data);
 
@@ -451,9 +447,6 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 	// Refresh all derived data structures (nodes, edges, etc.)
 	// This will sync node positions from data->current_layout
 	graph_refresh_data(data);
-
-	// Reinitialize animation manager with new graph data
-	animation_manager_init(&state->anim_manager, renderer, data);
 
 	// Refresh renderer
 	renderer_update_graph(renderer, data);

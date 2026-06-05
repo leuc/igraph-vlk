@@ -87,7 +87,6 @@ add_executable(igraph-vlk
     src/vulkan/app_path.c
     src/vulkan/polyhedron.c
     src/vulkan/text.c
-    src/vulkan/animation_manager.c
 
     # Graph modules
     src/graph/graph_core.c

@@ -21,10 +21,6 @@ typedef struct
 	int elevationLevel;
 	int pathLength;
 	vec4 path[16];
-	float animation_progress;
-	int animation_direction;
-	int is_animating;
-	int pad;
 } CompEdge;
 
 typedef struct

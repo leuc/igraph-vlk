@@ -187,9 +187,6 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 				memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].from].color, 12);
 				edgeAttributes[idx].size = graph->edges[i].size;
 				edgeAttributes[idx].selected = graph->edges[i].selected;
-				edgeAttributes[idx].animation_progress = graph->edges[i].animation_progress;
-				edgeAttributes[idx].animation_direction = graph->edges[i].animation_direction;
-				edgeAttributes[idx].is_animating = graph->edges[i].is_animating;
 				edgeAttributes[idx].normalized_pos = current_segment_start_len / (total_length > 0.0f ? total_length : 1.0f);
 				idx++;
 
@@ -197,9 +194,6 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 				memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].to].color, 12);
 				edgeAttributes[idx].size = graph->edges[i].size;
 				edgeAttributes[idx].selected = graph->edges[i].selected;
-				edgeAttributes[idx].animation_progress = graph->edges[i].animation_progress;
-				edgeAttributes[idx].animation_direction = graph->edges[i].animation_direction;
-				edgeAttributes[idx].is_animating = graph->edges[i].is_animating;
 				edgeAttributes[idx].normalized_pos = (current_segment_start_len + segment_length) / (total_length > 0.0f ? total_length : 1.0f);
 				idx++;
 				current_segment_start_len += segment_length;
@@ -217,9 +211,6 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 			memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].from].color, 12);
 			edgeAttributes[idx].size = graph->edges[i].size;
 			edgeAttributes[idx].selected = graph->edges[i].selected;
-			edgeAttributes[idx].animation_progress = graph->edges[i].animation_progress;
-			edgeAttributes[idx].animation_direction = graph->edges[i].animation_direction;
-			edgeAttributes[idx].is_animating = graph->edges[i].is_animating;
 			edgeAttributes[idx].normalized_pos = 0.0f;
 			idx++;
 
@@ -227,9 +218,6 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 			memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].to].color, 12);
 			edgeAttributes[idx].size = graph->edges[i].size;
 			edgeAttributes[idx].selected = graph->edges[i].selected;
-			edgeAttributes[idx].animation_progress = graph->edges[i].animation_progress;
-			edgeAttributes[idx].animation_direction = graph->edges[i].animation_direction;
-			edgeAttributes[idx].is_animating = graph->edges[i].is_animating;
 			edgeAttributes[idx].normalized_pos = 1.0f;
 			idx++;
 		}

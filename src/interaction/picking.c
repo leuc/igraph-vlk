@@ -1,6 +1,5 @@
 #include "interaction/picking.h"
 #include "graph/graph_core.h"
-#include "vulkan/animation_manager.h"
 #include <cglm/cglm.h>
 #include <float.h>
 #include <math.h>
@@ -70,12 +69,6 @@ void interaction_pick_object(AppState *state, bool is_double_click)
 	for (uint32_t i = 0; i < state->current_graph.edge_count; i++)
 		state->current_graph.edges[i].selected = 0.0f;
 
-	// Clear previous animations if a new object is picked or on double-click
-	if (is_double_click || (state->last_picked_node != -1 && hit_node != state->last_picked_node) || (state->last_picked_edge != -1 && hit_edge != state->last_picked_edge)) {
-		animation_manager_cleanup(&state->anim_manager);
-		animation_manager_init(&state->anim_manager, &state->renderer, &state->current_graph);
-	}
-
 	for (uint32_t i = 0; i < state->current_graph.node_count; i++) {
 		vec3 pos;
 		glm_vec3_scale(state->current_graph.nodes[i].position, state->renderer.layoutScale, pos);
@@ -105,26 +98,6 @@ void interaction_pick_object(AppState *state, bool is_double_click)
 		state->current_graph.nodes[hit_node].selected = 1.0f;
 		printf("%s Clicked Node %d: %s\n", is_double_click ? "Double" : "Single", hit_node, state->current_graph.nodes[hit_node].label ? state->current_graph.nodes[hit_node].label : "no label");
 		state->last_picked_node = hit_node;
-
-		if (is_double_click) {
-			printf("Double-clicked node %d. Animating connected edges.\n", hit_node);
-			for (uint32_t i = 0; i < state->current_graph.edge_count; ++i) {
-				uint32_t edge_from = state->current_graph.edges[i].from;
-				uint32_t edge_to = state->current_graph.edges[i].to;
-				int direction = 0;
-
-				if (edge_from == (uint32_t)hit_node) {
-					direction = 1; // From hit_node to edge.to
-				} else if (edge_to == (uint32_t)hit_node) {
-					direction = -1; // From hit_node to edge.from (i.e. backward)
-				}
-
-				if (direction != 0) {
-					animation_manager_toggle_edge(&state->anim_manager, i, direction);
-					printf("From: %d To: %d \n", edge_from, edge_to);
-				}
-			}
-		}
 	} else if (hit_edge != -1) {
 		state->current_graph.edges[hit_edge].selected = 1.0f;
 		printf("%s Clicked Edge %d: %d -> %d\n", is_double_click ? "Double" : "Single", hit_edge, state->current_graph.edges[hit_edge].from, state->current_graph.edges[hit_edge].to);

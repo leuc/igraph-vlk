@@ -43,11 +43,6 @@ typedef struct
 	uint32_t to;
 	float size;
 	float selected;
-	// Animation specific fields
-	float animation_progress; // 0.0 to 1.0
-	int animation_direction;  // 1 for forward, -1 for backward
-	bool is_animating;
-	float animation_speed; // speed multiplier for this edge
 } Edge;
 
 typedef struct

@@ -47,9 +47,6 @@ typedef struct
 	vec3 color;
 	float size;
 	float selected;
-	float animation_progress;
-	int animation_direction;
-	int is_animating;
 	float normalized_pos;
 } EdgeAttribute;
 
