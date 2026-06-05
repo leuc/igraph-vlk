@@ -113,8 +113,9 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->menuQuadVertexBuffer = VK_NULL_HANDLE;
 	r->menuQuadIndexBuffer = VK_NULL_HANDLE;
 	r->menuInstanceBuffer = VK_NULL_HANDLE;
-	r->menuTextInstanceBuffer = VK_NULL_HANDLE;
+	r->textQuadInstanceBuffer = VK_NULL_HANDLE;
 	r->menuNodeCount = 0;
+	r->textQuadInstanceCount = 0;
 	r->menuQuadIndexCount = 0;
 
 	r->nodePositionBuffer = VK_NULL_HANDLE;
@@ -136,16 +137,19 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 		VK_CHECK(vkMapMemory(r->core.device, r->uniformBuffersMemory[i], 0, sizeof(UniformBufferObject), 0, &r->uboMapped[i]), "Failed to map UBO memory");
 	}
 
-	VkDescriptorPoolSize descriptorPoolSizes[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS}};
-	VkDescriptorPoolCreateInfo descriptorPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .poolSizeCount = 2, .pPoolSizes = descriptorPoolSizes, .maxSets = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS};
+	VkDescriptorPoolSize descriptorPoolSizes[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2}};
+	VkDescriptorPoolCreateInfo descriptorPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .poolSizeCount = 2, .pPoolSizes = descriptorPoolSizes, .maxSets = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2};
 	VK_CHECK(vkCreateDescriptorPool(r->core.device, &descriptorPoolInfo, NULL, &r->descriptorPool), "Failed to create descriptor pool");
 
-	VkDescriptorSetLayout descriptorSetLayouts[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++)
+	VkDescriptorSetLayout descriptorSetLayouts[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2];
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2; i++)
 		descriptorSetLayouts[i] = r->descriptorSetLayout;
-	VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->descriptorPool, .descriptorSetCount = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS, .pSetLayouts = descriptorSetLayouts};
-	r->descriptorSets = malloc(sizeof(VkDescriptorSet) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
+	VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->descriptorPool, .descriptorSetCount = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2, .pSetLayouts = descriptorSetLayouts};
+	r->descriptorSets = malloc(sizeof(VkDescriptorSet) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2);
 	VK_CHECK(vkAllocateDescriptorSets(r->core.device, &descriptorSetAllocInfo, r->descriptorSets), "Failed to allocate descriptor sets");
+
+	// Initialize text quad descriptor set pointers (set after atlas upload)
+	r->textQuadDescriptorSets = &r->descriptorSets[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 		VkDescriptorBufferInfo bufferInfo = {r->uniformBuffers[i], 0, sizeof(UniformBufferObject)};
@@ -153,6 +157,9 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 		VkWriteDescriptorSet descriptorWrites[] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &bufferInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imageInfo, NULL, NULL}};
 		vkUpdateDescriptorSets(r->core.device, 2, descriptorWrites, 0, NULL);
 	}
+
+	// Initialize menu text atlas (will be populated on first menu buffer generation)
+	text_atlas_init(&r->menuTextAtlas, 2048, 512);
 
 	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
 	r->graphUpdateRingIndex = 0;
@@ -283,21 +290,16 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdBindVertexBuffers(cmd, 0, 2, mVs, mOs);
 		vkCmdBindIndexBuffer(cmd, r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdDrawIndexed(cmd, r->menuQuadIndexCount, r->menuNodeCount, 0, 0, 0);
-		if (r->menuTextCharCount > 0 && r->menuTextInstanceBuffer != VK_NULL_HANDLE) {
-			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
-			struct
-			{
-				vec3 cameraPos;
-				float lodThreshold;
-			} menuLOD;
-			glm_vec3_zero(menuLOD.cameraPos);
-			menuLOD.lodThreshold = 1e30f;
-			vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(menuLOD), &menuLOD);
-			VkBuffer mTs[] = {r->labelVertexBuffer, r->menuTextInstanceBuffer};
-			VkDeviceSize mTOs[] = {0, 0};
-			vkCmdBindVertexBuffers(cmd, 0, 2, mTs, mTOs);
-			vkCmdDraw(cmd, 4, r->menuTextCharCount, 0, 0);
-		}
+	}
+	if (r->textQuadInstanceCount > 0 && r->textQuadInstanceBuffer != VK_NULL_HANDLE) {
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->textQuadPipeline);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->textQuadDescriptorSets[ubo_idx], 0, NULL);
+		VkBuffer tVs[] = {r->menuQuadVertexBuffer, r->textQuadInstanceBuffer};
+		VkDeviceSize tOs[] = {0, 0};
+		vkCmdBindVertexBuffers(cmd, 0, 2, tVs, tOs);
+		vkCmdBindIndexBuffer(cmd, r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(cmd, 6, r->textQuadInstanceCount, 0, 0, 0);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[ubo_idx], 0, NULL);
 	}
 	if (r->showUI) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->uiPipeline);
@@ -424,10 +426,11 @@ void renderer_cleanup(Renderer *r)
 		vkDestroyBuffer(r->core.device, r->menuInstanceBuffer, NULL);
 		vkFreeMemory(r->core.device, r->menuInstanceBufferMemory, NULL);
 	}
-	if (r->menuTextInstanceBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->menuTextInstanceBuffer, NULL);
-		vkFreeMemory(r->core.device, r->menuTextInstanceBufferMemory, NULL);
+	if (r->textQuadInstanceBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->core.device, r->textQuadInstanceBuffer, NULL);
+		vkFreeMemory(r->core.device, r->textQuadInstanceBufferMemory, NULL);
 	}
+	text_atlas_destroy(&r->menuTextAtlas, r->core.device);
 	if (r->xrFramebuffers) {
 		for (uint32_t i = 0; i < r->xr_view_count; i++) {
 			if (r->xrDepthImageViews[i] != VK_NULL_HANDLE)
@@ -459,6 +462,7 @@ void renderer_cleanup(Renderer *r)
 	vkDestroyPipeline(r->core.device, r->uiPipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->labelPipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->menuPipeline, NULL);
+	vkDestroyPipeline(r->core.device, r->textQuadPipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->rayPipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->edgePipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->graphicsPipeline, NULL);

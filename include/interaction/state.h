@@ -5,6 +5,7 @@
 #include <cglm/cglm.h>
 #include <igraph.h>
 #include <stdbool.h>
+#include <vulkan/text.h>
 
 // Forward declaration to avoid circular dependency with command_registry.h
 struct CommandDef;
@@ -114,6 +115,9 @@ typedef struct MenuNode
 
 	bool hovered;	  // For visual feedback
 	bool is_expanded; // Whether submenu is unfolded
+
+	// Cached text atlas data (populated once at menu init)
+	TextRegion cachedTextRegion; // UV + pixel dimensions for this node's label in text atlas
 } MenuNode;
 
 // --- Generic Info Card Data ---

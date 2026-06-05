@@ -44,6 +44,8 @@ set(SHADERS
     shaders/ui.frag
     shaders/menu.vert
     shaders/menu.frag
+    shaders/textquad.vert
+    shaders/textquad.frag
     shaders/routing.comp
     shaders/ray.vert
     shaders/ray.frag
@@ -166,6 +168,8 @@ target_compile_definitions(igraph-vlk PRIVATE
     UI_FRAG_SHADER_PATH="shaders/ui.frag.spv"
     MENU_VERT_SHADER_PATH="shaders/menu.vert.spv"
     MENU_FRAG_SHADER_PATH="shaders/menu.frag.spv"
+    TEXTQUAD_VERT_SHADER_PATH="shaders/textquad.vert.spv"
+    TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv"
     ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv"
     RAY_VERT_SHADER_PATH="shaders/ray.vert.spv"
     RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv"

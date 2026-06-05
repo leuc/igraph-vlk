@@ -6,13 +6,15 @@
 
 void renderer_create_ui_pipelines(Renderer *r)
 {
-	VkShaderModule uiVertexShaderModule, uiFragmentShaderModule, labelVertexShaderModule, labelFragmentShaderModule, menuVertexShaderModule, menuFragmentShaderModule;
+	VkShaderModule uiVertexShaderModule, uiFragmentShaderModule, labelVertexShaderModule, labelFragmentShaderModule, menuVertexShaderModule, menuFragmentShaderModule, textQuadVertexShaderModule, textQuadFragmentShaderModule;
 	VK_CHECK(create_shader_module(r->core.device, UI_VERT_SHADER_PATH, &uiVertexShaderModule), "Failed to create UI vertex shader module");
 	VK_CHECK(create_shader_module(r->core.device, UI_FRAG_SHADER_PATH, &uiFragmentShaderModule), "Failed to create UI fragment shader module");
 	VK_CHECK(create_shader_module(r->core.device, LABEL_VERT_SHADER_PATH, &labelVertexShaderModule), "Failed to create label vertex shader module");
 	VK_CHECK(create_shader_module(r->core.device, LABEL_FRAG_SHADER_PATH, &labelFragmentShaderModule), "Failed to create label fragment shader module");
 	VK_CHECK(create_shader_module(r->core.device, MENU_VERT_SHADER_PATH, &menuVertexShaderModule), "Failed to create menu vertex shader module");
 	VK_CHECK(create_shader_module(r->core.device, MENU_FRAG_SHADER_PATH, &menuFragmentShaderModule), "Failed to create menu fragment shader module");
+	VK_CHECK(create_shader_module(r->core.device, TEXTQUAD_VERT_SHADER_PATH, &textQuadVertexShaderModule), "Failed to create text quad vertex shader module");
+	VK_CHECK(create_shader_module(r->core.device, TEXTQUAD_FRAG_SHADER_PATH, &textQuadFragmentShaderModule), "Failed to create text quad fragment shader module");
 
 	VkPipelineViewportStateCreateInfo viewportState = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, .viewportCount = 1, .scissorCount = 1};
 	VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
@@ -50,6 +52,18 @@ void renderer_create_ui_pipelines(Renderer *r)
 	VkGraphicsPipelineCreateInfo menuPipelineInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = menuShaderStages, .pVertexInputState = &menuVertexInput, .pInputAssemblyState = &menuInputAssembly, .pViewportState = &viewportState, .pRasterizationState = &rasterizationState, .pMultisampleState = &multisampleState, .pColorBlendState = &colorBlendState, .pDepthStencilState = &menuDepthStencilState, .pDynamicState = &dynamicState, .layout = r->pipelineLayout, .renderPass = r->renderPass.renderPass};
 	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &menuPipelineInfo, NULL, &r->menuPipeline), "Failed to create menu graphics pipeline");
 
+	// Text Quad (generic: background color + text atlas compositing)
+	VkPipelineShaderStageCreateInfo textQuadShaderStages[] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, textQuadVertexShaderModule, "main", NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, textQuadFragmentShaderModule, "main", NULL}};
+	VkVertexInputBindingDescription textQuadBindings[] = {{0, sizeof(QuadVertex), VK_VERTEX_INPUT_RATE_VERTEX}, {1, sizeof(TextQuadInstance), VK_VERTEX_INPUT_RATE_INSTANCE}};
+	VkVertexInputAttributeDescription textQuadAttributes[] = {
+		{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(QuadVertex, pos)}, {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(QuadVertex, tex)}, {2, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(TextQuadInstance, worldPos)}, {3, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(TextQuadInstance, bgColor)}, {4, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(TextQuadInstance, scale)}, {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(TextQuadInstance, rotation)}, {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(TextQuadInstance, textUV)}, {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(TextQuadInstance, textRegion)},
+	};
+	VkPipelineVertexInputStateCreateInfo textQuadVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 2, .pVertexBindingDescriptions = textQuadBindings, .vertexAttributeDescriptionCount = 8, .pVertexAttributeDescriptions = textQuadAttributes};
+	VkGraphicsPipelineCreateInfo textQuadPipelineInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = textQuadShaderStages, .pVertexInputState = &textQuadVertexInput, .pInputAssemblyState = &menuInputAssembly, .pViewportState = &viewportState, .pRasterizationState = &rasterizationState, .pMultisampleState = &multisampleState, .pColorBlendState = &colorBlendState, .pDepthStencilState = &menuDepthStencilState, .pDynamicState = &dynamicState, .layout = r->pipelineLayout, .renderPass = r->renderPass.renderPass};
+	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &textQuadPipelineInfo, NULL, &r->textQuadPipeline), "Failed to create text quad graphics pipeline");
+
+	vkDestroyShaderModule(r->core.device, textQuadFragmentShaderModule, NULL);
+	vkDestroyShaderModule(r->core.device, textQuadVertexShaderModule, NULL);
 	vkDestroyShaderModule(r->core.device, menuFragmentShaderModule, NULL);
 	vkDestroyShaderModule(r->core.device, menuVertexShaderModule, NULL);
 	vkDestroyShaderModule(r->core.device, labelFragmentShaderModule, NULL);

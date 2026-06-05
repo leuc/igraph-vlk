@@ -8,6 +8,7 @@
 
 #include "graph/graph_types.h"
 #include "vulkan/polyhedron.h"
+#include "vulkan/text.h"
 
 #define MAX_FRAMES_IN_FLIGHT 2
 #define MAX_VIEWS 3
@@ -95,6 +96,16 @@ typedef struct
 	vec4 rotation;
 	float hovered;
 } MenuInstance;
+
+typedef struct
+{
+	vec3 worldPos;	 // Quad center position
+	vec4 bgColor;	 // Background color (RGBA). a==0 means text-only (no background)
+	vec3 scale;		 // (width, height, 1.0)
+	vec4 rotation;	 // Quaternion
+	vec4 textUV;	 // (u0, v0, u1, v1) in text atlas. (0,0,0,0) = no text
+	vec4 textRegion; // (left, top, right, bottom) text area in quad-local [0..1]
+} TextQuadInstance;
 
 // --- CONTEXT TYPES ---
 
@@ -270,12 +281,17 @@ typedef struct Renderer
 	VkDeviceMemory menuQuadIndexBufferMemory;
 	VkBuffer menuInstanceBuffer;
 	VkDeviceMemory menuInstanceBufferMemory;
-	VkBuffer menuTextInstanceBuffer;
-	VkDeviceMemory menuTextInstanceBufferMemory;
-	uint32_t menuTextCharCount;
 	uint32_t menuNodeCount;
 	uint32_t menuQuadIndexCount;
 	VkPipeline menuPipeline; // Instanced menu rendering pipeline
+
+	// Generic text quad pipeline
+	VkPipeline textQuadPipeline;
+	VkBuffer textQuadInstanceBuffer;
+	VkDeviceMemory textQuadInstanceBufferMemory;
+	uint32_t textQuadInstanceCount;
+	TextAtlas menuTextAtlas;
+	VkDescriptorSet *textQuadDescriptorSets;
 	VkPipeline rayPipeline;
 	VkBuffer rayVertexBuffer;
 	VkDeviceMemory rayVertexBufferMemory;

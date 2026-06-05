@@ -220,7 +220,7 @@ int main(int argc, char **argv)
 			generate_vulkan_menu_buffers(&app.app_ctx, &app.renderer);
 		} else {
 			app.renderer.menuNodeCount = 0;
-			app.renderer.menuTextCharCount = 0;
+			app.renderer.textQuadInstanceCount = 0;
 		}
 
 #ifdef USE_OPENXR
