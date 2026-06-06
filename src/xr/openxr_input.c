@@ -230,7 +230,7 @@ bool xr_context_is_action_pressed(XrContext *ctx, XrAction action, uint32_t hand
 	return state.isActive && state.changedSinceLastSync && state.currentState;
 }
 
-static void check_button(XrContext *ctx, XrAction action, const char *name)
+static void xr_check_button(XrContext *ctx, XrAction action, const char *name)
 {
 	for (int i = 0; i < 2; i++) {
 		if (xr_context_is_action_pressed(ctx, action, i)) {
@@ -268,12 +268,12 @@ void xr_context_sync_input(XrContext *ctx)
 		}
 	}
 
-	check_button(ctx, ctx->select_action, "Select");
-	check_button(ctx, ctx->menu_action, "Menu");
-	check_button(ctx, ctx->button_a_action, "Button A");
-	check_button(ctx, ctx->button_b_action, "Button B");
-	check_button(ctx, ctx->button_x_action, "Button X");
-	check_button(ctx, ctx->button_y_action, "Button Y");
+	xr_check_button(ctx, ctx->select_action, "Select");
+	xr_check_button(ctx, ctx->menu_action, "Menu");
+	xr_check_button(ctx, ctx->button_a_action, "Button A");
+	xr_check_button(ctx, ctx->button_b_action, "Button B");
+	xr_check_button(ctx, ctx->button_x_action, "Button X");
+	xr_check_button(ctx, ctx->button_y_action, "Button Y");
 }
 
 float xr_context_get_thumbstick(XrContext *ctx, uint32_t hand_index, uint32_t axis)
