@@ -112,6 +112,93 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 		return;
 
 	switch (key) {
+	case GLFW_KEY_ENTER:
+		if (mods & GLFW_MOD_ALT) {
+			state->is_fullscreen = !state->is_fullscreen;
+			if (state->is_fullscreen) {
+				glfwGetWindowPos(window, &state->win_x, &state->win_y);
+				glfwGetWindowSize(window, &state->win_w, &state->win_h);
+				GLFWmonitor *monitor = glfwGetWindowMonitor(window);
+				if (!monitor)
+					monitor = glfwGetPrimaryMonitor();
+				const GLFWvidmode *mode = glfwGetVideoMode(monitor);
+				glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+			} else {
+				glfwSetWindowMonitor(window, NULL, state->win_x, state->win_y, state->win_w, state->win_h, 0);
+			}
+			break;
+		}
+		// fall through for unmodified Enter
+	case GLFW_KEY_LEFT:
+		if ((mods & GLFW_MOD_ALT) && state->is_fullscreen) {
+			GLFWmonitor *current = glfwGetWindowMonitor(window);
+			if (!current)
+				break;
+			int count;
+			GLFWmonitor **monitors = glfwGetMonitors(&count);
+			int cx, cy;
+			glfwGetMonitorPos(current, &cx, &cy);
+			const GLFWvidmode *cmode = glfwGetVideoMode(current);
+			int ccx = cx + cmode->width / 2;
+			int best = -1;
+			int best_dist = INT32_MAX;
+			for (int i = 0; i < count; i++) {
+				if (monitors[i] == current)
+					continue;
+				int mx, my;
+				glfwGetMonitorPos(monitors[i], &mx, &my);
+				const GLFWvidmode *m = glfwGetVideoMode(monitors[i]);
+				int mcx = mx + m->width / 2;
+				if (mcx < ccx) {
+					int dist = ccx - mcx;
+					if (dist < best_dist) {
+						best_dist = dist;
+						best = i;
+					}
+				}
+			}
+			if (best >= 0) {
+				const GLFWvidmode *mode = glfwGetVideoMode(monitors[best]);
+				glfwSetWindowMonitor(window, monitors[best], 0, 0, mode->width, mode->height, mode->refreshRate);
+			}
+			break;
+		}
+		break;
+	case GLFW_KEY_RIGHT:
+		if ((mods & GLFW_MOD_ALT) && state->is_fullscreen) {
+			GLFWmonitor *current = glfwGetWindowMonitor(window);
+			if (!current)
+				break;
+			int count;
+			GLFWmonitor **monitors = glfwGetMonitors(&count);
+			int cx, cy;
+			glfwGetMonitorPos(current, &cx, &cy);
+			const GLFWvidmode *cmode = glfwGetVideoMode(current);
+			int ccx = cx + cmode->width / 2;
+			int best = -1;
+			int best_dist = INT32_MAX;
+			for (int i = 0; i < count; i++) {
+				if (monitors[i] == current)
+					continue;
+				int mx, my;
+				glfwGetMonitorPos(monitors[i], &mx, &my);
+				const GLFWvidmode *m = glfwGetVideoMode(monitors[i]);
+				int mcx = mx + m->width / 2;
+				if (mcx > ccx) {
+					int dist = mcx - ccx;
+					if (dist < best_dist) {
+						best_dist = dist;
+						best = i;
+					}
+				}
+			}
+			if (best >= 0) {
+				const GLFWvidmode *mode = glfwGetVideoMode(monitors[best]);
+				glfwSetWindowMonitor(window, monitors[best], 0, 0, mode->width, mode->height, mode->refreshRate);
+			}
+			break;
+		}
+		break;
 	case GLFW_KEY_N:
 		state->renderer.showNodes = !state->renderer.showNodes;
 		renderer_update_graph(&state->renderer, &state->current_graph);
@@ -244,5 +331,4 @@ static void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 	state->win_w = width;
 	state->win_h = height;
 	state->renderer.framebufferResized = true;
-	fprintf(stderr, "[RESIZE] framebuffer %dx%d\n", width, height);
 }
