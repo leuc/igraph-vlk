@@ -293,39 +293,6 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 
 	// 6. Detail card FIRST (always gets atlas space before LOD labels)
 	if (selected_node >= 0 && selected_node < (int)node_count) {
-		// Build multi-line string: enumerate ALL igraph vertex attributes
-		char detail[4096] = {0};
-		int pos = 0;
-
-		igraph_strvector_t vnames;
-		igraph_vector_int_t vtypes;
-		igraph_strvector_init(&vnames, 0);
-		igraph_vector_int_init(&vtypes, 0);
-		igraph_cattribute_list(&graph->g, NULL, NULL, &vnames, &vtypes, NULL, NULL);
-		for (int a = 0; a < igraph_strvector_size(&vnames) && pos < (int)sizeof(detail) - 64; a++) {
-			const char *name = igraph_strvector_get(&vnames, a);
-			if (!igraph_cattribute_has_attr(&graph->g, IGRAPH_ATTRIBUTE_VERTEX, name))
-				continue;
-			if (VECTOR(vtypes)[a] == IGRAPH_ATTRIBUTE_STRING) {
-				const char *v = VAS(&graph->g, name, selected_node);
-				pos += snprintf(detail + pos, sizeof(detail) - pos, "%s: %s\n", name, v ? v : "");
-			} else if (VECTOR(vtypes)[a] == IGRAPH_ATTRIBUTE_NUMERIC) {
-				double v = VAN(&graph->g, name, selected_node);
-				if (fabs(v) < 0.001 || fabs(v) >= 10000.0)
-					pos += snprintf(detail + pos, sizeof(detail) - pos, "%s: %g\n", name, v);
-				else
-					pos += snprintf(detail + pos, sizeof(detail) - pos, "%s: %.4f\n", name, v);
-			} else if (VECTOR(vtypes)[a] == IGRAPH_ATTRIBUTE_BOOLEAN) {
-				bool v = (bool)VAN(&graph->g, name, selected_node);
-				pos += snprintf(detail + pos, sizeof(detail) - pos, "%s: %s\n", name, v ? "true" : "false");
-			}
-		}
-		igraph_strvector_destroy(&vnames);
-		igraph_vector_int_destroy(&vtypes);
-
-		if (pos == 0 && graph->nodes[selected_node].label)
-			pos += snprintf(detail, sizeof(detail), "%s\n", graph->nodes[selected_node].label);
-
 		// Surface tangent frame for selected node
 		vec3 normal, upGuide = {0.0f, 1.0f, 0.0f};
 		glm_vec3_normalize_to(graph->nodes[selected_node].position, normal);
@@ -342,31 +309,85 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 		glm_vec3_add(graph->nodes[selected_node].position, label_pos, label_pos);
 		glm_vec3_scale(label_pos, r->layoutScale, label_pos);
 
-		// Render detail string into atlas (rendered first to guarantee space)
-		TextRegion region;
-		text_atlas_render(&r->nodeTextAtlas, &globalAtlas, detail, &region);
+		// Build multi-line string: enumerate ALL igraph vertex attributes
+		size_t detail_cap = 4096;
+		char *detail = calloc(detail_cap, 1);
+		if (detail) {
+			size_t pos = 0;
 
-		// Build instance (darker background, larger)
-		NodeLabelInstance *inst = &instances[inst_idx];
-		glm_vec3_copy(label_pos, inst->worldPos);
-		inst->bgColor[0] = 0.02f;
-		inst->bgColor[1] = 0.02f;
-		inst->bgColor[2] = 0.04f;
-		inst->bgColor[3] = 1.0f;
-		inst->scale[0] = region.width_px * world_text_scale;
-		inst->scale[1] = region.height_px * world_text_scale;
-		inst->scale[2] = 1.0f;
-		glm_vec3_copy(right, inst->right);
-		glm_vec3_copy(up, inst->up);
-		inst->textUV[0] = region.u0;
-		inst->textUV[1] = region.v0;
-		inst->textUV[2] = region.u1;
-		inst->textUV[3] = region.v1;
-		inst->textRegion[0] = 0.0f;
-		inst->textRegion[1] = 0.0f;
-		inst->textRegion[2] = 1.0f;
-		inst->textRegion[3] = 1.0f;
-		inst_idx++;
+			igraph_strvector_t vnames;
+			igraph_vector_int_t vtypes;
+			bool vnames_ok = igraph_strvector_init(&vnames, 0) == IGRAPH_SUCCESS;
+			bool vtypes_ok = igraph_vector_int_init(&vtypes, 0) == IGRAPH_SUCCESS;
+			bool list_ok = vnames_ok && vtypes_ok && (igraph_cattribute_list(&graph->g, NULL, NULL, &vnames, &vtypes, NULL, NULL) == IGRAPH_SUCCESS);
+
+			if (list_ok) {
+				int n_attrs = igraph_strvector_size(&vnames);
+				for (int a = 0; a < n_attrs; a++) {
+					// Ensure we have at least 256 bytes of headroom for the next line
+					if (pos + 256 >= detail_cap) {
+						size_t new_cap = detail_cap * 2;
+						char *tmp = realloc(detail, new_cap);
+						if (!tmp)
+							break;
+						detail = tmp;
+						memset(detail + detail_cap, 0, new_cap - detail_cap);
+						detail_cap = new_cap;
+					}
+
+					const char *name = igraph_strvector_get(&vnames, a);
+					if (VECTOR(vtypes)[a] == IGRAPH_ATTRIBUTE_STRING) {
+						const char *v = VAS(&graph->g, name, selected_node);
+						pos += (size_t)snprintf(detail + pos, detail_cap - pos, "%s: %s\n", name, v ? v : "");
+					} else if (VECTOR(vtypes)[a] == IGRAPH_ATTRIBUTE_NUMERIC) {
+						double v = VAN(&graph->g, name, selected_node);
+						if (fabs(v) < 0.001 || fabs(v) >= 10000.0)
+							pos += (size_t)snprintf(detail + pos, detail_cap - pos, "%s: %g\n", name, v);
+						else
+							pos += (size_t)snprintf(detail + pos, detail_cap - pos, "%s: %.4f\n", name, v);
+					} else if (VECTOR(vtypes)[a] == IGRAPH_ATTRIBUTE_BOOLEAN) {
+						bool v = (bool)VAB(&graph->g, name, selected_node);
+						pos += (size_t)snprintf(detail + pos, detail_cap - pos, "%s: %s\n", name, v ? "true" : "false");
+					}
+				}
+			}
+
+			if (vnames_ok)
+				igraph_strvector_destroy(&vnames);
+			if (vtypes_ok)
+				igraph_vector_int_destroy(&vtypes);
+
+			if (pos == 0 && graph->nodes[selected_node].label)
+				pos += (size_t)snprintf(detail, detail_cap, "%s\n", graph->nodes[selected_node].label);
+
+			// Render detail string into atlas (rendered first to guarantee space)
+			TextRegion region;
+			text_atlas_render(&r->nodeTextAtlas, &globalAtlas, detail, &region);
+
+			// Build instance (darker background, larger)
+			NodeLabelInstance *inst = &instances[inst_idx];
+			glm_vec3_copy(label_pos, inst->worldPos);
+			inst->bgColor[0] = 0.02f;
+			inst->bgColor[1] = 0.02f;
+			inst->bgColor[2] = 0.04f;
+			inst->bgColor[3] = 1.0f;
+			inst->scale[0] = region.width_px * world_text_scale;
+			inst->scale[1] = region.height_px * world_text_scale;
+			inst->scale[2] = 1.0f;
+			glm_vec3_copy(right, inst->right);
+			glm_vec3_copy(up, inst->up);
+			inst->textUV[0] = region.u0;
+			inst->textUV[1] = region.v0;
+			inst->textUV[2] = region.u1;
+			inst->textUV[3] = region.v1;
+			inst->textRegion[0] = 0.0f;
+			inst->textRegion[1] = 0.0f;
+			inst->textRegion[2] = 1.0f;
+			inst->textRegion[3] = 1.0f;
+			inst_idx++;
+
+			free(detail);
+		}
 	}
 
 	// 7. LOD labels (nearest up to max_labels, skip selected, skip no-label)
