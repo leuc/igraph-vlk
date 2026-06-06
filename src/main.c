@@ -41,12 +41,32 @@ int main(int argc, char **argv)
 	app.win_w = 3440;
 	app.win_h = 1440;
 
-	if (argc < 2) {
+#ifdef USE_OPENXR
+	bool vr_requested = false;
+#endif
+	char *filename = NULL;
+
+	for (int i = 1; i < argc; i++) {
+#ifdef USE_OPENXR
+		if (strcmp(argv[i], "--vr") == 0) {
+			vr_requested = true;
+			continue;
+		}
+#endif
+		if (filename == NULL) {
+			filename = argv[i];
+		} else {
+			fprintf(stderr, "Usage: %s <graph.graphml>\n", argv[0]);
+			return EXIT_FAILURE;
+		}
+	}
+
+	if (filename == NULL) {
 		fprintf(stderr, "Usage: %s <graph.graphml>\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
-	app.current_filename = argv[1];
+	app.current_filename = filename;
 
 	// Initialize graph data
 	app.current_graph.graph_initialized = false;
@@ -77,17 +97,23 @@ int main(int argc, char **argv)
 	// Initialize input handling (registers GLFW callbacks)
 	interaction_init(app.window);
 
-	// Initialize OpenXR (Display Only)
+	// Initialize VR (only when --vr is explicitly requested)
 #ifdef USE_OPENXR
-	app.vr_enabled = xr_context_init(&app.xr_ctx, "igraph-vlk");
-	if (app.vr_enabled) {
-		printf("OpenXR HMD detected, enabling VR mode.\n");
+	if (vr_requested) {
+		app.vr_enabled = xr_context_init(&app.xr_ctx, "igraph-vlk");
+		if (!app.vr_enabled) {
+			fprintf(stderr, "Failed to initialize OpenXR context.\n");
+			graph_free_data(&app.current_graph);
+			glfwDestroyWindow(app.window);
+			glfwTerminate();
+			return EXIT_FAILURE;
+		}
+		printf("OpenXR initialized, enabling VR mode.\n");
 	} else {
-		printf("No HMD detected, running in desktop mode.\n");
+		app.vr_enabled = false;
 	}
 #else
 	app.vr_enabled = false;
-	printf("VR support disabled at compile time.\n");
 #endif
 
 	// Initialize renderer
@@ -105,7 +131,13 @@ int main(int argc, char **argv)
 #ifdef USE_OPENXR
 	if (app.vr_enabled) {
 		if (!xr_init_vr(&app)) {
-			app.vr_enabled = false;
+			fprintf(stderr, "Failed to initialize VR session.\n");
+			xr_context_cleanup(&app.xr_ctx);
+			graph_free_data(&app.current_graph);
+			renderer_cleanup(&app.renderer);
+			glfwDestroyWindow(app.window);
+			glfwTerminate();
+			return EXIT_FAILURE;
 		}
 	}
 #endif
