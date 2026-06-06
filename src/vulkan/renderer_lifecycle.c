@@ -232,6 +232,9 @@ void renderer_recreate_swapchain(Renderer *r)
 		glfwWaitEvents();
 	}
 
+	// Wait only for in-flight frames to finish (not a full device idle)
+	VK_CHECK(vkWaitForFences(r->core.device, MAX_FRAMES_IN_FLIGHT, r->commands.inFlightFences, VK_TRUE, UINT64_MAX), "Failed to wait for in-flight fences during swapchain recreation");
+
 	// Destroy old framebuffers (render pass survives — format-based, not extent-based)
 	for (uint32_t i = 0; i < r->renderPass.imageCount; i++) {
 		if (r->renderPass.framebuffers[i] != VK_NULL_HANDLE)
