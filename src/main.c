@@ -250,6 +250,9 @@ int main(int argc, char **argv)
 				// Update base view matrix from camera
 				renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
 
+				// Update node labels (LOD atlas, nearest 200 nodes + detail card)
+				renderer_update_node_labels(&app.renderer, &app.current_graph, app.camera.pos, app.last_picked_node);
+
 				renderer_draw_frame(&app.renderer);
 			}
 #ifdef USE_OPENXR

@@ -20,17 +20,14 @@ layout(location = 5) in vec4 rotation;
 layout(location = 6) in vec4 textUV;
 layout(location = 7) in vec4 textRegion;
 
-layout(location = 0) out vec2 fragQuadUV;   // 0..1 from top-left of quad
+layout(location = 0) out vec2 fragQuadUV; // 0..1 from top-left of quad
 layout(location = 1) out vec4 fragBgColor;
 layout(location = 2) out vec4 fragTextUV;
 layout(location = 3) out vec4 fragTextRegion;
 
 vec4 quat_mul(vec4 q1, vec4 q2)
 {
-	return vec4(q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y,
-				q1.w * q2.y - q1.x * q2.z + q1.y * q2.w + q1.z * q2.x,
-				q1.w * q2.z + q1.x * q2.y - q1.y * q2.x + q1.z * q2.w,
-				q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z);
+	return vec4(q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y, q1.w * q2.y - q1.x * q2.z + q1.y * q2.w + q1.z * q2.x, q1.w * q2.z + q1.x * q2.y - q1.y * q2.x + q1.z * q2.w, q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z);
 }
 
 vec3 rotate_by_quat(vec3 v, vec4 q)

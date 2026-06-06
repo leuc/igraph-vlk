@@ -477,18 +477,6 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 
 	// --- Upload MenuInstance buffer (background-only quads) ---
 	if (instance_count > 0) {
-		if (r->menuQuadVertexBuffer == VK_NULL_HANDLE) {
-			QuadVertex qv[] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}, {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}}, {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}};
-			uint32_t qi[] = {0, 1, 2, 2, 3, 0};
-
-			create_buffer(r->core.device, r->core.physicalDevice, sizeof(qv), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuQuadVertexBuffer, &r->menuQuadVertexBufferMemory);
-			update_buffer(r->core.device, r->menuQuadVertexBufferMemory, sizeof(qv), qv);
-
-			create_buffer(r->core.device, r->core.physicalDevice, sizeof(qi), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuQuadIndexBuffer, &r->menuQuadIndexBufferMemory);
-			update_buffer(r->core.device, r->menuQuadIndexBufferMemory, sizeof(qi), qi);
-			r->menuQuadIndexCount = 6;
-		}
-
 		VkDeviceSize bufferSize = sizeof(MenuInstance) * instance_count;
 		if (r->menuInstanceBuffer != VK_NULL_HANDLE) {
 			VK_CHECK(vkDeviceWaitIdle(r->core.device), "Failed to wait for device idle before menu buffer rebuild");

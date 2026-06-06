@@ -99,46 +99,64 @@ void text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, T
 
 	int len = (int)strlen(text);
 
-	// Compute total width and bounding box (accounting for negative yoff)
-	float total_width = 0;
+	// Pass 1: measure — track max line width, line count, glyph bounding box
+	float max_line_width = 0;
+	float cur_line_width = 0;
 	float min_y = 0;
 	float max_y = 0;
+	int num_lines = 1;
 	for (int i = 0; i < len; i++) {
 		unsigned char c = (unsigned char)text[i];
+		if (c == '\n') {
+			if (cur_line_width > max_line_width)
+				max_line_width = cur_line_width;
+			cur_line_width = 0;
+			num_lines++;
+			continue;
+		}
 		CharInfo *ci = (c < 128) ? &((FontAtlas *)font)->chars[c] : &((FontAtlas *)font)->chars[32];
-		total_width += ci->xadvance;
+		cur_line_width += ci->xadvance;
 		if (ci->y0 < min_y)
 			min_y = ci->y0;
 		if (ci->y1 > max_y)
 			max_y = ci->y1;
 	}
+	if (cur_line_width > max_line_width)
+		max_line_width = cur_line_width;
 
-	// Round up row height to power-of-two-ish for alignment
-	int text_h = (int)(max_y - min_y + 1.5f) & ~1; // round to even, minimum padding
-	if (text_h < 1)
-		text_h = 1;
+	float line_height = max_y - min_y;
+	int line_h_px = (int)(line_height + 1.5f) & ~1;
+	if (line_h_px < 1)
+		line_h_px = 1;
+	int total_h = line_h_px * num_lines + (num_lines - 1) * 2;
 
 	// Baseline offset: shift all glyphs down so negative y0 doesn't clip above the row
 	int baseline = (int)(-min_y);
 
 	// Advance to new row if needed
-	if (ta->cursor_x + (int)total_width + 1 > ta->width) {
+	if (ta->cursor_x + (int)max_line_width + 1 > ta->width) {
 		ta->cursor_x = 0;
 		ta->cursor_y += ta->row_height + 1;
 		ta->row_height = 0;
 	}
 
 	// Check atlas overflow
-	if (ta->cursor_y + text_h > ta->height) {
+	if (ta->cursor_y + total_h > ta->height) {
 		out->u0 = out->v0 = out->u1 = out->v1 = 0;
 		out->width_px = out->height_px = 0;
 		return;
 	}
 
-	// Composite each glyph into the atlas
+	// Pass 2: blit each glyph into the atlas, handling \n as line breaks
 	float x_cursor = 0;
+	int line_idx = 0;
 	for (int i = 0; i < len; i++) {
 		unsigned char c = (unsigned char)text[i];
+		if (c == '\n') {
+			x_cursor = 0;
+			line_idx++;
+			continue;
+		}
 		CharInfo *ci = (c < 128) ? &((FontAtlas *)font)->chars[c] : &((FontAtlas *)font)->chars[32];
 
 		int glyph_w = (int)(ci->x1 - ci->x0);
@@ -146,9 +164,8 @@ void text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, T
 
 		if (glyph_w > 0 && glyph_h > 0) {
 			int dst_x = ta->cursor_x + (int)(x_cursor + ci->x0);
-			int dst_y = ta->cursor_y + baseline + (int)ci->y0;
+			int dst_y = ta->cursor_y + line_idx * (line_h_px + 2) + baseline + (int)ci->y0;
 
-			// Blit glyph from font atlas into text atlas
 			for (int gy = 0; gy < glyph_h; gy++) {
 				int sy = ci->src_y0 + gy;
 				int dy = dst_y + gy;
@@ -170,15 +187,15 @@ void text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, T
 	// Output UV and pixel dimensions
 	out->u0 = (float)ta->cursor_x / ta->width;
 	out->v0 = (float)(ta->cursor_y) / ta->height;
-	out->u1 = (float)(ta->cursor_x + (int)(total_width + 0.5f)) / ta->width;
-	out->v1 = (float)(ta->cursor_y + (int)(max_y - min_y)) / ta->height;
-	out->width_px = total_width;
-	out->height_px = max_y - min_y;
+	out->u1 = (float)(ta->cursor_x + (int)(max_line_width + 0.5f)) / ta->width;
+	out->v1 = (float)(ta->cursor_y + total_h) / ta->height;
+	out->width_px = max_line_width;
+	out->height_px = (float)total_h;
 
 	// Advance cursor
-	ta->cursor_x += (int)(total_width + 0.5f) + 1;
-	if (text_h > ta->row_height)
-		ta->row_height = text_h;
+	ta->cursor_x += (int)(max_line_width + 0.5f) + 1;
+	if (total_h > ta->row_height)
+		ta->row_height = total_h;
 	ta->dirty = true;
 }
 

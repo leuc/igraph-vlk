@@ -1,22 +1,35 @@
 #version 450
 
-layout(binding = 1) uniform sampler2D texSampler;
-layout(location = 0) in vec2 fragTexCoord;
-layout(location = 1) in float inSelected;
+layout(binding = 1) uniform sampler2D textAtlas;
+
+layout(location = 0) in vec2 fragQuadUV;
+layout(location = 1) in vec4 fragBgColor;
+layout(location = 2) in vec4 fragTextUV;
+layout(location = 3) in vec4 fragTextRegion;
+
 layout(location = 0) out vec4 outColor;
 
 void main()
 {
-	float a = texture(texSampler, fragTexCoord).r;
-	if (inSelected > 1.5) {
-		outColor = vec4(0.04, 0.04, 0.08, 1.0);
-	} else if (inSelected > 0.5) {
-		if (a < 0.1)
-			discard;
-		outColor = vec4(1.0, 1.0, 1.0, 1.0);
-	} else {
-		if (a < 0.1)
-			discard;
-		outColor = vec4(1.0, 1.0, 1.0, a);
+	vec4 color = fragBgColor;
+
+	if (fragTextUV.z > fragTextUV.x) {
+		vec2 rMin = fragTextRegion.xy;
+		vec2 rMax = fragTextRegion.zw;
+		if (fragQuadUV.x >= rMin.x && fragQuadUV.x <= rMax.x && fragQuadUV.y >= rMin.y && fragQuadUV.y <= rMax.y) {
+			vec2 localUV = (fragQuadUV - rMin) / (rMax - rMin);
+			vec2 atlasUV = vec2(mix(fragTextUV.x, fragTextUV.z, localUV.x), mix(fragTextUV.y, fragTextUV.w, localUV.y));
+
+			float a = textureLod(textAtlas, atlasUV, 0.0).r;
+
+			if (a > 0.1) {
+				color.rgb = mix(color.rgb, vec3(1.0), a);
+				color.a = max(color.a, a);
+			}
+		}
 	}
+
+	if (color.a < 0.01)
+		discard;
+	outColor = color;
 }

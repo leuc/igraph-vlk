@@ -8,41 +8,35 @@ layout(binding = 0) uniform UniformBufferObject
 }
 ubo;
 
-layout(push_constant) uniform LODConstants
-{
-	vec3 cameraPos;
-	float lodThreshold;
-}
-pc;
-
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec2 inTexCoord;
 
-layout(location = 2) in vec3 nodePos;
-layout(location = 3) in vec4 charRect;
-layout(location = 4) in vec4 charUV;
+layout(location = 2) in vec3 worldPos;
+layout(location = 3) in vec4 bgColor;
+layout(location = 4) in vec3 scale;
+layout(location = 5) in vec3 right;
+layout(location = 6) in vec3 up;
+layout(location = 7) in vec4 textUV;
+layout(location = 8) in vec4 textRegion;
 
-layout(location = 5) in vec3 fixedRight;
-layout(location = 6) in vec3 fixedUp;
-layout(location = 7) in float inSelected;
-
-layout(location = 0) out vec2 fragTexCoord;
-layout(location = 1) out float outSelected;
+layout(location = 0) out vec2 fragQuadUV;
+layout(location = 1) out vec4 fragBgColor;
+layout(location = 2) out vec4 fragTextUV;
+layout(location = 3) out vec4 fragTextRegion;
 
 void main()
 {
-	float x = mix(charRect.x, charRect.z, inPosition.x);
-	float y = mix(charRect.y, charRect.w, inPosition.y);
+	float x = inPosition.x * scale.x;
+	float y = inPosition.y * scale.y;
 
-	vec3 pos = nodePos + (fixedRight * x) + (fixedUp * -y);
-
-	if (inSelected < 0.5 && distance(pos, pc.cameraPos) > pc.lodThreshold) {
-		gl_Position = vec4(0.0);
-		return;
-	}
+	vec3 pos = worldPos + right * x + up * y;
 
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(pos, 1.0);
 
-	fragTexCoord = vec2(mix(charUV.x, charUV.z, inTexCoord.x), mix(charUV.y, charUV.w, inTexCoord.y));
-	outSelected = inSelected;
+	gl_Position.z -= 0.001 * gl_Position.w;
+
+	fragQuadUV = vec2(inPosition.x + 0.5, 0.5 - inPosition.y);
+	fragBgColor = bgColor;
+	fragTextUV = textUV;
+	fragTextRegion = textRegion;
 }

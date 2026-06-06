@@ -65,13 +65,14 @@ typedef struct
 
 typedef struct
 {
-	vec3 nodePos;
-	vec4 charRect;
-	vec4 charUV;
+	vec3 worldPos;
+	vec4 bgColor;
+	vec3 scale;
 	vec3 right;
 	vec3 up;
-	float selected;
-} LabelInstance;
+	vec4 textUV;
+	vec4 textRegion;
+} NodeLabelInstance;
 
 typedef struct
 {
@@ -106,6 +107,12 @@ typedef struct
 	vec4 textUV;	 // (u0, v0, u1, v1) in text atlas. (0,0,0,0) = no text
 	vec4 textRegion; // (left, top, right, bottom) text area in quad-local [0..1]
 } TextQuadInstance;
+
+typedef struct
+{
+	float dist;
+	uint32_t idx;
+} DistIdxPair;
 
 // --- CONTEXT TYPES ---
 
@@ -292,6 +299,17 @@ typedef struct Renderer
 	uint32_t textQuadInstanceCount;
 	TextAtlas menuTextAtlas;
 	VkDescriptorSet *textQuadDescriptorSets;
+
+	// Node Labels (LOD)
+	TextAtlas nodeTextAtlas;
+	VkDescriptorSet *nodeLabelDescSets;
+	VkBuffer nodeLabelInstanceBuffer;
+	VkDeviceMemory nodeLabelInstanceBufferMemory;
+	uint32_t nodeLabelInstanceCount;
+	uint32_t nodeLabelCapacity;
+	DistIdxPair *labelSortPairs;
+	uint32_t labelSortCapacity;
+
 	VkPipeline rayPipeline;
 	VkBuffer rayVertexBuffer;
 	VkDeviceMemory rayVertexBufferMemory;

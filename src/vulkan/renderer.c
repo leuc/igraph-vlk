@@ -101,6 +101,15 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	create_buffer(r->core.device, r->core.physicalDevice, sizeof(lvs), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->labelVertexBuffer, &r->labelVertexBufferMemory);
 	update_buffer(r->core.device, r->labelVertexBufferMemory, sizeof(lvs), lvs);
 
+	// Shared quad vertex/index buffers for menus, text quads, and node labels
+	QuadVertex qv[] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}, {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}}, {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}};
+	uint32_t qi[] = {0, 1, 2, 2, 3, 0};
+	create_buffer(r->core.device, r->core.physicalDevice, sizeof(qv), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuQuadVertexBuffer, &r->menuQuadVertexBufferMemory);
+	update_buffer(r->core.device, r->menuQuadVertexBufferMemory, sizeof(qv), qv);
+	create_buffer(r->core.device, r->core.physicalDevice, sizeof(qi), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuQuadIndexBuffer, &r->menuQuadIndexBufferMemory);
+	update_buffer(r->core.device, r->menuQuadIndexBufferMemory, sizeof(qi), qi);
+	r->menuQuadIndexCount = 6;
+
 	UIVertex uiBg[] = {{{0, 0, 0}, {0, 0}}, {{1, 0, 0}, {1, 0}}, {{0, 1, 0}, {0, 1}}, {{1, 1, 0}, {1, 1}}};
 	create_buffer(r->core.device, r->core.physicalDevice, sizeof(uiBg), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uiBgVertexBuffer, &r->uiBgVertexBufferMemory);
 	update_buffer(r->core.device, r->uiBgVertexBufferMemory, sizeof(uiBg), uiBg);
@@ -150,19 +159,20 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 		VK_CHECK(vkMapMemory(r->core.device, r->uniformBuffersMemory[i], 0, sizeof(UniformBufferObject), 0, &r->uboMapped[i]), "Failed to map UBO memory");
 	}
 
-	VkDescriptorPoolSize descriptorPoolSizes[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2}};
-	VkDescriptorPoolCreateInfo descriptorPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .poolSizeCount = 2, .pPoolSizes = descriptorPoolSizes, .maxSets = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2};
+	VkDescriptorPoolSize descriptorPoolSizes[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 3}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 3}};
+	VkDescriptorPoolCreateInfo descriptorPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .poolSizeCount = 2, .pPoolSizes = descriptorPoolSizes, .maxSets = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 3};
 	VK_CHECK(vkCreateDescriptorPool(r->core.device, &descriptorPoolInfo, NULL, &r->descriptorPool), "Failed to create descriptor pool");
 
-	VkDescriptorSetLayout descriptorSetLayouts[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2];
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2; i++)
+	VkDescriptorSetLayout descriptorSetLayouts[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 3];
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 3; i++)
 		descriptorSetLayouts[i] = r->descriptorSetLayout;
-	VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->descriptorPool, .descriptorSetCount = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2, .pSetLayouts = descriptorSetLayouts};
-	r->descriptorSets = malloc(sizeof(VkDescriptorSet) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2);
+	VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->descriptorPool, .descriptorSetCount = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 3, .pSetLayouts = descriptorSetLayouts};
+	r->descriptorSets = malloc(sizeof(VkDescriptorSet) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 3);
 	VK_CHECK(vkAllocateDescriptorSets(r->core.device, &descriptorSetAllocInfo, r->descriptorSets), "Failed to allocate descriptor sets");
 
 	// Initialize text quad descriptor set pointers (set after atlas upload)
 	r->textQuadDescriptorSets = &r->descriptorSets[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
+	r->nodeLabelDescSets = &r->descriptorSets[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 2];
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 		VkDescriptorBufferInfo bufferInfo = {r->uniformBuffers[i], 0, sizeof(UniformBufferObject)};
@@ -176,6 +186,18 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 		fprintf(stderr, "Failed to initialize menu text atlas\n");
 		return false;
 	}
+
+	// Initialize node label atlas and instance buffer
+	if (!text_atlas_init(&r->nodeTextAtlas, 2048, 512)) {
+		fprintf(stderr, "Failed to initialize node label text atlas\n");
+		return false;
+	}
+	r->nodeLabelInstanceBuffer = VK_NULL_HANDLE;
+	r->nodeLabelInstanceBufferMemory = VK_NULL_HANDLE;
+	r->nodeLabelInstanceCount = 0;
+	r->nodeLabelCapacity = 0;
+	r->labelSortPairs = NULL;
+	r->labelSortCapacity = 0;
 
 	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
 	r->graphUpdateRingIndex = 0;
@@ -197,6 +219,230 @@ void renderer_update_view(Renderer *r, vec3 pos, vec3 front, vec3 up)
 	vec3 c;
 	glm_vec3_add(pos, front, c);
 	glm_lookat(pos, c, up, r->ubo.view);
+}
+
+static int sort_by_dist(const void *a, const void *b)
+{
+	float da = ((const DistIdxPair *)a)->dist;
+	float db = ((const DistIdxPair *)b)->dist;
+	return (da > db) - (da < db);
+}
+
+void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos, int selected_node)
+{
+	r->nodeLabelInstanceCount = 0;
+	if (graph->node_count == 0)
+		return;
+
+	uint32_t node_count = graph->node_count;
+	uint32_t max_labels = 200;
+
+	// Ensure sort buffer is large enough
+	if (!r->labelSortPairs || r->labelSortCapacity < node_count) {
+		free(r->labelSortPairs);
+		r->labelSortCapacity = node_count > 0 ? node_count : 256;
+		r->labelSortPairs = malloc(sizeof(DistIdxPair) * r->labelSortCapacity);
+		if (!r->labelSortPairs)
+			return;
+	}
+
+	DistIdxPair *pairs = r->labelSortPairs;
+
+	// 1. Compute distances from camera
+	for (uint32_t i = 0; i < node_count; i++) {
+		vec3 ws;
+		glm_vec3_scale(graph->nodes[i].position, r->layoutScale, ws);
+		pairs[i].dist = glm_vec3_distance(camera_pos, ws);
+		pairs[i].idx = i;
+	}
+
+	// 2. Sort by distance
+	qsort(pairs, node_count, sizeof(DistIdxPair), sort_by_dist);
+
+	// 3. Count how many labels we need (up to max_labels, skip selected for detail card)
+	uint32_t label_count = 0;
+	for (uint32_t j = 0; j < node_count && label_count < max_labels; j++) {
+		uint32_t ni = pairs[j].idx;
+		if ((int)ni == selected_node)
+			continue;
+		if (!graph->nodes[ni].label || !graph->nodes[ni].label[0])
+			continue;
+		label_count++;
+	}
+	uint32_t nli_needed = label_count + (selected_node >= 0 && selected_node < (int)node_count ? 1 : 0);
+	if (nli_needed == 0)
+		return;
+
+	// 4. Ensure instance buffer is large enough
+	if (!r->nodeLabelInstanceBuffer || r->nodeLabelCapacity < nli_needed) {
+		if (r->nodeLabelInstanceBuffer != VK_NULL_HANDLE) {
+			vkDeviceWaitIdle(r->core.device);
+			vkDestroyBuffer(r->core.device, r->nodeLabelInstanceBuffer, NULL);
+			vkFreeMemory(r->core.device, r->nodeLabelInstanceBufferMemory, NULL);
+		}
+		r->nodeLabelCapacity = nli_needed > 128 ? nli_needed : 128;
+		create_buffer(r->core.device, r->core.physicalDevice, sizeof(NodeLabelInstance) * r->nodeLabelCapacity, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->nodeLabelInstanceBuffer, &r->nodeLabelInstanceBufferMemory);
+	}
+
+	// 5. Clear atlas and build instances
+	text_atlas_clear(&r->nodeTextAtlas);
+	NodeLabelInstance *instances = malloc(sizeof(NodeLabelInstance) * nli_needed);
+	if (!instances)
+		return;
+
+	float world_text_scale = 0.003f;
+	float fixed_offset = 0.4f;
+	uint32_t inst_idx = 0;
+
+	for (uint32_t j = 0; j < node_count && inst_idx < label_count; j++) {
+		uint32_t ni = pairs[j].idx;
+		if ((int)ni == selected_node)
+			continue;
+		const char *label = graph->nodes[ni].label;
+		if (!label || !label[0])
+			continue;
+
+		// Surface tangent frame (same as shader.vert)
+		vec3 normal, upGuide = {0.0f, 1.0f, 0.0f};
+		glm_vec3_normalize_to(graph->nodes[ni].position, normal);
+		if (fabsf(normal[1]) > 0.999f)
+			upGuide[0] = 1.0f;
+		vec3 right, up;
+		glm_vec3_cross(upGuide, normal, right);
+		glm_vec3_normalize(right);
+		glm_vec3_cross(normal, right, up);
+
+		// Position above node surface
+		vec3 label_pos;
+		glm_vec3_scale(normal, fixed_offset, label_pos);
+		glm_vec3_add(graph->nodes[ni].position, label_pos, label_pos);
+		glm_vec3_scale(label_pos, r->layoutScale, label_pos);
+
+		// Render label text into atlas
+		TextRegion region;
+		text_atlas_render(&r->nodeTextAtlas, &globalAtlas, label, &region);
+
+		// Build instance
+		NodeLabelInstance *inst = &instances[inst_idx];
+		glm_vec3_copy(label_pos, inst->worldPos);
+		inst->bgColor[0] = 0.05f;
+		inst->bgColor[1] = 0.05f;
+		inst->bgColor[2] = 0.10f;
+		inst->bgColor[3] = 1.0f;
+		inst->scale[0] = region.width_px * world_text_scale;
+		inst->scale[1] = region.height_px * world_text_scale;
+		inst->scale[2] = 1.0f;
+		glm_vec3_copy(right, inst->right);
+		glm_vec3_copy(up, inst->up);
+		inst->textUV[0] = region.u0;
+		inst->textUV[1] = region.v0;
+		inst->textUV[2] = region.u1;
+		inst->textUV[3] = region.v1;
+		inst->textRegion[0] = 0.0f;
+		inst->textRegion[1] = 0.0f;
+		inst->textRegion[2] = 1.0f;
+		inst->textRegion[3] = 1.0f;
+		inst_idx++;
+	}
+
+	// 6. Detail card for selected node (replaces regular label)
+	if (selected_node >= 0 && selected_node < (int)node_count) {
+		// Build multi-line string with all vertex attributes
+		char detail[4096] = {0};
+		int pos = 0;
+
+		if (pos < (int)sizeof(detail) - 2 && graph->nodes[selected_node].label)
+			pos += snprintf(detail + pos, sizeof(detail) - pos, "label: %s\n", graph->nodes[selected_node].label);
+
+		// Enumerate all igraph vertex attributes
+		igraph_strvector_t vnames;
+		igraph_vector_int_t vtypes;
+		igraph_strvector_init(&vnames, 0);
+		igraph_vector_int_init(&vtypes, 0);
+		igraph_cattribute_list(&graph->g, NULL, NULL, NULL, NULL, &vnames, &vtypes);
+		for (int a = 0; a < igraph_strvector_size(&vnames) && pos < (int)sizeof(detail) - 64; a++) {
+			const char *name = STR(vnames, a);
+			if (strcmp(name, "label") == 0)
+				continue;
+			if (VECTOR(vtypes)[a] == IGRAPH_ATTRIBUTE_STRING) {
+				const char *v = VAS(&graph->g, name, selected_node);
+				pos += snprintf(detail + pos, sizeof(detail) - pos, "%s: %s\n", name, v ? v : "");
+			} else if (VECTOR(vtypes)[a] == IGRAPH_ATTRIBUTE_NUMERIC) {
+				double v = VAN(&graph->g, name, selected_node);
+				if (fabs(v) < 0.001 || fabs(v) >= 10000.0)
+					pos += snprintf(detail + pos, sizeof(detail) - pos, "%s: %g\n", name, v);
+				else
+					pos += snprintf(detail + pos, sizeof(detail) - pos, "%s: %.4f\n", name, v);
+			} else if (VECTOR(vtypes)[a] == IGRAPH_ATTRIBUTE_BOOLEAN) {
+				bool v = (bool)VAN(&graph->g, name, selected_node);
+				pos += snprintf(detail + pos, sizeof(detail) - pos, "%s: %s\n", name, v ? "true" : "false");
+			}
+		}
+		igraph_strvector_destroy(&vnames);
+		igraph_vector_int_destroy(&vtypes);
+
+		pos += snprintf(detail + pos, sizeof(detail) - pos, "degree: %d\n", graph->nodes[selected_node].degree);
+		pos += snprintf(detail + pos, sizeof(detail) - pos, "coreness: %d\n", graph->nodes[selected_node].coreness);
+
+		// Surface tangent frame for selected node
+		vec3 normal, upGuide = {0.0f, 1.0f, 0.0f};
+		glm_vec3_normalize_to(graph->nodes[selected_node].position, normal);
+		if (fabsf(normal[1]) > 0.999f)
+			upGuide[0] = 1.0f;
+		vec3 right, up;
+		glm_vec3_cross(upGuide, normal, right);
+		glm_vec3_normalize(right);
+		glm_vec3_cross(normal, right, up);
+
+		// Position slightly higher than regular labels
+		vec3 label_pos;
+		glm_vec3_scale(normal, fixed_offset + 0.3f, label_pos);
+		glm_vec3_add(graph->nodes[selected_node].position, label_pos, label_pos);
+		glm_vec3_scale(label_pos, r->layoutScale, label_pos);
+
+		// Render detail string into atlas
+		TextRegion region;
+		text_atlas_render(&r->nodeTextAtlas, &globalAtlas, detail, &region);
+
+		// Build instance (darker background, larger)
+		NodeLabelInstance *inst = &instances[inst_idx];
+		glm_vec3_copy(label_pos, inst->worldPos);
+		inst->bgColor[0] = 0.02f;
+		inst->bgColor[1] = 0.02f;
+		inst->bgColor[2] = 0.04f;
+		inst->bgColor[3] = 1.0f;
+		inst->scale[0] = region.width_px * world_text_scale;
+		inst->scale[1] = region.height_px * world_text_scale;
+		inst->scale[2] = 1.0f;
+		glm_vec3_copy(right, inst->right);
+		glm_vec3_copy(up, inst->up);
+		inst->textUV[0] = region.u0;
+		inst->textUV[1] = region.v0;
+		inst->textUV[2] = region.u1;
+		inst->textUV[3] = region.v1;
+		inst->textRegion[0] = 0.0f;
+		inst->textRegion[1] = 0.0f;
+		inst->textRegion[2] = 1.0f;
+		inst->textRegion[3] = 1.0f;
+		inst_idx++;
+	}
+
+	// 7. Upload to GPU
+	if (inst_idx > 0) {
+		text_atlas_ensure_uploaded(&r->nodeTextAtlas, r->core.device, r->core.physicalDevice, r->commands.commandPool, r->core.graphicsQueue);
+
+		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
+			VkDescriptorBufferInfo bufferInfo = {r->uniformBuffers[i], 0, sizeof(UniformBufferObject)};
+			VkDescriptorImageInfo imageInfo = {r->textureSampler, r->nodeTextAtlas.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+			VkWriteDescriptorSet writes[] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->nodeLabelDescSets[i], 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &bufferInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->nodeLabelDescSets[i], 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imageInfo, NULL, NULL}};
+			vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
+		}
+
+		update_buffer(r->core.device, r->nodeLabelInstanceBufferMemory, sizeof(NodeLabelInstance) * inst_idx, instances);
+	}
+
+	r->nodeLabelInstanceCount = inst_idx;
+	free(instances);
 }
 
 #ifdef USE_OPENXR
@@ -303,6 +549,16 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdBindVertexBuffers(cmd, 0, 2, tVs, tOs);
 		vkCmdBindIndexBuffer(cmd, r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdDrawIndexed(cmd, 6, r->textQuadInstanceCount, 0, 0, 0);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[ubo_idx], 0, NULL);
+	}
+	if (r->nodeLabelInstanceCount > 0 && r->nodeLabelInstanceBuffer != VK_NULL_HANDLE) {
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->nodeLabelDescSets[ubo_idx], 0, NULL);
+		VkBuffer nVs[] = {r->menuQuadVertexBuffer, r->nodeLabelInstanceBuffer};
+		VkDeviceSize nOs[] = {0, 0};
+		vkCmdBindVertexBuffers(cmd, 0, 2, nVs, nOs);
+		vkCmdBindIndexBuffer(cmd, r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(cmd, 6, r->nodeLabelInstanceCount, 0, 0, 0);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[ubo_idx], 0, NULL);
 	}
 	if (r->showUI) {
@@ -435,6 +691,12 @@ void renderer_cleanup(Renderer *r)
 		vkFreeMemory(r->core.device, r->textQuadInstanceBufferMemory, NULL);
 	}
 	text_atlas_destroy(&r->menuTextAtlas, r->core.device);
+	text_atlas_destroy(&r->nodeTextAtlas, r->core.device);
+	free(r->labelSortPairs);
+	if (r->nodeLabelInstanceBuffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->core.device, r->nodeLabelInstanceBuffer, NULL);
+		vkFreeMemory(r->core.device, r->nodeLabelInstanceBufferMemory, NULL);
+	}
 	if (r->xrFramebuffers) {
 		for (uint32_t i = 0; i < r->xr_view_count; i++) {
 			if (r->xrDepthImageViews[i] != VK_NULL_HANDLE)
