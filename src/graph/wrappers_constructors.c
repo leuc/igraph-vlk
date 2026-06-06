@@ -450,6 +450,7 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 
 	// Refresh renderer
 	renderer_update_graph(renderer, data);
+	renderer->labelTreeNeedsRebuild = true;
 
 	printf("[apply_new_graph] New graph generated - %d vertices, %d edges\n", data->node_count, data->edge_count);
 }

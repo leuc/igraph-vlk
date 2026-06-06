@@ -252,11 +252,13 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 	case GLFW_KEY_EQUAL:
 		state->renderer.layoutScale *= 1.2f;
 		renderer_update_graph(&state->renderer, &state->current_graph);
+		state->renderer.labelTreeNeedsRebuild = true;
 		break;
 	case GLFW_KEY_KP_SUBTRACT:
 	case GLFW_KEY_MINUS:
 		state->renderer.layoutScale /= 1.2f;
 		renderer_update_graph(&state->renderer, &state->current_graph);
+		state->renderer.labelTreeNeedsRebuild = true;
 		break;
 	}
 }

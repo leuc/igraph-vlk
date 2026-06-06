@@ -4,6 +4,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <cglm/cglm.h>
+#include <igraph.h>
+#include <igraph_barnes_hut.h>
 #include <vulkan/vulkan.h>
 
 #include "graph/graph_types.h"
@@ -308,8 +310,8 @@ typedef struct Renderer
 	VkDeviceMemory nodeLabelInstanceBufferMemory;
 	uint32_t nodeLabelInstanceCount;
 	uint32_t nodeLabelCapacity;
-	DistIdxPair *labelSortPairs;
-	uint32_t labelSortCapacity;
+	igraph_bh_tree_t labelTree;
+	bool labelTreeNeedsRebuild;
 	vec3 labelCameraPos;
 	int labelSelectedNode;
 	bool labelCacheValid;

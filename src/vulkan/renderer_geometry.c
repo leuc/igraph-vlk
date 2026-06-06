@@ -215,7 +215,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	free(edgePositions);
 	free(edgeAttributes);
 	r->needsAttributeUpload = VK_FALSE;
-	r->labelCacheValid = false;
+	r->labelTreeNeedsRebuild = true;
 
 	// Signal the ring fence for this slot so the next update can proceed
 	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 0, NULL, r->graphUpdateFences[ringIdx]), "Failed to signal graph update fence");

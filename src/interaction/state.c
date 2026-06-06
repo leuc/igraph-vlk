@@ -161,6 +161,8 @@ void update_app_state(AppState *state)
 					// Apply dynamic result if available
 					if (job->apply_func && job->result_data) {
 						job->apply_func(job->ctx, job->result_data);
+						Renderer *r = &state->renderer;
+						r->labelTreeNeedsRebuild = true;
 					}
 
 					// Free dynamic result if available

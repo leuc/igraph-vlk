@@ -150,6 +150,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->computeCtx.initialized = VK_FALSE;
 
 	renderer_update_graph(r, graph);
+	r->labelTreeNeedsRebuild = true;
 
 	r->uniformBuffers = malloc(sizeof(VkBuffer) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
 	r->uniformBuffersMemory = malloc(sizeof(VkDeviceMemory) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
@@ -196,8 +197,8 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->nodeLabelInstanceBufferMemory = VK_NULL_HANDLE;
 	r->nodeLabelInstanceCount = 0;
 	r->nodeLabelCapacity = 0;
-	r->labelSortPairs = NULL;
-	r->labelSortCapacity = 0;
+	memset(&r->labelTree, 0, sizeof(r->labelTree));
+	r->labelTreeNeedsRebuild = true;
 
 	// Initialize dedicated detail card atlas and single-instance buffer
 	if (!text_atlas_init(&r->detailCardAtlas, 2048, 4096)) {
@@ -379,7 +380,7 @@ void renderer_cleanup(Renderer *r)
 	text_atlas_destroy(&r->menuTextAtlas, r->core.device);
 	text_atlas_destroy(&r->nodeTextAtlas, r->core.device);
 	text_atlas_destroy(&r->detailCardAtlas, r->core.device);
-	free(r->labelSortPairs);
+	igraph_bh_tree_destroy(&r->labelTree);
 	if (r->nodeLabelInstanceBuffer != VK_NULL_HANDLE) {
 		vkDestroyBuffer(r->core.device, r->nodeLabelInstanceBuffer, NULL);
 		vkFreeMemory(r->core.device, r->nodeLabelInstanceBufferMemory, NULL);

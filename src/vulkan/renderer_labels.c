@@ -5,17 +5,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <igraph.h>
+#include <igraph_barnes_hut.h>
+
 #include "vulkan/buffers.h"
 #include "vulkan/renderer_lifecycle.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
-
-static int sort_by_dist(const void *a, const void *b)
-{
-	float da = ((const DistIdxPair *)a)->dist;
-	float db = ((const DistIdxPair *)b)->dist;
-	return (da > db) - (da < db);
-}
 
 // Build the detail card text (multi-line attribute list) for a selected node.
 // Returns malloc'd string the caller must free, or NULL on alloc failure.
@@ -105,45 +101,172 @@ static char *build_detail_card_text(igraph_t *g, int node, size_t *out_len)
 }
 
 // ============================================================================
-// LOD Label Helpers
+// LOD Label Helpers — Barnes-Hut nearest-K
 // ============================================================================
 
-// Compute per-node distances from camera, sort by distance, count visible labels.
-// Returns the number of labels to render (skipping selected node and empty labels).
-static uint32_t label_sort_by_distance(Renderer *r, GraphData *graph, vec3 camera_pos, int selected_node, uint32_t max_labels)
+// Max-heap entry for nearest-K selection
+typedef struct
 {
-	uint32_t node_count = graph->node_count;
+	float dist;
+	uint32_t idx;
+} BHHeapEntry;
 
-	// Ensure sort buffer is large enough
-	if (!r->labelSortPairs || r->labelSortCapacity < node_count) {
-		free(r->labelSortPairs);
-		r->labelSortCapacity = node_count > 0 ? node_count : 256;
-		r->labelSortPairs = malloc(sizeof(DistIdxPair) * r->labelSortCapacity);
-		if (!r->labelSortPairs)
-			return 0;
+static void bh_heap_sift_up(BHHeapEntry *heap, uint32_t size, uint32_t i)
+{
+	while (i > 0) {
+		uint32_t parent = (i - 1) / 2;
+		if (heap[i].dist > heap[parent].dist) {
+			BHHeapEntry tmp = heap[i];
+			heap[i] = heap[parent];
+			heap[parent] = tmp;
+			i = parent;
+		} else {
+			break;
+		}
+	}
+}
+
+static void bh_heap_sift_down(BHHeapEntry *heap, uint32_t size, uint32_t i)
+{
+	for (;;) {
+		uint32_t largest = i;
+		uint32_t left = 2 * i + 1;
+		uint32_t right = 2 * i + 2;
+		if (left < size && heap[left].dist > heap[largest].dist)
+			largest = left;
+		if (right < size && heap[right].dist > heap[largest].dist)
+			largest = right;
+		if (largest == i)
+			break;
+		BHHeapEntry tmp = heap[i];
+		heap[i] = heap[largest];
+		heap[largest] = tmp;
+		i = largest;
+	}
+}
+
+static void bh_heap_push(BHHeapEntry *heap, uint32_t *size, uint32_t capacity, float dist, uint32_t idx)
+{
+	if (*size < capacity) {
+		heap[*size].dist = dist;
+		heap[*size].idx = idx;
+		(*size)++;
+		bh_heap_sift_up(heap, *size, *size - 1);
+	} else if (dist < heap[0].dist) {
+		heap[0].dist = dist;
+		heap[0].idx = idx;
+		bh_heap_sift_down(heap, *size, 0);
+	}
+}
+
+// Recursively traverse BH tree to find K nearest points to the query.
+static void bh_traverse_nearest_k(const igraph_bh_tree_t *tree, igraph_integer_t node_idx, const float query[3], uint32_t k, BHHeapEntry *heap, uint32_t *heap_size)
+{
+	const igraph_bh_node_t *node = &tree->nodes[node_idx];
+
+	if (node->point_count == 0 && !node->is_leaf)
+		return;
+
+	// Lower bound: distance from query to nearest edge of node bounding box
+	float dx = query[0] - (float)node->center[0];
+	float dy = query[1] - (float)node->center[1];
+	float dz = query[2] - (float)node->center[2];
+	float dist_sq_to_center = dx * dx + dy * dy + dz * dz;
+	float half_size = (float)node->size * 0.5f;
+	float center_dist = sqrtf(dist_sq_to_center);
+	float min_dist = center_dist - half_size * 1.7320508f; // sqrt(3) for 3D bounding sphere
+	if (min_dist < 0.0f)
+		min_dist = 0.0f;
+
+	// MAC: if lower bound exceeds current k-th farthest, prune
+	if (*heap_size >= k && min_dist >= heap[0].dist)
+		return;
+
+	if (node->is_leaf) {
+		// Check each point in this leaf
+		for (igraph_integer_t p = 0; p < node->point_count; p++) {
+			igraph_integer_t pt_idx = tree->point_indices[node->data.first_point_idx + p];
+			const igraph_bh_point_t *pt = &tree->points[pt_idx];
+			float px = query[0] - (float)pt->coord[0];
+			float py = query[1] - (float)pt->coord[1];
+			float pz = query[2] - (float)pt->coord[2];
+			float d = px * px + py * py + pz * pz;
+			bh_heap_push(heap, heap_size, k, d, (uint32_t)pt->id);
+		}
+	} else {
+		// Recurse into children (2^dim = 8 for 3D)
+		igraph_integer_t num_children = 1 << tree->dim;
+		for (igraph_integer_t c = 0; c < num_children; c++) {
+			igraph_integer_t child_idx = node->data.first_child_idx + c;
+			if (child_idx < tree->node_count)
+				bh_traverse_nearest_k(tree, child_idx, query, k, heap, heap_size);
+		}
+	}
+}
+
+// Rebuild the Barnes-Hut tree from current node positions (scaled by layoutScale).
+static void label_rebuild_tree(Renderer *r, GraphData *graph)
+{
+	uint32_t n = graph->node_count;
+	if (n == 0)
+		return;
+
+	igraph_integer_t max_level, leaf_capacity;
+	igraph_bh_tree_get_scaling_params(n, 3, &max_level, &leaf_capacity);
+
+	igraph_bh_tree_destroy(&r->labelTree);
+	igraph_error_t err = igraph_bh_tree_init(&r->labelTree, 3, 0.7, max_level, leaf_capacity);
+	if (err != IGRAPH_SUCCESS) {
+		fprintf(stderr, "label_rebuild_tree: igraph_bh_tree_init failed\n");
+		return;
 	}
 
-	DistIdxPair *pairs = r->labelSortPairs;
-
-	for (uint32_t i = 0; i < node_count; i++) {
-		vec3 ws;
-		glm_vec3_scale(graph->nodes[i].position, r->layoutScale, ws);
-		pairs[i].dist = glm_vec3_distance(camera_pos, ws);
-		pairs[i].idx = i;
+	igraph_matrix_t coords;
+	igraph_matrix_init(&coords, n, 3);
+	for (uint32_t i = 0; i < n; i++) {
+		igraph_matrix_set(&coords, i, 0, (igraph_real_t)(graph->nodes[i].position[0] * r->layoutScale));
+		igraph_matrix_set(&coords, i, 1, (igraph_real_t)(graph->nodes[i].position[1] * r->layoutScale));
+		igraph_matrix_set(&coords, i, 2, (igraph_real_t)(graph->nodes[i].position[2] * r->layoutScale));
 	}
 
-	qsort(pairs, node_count, sizeof(DistIdxPair), sort_by_dist);
+	igraph_vector_t masses;
+	igraph_vector_init(&masses, n);
+	for (uint32_t i = 0; i < n; i++)
+		VECTOR(masses)[i] = 1.0;
 
-	uint32_t label_count = 0;
-	for (uint32_t j = 0; j < node_count && label_count < max_labels; j++) {
-		uint32_t ni = pairs[j].idx;
-		if ((int)ni == selected_node)
-			continue;
-		if (!graph->nodes[ni].label || !graph->nodes[ni].label[0])
-			continue;
-		label_count++;
+	err = igraph_bh_tree_build(&r->labelTree, &coords, &masses);
+	igraph_matrix_destroy(&coords);
+	igraph_vector_destroy(&masses);
+
+	if (err != IGRAPH_SUCCESS) {
+		fprintf(stderr, "label_rebuild_tree: igraph_bh_tree_build failed\n");
+		return;
 	}
-	return label_count;
+
+	r->labelTreeNeedsRebuild = false;
+}
+
+// Find K nearest nodes to the query point using BH tree traversal.
+// Returns the number of results written. Results are written to `out` as DistIdxPair.
+static uint32_t bh_find_nearest_k(Renderer *r, const float query[3], uint32_t k, DistIdxPair *out, int selected_node)
+{
+	BHHeapEntry *heap = malloc(sizeof(BHHeapEntry) * k);
+	uint32_t heap_size = 0;
+
+	bh_traverse_nearest_k(&r->labelTree, 0, query, k, heap, &heap_size);
+
+	// Extract results, sort by distance ascending for label_build_lod_instances
+	// Convert max-heap to sorted array: repeatedly extract max, then reverse
+	for (uint32_t i = heap_size; i > 0; i--) {
+		BHHeapEntry top = heap[0];
+		heap[0] = heap[i - 1];
+		bh_heap_sift_down(heap, i - 1, 0);
+		out[heap_size - i].dist = sqrtf(top.dist);
+		out[heap_size - i].idx = top.idx;
+	}
+
+	free(heap);
+	return heap_size;
 }
 
 // Ensure the node label instance buffer is large enough for 'needed' instances.
@@ -162,19 +285,16 @@ static void label_ensure_instance_buffer(Renderer *r, uint32_t needed)
 
 // Build NodeLabelInstance entries for the nearest nodes.
 // Returns the number of instances written.
-static uint32_t label_build_lod_instances(Renderer *r, GraphData *graph, uint32_t label_count, int selected_node, NodeLabelInstance *instances)
+static uint32_t label_build_lod_instances(Renderer *r, GraphData *graph, uint32_t label_count, DistIdxPair *sorted, int selected_node, NodeLabelInstance *instances)
 {
-	uint32_t node_count = graph->node_count;
-	DistIdxPair *pairs = r->labelSortPairs;
-
 	text_atlas_clear(&r->nodeTextAtlas);
 
 	float world_text_scale = 0.003f;
 	float fixed_offset = 0.4f;
 	uint32_t inst_idx = 0;
 
-	for (uint32_t j = 0; j < node_count && inst_idx < label_count; j++) {
-		uint32_t ni = pairs[j].idx;
+	for (uint32_t j = 0; j < label_count && inst_idx < label_count; j++) {
+		uint32_t ni = sorted[j].idx;
 		if ((int)ni == selected_node)
 			continue;
 		const char *label = graph->nodes[ni].label;
@@ -335,7 +455,8 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 		return;
 	}
 
-	if (r->labelCacheValid) {
+	// Check if labels can be skipped (camera hasn't moved, selection unchanged)
+	if (!r->labelTreeNeedsRebuild && r->labelCacheValid) {
 		vec3 delta;
 		glm_vec3_sub(camera_pos, r->labelCameraPos, delta);
 		float dist2 = glm_vec3_dot(delta, delta);
@@ -349,12 +470,38 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 		}
 	}
 
+	// Rebuild BH tree if positions changed
+	if (r->labelTreeNeedsRebuild)
+		label_rebuild_tree(r, graph);
+
 	r->nodeLabelInstanceCount = 0;
 
+	// Find K nearest nodes via BH traversal
 	uint32_t max_labels = 200;
-	uint32_t label_count = label_sort_by_distance(r, graph, camera_pos, selected_node, max_labels);
-	if (label_count == 0 && selected_node < 0)
+	float query[3] = {camera_pos[0], camera_pos[1], camera_pos[2]};
+
+	// Allocate sort buffer for BH results
+	DistIdxPair *sorted = malloc(sizeof(DistIdxPair) * max_labels);
+	if (!sorted)
 		return;
+
+	uint32_t found = bh_find_nearest_k(r, query, max_labels, sorted, selected_node);
+
+	// Count valid labels from BH results
+	uint32_t label_count = 0;
+	for (uint32_t j = 0; j < found && label_count < max_labels; j++) {
+		uint32_t ni = sorted[j].idx;
+		if ((int)ni == selected_node)
+			continue;
+		if (!graph->nodes[ni].label || !graph->nodes[ni].label[0])
+			continue;
+		label_count++;
+	}
+
+	if (label_count == 0 && selected_node < 0) {
+		free(sorted);
+		return;
+	}
 
 	uint32_t nli_needed = label_count > 0 ? label_count : 1;
 	label_ensure_instance_buffer(r, nli_needed);
@@ -362,11 +509,15 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 	NodeLabelInstance *instances = NULL;
 	if (label_count > 0) {
 		instances = malloc(sizeof(NodeLabelInstance) * label_count);
-		if (!instances)
+		if (!instances) {
+			free(sorted);
 			return;
+		}
 	}
 
-	uint32_t inst_idx = label_build_lod_instances(r, graph, label_count, selected_node, instances);
+	uint32_t inst_idx = label_build_lod_instances(r, graph, label_count, sorted, selected_node, instances);
+	free(sorted);
+
 	if (inst_idx > 0)
 		label_upload_and_update_descriptors(r, inst_idx, instances);
 
