@@ -22,4 +22,4 @@ MenuNode *raycast_menu_crosshair(AppState *state);
 /**
  * Clear the hovered flag from all nodes in the menu tree.
  */
-void clear_menu_hover_recursive(MenuNode *node);
+void menu_hover_clear_recursive(MenuNode *node);

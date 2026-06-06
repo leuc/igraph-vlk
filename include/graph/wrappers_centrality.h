@@ -39,6 +39,6 @@ void *compute_igraph_constraint(igraph_t *graph);
 
 // Standard apply and free functions for centrality scores
 void apply_centrality_scores(ExecutionContext *ctx, void *result_data);
-void free_centrality_scores(void *result_data);
+void centrality_scores_free(void *result_data);
 
 #endif // GRAPH_WRAPPERS_CENTRALITY_H

@@ -107,13 +107,13 @@ void init_menu_tree(MenuNode *root)
 	}
 }
 
-void destroy_menu_tree(MenuNode *node)
+void menu_tree_destroy(MenuNode *node)
 {
 	if (node == NULL)
 		return;
 	if (node->type == NODE_BRANCH) {
 		for (int i = 0; i < node->num_children; i++) {
-			destroy_menu_tree(node->children[i]);
+			menu_tree_destroy(node->children[i]);
 		}
 		if (node->children)
 			free(node->children);

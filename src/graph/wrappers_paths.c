@@ -91,7 +91,7 @@ void apply_info_card(ExecutionContext *ctx, void *result_data)
 	}
 }
 
-void free_info_card(void *result_data)
+void info_card_free(void *result_data)
 {
 	if (result_data)
 		free(result_data);

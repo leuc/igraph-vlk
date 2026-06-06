@@ -106,26 +106,26 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// Analysis menu - Centrality & Roles
 	// =========================================================================
-	{"Analysis/Centrality", "igraph_degree", "Degree", compute_igraph_degree, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality", "igraph_closeness_cutoff", "Closeness", compute_igraph_closeness_cutoff, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality", "igraph_betweenness", "Betweenness", compute_igraph_betweenness, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality", "igraph_eigenvector_centrality", "Eigenvector Centrality", compute_igraph_eigenvector_centrality, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality", "igraph_pagerank", "PageRank", compute_igraph_pagerank, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality", "igraph_hub_and_authority_scores", "HITS (Hub)", compute_igraph_hub_and_authority_scores, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality", "igraph_harmonic_centrality", "Harmonic", compute_igraph_harmonic_centrality, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality", "igraph_strength", "Strength (Weighted Degree)", compute_igraph_strength, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality", "igraph_constraint", "Constraint (Structural Holes)", compute_igraph_constraint, apply_centrality_scores, free_centrality_scores},
-	{"Analysis/Centrality", "igraph_coreness", "Coreness (k-Core)", compute_igraph_coreness, apply_centrality_scores, free_centrality_scores},
+	{"Analysis/Centrality", "igraph_degree", "Degree", compute_igraph_degree, apply_centrality_scores, centrality_scores_free},
+	{"Analysis/Centrality", "igraph_closeness_cutoff", "Closeness", compute_igraph_closeness_cutoff, apply_centrality_scores, centrality_scores_free},
+	{"Analysis/Centrality", "igraph_betweenness", "Betweenness", compute_igraph_betweenness, apply_centrality_scores, centrality_scores_free},
+	{"Analysis/Centrality", "igraph_eigenvector_centrality", "Eigenvector Centrality", compute_igraph_eigenvector_centrality, apply_centrality_scores, centrality_scores_free},
+	{"Analysis/Centrality", "igraph_pagerank", "PageRank", compute_igraph_pagerank, apply_centrality_scores, centrality_scores_free},
+	{"Analysis/Centrality", "igraph_hub_and_authority_scores", "HITS (Hub)", compute_igraph_hub_and_authority_scores, apply_centrality_scores, centrality_scores_free},
+	{"Analysis/Centrality", "igraph_harmonic_centrality", "Harmonic", compute_igraph_harmonic_centrality, apply_centrality_scores, centrality_scores_free},
+	{"Analysis/Centrality", "igraph_strength", "Strength (Weighted Degree)", compute_igraph_strength, apply_centrality_scores, centrality_scores_free},
+	{"Analysis/Centrality", "igraph_constraint", "Constraint (Structural Holes)", compute_igraph_constraint, apply_centrality_scores, centrality_scores_free},
+	{"Analysis/Centrality", "igraph_coreness", "Coreness (k-Core)", compute_igraph_coreness, apply_centrality_scores, centrality_scores_free},
 
 	// =========================================================================
 	// Analysis menu - Global Network Properties
 	// =========================================================================
-	{"Analysis/Global Properties", "igraph_diameter", "Diameter", compute_igraph_diameter, apply_info_card, free_info_card},
-	{"Analysis/Global Properties", "igraph_radius", "Radius", compute_igraph_radius, apply_info_card, free_info_card},
-	{"Analysis/Global Properties", "igraph_average_path_length", "Average Path Length", compute_igraph_average_path_length, apply_info_card, free_info_card},
-	{"Analysis/Global Properties", "igraph_assortativity_degree", "Assortativity", compute_igraph_assortativity_degree, apply_info_card, free_info_card},
-	{"Analysis/Global Properties", "igraph_density", "Density", compute_igraph_density, apply_info_card, free_info_card},
-	{"Analysis/Global Properties", "igraph_transitivity_undirected", "Transitivity (undirected)", compute_igraph_transitivity_undirected, apply_info_card, free_info_card},
+	{"Analysis/Global Properties", "igraph_diameter", "Diameter", compute_igraph_diameter, apply_info_card, info_card_free},
+	{"Analysis/Global Properties", "igraph_radius", "Radius", compute_igraph_radius, apply_info_card, info_card_free},
+	{"Analysis/Global Properties", "igraph_average_path_length", "Average Path Length", compute_igraph_average_path_length, apply_info_card, info_card_free},
+	{"Analysis/Global Properties", "igraph_assortativity_degree", "Assortativity", compute_igraph_assortativity_degree, apply_info_card, info_card_free},
+	{"Analysis/Global Properties", "igraph_density", "Density", compute_igraph_density, apply_info_card, info_card_free},
+	{"Analysis/Global Properties", "igraph_transitivity_undirected", "Transitivity (undirected)", compute_igraph_transitivity_undirected, apply_info_card, info_card_free},
 
 	// =========================================================================
 	// Communities menu - Detection

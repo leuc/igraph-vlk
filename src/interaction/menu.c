@@ -75,19 +75,19 @@ static MenuNode *pick_menu_recursive(MenuNode *node, float *ray_ori, float *ray_
 	return best_hit;
 }
 
-void clear_menu_hover_recursive(MenuNode *node)
+void menu_hover_clear_recursive(MenuNode *node)
 {
 	if (!node)
 		return;
 	node->hovered = false;
 	for (int i = 0; i < node->num_children; i++) {
-		clear_menu_hover_recursive(node->children[i]);
+		menu_hover_clear_recursive(node->children[i]);
 	}
 }
 
 MenuNode *raycast_menu_crosshair(AppState *state)
 {
-	clear_menu_hover_recursive(state->app_ctx.root_menu);
+	menu_hover_clear_recursive(state->app_ctx.root_menu);
 	float min_t = FLT_MAX;
 	MenuNode *hit = pick_menu_recursive(state->app_ctx.root_menu, state->camera.pos, state->camera.front, &min_t);
 	if (hit)
@@ -97,7 +97,7 @@ MenuNode *raycast_menu_crosshair(AppState *state)
 
 MenuNode *raycast_menu_vr(AppState *state, vec3 ray_ori, vec3 ray_dir)
 {
-	clear_menu_hover_recursive(state->app_ctx.root_menu);
+	menu_hover_clear_recursive(state->app_ctx.root_menu);
 	float min_t = FLT_MAX;
 	MenuNode *hit = pick_menu_recursive(state->app_ctx.root_menu, ray_ori, ray_dir, &min_t);
 	if (hit) {

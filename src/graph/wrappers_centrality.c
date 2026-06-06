@@ -302,7 +302,7 @@ void apply_centrality_scores(ExecutionContext *ctx, void *result_data)
 	printf("[apply_centrality_scores] Centrality applied\n");
 }
 
-void free_centrality_scores(void *result_data)
+void centrality_scores_free(void *result_data)
 {
 	if (result_data) {
 		igraph_vector_destroy((igraph_vector_t *)result_data);

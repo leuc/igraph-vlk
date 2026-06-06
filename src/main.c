@@ -156,7 +156,7 @@ int main(int argc, char **argv)
 	// Initialize worker thread for long-running operations
 	if (worker_thread_init(&app.worker_ctx, 10) != 0) {
 		fprintf(stderr, "Failed to initialize worker thread\n");
-		destroy_menu_tree(root_menu);
+		menu_tree_destroy(root_menu);
 		graph_free_data(&app.current_graph);
 		renderer_cleanup(&app.renderer);
 		glfwDestroyWindow(app.window);
@@ -257,7 +257,7 @@ int main(int argc, char **argv)
 #endif
 	worker_thread_cleanup(&app.worker_ctx);
 	app_context_destroy(&app.app_ctx);
-	destroy_menu_tree(root_menu);
+	menu_tree_destroy(root_menu);
 	graph_free_data(&app.current_graph);
 	renderer_cleanup(&app.renderer);
 #ifdef USE_OPENXR
