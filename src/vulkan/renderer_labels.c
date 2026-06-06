@@ -5,10 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "vulkan/buffers.h"
 #include "vulkan/renderer_lifecycle.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
-#include "vulkan/buffers.h"
 
 static int sort_by_dist(const void *a, const void *b)
 {
@@ -315,6 +315,7 @@ static void detail_card_update(Renderer *r, GraphData *graph, int selected_node)
 
 		update_buffer(r->core.device, r->detailCardInstanceBufferMemory, sizeof(NodeLabelInstance), &r->detailCardInstance);
 		r->detailCardVisible = true;
+		r->detailCardNode = selected_node;
 	} else {
 		fprintf(stderr, "renderer_update_node_labels: detail card atlas render empty (text len %zu)\n", text_len);
 	}
@@ -329,9 +330,10 @@ static void detail_card_update(Renderer *r, GraphData *graph, int selected_node)
 void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos, int selected_node)
 {
 	r->nodeLabelInstanceCount = 0;
-	r->detailCardVisible = false;
-	if (graph->node_count == 0)
+	if (graph->node_count == 0) {
+		r->detailCardVisible = false;
 		return;
+	}
 
 	uint32_t max_labels = 200;
 	uint32_t label_count = label_sort_by_distance(r, graph, camera_pos, selected_node, max_labels);
@@ -355,6 +357,14 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 	r->nodeLabelInstanceCount = inst_idx;
 	free(instances);
 
-	if (selected_node >= 0 && selected_node < (int)graph->node_count)
-		detail_card_update(r, graph, selected_node);
+	// Detail card: only rebuild atlas on selection change
+	if (selected_node >= 0 && selected_node < (int)graph->node_count) {
+		if (selected_node != r->detailCardNode)
+			detail_card_update(r, graph, selected_node);
+		else
+			r->detailCardVisible = true;
+	} else {
+		r->detailCardVisible = false;
+		r->detailCardNode = -1;
+	}
 }

@@ -207,6 +207,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->detailCardInstanceBuffer = VK_NULL_HANDLE;
 	r->detailCardInstanceBufferMemory = VK_NULL_HANDLE;
 	r->detailCardVisible = false;
+	r->detailCardNode = -1;
 
 	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
 	r->graphUpdateRingIndex = 0;

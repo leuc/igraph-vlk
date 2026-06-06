@@ -318,6 +318,7 @@ typedef struct Renderer
 	VkDeviceMemory detailCardInstanceBufferMemory;
 	bool detailCardVisible;
 	NodeLabelInstance detailCardInstance;
+	int detailCardNode; // node index the detail card was built for, -1 = none
 
 	VkPipeline rayPipeline;
 	VkBuffer rayVertexBuffer;
