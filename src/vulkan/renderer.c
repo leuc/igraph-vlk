@@ -293,22 +293,18 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 
 	// 6. Detail card FIRST (always gets atlas space before LOD labels)
 	if (selected_node >= 0 && selected_node < (int)node_count) {
-		// Build multi-line string with all vertex attributes
+		// Build multi-line string: enumerate ALL igraph vertex attributes
 		char detail[4096] = {0};
 		int pos = 0;
 
-		if (pos < (int)sizeof(detail) - 2 && graph->nodes[selected_node].label)
-			pos += snprintf(detail + pos, sizeof(detail) - pos, "label: %s\n", graph->nodes[selected_node].label);
-
-		// Enumerate all igraph vertex attributes
 		igraph_strvector_t vnames;
 		igraph_vector_int_t vtypes;
 		igraph_strvector_init(&vnames, 0);
 		igraph_vector_int_init(&vtypes, 0);
-		igraph_cattribute_list(&graph->g, NULL, NULL, NULL, NULL, &vnames, &vtypes);
+		igraph_cattribute_list(&graph->g, NULL, NULL, &vnames, &vtypes, NULL, NULL);
 		for (int a = 0; a < igraph_strvector_size(&vnames) && pos < (int)sizeof(detail) - 64; a++) {
-			const char *name = STR(vnames, a);
-			if (strcmp(name, "label") == 0)
+			const char *name = igraph_strvector_get(&vnames, a);
+			if (!igraph_cattribute_has_attr(&graph->g, IGRAPH_ATTRIBUTE_VERTEX, name))
 				continue;
 			if (VECTOR(vtypes)[a] == IGRAPH_ATTRIBUTE_STRING) {
 				const char *v = VAS(&graph->g, name, selected_node);
@@ -327,8 +323,8 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 		igraph_strvector_destroy(&vnames);
 		igraph_vector_int_destroy(&vtypes);
 
-		pos += snprintf(detail + pos, sizeof(detail) - pos, "degree: %d\n", graph->nodes[selected_node].degree);
-		pos += snprintf(detail + pos, sizeof(detail) - pos, "coreness: %d\n", graph->nodes[selected_node].coreness);
+		if (pos == 0 && graph->nodes[selected_node].label)
+			pos += snprintf(detail, sizeof(detail), "%s\n", graph->nodes[selected_node].label);
 
 		// Surface tangent frame for selected node
 		vec3 normal, upGuide = {0.0f, 1.0f, 0.0f};
