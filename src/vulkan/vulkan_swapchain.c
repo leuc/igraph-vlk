@@ -91,7 +91,7 @@ void vulkan_swapchain_create(VulkanSwapchain *swapchain, VulkanCore *core, GLFWw
 
 	// Depth Buffer
 	swapchain->depthFormat = VK_FORMAT_D32_SFLOAT;
-	createImage(core->device, core->physicalDevice, extent.width, extent.height, swapchain->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &swapchain->depthImage, &swapchain->depthMemory);
+	create_image(core->device, core->physicalDevice, extent.width, extent.height, swapchain->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &swapchain->depthImage, &swapchain->depthMemory);
 
 	VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = swapchain->depthImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = swapchain->depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
 	VK_CHECK(vkCreateImageView(core->device, &depthViewInfo, NULL, &swapchain->depthView), "Failed to create depth image view");

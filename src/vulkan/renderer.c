@@ -58,16 +58,16 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 		text_generate_atlas(app_path_resolve(FONT_PATH), &globalAtlas);
 		atlasLoaded = true;
 	}
-	createImage(r->core.device, r->core.physicalDevice, globalAtlas.width, globalAtlas.height, VK_FORMAT_R8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->textureImage, &r->textureImageMemory);
+	create_image(r->core.device, r->core.physicalDevice, globalAtlas.width, globalAtlas.height, VK_FORMAT_R8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->textureImage, &r->textureImageMemory);
 	VkDeviceSize imgSize = globalAtlas.width * globalAtlas.height;
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
-	createBuffer(r->core.device, r->core.physicalDevice, imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory);
+	create_buffer(r->core.device, r->core.physicalDevice, imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory);
 	void *dataPtr;
 	VK_CHECK(vkMapMemory(r->core.device, stagingBufferMemory, 0, imgSize, 0, &dataPtr), "Failed to map texture staging buffer memory");
 	memcpy(dataPtr, globalAtlas.atlasData, imgSize);
 	vkUnmapMemory(r->core.device, stagingBufferMemory);
-	transitionImageLayout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	transition_image_layout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 	VkCommandBuffer commandBuffer = begin_single_time_commands(r->core.device, r->commands.commandPool);
 	VkBufferImageCopy bufferImageCopy = {.bufferOffset = 0, .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .imageExtent = {(uint32_t)globalAtlas.width, (uint32_t)globalAtlas.height, 1}};
@@ -75,7 +75,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	end_single_time_commands(r->core.device, r->commands.commandPool, r->core.graphicsQueue, commandBuffer);
 	vkDestroyBuffer(r->core.device, stagingBuffer, NULL);
 	vkFreeMemory(r->core.device, stagingBufferMemory, NULL);
-	transitionImageLayout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	transition_image_layout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	VkImageViewCreateInfo imageViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->textureImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_R8_UNORM, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
 	VK_CHECK(vkCreateImageView(r->core.device, &imageViewInfo, NULL, &r->textureImageView), "Failed to create texture image view");
@@ -89,26 +89,26 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 		uint32_t vc;
 		uint32_t *idx;
 		polyhedron_generate_platonic(i, &v, &vc, &idx, &r->platonicIndexCounts[i]);
-		createBuffer(r->core.device, r->core.physicalDevice, sizeof(Vertex) * vc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->vertexBuffers[i], &r->vertexBufferMemories[i]);
-		updateBuffer(r->core.device, r->vertexBufferMemories[i], sizeof(Vertex) * vc, v);
-		createBuffer(r->core.device, r->core.physicalDevice, sizeof(uint32_t) * r->platonicIndexCounts[i], VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->indexBuffers[i], &r->indexBufferMemories[i]);
-		updateBuffer(r->core.device, r->indexBufferMemories[i], sizeof(uint32_t) * r->platonicIndexCounts[i], idx);
+		create_buffer(r->core.device, r->core.physicalDevice, sizeof(Vertex) * vc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->vertexBuffers[i], &r->vertexBufferMemories[i]);
+		update_buffer(r->core.device, r->vertexBufferMemories[i], sizeof(Vertex) * vc, v);
+		create_buffer(r->core.device, r->core.physicalDevice, sizeof(uint32_t) * r->platonicIndexCounts[i], VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->indexBuffers[i], &r->indexBufferMemories[i]);
+		update_buffer(r->core.device, r->indexBufferMemories[i], sizeof(uint32_t) * r->platonicIndexCounts[i], idx);
 		free(v);
 		free(idx);
 	}
 
 	LabelVertex lvs[] = {{{0, 0, 0}, {0, 0}}, {{1, 0, 0}, {1, 0}}, {{0, 1, 0}, {0, 1}}, {{1, 1, 0}, {1, 1}}};
-	createBuffer(r->core.device, r->core.physicalDevice, sizeof(lvs), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->labelVertexBuffer, &r->labelVertexBufferMemory);
-	updateBuffer(r->core.device, r->labelVertexBufferMemory, sizeof(lvs), lvs);
+	create_buffer(r->core.device, r->core.physicalDevice, sizeof(lvs), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->labelVertexBuffer, &r->labelVertexBufferMemory);
+	update_buffer(r->core.device, r->labelVertexBufferMemory, sizeof(lvs), lvs);
 
 	UIVertex uiBg[] = {{{0, 0, 0}, {0, 0}}, {{1, 0, 0}, {1, 0}}, {{0, 1, 0}, {0, 1}}, {{1, 1, 0}, {1, 1}}};
-	createBuffer(r->core.device, r->core.physicalDevice, sizeof(uiBg), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uiBgVertexBuffer, &r->uiBgVertexBufferMemory);
-	updateBuffer(r->core.device, r->uiBgVertexBufferMemory, sizeof(uiBg), uiBg);
-	createBuffer(r->core.device, r->core.physicalDevice, sizeof(UIInstance) * 1024, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uiTextInstanceBuffer, &r->uiTextInstanceBufferMemory);
+	create_buffer(r->core.device, r->core.physicalDevice, sizeof(uiBg), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uiBgVertexBuffer, &r->uiBgVertexBufferMemory);
+	update_buffer(r->core.device, r->uiBgVertexBufferMemory, sizeof(uiBg), uiBg);
+	create_buffer(r->core.device, r->core.physicalDevice, sizeof(UIInstance) * 1024, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uiTextInstanceBuffer, &r->uiTextInstanceBufferMemory);
 
 	UIInstance bgInst = {.color = {0, 0, 0, -1.0f}};
-	createBuffer(r->core.device, r->core.physicalDevice, sizeof(UIInstance), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uiBgInstanceBuffer, &r->uiBgInstanceBufferMemory);
-	updateBuffer(r->core.device, r->uiBgInstanceBufferMemory, sizeof(UIInstance), &bgInst);
+	create_buffer(r->core.device, r->core.physicalDevice, sizeof(UIInstance), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uiBgInstanceBuffer, &r->uiBgInstanceBufferMemory);
+	update_buffer(r->core.device, r->uiBgInstanceBufferMemory, sizeof(UIInstance), &bgInst);
 
 	r->menuQuadVertexBuffer = VK_NULL_HANDLE;
 	r->menuQuadIndexBuffer = VK_NULL_HANDLE;
@@ -133,7 +133,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->uniformBuffers = malloc(sizeof(VkBuffer) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
 	r->uniformBuffersMemory = malloc(sizeof(VkDeviceMemory) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-		createBuffer(r->core.device, r->core.physicalDevice, sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uniformBuffers[i], &r->uniformBuffersMemory[i]);
+		create_buffer(r->core.device, r->core.physicalDevice, sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uniformBuffers[i], &r->uniformBuffersMemory[i]);
 		VK_CHECK(vkMapMemory(r->core.device, r->uniformBuffersMemory[i], 0, sizeof(UniformBufferObject), 0, &r->uboMapped[i]), "Failed to map UBO memory");
 	}
 
@@ -225,10 +225,10 @@ void renderer_setup_xr(Renderer *r, XrContext *xr)
 		r->xrFramebuffers[i] = malloc(sizeof(VkFramebuffer) * xr->swapchains[i].image_count);
 		xr->swapchains[i].image_views = malloc(sizeof(VkImageView) * xr->swapchains[i].image_count);
 
-		createImage(r->core.device, r->core.physicalDevice, xr->swapchains[i].width, xr->swapchains[i].height, r->swapchain.depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->xrDepthImages[i], &r->xrDepthImageMemories[i]);
+		create_image(r->core.device, r->core.physicalDevice, xr->swapchains[i].width, xr->swapchains[i].height, r->swapchain.depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->xrDepthImages[i], &r->xrDepthImageMemories[i]);
 		VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->xrDepthImages[i], .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->swapchain.depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
 		VK_CHECK(vkCreateImageView(r->core.device, &depthViewInfo, NULL, &r->xrDepthImageViews[i]), "Failed to create XR depth image view");
-		transitionImageLayout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->xrDepthImages[i], r->swapchain.depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+		transition_image_layout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->xrDepthImages[i], r->swapchain.depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
 		for (uint32_t j = 0; j < xr->swapchains[i].image_count; j++) {
 			VkImageViewCreateInfo ivInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = xr->swapchains[i].images[j], .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = xr->swapchain_format, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};

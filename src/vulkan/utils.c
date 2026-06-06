@@ -7,7 +7,7 @@
 
 #include "vulkan/app_path.h"
 
-uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties)
+uint32_t find_memory_type(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties)
 {
 	VkPhysicalDeviceMemoryProperties memProperties;
 	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
@@ -18,7 +18,7 @@ uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, Vk
 	return 0;
 }
 
-void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer, VkDeviceMemory *bufferMemory)
+void create_buffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer, VkDeviceMemory *bufferMemory)
 {
 	VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size, .usage = usage, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
 	VK_CHECK(vkCreateBuffer(device, &bufferInfo, NULL, buffer), "Failed to create buffer");
@@ -28,12 +28,12 @@ void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize
 	vkGetPhysicalDeviceProperties(physicalDevice, &props);
 	VkDeviceSize atomSize = props.limits.nonCoherentAtomSize;
 	VkDeviceSize allocSize = (memReqs.size + atomSize - 1) & ~(atomSize - 1);
-	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, properties)};
+	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = find_memory_type(physicalDevice, memReqs.memoryTypeBits, properties)};
 	VK_CHECK(vkAllocateMemory(device, &allocInfo, NULL, bufferMemory), "Failed to allocate buffer memory");
 	VK_CHECK(vkBindBufferMemory(device, *buffer, *bufferMemory, 0), "Failed to bind buffer memory");
 }
 
-void updateBuffer(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, const void *data)
+void update_buffer(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, const void *data)
 {
 	void *mapped;
 	VK_CHECK(vkMapMemory(device, memory, 0, size, 0, &mapped), "Failed to map buffer memory for update");
@@ -41,7 +41,7 @@ void updateBuffer(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, con
 	vkUnmapMemory(device, memory);
 }
 
-void updateBufferMapped(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, const void *data, const VkPhysicalDeviceProperties *deviceProps)
+void update_buffer_mapped(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, const void *data, const VkPhysicalDeviceProperties *deviceProps)
 {
 	if (size == 0)
 		return;
@@ -55,7 +55,7 @@ void updateBufferMapped(VkDevice device, VkDeviceMemory memory, VkDeviceSize siz
 	vkUnmapMemory(device, memory);
 }
 
-void createMappedBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBuffer *buffer, VkDeviceMemory *memory)
+void create_mapped_buffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBuffer *buffer, VkDeviceMemory *memory)
 {
 	VkBufferCreateInfo info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size, .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
 	VK_CHECK(vkCreateBuffer(device, &info, NULL, buffer), "Failed to create mapped buffer");
@@ -67,12 +67,12 @@ void createMappedBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDevi
 	vkGetPhysicalDeviceProperties(physicalDevice, &props);
 	VkDeviceSize atomSize = props.limits.nonCoherentAtomSize;
 	VkDeviceSize allocSize = (req.size + atomSize - 1) & ~(atomSize - 1);
-	VkMemoryAllocateInfo alloc = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = findMemoryType(physicalDevice, req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)};
+	VkMemoryAllocateInfo alloc = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = find_memory_type(physicalDevice, req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)};
 	VK_CHECK(vkAllocateMemory(device, &alloc, NULL, memory), "Failed to allocate mapped buffer memory");
 	VK_CHECK(vkBindBufferMemory(device, *buffer, *memory, 0), "Failed to bind mapped buffer memory");
 }
 
-void createStagingBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *stagingBuf, VkDeviceMemory *stagingMem, VkBuffer *deviceBuf, VkDeviceMemory *deviceMem)
+void create_staging_buffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *stagingBuf, VkDeviceMemory *stagingMem, VkBuffer *deviceBuf, VkDeviceMemory *deviceMem)
 {
 	VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size, .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
 	VK_CHECK(vkCreateBuffer(device, &bufferInfo, NULL, stagingBuf), "Failed to create staging buffer");
@@ -82,7 +82,7 @@ void createStagingBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDev
 	vkGetPhysicalDeviceProperties(physicalDevice, &props);
 	VkDeviceSize atomSize = props.limits.nonCoherentAtomSize;
 	VkDeviceSize allocSize = (memReqs.size + atomSize - 1) & ~(atomSize - 1);
-	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)};
+	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = find_memory_type(physicalDevice, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)};
 	VK_CHECK(vkAllocateMemory(device, &allocInfo, NULL, stagingMem), "Failed to allocate staging buffer memory");
 	VK_CHECK(vkBindBufferMemory(device, *stagingBuf, *stagingMem, 0), "Failed to bind staging buffer memory");
 
@@ -90,12 +90,12 @@ void createStagingBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDev
 	VK_CHECK(vkCreateBuffer(device, &bufferInfo, NULL, deviceBuf), "Failed to create device-local buffer");
 	vkGetBufferMemoryRequirements(device, *deviceBuf, &memReqs);
 	allocInfo.allocationSize = memReqs.size;
-	allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	allocInfo.memoryTypeIndex = find_memory_type(physicalDevice, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	VK_CHECK(vkAllocateMemory(device, &allocInfo, NULL, deviceMem), "Failed to allocate device-local buffer memory");
 	VK_CHECK(vkBindBufferMemory(device, *deviceBuf, *deviceMem, 0), "Failed to bind device-local buffer memory");
 }
 
-void updateBufferStaged(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkDeviceSize size, const void *data, VkBuffer stagingBuf, VkDeviceMemory stagingMem, VkBuffer deviceBuf, const VkPhysicalDeviceProperties *deviceProps)
+void update_buffer_staged(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkDeviceSize size, const void *data, VkBuffer stagingBuf, VkDeviceMemory stagingMem, VkBuffer deviceBuf, const VkPhysicalDeviceProperties *deviceProps)
 {
 	VkDeviceSize atomSize = deviceProps->limits.nonCoherentAtomSize;
 	VkDeviceSize alignedSize = (size + atomSize - 1) & ~(atomSize - 1);
@@ -112,18 +112,18 @@ void updateBufferStaged(VkDevice device, VkCommandPool commandPool, VkQueue queu
 	end_single_time_commands(device, commandPool, queue, commandBuffer);
 }
 
-void createImage(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage *image, VkDeviceMemory *imageMemory)
+void create_image(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage *image, VkDeviceMemory *imageMemory)
 {
 	VkImageCreateInfo imageInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .extent = {width, height, 1}, .mipLevels = 1, .arrayLayers = 1, .format = format, .tiling = tiling, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .usage = usage, .samples = VK_SAMPLE_COUNT_1_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
 	VK_CHECK(vkCreateImage(device, &imageInfo, NULL, image), "Failed to create image");
 	VkMemoryRequirements memReqs;
 	vkGetImageMemoryRequirements(device, *image, &memReqs);
-	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = memReqs.size, .memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, properties)};
+	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = memReqs.size, .memoryTypeIndex = find_memory_type(physicalDevice, memReqs.memoryTypeBits, properties)};
 	VK_CHECK(vkAllocateMemory(device, &allocInfo, NULL, imageMemory), "Failed to allocate image memory");
 	VK_CHECK(vkBindImageMemory(device, *image, *imageMemory, 0), "Failed to bind image memory");
 }
 
-void transitionImageLayout(VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
+void transition_image_layout(VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
 {
 	VkCommandBuffer commandBuffer = begin_single_time_commands(device, commandPool);
 	VkImageMemoryBarrier barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, .oldLayout = oldLayout, .newLayout = newLayout, .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = image, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};

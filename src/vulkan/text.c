@@ -187,20 +187,20 @@ void text_atlas_ensure_uploaded(TextAtlas *ta, VkDevice device, VkPhysicalDevice
 	VkDeviceSize imgSize = (VkDeviceSize)ta->width * ta->height;
 
 	if (ta->image == VK_NULL_HANDLE) {
-		createImage(device, physicalDevice, ta->width, ta->height, VK_FORMAT_R8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &ta->image, &ta->memory);
+		create_image(device, physicalDevice, ta->width, ta->height, VK_FORMAT_R8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &ta->image, &ta->memory);
 
 		VkImageViewCreateInfo viewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = ta->image, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_R8_UNORM, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
 		vkCreateImageView(device, &viewInfo, NULL, &ta->view);
 
-		transitionImageLayout(device, commandPool, queue, ta->image, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		transition_image_layout(device, commandPool, queue, ta->image, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	} else {
-		transitionImageLayout(device, commandPool, queue, ta->image, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		transition_image_layout(device, commandPool, queue, ta->image, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	}
 
 	// Upload via staging buffer
 	VkBuffer stagingBuf;
 	VkDeviceMemory stagingMem;
-	createBuffer(device, physicalDevice, imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuf, &stagingMem);
+	create_buffer(device, physicalDevice, imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuf, &stagingMem);
 
 	void *mapped;
 	vkMapMemory(device, stagingMem, 0, imgSize, 0, &mapped);
@@ -215,7 +215,7 @@ void text_atlas_ensure_uploaded(TextAtlas *ta, VkDevice device, VkPhysicalDevice
 	vkDestroyBuffer(device, stagingBuf, NULL);
 	vkFreeMemory(device, stagingMem, NULL);
 
-	transitionImageLayout(device, commandPool, queue, ta->image, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	transition_image_layout(device, commandPool, queue, ta->image, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	ta->dirty = false;
 }

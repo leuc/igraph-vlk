@@ -481,11 +481,11 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 			QuadVertex qv[] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}, {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}}, {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}};
 			uint32_t qi[] = {0, 1, 2, 2, 3, 0};
 
-			createBuffer(r->core.device, r->core.physicalDevice, sizeof(qv), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuQuadVertexBuffer, &r->menuQuadVertexBufferMemory);
-			updateBuffer(r->core.device, r->menuQuadVertexBufferMemory, sizeof(qv), qv);
+			create_buffer(r->core.device, r->core.physicalDevice, sizeof(qv), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuQuadVertexBuffer, &r->menuQuadVertexBufferMemory);
+			update_buffer(r->core.device, r->menuQuadVertexBufferMemory, sizeof(qv), qv);
 
-			createBuffer(r->core.device, r->core.physicalDevice, sizeof(qi), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuQuadIndexBuffer, &r->menuQuadIndexBufferMemory);
-			updateBuffer(r->core.device, r->menuQuadIndexBufferMemory, sizeof(qi), qi);
+			create_buffer(r->core.device, r->core.physicalDevice, sizeof(qi), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuQuadIndexBuffer, &r->menuQuadIndexBufferMemory);
+			update_buffer(r->core.device, r->menuQuadIndexBufferMemory, sizeof(qi), qi);
 			r->menuQuadIndexCount = 6;
 		}
 
@@ -495,8 +495,8 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 			vkDestroyBuffer(r->core.device, r->menuInstanceBuffer, NULL);
 			vkFreeMemory(r->core.device, r->menuInstanceBufferMemory, NULL);
 		}
-		createBuffer(r->core.device, r->core.physicalDevice, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuInstanceBuffer, &r->menuInstanceBufferMemory);
-		updateBuffer(r->core.device, r->menuInstanceBufferMemory, bufferSize, instances);
+		create_buffer(r->core.device, r->core.physicalDevice, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuInstanceBuffer, &r->menuInstanceBufferMemory);
+		update_buffer(r->core.device, r->menuInstanceBufferMemory, bufferSize, instances);
 		r->menuNodeCount = instance_count;
 	}
 
@@ -510,8 +510,8 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 			vkDestroyBuffer(r->core.device, r->textQuadInstanceBuffer, NULL);
 			vkFreeMemory(r->core.device, r->textQuadInstanceBufferMemory, NULL);
 		}
-		createBuffer(r->core.device, r->core.physicalDevice, tqBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->textQuadInstanceBuffer, &r->textQuadInstanceBufferMemory);
-		updateBuffer(r->core.device, r->textQuadInstanceBufferMemory, tqBufferSize, tq_instances);
+		create_buffer(r->core.device, r->core.physicalDevice, tqBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->textQuadInstanceBuffer, &r->textQuadInstanceBufferMemory);
+		update_buffer(r->core.device, r->textQuadInstanceBufferMemory, tqBufferSize, tq_instances);
 		r->textQuadInstanceCount = tq_count;
 	}
 

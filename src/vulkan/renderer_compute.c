@@ -75,7 +75,7 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 		}
 	}
 	if (ctx->nodeBuf == VK_NULL_HANDLE) {
-		createBuffer(r->core.device, r->core.physicalDevice, nodeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->nodeBuf, &ctx->nodeMem);
+		create_buffer(r->core.device, r->core.physicalDevice, nodeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->nodeBuf, &ctx->nodeMem);
 	}
 
 	if (ctx->edgeBuf != VK_NULL_HANDLE) {
@@ -88,16 +88,16 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 		}
 	}
 	if (ctx->edgeBuf == VK_NULL_HANDLE) {
-		createBuffer(r->core.device, r->core.physicalDevice, edgeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->edgeBuf, &ctx->edgeMem);
+		create_buffer(r->core.device, r->core.physicalDevice, edgeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->edgeBuf, &ctx->edgeMem);
 	}
 
 	if (ctx->hubBuf == VK_NULL_HANDLE) {
-		createBuffer(r->core.device, r->core.physicalDevice, sizeof(CompHub), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->hubBuf, &ctx->hubMem);
+		create_buffer(r->core.device, r->core.physicalDevice, sizeof(CompHub), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->hubBuf, &ctx->hubMem);
 	}
 
 	// Upload node and edge data to GPU
-	updateBuffer(r->core.device, ctx->nodeMem, nodeSize, cNodes);
-	updateBuffer(r->core.device, ctx->edgeMem, edgeSize, cEdges);
+	update_buffer(r->core.device, ctx->nodeMem, nodeSize, cNodes);
+	update_buffer(r->core.device, ctx->edgeMem, edgeSize, cEdges);
 
 	// Update descriptor set with storage buffers
 	VkDescriptorBufferInfo nodeBufferInfo = {ctx->nodeBuf, 0, VK_WHOLE_SIZE}, edgeBufferInfo = {ctx->edgeBuf, 0, VK_WHOLE_SIZE}, hubBufferInfo = {ctx->hubBuf, 0, VK_WHOLE_SIZE};

@@ -66,5 +66,5 @@ void renderer_update_ui(Renderer *r, const char *text)
 	total_len++;
 
 	r->uiTextCharCount = total_len;
-	updateBuffer(r->core.device, r->uiTextInstanceBufferMemory, sizeof(UIInstance) * r->uiTextCharCount, instances);
+	update_buffer(r->core.device, r->uiTextInstanceBufferMemory, sizeof(UIInstance) * r->uiTextCharCount, instances);
 }
