@@ -70,7 +70,7 @@ int main(int argc, char **argv)
 
 	// Initialize graph data
 	app.current_graph.graph_initialized = false;
-	if (graph_load_graphml(app.current_filename, &app.current_graph, LAYOUT_GRID_3D, NULL, NULL) != 0) {
+	if (!graph_load_graphml(app.current_filename, &app.current_graph, LAYOUT_GRID_3D, NULL, NULL)) {
 		fprintf(stderr, "Failed to load graph: %s\n", app.current_filename);
 		return EXIT_FAILURE;
 	}
@@ -118,9 +118,9 @@ int main(int argc, char **argv)
 
 	// Initialize renderer
 #ifdef USE_OPENXR
-	if (renderer_init(&app.renderer, app.window, &app.current_graph, app.vr_enabled ? (void *)&app.xr_ctx : NULL) != 0) {
+	if (!renderer_init(&app.renderer, app.window, &app.current_graph, app.vr_enabled ? (void *)&app.xr_ctx : NULL)) {
 #else
-	if (renderer_init(&app.renderer, app.window, &app.current_graph, NULL) != 0) {
+	if (!renderer_init(&app.renderer, app.window, &app.current_graph, NULL)) {
 #endif
 		fprintf(stderr, "Failed to initialize renderer\n");
 		glfwDestroyWindow(app.window);
@@ -154,7 +154,7 @@ int main(int argc, char **argv)
 	app_context_init(&app.app_ctx, &app.current_graph.g, root_menu);
 
 	// Initialize worker thread for long-running operations
-	if (worker_thread_init(&app.worker_ctx, 10) != 0) {
+	if (!worker_thread_init(&app.worker_ctx, 10)) {
 		fprintf(stderr, "Failed to initialize worker thread\n");
 		menu_tree_destroy(root_menu);
 		graph_free_data(&app.current_graph);

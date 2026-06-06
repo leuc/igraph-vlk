@@ -139,10 +139,10 @@ static void *worker_thread_func(void *arg)
 }
 
 // Initialize worker thread system
-int worker_thread_init(WorkerThreadContext *context, int max_queue_size)
+bool worker_thread_init(WorkerThreadContext *context, int max_queue_size)
 {
 	if (!context) {
-		return -1;
+		return false;
 	}
 
 	memset(context, 0, sizeof(WorkerThreadContext));
@@ -157,18 +157,18 @@ int worker_thread_init(WorkerThreadContext *context, int max_queue_size)
 
 	context->job_queue = (WorkerJob **)malloc(sizeof(WorkerJob *) * max_queue_size);
 	if (!context->job_queue) {
-		return -1;
+		return false;
 	}
 
 	if (pthread_mutex_init(&context->queue_mutex, NULL) != 0) {
 		free(context->job_queue);
-		return -1;
+		return false;
 	}
 
 	if (pthread_cond_init(&context->queue_cond, NULL) != 0) {
 		pthread_mutex_destroy(&context->queue_mutex);
 		free(context->job_queue);
-		return -1;
+		return false;
 	}
 
 	// Start worker thread
@@ -177,11 +177,11 @@ int worker_thread_init(WorkerThreadContext *context, int max_queue_size)
 		pthread_cond_destroy(&context->queue_cond);
 		pthread_mutex_destroy(&context->queue_mutex);
 		free(context->job_queue);
-		return -1;
+		return false;
 	}
 
 	context->thread_running = true;
-	return 0;
+	return true;
 }
 
 // Submit a job to worker thread

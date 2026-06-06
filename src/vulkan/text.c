@@ -63,11 +63,13 @@ int text_generate_atlas(const char *fontPath, FontAtlas *atlas)
 // Text Atlas — composites glyph bitmaps into a single texture
 // ============================================================================
 
-void text_atlas_init(TextAtlas *ta, int width, int height)
+bool text_atlas_init(TextAtlas *ta, int width, int height)
 {
 	ta->width = width;
 	ta->height = height;
 	ta->pixels = (uint8_t *)calloc(1, (size_t)width * height);
+	if (!ta->pixels)
+		return false;
 	ta->cursor_x = 0;
 	ta->cursor_y = 0;
 	ta->row_height = 0;
@@ -75,6 +77,7 @@ void text_atlas_init(TextAtlas *ta, int width, int height)
 	ta->image = VK_NULL_HANDLE;
 	ta->memory = VK_NULL_HANDLE;
 	ta->view = VK_NULL_HANDLE;
+	return true;
 }
 
 void text_atlas_clear(TextAtlas *ta)

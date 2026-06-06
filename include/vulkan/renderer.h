@@ -11,7 +11,7 @@
 #include "xr/openxr_context.h"
 #endif
 
-int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr);
+bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr);
 void renderer_cleanup(Renderer *r);
 void renderer_draw_frame(Renderer *r);
 void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index, bool has_ray, vec3 ray_origin, vec3 ray_dir);

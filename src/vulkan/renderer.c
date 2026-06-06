@@ -20,7 +20,7 @@
 FontAtlas globalAtlas;
 bool atlasLoaded = false;
 
-int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
+bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 {
 	r->window = window;
 	r->nodeCount = graph->node_count;
@@ -159,7 +159,10 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	}
 
 	// Initialize menu text atlas (will be populated on first menu buffer generation)
-	text_atlas_init(&r->menuTextAtlas, 2048, 512);
+	if (!text_atlas_init(&r->menuTextAtlas, 2048, 512)) {
+		fprintf(stderr, "Failed to initialize menu text atlas\n");
+		return false;
+	}
 
 	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
 	r->graphUpdateRingIndex = 0;
@@ -185,7 +188,7 @@ int renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	glfwGetFramebufferSize(window, &w, &h);
 	glm_perspective(glm_rad(45.0f), (float)w / (float)h, 0.1f, 1000.0f, r->ubo.proj);
 	r->ubo.proj[1][1] *= -1;
-	return 0;
+	return true;
 }
 
 void renderer_update_view(Renderer *r, vec3 pos, vec3 front, vec3 up)

@@ -8,15 +8,15 @@
 
 #include "graph/graph_core.h"
 
-int graph_load_graphml(const char *filename, GraphData *data, LayoutType layout_type, const char *node_attr, const char *edge_attr)
+bool graph_load_graphml(const char *filename, GraphData *data, LayoutType layout_type, const char *node_attr, const char *edge_attr)
 {
 	igraph_set_attribute_table(&igraph_cattribute_table);
 	FILE *fp = fopen(filename, "r");
 	if (!fp)
-		return -1;
+		return false;
 	if (igraph_read_graph_graphml(&data->g, fp, 0) != IGRAPH_SUCCESS) {
 		fclose(fp);
-		return -1;
+		return false;
 	}
 	fclose(fp);
 	igraph_simplify(&data->g, 1, 1, NULL);
@@ -39,5 +39,5 @@ int graph_load_graphml(const char *filename, GraphData *data, LayoutType layout_
 	data->active_layout = layout_type;
 
 	graph_refresh_data(data);
-	return 0;
+	return true;
 }

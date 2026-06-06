@@ -10,8 +10,8 @@
  * @param layout_type Initial layout type to use
  * @param node_attr Name of the node attribute to use for sizing (or NULL for default)
  * @param edge_attr Name of the edge attribute to use for sizing (or NULL for default)
- * @return 0 on success, -1 on failure
+ * @return true on success, false on failure
  */
-int graph_load_graphml(const char *filename, GraphData *data, LayoutType layout_type, const char *node_attr, const char *edge_attr);
+bool graph_load_graphml(const char *filename, GraphData *data, LayoutType layout_type, const char *node_attr, const char *edge_attr);
 
 #endif // GRAPH_IO_H

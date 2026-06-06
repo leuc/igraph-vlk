@@ -51,7 +51,7 @@ typedef struct
 } WorkerThreadContext;
 
 // Initialize worker thread system
-int worker_thread_init(WorkerThreadContext *context, int max_queue_size);
+bool worker_thread_init(WorkerThreadContext *context, int max_queue_size);
 
 // Submit a job to worker thread
 WorkerJob *worker_thread_submit_job(WorkerThreadContext *context, CommandDef *cmd, ExecutionContext *ctx);
