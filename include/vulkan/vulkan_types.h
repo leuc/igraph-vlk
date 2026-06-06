@@ -310,6 +310,9 @@ typedef struct Renderer
 	uint32_t nodeLabelCapacity;
 	DistIdxPair *labelSortPairs;
 	uint32_t labelSortCapacity;
+	vec3 labelCameraPos;
+	int labelSelectedNode;
+	bool labelCacheValid;
 
 	// Detail card (single-instance, dedicated atlas)
 	TextAtlas detailCardAtlas;

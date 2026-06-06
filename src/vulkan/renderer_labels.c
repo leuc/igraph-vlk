@@ -329,11 +329,27 @@ static void detail_card_update(Renderer *r, GraphData *graph, int selected_node)
 
 void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos, int selected_node)
 {
-	r->nodeLabelInstanceCount = 0;
 	if (graph->node_count == 0) {
+		r->nodeLabelInstanceCount = 0;
 		r->detailCardVisible = false;
 		return;
 	}
+
+	if (r->labelCacheValid) {
+		vec3 delta;
+		glm_vec3_sub(camera_pos, r->labelCameraPos, delta);
+		float dist2 = glm_vec3_dot(delta, delta);
+		bool camera_moved = dist2 > 0.0001f;
+		bool selection_changed = (selected_node != r->labelSelectedNode);
+
+		if (!camera_moved && !selection_changed) {
+			if (selected_node >= 0 && selected_node < (int)graph->node_count)
+				r->detailCardVisible = (r->detailCardNode >= 0);
+			return;
+		}
+	}
+
+	r->nodeLabelInstanceCount = 0;
 
 	uint32_t max_labels = 200;
 	uint32_t label_count = label_sort_by_distance(r, graph, camera_pos, selected_node, max_labels);
@@ -356,6 +372,10 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 
 	r->nodeLabelInstanceCount = inst_idx;
 	free(instances);
+
+	glm_vec3_copy(camera_pos, r->labelCameraPos);
+	r->labelSelectedNode = selected_node;
+	r->labelCacheValid = true;
 
 	// Detail card: only rebuild atlas on selection change
 	if (selected_node >= 0 && selected_node < (int)graph->node_count) {

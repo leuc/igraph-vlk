@@ -8,8 +8,8 @@
 
 #include "interaction/camera.h"
 #include "interaction/state.h"
-#include "vulkan/utils.h"
 #include "vulkan/buffers.h"
+#include "vulkan/utils.h"
 
 void renderer_update_graph(Renderer *r, GraphData *graph)
 {
@@ -215,6 +215,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	free(edgePositions);
 	free(edgeAttributes);
 	r->needsAttributeUpload = VK_FALSE;
+	r->labelCacheValid = false;
 
 	// Signal the ring fence for this slot so the next update can proceed
 	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 0, NULL, r->graphUpdateFences[ringIdx]), "Failed to signal graph update fence");
