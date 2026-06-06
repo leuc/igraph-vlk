@@ -310,6 +310,14 @@ typedef struct Renderer
 	DistIdxPair *labelSortPairs;
 	uint32_t labelSortCapacity;
 
+	// Detail card (single-instance, dedicated atlas)
+	TextAtlas detailCardAtlas;
+	VkDescriptorSet *detailCardDescSets;
+	VkBuffer detailCardInstanceBuffer;
+	VkDeviceMemory detailCardInstanceBufferMemory;
+	bool detailCardVisible;
+	NodeLabelInstance detailCardInstance;
+
 	VkPipeline rayPipeline;
 	VkBuffer rayVertexBuffer;
 	VkDeviceMemory rayVertexBufferMemory;
