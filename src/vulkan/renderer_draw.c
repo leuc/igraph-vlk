@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "vulkan/renderer.h"
+#include "vulkan/renderer_lifecycle.h"
 #include "vulkan/utils.h"
 
 void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index, bool has_ray, vec3 ray_origin, vec3 ray_dir)
@@ -107,11 +108,20 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 
 void renderer_draw_frame(Renderer *r)
 {
+	if (r->framebufferResized) {
+		renderer_recreate_swapchain(r);
+		return;
+	}
 	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->commands.inFlightFences[r->commands.currentFrame], VK_TRUE, UINT64_MAX), "Failed to wait for in-flight fences");
 	uint32_t imageIndex;
 	VkResult res = vkAcquireNextImageKHR(r->core.device, r->swapchain.swapchain, UINT64_MAX, r->commands.imageAvailableSemaphores[r->commands.currentFrame], VK_NULL_HANDLE, &imageIndex);
-	if (res == VK_ERROR_OUT_OF_DATE_KHR)
+	if (res == VK_ERROR_OUT_OF_DATE_KHR) {
+		renderer_recreate_swapchain(r);
 		return;
+	} else if (res != VK_SUCCESS) {
+		fprintf(stderr, "Failed to acquire swapchain image\n");
+		return;
+	}
 
 	VK_CHECK(vkResetFences(r->core.device, 1, &r->commands.inFlightFences[r->commands.currentFrame]), "Failed to reset in-flight fences");
 	VK_CHECK(vkResetCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], 0), "Failed to reset command buffer");

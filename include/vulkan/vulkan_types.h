@@ -270,6 +270,7 @@ typedef struct Renderer
 	bool showNodes;
 	bool showEdges;
 	bool showUI;
+	bool framebufferResized;
 	float layoutScale;
 
 	// UI

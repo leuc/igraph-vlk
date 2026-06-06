@@ -25,6 +25,7 @@ static void mouse_button_callback(GLFWwindow *window, int button, int action, in
 static void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 static void focus_callback(GLFWwindow *window, int focused);
 static void joystick_callback(int jid, int event);
+static void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 
 void interaction_init(GLFWwindow *window)
 {
@@ -33,6 +34,7 @@ void interaction_init(GLFWwindow *window)
 	glfwSetCursorPosCallback(window, mouse_callback);
 	glfwSetWindowFocusCallback(window, focus_callback);
 	glfwSetJoystickCallback(joystick_callback);
+	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	gamepad_id = gamepad_get_first_active();
@@ -232,4 +234,15 @@ static void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 		cam->pitch = -89.0f;
 
 	camera_update_vectors(cam);
+}
+
+static void framebuffer_size_callback(GLFWwindow *window, int width, int height)
+{
+	AppState *state = (AppState *)glfwGetWindowUserPointer(window);
+	if (!state)
+		return;
+	state->win_w = width;
+	state->win_h = height;
+	state->renderer.framebufferResized = true;
+	fprintf(stderr, "[RESIZE] framebuffer %dx%d\n", width, height);
 }

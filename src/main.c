@@ -42,8 +42,6 @@ int main(int argc, char **argv)
 	// Set defaults
 	app.last_picked_node = -1;
 	app.last_picked_edge = -1;
-	app.win_w = 3440;
-	app.win_h = 1440;
 
 #ifdef USE_OPENXR
 	bool vr_requested = false;
@@ -88,8 +86,8 @@ int main(int argc, char **argv)
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-	// Create window
-	app.window = glfwCreateWindow(app.win_w, app.win_h, "Graph Sphere", NULL, NULL);
+	// Create window (initial size; query actual after creation)
+	app.window = glfwCreateWindow(3440, 1440, "Graph Sphere", NULL, NULL);
 	if (!app.window) {
 		fprintf(stderr, "Failed to create GLFW window\n");
 		graph_free_data(&app.current_graph);
@@ -99,6 +97,9 @@ int main(int argc, char **argv)
 
 	// Store user pointer for callbacks
 	glfwSetWindowUserPointer(app.window, &app);
+
+	// Query actual window size (may differ from requested on some compositors)
+	glfwGetWindowSize(app.window, &app.win_w, &app.win_h);
 
 	// Initialize input handling (registers GLFW callbacks)
 	interaction_init(app.window);

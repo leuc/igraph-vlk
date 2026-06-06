@@ -5,16 +5,17 @@
 #include <string.h>
 
 #include "vulkan/app_path.h"
+#include "vulkan/buffers.h"
+#include "vulkan/images.h"
 #include "vulkan/pipeline_compute.h"
 #include "vulkan/pipeline_graphics.h"
 #include "vulkan/pipeline_ui.h"
 #include "vulkan/renderer_compute.h"
 #include "vulkan/renderer_geometry.h"
 #include "vulkan/renderer_pipelines.h"
+#include "vulkan/swapchain.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
-#include "vulkan/buffers.h"
-#include "vulkan/images.h"
 
 #define FONT_PATH "/usr/share/fonts/truetype/inconsolata/Inconsolata.otf"
 
@@ -220,6 +221,67 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	glm_perspective(glm_rad(45.0f), (float)w / (float)h, 0.1f, 1000.0f, r->ubo.proj);
 	r->ubo.proj[1][1] *= -1;
 	return true;
+}
+
+void renderer_recreate_swapchain(Renderer *r)
+{
+	int w = 0, h = 0;
+	glfwGetFramebufferSize(r->window, &w, &h);
+	while (w == 0 || h == 0) {
+		glfwGetFramebufferSize(r->window, &w, &h);
+		glfwWaitEvents();
+	}
+
+	// Destroy old framebuffers (render pass survives — format-based, not extent-based)
+	for (uint32_t i = 0; i < r->renderPass.imageCount; i++) {
+		if (r->renderPass.framebuffers[i] != VK_NULL_HANDLE)
+			vkDestroyFramebuffer(r->core.device, r->renderPass.framebuffers[i], NULL);
+	}
+	free(r->renderPass.framebuffers);
+	r->renderPass.framebuffers = NULL;
+
+	// Destroy old renderFinishedSemaphores (sized to old swapchain image count)
+	for (uint32_t i = 0; i < r->commands.imageCount; i++) {
+		if (r->commands.renderFinishedSemaphores[i] != VK_NULL_HANDLE)
+			vkDestroySemaphore(r->core.device, r->commands.renderFinishedSemaphores[i], NULL);
+	}
+	free(r->commands.renderFinishedSemaphores);
+	r->commands.renderFinishedSemaphores = NULL;
+
+	// Recreate swapchain (passes old swapchain handle for driver optimization)
+	vulkan_swapchain_recreate(&r->swapchain, &r->core, r->window);
+
+	// Recreate framebuffers with new extent
+	r->renderPass.imageCount = r->swapchain.imageCount;
+	r->renderPass.framebuffers = malloc(sizeof(VkFramebuffer) * r->swapchain.imageCount);
+	for (uint32_t i = 0; i < r->swapchain.imageCount; i++) {
+		VkImageView attachmentViews[] = {r->swapchain.views[i], r->swapchain.depthView};
+		VkFramebufferCreateInfo framebufferInfo = {
+			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+			.renderPass = r->renderPass.renderPass,
+			.attachmentCount = 2,
+			.pAttachments = attachmentViews,
+			.width = r->swapchain.extent.width,
+			.height = r->swapchain.extent.height,
+			.layers = 1,
+		};
+		VK_CHECK(vkCreateFramebuffer(r->core.device, &framebufferInfo, NULL, &r->renderPass.framebuffers[i]), "Failed to create framebuffer");
+	}
+
+	// Recreate renderFinishedSemaphores for new image count
+	r->commands.imageCount = r->swapchain.imageCount;
+	r->commands.renderFinishedSemaphores = malloc(sizeof(VkSemaphore) * r->commands.imageCount);
+	VkSemaphoreCreateInfo semaphoreInfo = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+	for (uint32_t i = 0; i < r->commands.imageCount; i++) {
+		VK_CHECK(vkCreateSemaphore(r->core.device, &semaphoreInfo, NULL, &r->commands.renderFinishedSemaphores[i]), "Failed to create render finished semaphore");
+	}
+
+	// Update projection matrix for new aspect ratio
+	float aspect = (float)r->swapchain.extent.width / (float)r->swapchain.extent.height;
+	glm_perspective(glm_rad(45.0f), aspect, 0.1f, 1000.0f, r->ubo.proj);
+	r->ubo.proj[1][1] *= -1;
+
+	r->framebufferResized = false;
 }
 
 void renderer_cleanup(Renderer *r)
