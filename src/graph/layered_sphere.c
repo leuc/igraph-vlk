@@ -621,9 +621,9 @@ static bool layered_sphere_iterate(LayeredSphereContext *ctx, const igraph_t *ig
 void *compute_layout_layered_sphere(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
-	igraph_matrix_t *result = malloc(sizeof(igraph_matrix_t));
+	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 

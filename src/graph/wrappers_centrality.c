@@ -16,9 +16,9 @@
 void *compute_igraph_degree(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
-	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 
@@ -38,9 +38,9 @@ void *compute_igraph_degree(igraph_t *graph)
 void *compute_igraph_closeness_cutoff(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
-	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 
@@ -49,7 +49,7 @@ void *compute_igraph_closeness_cutoff(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 	return result;
@@ -59,9 +59,9 @@ void *compute_igraph_closeness_cutoff(igraph_t *graph)
 void *compute_igraph_betweenness(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
-	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 
@@ -69,7 +69,7 @@ void *compute_igraph_betweenness(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 	return result;
@@ -79,9 +79,9 @@ void *compute_igraph_betweenness(igraph_t *graph)
 void *compute_igraph_eigenvector_centrality(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
-	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 
@@ -89,7 +89,7 @@ void *compute_igraph_eigenvector_centrality(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 	return result;
@@ -99,9 +99,9 @@ void *compute_igraph_eigenvector_centrality(igraph_t *graph)
 void *compute_igraph_pagerank(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
-	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 
@@ -109,7 +109,7 @@ void *compute_igraph_pagerank(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 	return result;
@@ -121,9 +121,9 @@ void *compute_igraph_pagerank(igraph_t *graph)
 void *compute_igraph_hub_and_authority_scores(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
-	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 
@@ -132,7 +132,7 @@ void *compute_igraph_hub_and_authority_scores(igraph_t *graph)
 		igraph_error_t code = igraph_eigenvector_centrality(graph, result, NULL, IGRAPH_ALL, NULL, NULL);
 		if (code != IGRAPH_SUCCESS) {
 			igraph_vector_destroy(result);
-			free(result);
+			IGRAPH_FREE(result);
 			return NULL;
 		}
 	} else {
@@ -147,7 +147,7 @@ void *compute_igraph_hub_and_authority_scores(igraph_t *graph)
 			igraph_vector_destroy(&hub_scores);
 			igraph_vector_destroy(&authority_scores);
 			igraph_vector_destroy(result);
-			free(result);
+			IGRAPH_FREE(result);
 			return NULL;
 		}
 
@@ -167,9 +167,9 @@ void *compute_igraph_hub_and_authority_scores(igraph_t *graph)
 void *compute_igraph_harmonic_centrality(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
-	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 
@@ -177,7 +177,7 @@ void *compute_igraph_harmonic_centrality(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 	return result;
@@ -187,9 +187,9 @@ void *compute_igraph_harmonic_centrality(igraph_t *graph)
 void *compute_igraph_strength(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
-	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 
@@ -197,7 +197,7 @@ void *compute_igraph_strength(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 	return result;
@@ -207,9 +207,9 @@ void *compute_igraph_strength(igraph_t *graph)
 void *compute_igraph_coreness(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
-	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 
@@ -220,7 +220,7 @@ void *compute_igraph_coreness(igraph_t *graph)
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_int_destroy(&coreness);
 		igraph_vector_destroy(result);
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 
@@ -236,9 +236,9 @@ void *compute_igraph_coreness(igraph_t *graph)
 void *compute_igraph_constraint(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
-	igraph_vector_t *result = malloc(sizeof(igraph_vector_t));
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 
@@ -246,7 +246,7 @@ void *compute_igraph_constraint(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);
-		free(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 	return result;
@@ -306,6 +306,6 @@ void free_centrality_scores(void *result_data)
 {
 	if (result_data) {
 		igraph_vector_destroy((igraph_vector_t *)result_data);
-		free(result_data);
+		IGRAPH_FREE(result_data);
 	}
 }

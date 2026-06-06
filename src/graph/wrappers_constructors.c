@@ -17,7 +17,7 @@
 // Ring graph
 void *compute_igraph_ring(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -26,7 +26,7 @@ void *compute_igraph_ring(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -35,7 +35,7 @@ void *compute_igraph_ring(igraph_t *graph)
 // Star graph
 void *compute_igraph_star(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -44,7 +44,7 @@ void *compute_igraph_star(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -53,7 +53,7 @@ void *compute_igraph_star(igraph_t *graph)
 // Tree (k-ary tree, binary by default)
 void *compute_igraph_kary_tree(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -62,7 +62,7 @@ void *compute_igraph_kary_tree(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -71,7 +71,7 @@ void *compute_igraph_kary_tree(igraph_t *graph)
 // Square lattice
 void *compute_igraph_square_lattice(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -88,7 +88,7 @@ void *compute_igraph_square_lattice(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -97,7 +97,7 @@ void *compute_igraph_square_lattice(igraph_t *graph)
 // Full graph (clique)
 void *compute_igraph_full(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -106,7 +106,7 @@ void *compute_igraph_full(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -115,7 +115,7 @@ void *compute_igraph_full(igraph_t *graph)
 // Cycle graph (circle)
 void *compute_igraph_cycle_graph(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -124,7 +124,7 @@ void *compute_igraph_cycle_graph(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -133,7 +133,7 @@ void *compute_igraph_cycle_graph(igraph_t *graph)
 // Famous graph (Zachary's karate club)
 void *compute_igraph_famous(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -142,7 +142,7 @@ void *compute_igraph_famous(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -151,7 +151,7 @@ void *compute_igraph_famous(igraph_t *graph)
 // Erdős-Rényi G(n,p) random graph
 void *compute_igraph_erdos_renyi_game_gnp(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -160,7 +160,7 @@ void *compute_igraph_erdos_renyi_game_gnp(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -169,7 +169,7 @@ void *compute_igraph_erdos_renyi_game_gnp(igraph_t *graph)
 // Barabási-Albert preferential attachment
 void *compute_igraph_barabasi_game(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -178,7 +178,7 @@ void *compute_igraph_barabasi_game(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -187,7 +187,7 @@ void *compute_igraph_barabasi_game(igraph_t *graph)
 // Watts-Strogatz small-world graph
 void *compute_igraph_watts_strogatz_game(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -196,7 +196,7 @@ void *compute_igraph_watts_strogatz_game(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -205,7 +205,7 @@ void *compute_igraph_watts_strogatz_game(igraph_t *graph)
 // Forest fire model
 void *compute_igraph_forest_fire_game(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -214,7 +214,7 @@ void *compute_igraph_forest_fire_game(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -223,7 +223,7 @@ void *compute_igraph_forest_fire_game(igraph_t *graph)
 // Random tree
 void *compute_igraph_tree_game(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -232,7 +232,7 @@ void *compute_igraph_tree_game(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -241,7 +241,7 @@ void *compute_igraph_tree_game(igraph_t *graph)
 // Degree sequence game (regular graph: all degrees = 4)
 void *compute_igraph_degree_sequence_game(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -259,7 +259,7 @@ void *compute_igraph_degree_sequence_game(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -268,7 +268,7 @@ void *compute_igraph_degree_sequence_game(igraph_t *graph)
 // Random bipartite graph (G(n1, n2, m))
 void *compute_igraph_bipartite_game_gnm(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -278,7 +278,7 @@ void *compute_igraph_bipartite_game_gnm(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -290,9 +290,9 @@ void *compute_igraph_bipartite_projection(igraph_t *graph)
 {
 	// First, check if the graph is bipartite and get the vertex types
 	igraph_bool_t is_bipartite;
-	igraph_vector_bool_t *types = malloc(sizeof(igraph_vector_bool_t));
+	igraph_vector_bool_t *types = IGRAPH_MALLOC(sizeof(igraph_vector_bool_t));
 	if (igraph_vector_bool_init(types, 0) != IGRAPH_SUCCESS) {
-		free(types);
+		IGRAPH_FREE(types);
 		return NULL;
 	}
 
@@ -300,25 +300,25 @@ void *compute_igraph_bipartite_projection(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS || !is_bipartite) {
 		igraph_vector_bool_destroy(types);
-		free(types);
+		IGRAPH_FREE(types);
 		fprintf(stderr, "[compute_igraph_bipartite_projection] Error: Graph is not bipartite\n");
 		return NULL;
 	}
 
 	// Create two projection graphs
-	igraph_t *proj1 = malloc(sizeof(igraph_t));
+	igraph_t *proj1 = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!proj1) {
 		igraph_vector_bool_destroy(types);
-		free(types);
+		IGRAPH_FREE(types);
 		return NULL;
 	}
 
-	igraph_t *proj2 = malloc(sizeof(igraph_t));
+	igraph_t *proj2 = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!proj2) {
 		igraph_destroy(proj1);
-		free(proj1);
+		IGRAPH_FREE(proj1);
 		igraph_vector_bool_destroy(types);
-		free(types);
+		IGRAPH_FREE(types);
 		return NULL;
 	}
 
@@ -326,19 +326,19 @@ void *compute_igraph_bipartite_projection(igraph_t *graph)
 	code = igraph_bipartite_projection(graph, types, proj1, proj2, NULL, NULL, -1);
 
 	igraph_vector_bool_destroy(types);
-	free(types);
+	IGRAPH_FREE(types);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(proj1);
 		igraph_destroy(proj2);
-		free(proj1);
-		free(proj2);
+		IGRAPH_FREE(proj1);
+		IGRAPH_FREE(proj2);
 		return NULL;
 	}
 
 	// For now, return the first projection (vertices of type FALSE)
 	igraph_destroy(proj2);
-	free(proj2);
+	IGRAPH_FREE(proj2);
 
 	return proj1;
 }
@@ -346,7 +346,7 @@ void *compute_igraph_bipartite_projection(igraph_t *graph)
 // Geometric random graph
 void *compute_igraph_nearest_neighbor_graph(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -365,7 +365,7 @@ void *compute_igraph_nearest_neighbor_graph(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -374,7 +374,7 @@ void *compute_igraph_nearest_neighbor_graph(igraph_t *graph)
 // Gabriel graph
 void *compute_igraph_gabriel_graph(igraph_t *graph)
 {
-	igraph_t *new_graph = malloc(sizeof(igraph_t));
+	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
@@ -393,7 +393,7 @@ void *compute_igraph_gabriel_graph(igraph_t *graph)
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
-		free(new_graph);
+		IGRAPH_FREE(new_graph);
 		return NULL;
 	}
 	return new_graph;
@@ -433,7 +433,7 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 	data->graph_initialized = true;
 
 	// Compute a sphere layout for the new graph BEFORE refreshing data
-	igraph_matrix_t *layout = malloc(sizeof(igraph_matrix_t));
+	igraph_matrix_t *layout = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(layout, data->node_count, 3) == IGRAPH_SUCCESS) {
 		if (igraph_layout_sphere(&data->g, layout) == IGRAPH_SUCCESS) {
 			// Replace current_layout with the new layout
@@ -441,7 +441,7 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 			igraph_matrix_init_copy(&data->current_layout, layout);
 		}
 		igraph_matrix_destroy(layout);
-		free(layout);
+		IGRAPH_FREE(layout);
 	}
 
 	// Refresh all derived data structures (nodes, edges, etc.)
@@ -458,6 +458,6 @@ void free_new_graph(void *result_data)
 {
 	if (result_data) {
 		igraph_destroy((igraph_t *)result_data);
-		free(result_data);
+		IGRAPH_FREE(result_data);
 	}
 }

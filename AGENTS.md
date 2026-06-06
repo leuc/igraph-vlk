@@ -118,10 +118,12 @@ Mimic existing patterns strictly. Run `clang-format` after edits.
 ### Includes
 - Order: Local quoted > C std > extern. Not alpha.
 
-### Error Handling
+### Memory and Error Handling
 - `int` 0=success/<0=fail; `fprintf(stderr)` + cleanup/return.
 - Vulkan: `VK_CHECK`.
 - igraph: `!= IGRAPH_SUCCESS`.
+- IGRAPH_MALLOC / IGRAPH_FREE for igraph objects
+= IGRAPH_CHECK
 
 ### When Editing
 - Mimic neighbors; lint/format/build; no regressions.
