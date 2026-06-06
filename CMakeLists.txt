@@ -17,6 +17,7 @@ set(OPENXR_SOURCES
     src/xr/openxr_input.c
     src/xr/openxr_view.c
     src/xr/openxr_frame.c
+    src/vulkan/renderer_xr.c
 )
 
 if(USE_OPENXR)
@@ -69,7 +70,10 @@ add_executable(igraph-vlk
     src/main.c
 
     # Renderer core
-    src/vulkan/renderer.c
+    src/vulkan/renderer_lifecycle.c
+    src/vulkan/renderer_draw.c
+    src/vulkan/renderer_camera.c
+    src/vulkan/renderer_labels.c
     src/vulkan/renderer_geometry.c
     src/vulkan/renderer_compute.c
     src/vulkan/renderer_ui.c
@@ -83,7 +87,9 @@ add_executable(igraph-vlk
     src/vulkan/vulkan_render_pass.c
     src/vulkan/menu.c
     # Utilities and helpers
-    src/vulkan/utils.c
+    src/vulkan/vk_buffers.c
+    src/vulkan/vk_images.c
+    src/vulkan/vk_utils.c
     src/vulkan/app_path.c
     src/vulkan/polyhedron.c
     src/vulkan/text.c

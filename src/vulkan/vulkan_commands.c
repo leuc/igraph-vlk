@@ -74,3 +74,22 @@ void vulkan_commands_destroy(VulkanCommands *cmds, VkDevice device)
 		cmds->commandPool = VK_NULL_HANDLE;
 	}
 }
+
+VkCommandBuffer begin_single_time_commands(VkDevice device, VkCommandPool commandPool)
+{
+	VkCommandBufferAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandPool = commandPool, .commandBufferCount = 1};
+	VkCommandBuffer commandBuffer;
+	VK_CHECK(vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer), "Failed to allocate one-time command buffer");
+	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed to begin one-time command buffer");
+	return commandBuffer;
+}
+
+void end_single_time_commands(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkCommandBuffer commandBuffer)
+{
+	VK_CHECK(vkEndCommandBuffer(commandBuffer), "Failed to end one-time command buffer");
+	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &commandBuffer};
+	VK_CHECK(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit one-time command buffer");
+	VK_CHECK(vkQueueWaitIdle(queue), "Failed to wait for one-time command queue idle");
+	vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+}

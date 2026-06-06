@@ -19,32 +19,23 @@ static const VkPipelineDepthStencilStateCreateInfo VK_DEPTH_STENCIL_STATE_TEST_N
 static const VkPipelineDepthStencilStateCreateInfo VK_DEPTH_STENCIL_STATE_DISABLED = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO, .depthTestEnable = VK_FALSE, .depthWriteEnable = VK_FALSE, .depthCompareOp = VK_COMPARE_OP_ALWAYS};
 
 // ============================================================================
-// Function Declarations
+// Sub-module Headers
 // ============================================================================
 
-uint32_t find_memory_type(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);
-void create_buffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer, VkDeviceMemory *bufferMemory);
-void create_staging_buffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *stagingBuf, VkDeviceMemory *stagingMem, VkBuffer *deviceBuf, VkDeviceMemory *deviceMem);
-void create_mapped_buffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBuffer *buffer, VkDeviceMemory *memory);
-void update_buffer(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, const void *data);
-void update_buffer_mapped(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, const void *data, const VkPhysicalDeviceProperties *deviceProps);
-void update_buffer_staged(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkDeviceSize size, const void *data, VkBuffer stagingBuf, VkDeviceMemory stagingMem, VkBuffer deviceBuf, const VkPhysicalDeviceProperties *deviceProps);
-void create_image(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage *image, VkDeviceMemory *imageMemory);
-void transition_image_layout(VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
+#include "vulkan/vk_buffers.h"
+#include "vulkan/vk_images.h"
+#include "vulkan/vk_utils.h"
+#include "vulkan/vulkan_commands.h"
 
-// Point 9: One-time submit command buffer utilities
-VkCommandBuffer begin_single_time_commands(VkDevice device, VkCommandPool commandPool);
-void end_single_time_commands(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkCommandBuffer commandBuffer);
-
-VkResult create_shader_module(VkDevice device, const char *path, VkShaderModule *shaderModule);
+// ============================================================================
+// Shared Macros
+// ============================================================================
 
 #define VK_CHECK(res, msg) \
 	if (res != VK_SUCCESS) { \
 		fprintf(stderr, "Vulkan Error: %s (Result: %d)\n", msg, res); \
 		exit(1); \
 	}
-
-void exit_with_error(const char *msg);
 
 #ifndef CLAMP
 #define CLAMP(x, min, max) ((x) < (min) ? (min) : ((x) > (max) ? (max) : (x)))
