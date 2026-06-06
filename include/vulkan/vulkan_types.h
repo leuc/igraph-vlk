@@ -191,7 +191,7 @@ typedef struct Renderer
 	VkFormat xrFormat;		   // XR swapchain format (may differ from desktop)
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
-	VkPipeline graphicsPipeline;
+	VkPipeline nodePipeline;
 	VkPipeline edgePipeline;
 	VkPipeline labelPipeline;
 	VkPipeline uiPipeline;

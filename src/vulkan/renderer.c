@@ -276,7 +276,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	if (r->showNodes && r->nodeCount > 0) {
 		float a = 1.0f;
 		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 4, &a);
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->graphicsPipeline);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->nodePipeline);
 		for (int i = 0; i < PLATONIC_COUNT; i++) {
 			if (r->platonicDrawCalls[i].count == 0)
 				continue;
@@ -469,7 +469,7 @@ void renderer_cleanup(Renderer *r)
 	vkDestroyPipeline(r->core.device, r->textQuadPipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->rayPipeline, NULL);
 	vkDestroyPipeline(r->core.device, r->edgePipeline, NULL);
-	vkDestroyPipeline(r->core.device, r->graphicsPipeline, NULL);
+	vkDestroyPipeline(r->core.device, r->nodePipeline, NULL);
 	vkDestroyPipelineLayout(r->core.device, r->pipelineLayout, NULL);
 	vkDestroyDescriptorSetLayout(r->core.device, r->descriptorSetLayout, NULL);
 
