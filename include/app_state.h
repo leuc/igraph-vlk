@@ -39,9 +39,6 @@ typedef struct AppState
 
 	/* Application Logic State */
 	char *current_filename;
-	LayoutType current_layout;
-	char *node_attr;
-	char *edge_attr;
 
 	/* Interaction State */
 	int last_picked_node;

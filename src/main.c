@@ -18,7 +18,6 @@
 
 #include <GLFW/glfw3.h>
 
-#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,53 +31,26 @@
 
 int main(int argc, char **argv)
 {
-	// Parse command line arguments
-	int opt;
-	static struct option long_options[] = {{"layout", 1, 0, 'l'}, {"node-attr", 1, 0, 1}, {"edge-attr", 1, 0, 2}, {0, 0, 0, 0}};
-
 	app_path_init();
 
 	AppState app = {0};
 
 	// Set defaults
-	app.current_layout = LAYOUT_GRID_3D;
 	app.last_picked_node = -1;
 	app.last_picked_edge = -1;
 	app.win_w = 3440;
 	app.win_h = 1440;
 
-	while ((opt = getopt_long(argc, argv, "l:", long_options, NULL)) != -1) {
-		switch (opt) {
-		case 'l':
-			if (strcmp(optarg, "fr") == 0)
-				app.current_layout = LAYOUT_FR_3D;
-			else if (strcmp(optarg, "kk") == 0)
-				app.current_layout = LAYOUT_KK_3D;
-			else if (strcmp(optarg, "umap") == 0)
-				app.current_layout = LAYOUT_UMAP_3D;
-			break;
-		case 1:
-			app.node_attr = optarg;
-			break;
-		case 2:
-			app.edge_attr = optarg;
-			break;
-		}
-	}
-
-	if (optind >= argc) {
-		fprintf(stderr,
-				"Usage: %s [--layout <fr|kk|umap>] [--node-attr <attr>] "
-				"[--edge-attr <attr>] <graph.graphml>\n",
-				argv[0]);
+	if (argc < 2) {
+		fprintf(stderr, "Usage: %s <graph.graphml>\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
-	app.current_filename = argv[optind];
+	app.current_filename = argv[1];
 
 	// Initialize graph data
 	app.current_graph.graph_initialized = false;
-	if (graph_load_graphml(app.current_filename, &app.current_graph, app.current_layout, app.node_attr, app.edge_attr) != 0) {
+	if (graph_load_graphml(app.current_filename, &app.current_graph, LAYOUT_GRID_3D, NULL, NULL) != 0) {
 		fprintf(stderr, "Failed to load graph: %s\n", app.current_filename);
 		return EXIT_FAILURE;
 	}
