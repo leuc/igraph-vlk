@@ -119,13 +119,10 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	create_buffer(r->core.device, r->core.physicalDevice, sizeof(UIInstance), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uiBgInstanceBuffer, &r->uiBgInstanceBufferMemory);
 	update_buffer(r->core.device, r->uiBgInstanceBufferMemory, sizeof(UIInstance), &bgInst);
 
-	r->menuQuadVertexBuffer = VK_NULL_HANDLE;
-	r->menuQuadIndexBuffer = VK_NULL_HANDLE;
 	r->menuInstanceBuffer = VK_NULL_HANDLE;
 	r->textQuadInstanceBuffer = VK_NULL_HANDLE;
 	r->menuNodeCount = 0;
 	r->textQuadInstanceCount = 0;
-	r->menuQuadIndexCount = 0;
 
 	r->nodePositionBuffer = VK_NULL_HANDLE;
 	r->nodeAttributeBuffer = VK_NULL_HANDLE;
@@ -533,6 +530,17 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 			vkCmdDrawIndexed(cmd, r->platonicIndexCounts[i], r->platonicDrawCalls[i].count, 0, 0, r->platonicDrawCalls[i].firstInstance);
 		}
 	}
+	// Node labels (opaque, depth-writing) — draw before menu so menu occludes them
+	if (r->nodeLabelInstanceCount > 0 && r->nodeLabelInstanceBuffer != VK_NULL_HANDLE) {
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->nodeLabelDescSets[ubo_idx], 0, NULL);
+		VkBuffer nVs[] = {r->menuQuadVertexBuffer, r->nodeLabelInstanceBuffer};
+		VkDeviceSize nOs[] = {0, 0};
+		vkCmdBindVertexBuffers(cmd, 0, 2, nVs, nOs);
+		vkCmdBindIndexBuffer(cmd, r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(cmd, 6, r->nodeLabelInstanceCount, 0, 0, 0);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[ubo_idx], 0, NULL);
+	}
 	if (r->menuNodeCount > 0 && r->menuInstanceBuffer != VK_NULL_HANDLE) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->menuPipeline);
 		VkBuffer mVs[] = {r->menuQuadVertexBuffer, r->menuInstanceBuffer};
@@ -549,16 +557,6 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdBindVertexBuffers(cmd, 0, 2, tVs, tOs);
 		vkCmdBindIndexBuffer(cmd, r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdDrawIndexed(cmd, 6, r->textQuadInstanceCount, 0, 0, 0);
-		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[ubo_idx], 0, NULL);
-	}
-	if (r->nodeLabelInstanceCount > 0 && r->nodeLabelInstanceBuffer != VK_NULL_HANDLE) {
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
-		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->nodeLabelDescSets[ubo_idx], 0, NULL);
-		VkBuffer nVs[] = {r->menuQuadVertexBuffer, r->nodeLabelInstanceBuffer};
-		VkDeviceSize nOs[] = {0, 0};
-		vkCmdBindVertexBuffers(cmd, 0, 2, nVs, nOs);
-		vkCmdBindIndexBuffer(cmd, r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexed(cmd, 6, r->nodeLabelInstanceCount, 0, 0, 0);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[ubo_idx], 0, NULL);
 	}
 	if (r->showUI) {
