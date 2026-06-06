@@ -59,8 +59,6 @@ typedef struct
 {
 	const char *id_name;
 	const char *display_name;
-	const char *icon_path; // Path to Vulkan texture
-
 	int num_params;
 	CommandParameter *params; // Array of required parameters
 
@@ -83,7 +81,6 @@ typedef struct MenuNode
 {
 	MenuNodeType type;
 	const char *label;
-	int icon_texture_id;
 
 	// 3D Visual State
 	float target_phi;	// Spherical coordinate

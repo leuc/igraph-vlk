@@ -22,7 +22,6 @@ static MenuNode *create_menu_node(const char *label, MenuNodeType type)
 	MenuNode *node = (MenuNode *)malloc(sizeof(MenuNode));
 	node->label = strdup(label);
 	node->type = type;
-	node->icon_texture_id = -1;
 	node->target_phi = 0.0f;
 	node->target_theta = 0.0f;
 	node->current_radius = 0.0f;
@@ -42,7 +41,6 @@ static IgraphCommand *create_command(const char *id_name, const char *display_na
 	IgraphCommand *cmd = (IgraphCommand *)malloc(sizeof(IgraphCommand));
 	cmd->id_name = strdup(id_name);
 	cmd->display_name = strdup(display_name);
-	cmd->icon_path = NULL;
 	cmd->execute = execute;
 	cmd->num_params = num_params;
 	cmd->params = (CommandParameter *)malloc(sizeof(CommandParameter) * num_params);
@@ -51,13 +49,10 @@ static IgraphCommand *create_command(const char *id_name, const char *display_na
 	return cmd;
 }
 
-static void assign_menu_icons(MenuNode *node);
-
 void init_menu_tree(MenuNode *root)
 {
 	root->label = strdup("Main");
 	root->type = NODE_BRANCH;
-	root->icon_texture_id = -1;
 	root->target_phi = 0.0f;
 	root->target_theta = 0.0f;
 	root->current_radius = 0.0f;
@@ -110,8 +105,6 @@ void init_menu_tree(MenuNode *root)
 		current_parent->children[current_parent->num_children] = leaf;
 		current_parent->num_children++;
 	}
-
-	assign_menu_icons(root);
 }
 
 void destroy_menu_tree(MenuNode *node)
@@ -134,8 +127,6 @@ void destroy_menu_tree(MenuNode *node)
 			free((void *)node->command->id_name);
 		if (node->command->display_name)
 			free((void *)node->command->display_name);
-		if (node->command->icon_path)
-			free((void *)node->command->icon_path);
 		if (node->command->params)
 			free(node->command->params);
 		free(node->command);
@@ -274,15 +265,4 @@ void update_menu_transforms(MenuNode *node, const SpatialBasis *basis)
 	spatial_resolve_position(basis, -0.6f, 0.4f, 2.5f, root_top_left);
 
 	update_nextstep_layout_recursive(node, root_top_left);
-}
-
-static void assign_menu_icons(MenuNode *node)
-{
-	if (node == NULL)
-		return;
-	static int next_icon_id = 0;
-	node->icon_texture_id = next_icon_id++;
-	for (int i = 0; i < node->num_children; i++) {
-		assign_menu_icons(node->children[i]);
-	}
 }

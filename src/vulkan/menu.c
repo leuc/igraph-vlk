@@ -185,7 +185,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 			glm_vec3_copy(current->quad_center_pos, instances[instance_count].worldPos);
 			instances[instance_count].texCoord[0] = 0.0f;
 			instances[instance_count].texCoord[1] = 0.0f;
-			instances[instance_count].texId = (float)current->icon_texture_id;
+			instances[instance_count].texId = -1.0f;
 			instances[instance_count].scale[0] = current->box_width;
 			instances[instance_count].scale[1] = current->box_height;
 			instances[instance_count].scale[2] = 1.0f;
