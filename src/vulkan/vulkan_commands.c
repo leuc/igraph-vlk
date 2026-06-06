@@ -24,7 +24,6 @@ void vulkan_commands_create(VulkanCommands *cmds, VulkanCore *core, uint32_t ima
 	cmds->commandBuffers = malloc(sizeof(VkCommandBuffer) * MAX_FRAMES_IN_FLIGHT);
 	VkCommandBufferAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = cmds->commandPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = MAX_FRAMES_IN_FLIGHT};
 	VK_CHECK(vkAllocateCommandBuffers(core->device, &allocInfo, cmds->commandBuffers), "Failed to allocate command buffers");
-
 	// Create synchronization primitives
 	cmds->imageAvailableSemaphores = malloc(sizeof(VkSemaphore) * MAX_FRAMES_IN_FLIGHT);
 	cmds->renderFinishedSemaphores = malloc(sizeof(VkSemaphore) * imageCount);

@@ -128,6 +128,19 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->edgeCapacity = 0;
 	r->needsAttributeUpload = VK_TRUE;
 
+	r->computeCtx.nodeBuf = VK_NULL_HANDLE;
+	r->computeCtx.nodeMem = VK_NULL_HANDLE;
+	r->computeCtx.edgeBuf = VK_NULL_HANDLE;
+	r->computeCtx.edgeMem = VK_NULL_HANDLE;
+	r->computeCtx.hubBuf = VK_NULL_HANDLE;
+	r->computeCtx.hubMem = VK_NULL_HANDLE;
+	r->computeCtx.pool = VK_NULL_HANDLE;
+	r->computeCtx.descSet = VK_NULL_HANDLE;
+	r->computeCtx.cmdBuf = VK_NULL_HANDLE;
+	r->computeCtx.cmdPool = VK_NULL_HANDLE;
+	r->computeCtx.fence = VK_NULL_HANDLE;
+	r->computeCtx.initialized = VK_FALSE;
+
 	renderer_update_graph(r, graph);
 
 	r->uniformBuffers = malloc(sizeof(VkBuffer) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
@@ -170,18 +183,6 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 		VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &r->graphUpdateFences[i]), "Failed to create graph update fence");
 	}
 
-	r->computeCtx.nodeBuf = VK_NULL_HANDLE;
-	r->computeCtx.nodeMem = VK_NULL_HANDLE;
-	r->computeCtx.edgeBuf = VK_NULL_HANDLE;
-	r->computeCtx.edgeMem = VK_NULL_HANDLE;
-	r->computeCtx.hubBuf = VK_NULL_HANDLE;
-	r->computeCtx.hubMem = VK_NULL_HANDLE;
-	r->computeCtx.pool = VK_NULL_HANDLE;
-	r->computeCtx.descSet = VK_NULL_HANDLE;
-	r->computeCtx.cmdBuf = VK_NULL_HANDLE;
-	r->computeCtx.cmdPool = VK_NULL_HANDLE;
-	r->computeCtx.fence = VK_NULL_HANDLE;
-	r->computeCtx.initialized = VK_FALSE;
 	glm_mat4_identity(r->ubo.model);
 	glm_mat4_identity(r->ubo.view);
 	int w, h;

@@ -286,8 +286,9 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 
 void vulkan_device_destroy(VulkanCore *core)
 {
-	if (core->device != VK_NULL_HANDLE)
+	if (core->device != VK_NULL_HANDLE) {
 		vkDestroyDevice(core->device, NULL);
+	}
 	if (core->surface != VK_NULL_HANDLE)
 		vkDestroySurfaceKHR(core->instance, core->surface, NULL);
 	if (core->instance != VK_NULL_HANDLE)
