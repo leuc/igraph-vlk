@@ -78,6 +78,7 @@ int main(int argc, char **argv)
 	// Initialize GLFW
 	if (!glfwInit()) {
 		fprintf(stderr, "Failed to initialize GLFW\n");
+		graph_free_data(&app.current_graph);
 		return EXIT_FAILURE;
 	}
 
@@ -87,6 +88,7 @@ int main(int argc, char **argv)
 	app.window = glfwCreateWindow(app.win_w, app.win_h, "Graph Sphere", NULL, NULL);
 	if (!app.window) {
 		fprintf(stderr, "Failed to create GLFW window\n");
+		graph_free_data(&app.current_graph);
 		glfwTerminate();
 		return EXIT_FAILURE;
 	}
@@ -123,6 +125,11 @@ int main(int argc, char **argv)
 	if (!renderer_init(&app.renderer, app.window, &app.current_graph, NULL)) {
 #endif
 		fprintf(stderr, "Failed to initialize renderer\n");
+		graph_free_data(&app.current_graph);
+#ifdef USE_OPENXR
+		if (app.vr_enabled)
+			xr_context_cleanup(&app.xr_ctx);
+#endif
 		glfwDestroyWindow(app.window);
 		glfwTerminate();
 		return EXIT_FAILURE;
@@ -159,6 +166,9 @@ int main(int argc, char **argv)
 		menu_tree_destroy(root_menu);
 		graph_free_data(&app.current_graph);
 		renderer_cleanup(&app.renderer);
+#ifdef USE_OPENXR
+		xr_context_cleanup(&app.xr_ctx);
+#endif
 		glfwDestroyWindow(app.window);
 		glfwTerminate();
 		return EXIT_FAILURE;
