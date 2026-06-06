@@ -13,6 +13,8 @@
 #include "vulkan/renderer_pipelines.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
+#include "vulkan/buffers.h"
+#include "vulkan/images.h"
 
 #define FONT_PATH "/usr/share/fonts/truetype/inconsolata/Inconsolata.otf"
 

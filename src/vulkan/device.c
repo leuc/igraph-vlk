@@ -1,4 +1,4 @@
-#include "vulkan/vulkan_device.h"
+#include "vulkan/device.h"
 
 #include <stdio.h>
 #include <stdlib.h>

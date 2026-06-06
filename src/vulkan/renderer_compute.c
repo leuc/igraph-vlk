@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "vulkan/utils.h"
+#include "vulkan/buffers.h"
 
 VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge *edgeResults)
 {

@@ -1,4 +1,4 @@
-#include "vulkan/vulkan_swapchain.h"
+#include "vulkan/swapchain.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,6 +7,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include "vulkan/images.h"
 #include "vulkan/utils.h"
 
 VkSurfaceFormatKHR choose_swap_surface_format(VkSurfaceFormatKHR *formats, uint32_t count)

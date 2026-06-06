@@ -9,6 +9,7 @@
 #include "interaction/camera.h"
 #include "interaction/state.h"
 #include "vulkan/utils.h"
+#include "vulkan/buffers.h"
 
 void renderer_update_graph(Renderer *r, GraphData *graph)
 {

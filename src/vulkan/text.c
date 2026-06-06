@@ -2,6 +2,9 @@
 #include "vulkan/text.h"
 
 #include "vulkan/utils.h"
+#include "vulkan/buffers.h"
+#include "vulkan/images.h"
+#include "vulkan/commands.h"
 #include <stb/stb_truetype.h>
 #include <stdio.h>
 #include <stdlib.h>

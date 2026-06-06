@@ -1,6 +1,7 @@
 #include "vulkan/pipeline_compute.h"
 #include "vulkan/renderer.h"
 #include "vulkan/utils.h"
+#include "vulkan/utils.h"
 
 void renderer_create_compute_pipelines(Renderer *r)
 {

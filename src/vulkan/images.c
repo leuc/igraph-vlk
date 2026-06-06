@@ -1,8 +1,8 @@
-#include "vulkan/vk_images.h"
+#include "vulkan/images.h"
 
+#include "vulkan/buffers.h"
+#include "vulkan/commands.h"
 #include "vulkan/utils.h"
-#include "vulkan/vk_buffers.h"
-#include "vulkan/vulkan_commands.h"
 
 void create_image(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage *image, VkDeviceMemory *imageMemory)
 {

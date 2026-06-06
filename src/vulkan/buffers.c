@@ -1,11 +1,11 @@
-#include "vulkan/vk_buffers.h"
+#include "vulkan/buffers.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "vulkan/commands.h"
 #include "vulkan/utils.h"
-#include "vulkan/vulkan_commands.h"
 
 uint32_t find_memory_type(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties)
 {

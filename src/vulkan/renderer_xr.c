@@ -1,6 +1,7 @@
 #include "vulkan/renderer_xr.h"
 
 #include "vulkan/utils.h"
+#include "vulkan/images.h"
 
 #ifdef USE_OPENXR
 void renderer_setup_xr(Renderer *r, XrContext *xr)

@@ -2,6 +2,7 @@
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_geometry.h"
 #include "vulkan/utils.h"
+#include "vulkan/utils.h"
 #include <stddef.h>
 
 void renderer_create_graphics_pipelines(Renderer *r)

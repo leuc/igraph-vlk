@@ -11,6 +11,10 @@
 #include "vulkan/app_path.h"
 #include "vulkan/menu.h"
 #include "vulkan/renderer.h"
+#include "vulkan/renderer_camera.h"
+#include "vulkan/renderer_draw.h"
+#include "vulkan/renderer_labels.h"
+#include "vulkan/renderer_lifecycle.h"
 
 #ifdef USE_OPENXR
 #include "xr/openxr_frame.h"

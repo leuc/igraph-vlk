@@ -8,6 +8,9 @@
 
 #include <stdio.h>
 
+#include "vulkan/renderer_draw.h"
+#include "vulkan/renderer_lifecycle.h"
+#include "vulkan/renderer_xr.h"
 #include "vulkan/utils.h"
 
 bool xr_init_vr(AppState *app)

@@ -81,15 +81,15 @@ add_executable(igraph-vlk
     src/vulkan/pipeline_graphics.c
     src/vulkan/pipeline_ui.c
     src/vulkan/pipeline_compute.c
-    src/vulkan/vulkan_device.c
-    src/vulkan/vulkan_swapchain.c
-    src/vulkan/vulkan_commands.c
-    src/vulkan/vulkan_render_pass.c
+    src/vulkan/device.c
+    src/vulkan/swapchain.c
+    src/vulkan/commands.c
+    src/vulkan/render_pass.c
     src/vulkan/menu.c
     # Utilities and helpers
-    src/vulkan/vk_buffers.c
-    src/vulkan/vk_images.c
-    src/vulkan/vk_utils.c
+    src/vulkan/buffers.c
+    src/vulkan/images.c
+    src/vulkan/utils.c
     src/vulkan/app_path.c
     src/vulkan/polyhedron.c
     src/vulkan/text.c

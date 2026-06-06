@@ -1,4 +1,4 @@
-#include "vulkan/vk_utils.h"
+#include "vulkan/utils.h"
 
 #include <stdio.h>
 #include <stdlib.h>

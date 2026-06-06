@@ -8,6 +8,7 @@
 #include "vulkan/renderer_lifecycle.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
+#include "vulkan/buffers.h"
 
 static int sort_by_dist(const void *a, const void *b)
 {

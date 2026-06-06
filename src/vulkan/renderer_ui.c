@@ -5,6 +5,7 @@
 #include "vulkan/renderer_geometry.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
+#include "vulkan/buffers.h"
 
 extern FontAtlas globalAtlas;
 
