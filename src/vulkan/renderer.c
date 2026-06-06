@@ -185,7 +185,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	}
 
 	// Initialize node label atlas and instance buffer
-	if (!text_atlas_init(&r->nodeTextAtlas, 2048, 512)) {
+	if (!text_atlas_init(&r->nodeTextAtlas, 2048, 1024)) {
 		fprintf(stderr, "Failed to initialize node label text atlas\n");
 		return false;
 	}
@@ -291,58 +291,7 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 	float fixed_offset = 0.4f;
 	uint32_t inst_idx = 0;
 
-	for (uint32_t j = 0; j < node_count && inst_idx < label_count; j++) {
-		uint32_t ni = pairs[j].idx;
-		if ((int)ni == selected_node)
-			continue;
-		const char *label = graph->nodes[ni].label;
-		if (!label || !label[0])
-			continue;
-
-		// Surface tangent frame (same as shader.vert)
-		vec3 normal, upGuide = {0.0f, 1.0f, 0.0f};
-		glm_vec3_normalize_to(graph->nodes[ni].position, normal);
-		if (fabsf(normal[1]) > 0.999f)
-			upGuide[0] = 1.0f;
-		vec3 right, up;
-		glm_vec3_cross(upGuide, normal, right);
-		glm_vec3_normalize(right);
-		glm_vec3_cross(normal, right, up);
-
-		// Position above node surface
-		vec3 label_pos;
-		glm_vec3_scale(normal, fixed_offset, label_pos);
-		glm_vec3_add(graph->nodes[ni].position, label_pos, label_pos);
-		glm_vec3_scale(label_pos, r->layoutScale, label_pos);
-
-		// Render label text into atlas
-		TextRegion region;
-		text_atlas_render(&r->nodeTextAtlas, &globalAtlas, label, &region);
-
-		// Build instance
-		NodeLabelInstance *inst = &instances[inst_idx];
-		glm_vec3_copy(label_pos, inst->worldPos);
-		inst->bgColor[0] = 0.05f;
-		inst->bgColor[1] = 0.05f;
-		inst->bgColor[2] = 0.10f;
-		inst->bgColor[3] = 1.0f;
-		inst->scale[0] = region.width_px * world_text_scale;
-		inst->scale[1] = region.height_px * world_text_scale;
-		inst->scale[2] = 1.0f;
-		glm_vec3_copy(right, inst->right);
-		glm_vec3_copy(up, inst->up);
-		inst->textUV[0] = region.u0;
-		inst->textUV[1] = region.v0;
-		inst->textUV[2] = region.u1;
-		inst->textUV[3] = region.v1;
-		inst->textRegion[0] = 0.0f;
-		inst->textRegion[1] = 0.0f;
-		inst->textRegion[2] = 1.0f;
-		inst->textRegion[3] = 1.0f;
-		inst_idx++;
-	}
-
-	// 6. Detail card for selected node (replaces regular label)
+	// 6. Detail card FIRST (always gets atlas space before LOD labels)
 	if (selected_node >= 0 && selected_node < (int)node_count) {
 		// Build multi-line string with all vertex attributes
 		char detail[4096] = {0};
@@ -397,7 +346,7 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 		glm_vec3_add(graph->nodes[selected_node].position, label_pos, label_pos);
 		glm_vec3_scale(label_pos, r->layoutScale, label_pos);
 
-		// Render detail string into atlas
+		// Render detail string into atlas (rendered first to guarantee space)
 		TextRegion region;
 		text_atlas_render(&r->nodeTextAtlas, &globalAtlas, detail, &region);
 
@@ -407,6 +356,58 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 		inst->bgColor[0] = 0.02f;
 		inst->bgColor[1] = 0.02f;
 		inst->bgColor[2] = 0.04f;
+		inst->bgColor[3] = 1.0f;
+		inst->scale[0] = region.width_px * world_text_scale;
+		inst->scale[1] = region.height_px * world_text_scale;
+		inst->scale[2] = 1.0f;
+		glm_vec3_copy(right, inst->right);
+		glm_vec3_copy(up, inst->up);
+		inst->textUV[0] = region.u0;
+		inst->textUV[1] = region.v0;
+		inst->textUV[2] = region.u1;
+		inst->textUV[3] = region.v1;
+		inst->textRegion[0] = 0.0f;
+		inst->textRegion[1] = 0.0f;
+		inst->textRegion[2] = 1.0f;
+		inst->textRegion[3] = 1.0f;
+		inst_idx++;
+	}
+
+	// 7. LOD labels (nearest up to max_labels, skip selected, skip no-label)
+	for (uint32_t j = 0; j < node_count && inst_idx < nli_needed; j++) {
+		uint32_t ni = pairs[j].idx;
+		if ((int)ni == selected_node)
+			continue;
+		const char *label = graph->nodes[ni].label;
+		if (!label || !label[0])
+			continue;
+
+		// Surface tangent frame (same as shader.vert)
+		vec3 normal, upGuide = {0.0f, 1.0f, 0.0f};
+		glm_vec3_normalize_to(graph->nodes[ni].position, normal);
+		if (fabsf(normal[1]) > 0.999f)
+			upGuide[0] = 1.0f;
+		vec3 right, up;
+		glm_vec3_cross(upGuide, normal, right);
+		glm_vec3_normalize(right);
+		glm_vec3_cross(normal, right, up);
+
+		// Position above node surface
+		vec3 label_pos;
+		glm_vec3_scale(normal, fixed_offset, label_pos);
+		glm_vec3_add(graph->nodes[ni].position, label_pos, label_pos);
+		glm_vec3_scale(label_pos, r->layoutScale, label_pos);
+
+		// Render label text into atlas
+		TextRegion region;
+		text_atlas_render(&r->nodeTextAtlas, &globalAtlas, label, &region);
+
+		// Build instance
+		NodeLabelInstance *inst = &instances[inst_idx];
+		glm_vec3_copy(label_pos, inst->worldPos);
+		inst->bgColor[0] = 0.05f;
+		inst->bgColor[1] = 0.05f;
+		inst->bgColor[2] = 0.10f;
 		inst->bgColor[3] = 1.0f;
 		inst->scale[0] = region.width_px * world_text_scale;
 		inst->scale[1] = region.height_px * world_text_scale;
