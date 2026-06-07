@@ -186,7 +186,6 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	r->splc_active = false;
 	r->splc_current_level = 0;
 	r->splc_timer = 0;
-	r->splc_frames_per_level = 5;
 
 	igraph_integer_t n = graph->node_count;
 	igraph_integer_t m = graph->edge_count;
@@ -231,6 +230,11 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 		return;
 	}
 	r->splc_num_levels = (int)max_level + 1;
+	if (r->splc_num_levels > 0) {
+		r->splc_frames_per_level = 120 / r->splc_num_levels;
+		if (r->splc_frames_per_level < 2)
+			r->splc_frames_per_level = 2;
+	}
 
 	// Build level groups
 	r->splc_level_groups = calloc(r->splc_num_levels, sizeof(igraph_vector_int_t *));
