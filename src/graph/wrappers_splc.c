@@ -117,4 +117,21 @@ void apply_splc_animation(ExecutionContext *ctx, void *result_data)
 	state->renderer.labelTreeNeedsRebuild = true;
 
 	printf("SPLC animation started (graph has %d levels)\n", state->renderer.splc_num_levels);
+
+	igraph_vector_int_t indeg, outdeg;
+	igraph_integer_t nv = igraph_vcount(&data->g);
+	igraph_vector_int_init(&indeg, nv);
+	igraph_vector_int_init(&outdeg, nv);
+	igraph_degree(&data->g, &indeg, igraph_vss_all(), IGRAPH_IN, IGRAPH_LOOPS);
+	igraph_degree(&data->g, &outdeg, igraph_vss_all(), IGRAPH_OUT, IGRAPH_LOOPS);
+	igraph_integer_t sources = 0, sinks = 0;
+	for (igraph_integer_t i = 0; i < nv; i++) {
+		if (VECTOR(indeg)[i] == 0)
+			sources++;
+		if (VECTOR(outdeg)[i] == 0)
+			sinks++;
+	}
+	printf("  sources: %d, sinks: %d\n", (int)sources, (int)sinks);
+	igraph_vector_int_destroy(&indeg);
+	igraph_vector_int_destroy(&outdeg);
 }
