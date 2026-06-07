@@ -25,12 +25,9 @@ void renderer_create_compute_pipelines(Renderer *r)
 void renderer_create_splc_compute_pipeline(Renderer *r)
 {
 	VkDescriptorSetLayoutBinding splcBindings[] = {
-		{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
-		{1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
-		{2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
-		{3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+		{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
 	};
-	VkDescriptorSetLayoutCreateInfo splcLayoutInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 4, .pBindings = splcBindings};
+	VkDescriptorSetLayoutCreateInfo splcLayoutInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 5, .pBindings = splcBindings};
 	VK_CHECK(vkCreateDescriptorSetLayout(r->core.device, &splcLayoutInfo, NULL, &r->splc_compute_descriptor_set_layout), "Failed to create SPLC compute descriptor set layout");
 
 	VkPushConstantRange splcPushConstant = {.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = sizeof(uint32_t)};
@@ -44,7 +41,7 @@ void renderer_create_splc_compute_pipeline(Renderer *r)
 	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &splcPipelineInfo, NULL, &r->splc_compute_pipeline), "Failed to create SPLC compute pipeline");
 	vkDestroyShaderModule(r->core.device, splcShaderModule, NULL);
 
-	VkDescriptorPoolSize splcPoolSizes = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4};
+	VkDescriptorPoolSize splcPoolSizes = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 5};
 	VkDescriptorPoolCreateInfo splcPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &splcPoolSizes};
 	VK_CHECK(vkCreateDescriptorPool(r->core.device, &splcPoolInfo, NULL, &r->splc_descriptor_pool), "Failed to create SPLC descriptor pool");
 

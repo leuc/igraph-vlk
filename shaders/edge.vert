@@ -19,10 +19,14 @@ layout(std430, binding = 2) readonly buffer SPLCEdgeBuffer
 	SPLCEdge splc_edges[];
 };
 
+layout(std430, binding = 3) readonly buffer MaxBuffer
+{
+	uint global_max_weight_uint;
+};
+
 layout(push_constant) uniform SPLCConstants
 {
-	layout(offset = 128) float maxSPLCWeight;
-	layout(offset = 132) uint segmentsPerEdge;
+	layout(offset = 128) uint segmentsPerEdge;
 }
 splcPC;
 
@@ -39,12 +43,13 @@ void main()
 {
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
 
-	// Modulate color by SPLC weight (only when active)
+	float max_w = uintBitsToFloat(global_max_weight_uint);
+
 	fragColor = inColor;
-	if (splcPC.maxSPLCWeight > 0.0) {
+	if (max_w > 0.0) {
 		uint edge_index = gl_VertexIndex / (splcPC.segmentsPerEdge * 2);
 		float w = splc_edges[edge_index].weight;
-		float intensity = clamp(log(w + 1.0) / log(max(splcPC.maxSPLCWeight, 1.0) + 1.0), 0.0, 1.0);
+		float intensity = clamp(log(w + 1.0) / log(max_w + 1.0), 0.0, 1.0);
 		fragColor = inColor * (0.2 + 0.8 * intensity);
 	}
 	fragSelected = inSelected;

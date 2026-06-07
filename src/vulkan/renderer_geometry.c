@@ -23,7 +23,6 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	// If edge count changed while SPLC was active, reset to avoid stale/out-of-bounds reads
 	if (r->splc_active && r->edgeCount != graph->edge_count) {
 		r->splc_active = false;
-		r->splc_max_weight = 0.0f;
 	}
 
 	r->nodeCount = graph->node_count;

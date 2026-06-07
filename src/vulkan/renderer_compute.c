@@ -158,6 +158,8 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	VkDeviceMemory old_traffic_mem = r->splc_traffic_memory;
 	VkBuffer old_level_buf = r->splc_level_buffer;
 	VkDeviceMemory old_level_mem = r->splc_level_memory;
+	VkBuffer old_max_buf = r->splc_max_buffer;
+	VkDeviceMemory old_max_mem = r->splc_max_memory;
 
 	r->splc_nodes_buffer = VK_NULL_HANDLE;
 	r->splc_nodes_memory = VK_NULL_HANDLE;
@@ -167,6 +169,8 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	r->splc_traffic_memory = VK_NULL_HANDLE;
 	r->splc_level_buffer = VK_NULL_HANDLE;
 	r->splc_level_memory = VK_NULL_HANDLE;
+	r->splc_max_buffer = VK_NULL_HANDLE;
+	r->splc_max_memory = VK_NULL_HANDLE;
 
 	// Free old level groups
 	if (r->splc_level_groups) {
@@ -183,7 +187,6 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	r->splc_current_level = 0;
 	r->splc_timer = 0;
 	r->splc_frames_per_level = 5;
-	r->splc_max_weight = 0.0f;
 
 	igraph_integer_t n = graph->node_count;
 	igraph_integer_t m = graph->edge_count;
@@ -196,23 +199,34 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	igraph_integer_t max_level = calculate_dag_levels(&graph->g, &levels);
 	if (max_level < 0) {
 		igraph_vector_int_destroy(&levels);
-		// Still create a zero-initialized edge buffer so the graphics descriptor binding is valid
+		// Still create zero-initialized buffers so the graphics descriptor bindings are valid
 		VkDeviceSize edge_buf_size = sizeof(SPLCEdge) * m;
 		create_buffer(r->core.device, r->core.physicalDevice, edge_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_edges_buffer, &r->splc_edges_memory);
+		create_buffer(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_max_buffer, &r->splc_max_memory);
 		SPLCEdge *zero_edges = calloc(m, sizeof(SPLCEdge));
 		update_buffer(r->core.device, r->splc_edges_memory, edge_buf_size, zero_edges);
 		free(zero_edges);
+		uint32_t zero_max = 0;
+		update_buffer(r->core.device, r->splc_max_memory, sizeof(uint32_t), &zero_max);
 		if (r->descriptorSets != NULL) {
 			VkDescriptorBufferInfo edgeWeightInfo = {r->splc_edges_buffer, 0, VK_WHOLE_SIZE};
+			VkDescriptorBufferInfo maxWeightInfo = {r->splc_max_buffer, 0, VK_WHOLE_SIZE};
 			for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-				VkWriteDescriptorSet weightWrite = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeWeightInfo, NULL};
-				vkUpdateDescriptorSets(r->core.device, 1, &weightWrite, 0, NULL);
+				VkWriteDescriptorSet descWrites[] = {
+					{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeWeightInfo, NULL},
+					{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 3, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &maxWeightInfo, NULL},
+				};
+				vkUpdateDescriptorSets(r->core.device, 2, descWrites, 0, NULL);
 			}
 		}
 		// Destroy old buffers now that descriptor sets no longer reference them
 		if (old_edges_buf != VK_NULL_HANDLE) {
 			vkDestroyBuffer(r->core.device, old_edges_buf, NULL);
 			vkFreeMemory(r->core.device, old_edges_mem, NULL);
+		}
+		if (old_max_buf != VK_NULL_HANDLE) {
+			vkDestroyBuffer(r->core.device, old_max_buf, NULL);
+			vkFreeMemory(r->core.device, old_max_mem, NULL);
 		}
 		return;
 	}
@@ -284,33 +298,38 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	create_buffer(r->core.device, r->core.physicalDevice, edge_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_edges_buffer, &r->splc_edges_memory);
 	create_buffer(r->core.device, r->core.physicalDevice, traffic_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_traffic_buffer, &r->splc_traffic_memory);
 	create_buffer(r->core.device, r->core.physicalDevice, level_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_level_buffer, &r->splc_level_memory);
+	create_buffer(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_max_buffer, &r->splc_max_memory);
 
 	// Upload data
 	update_buffer(r->core.device, r->splc_nodes_memory, node_buf_size, splc_nodes);
 	update_buffer(r->core.device, r->splc_edges_memory, edge_buf_size, splc_edges);
 	update_buffer(r->core.device, r->splc_traffic_memory, traffic_buf_size, traffic);
+	uint32_t zero_max = 0;
+	update_buffer(r->core.device, r->splc_max_memory, sizeof(uint32_t), &zero_max);
 
 	// Update SPLC compute descriptor set
 	VkDescriptorBufferInfo nodeInfo = {r->splc_nodes_buffer, 0, VK_WHOLE_SIZE};
 	VkDescriptorBufferInfo edgeInfo = {r->splc_edges_buffer, 0, VK_WHOLE_SIZE};
 	VkDescriptorBufferInfo trafficInfo = {r->splc_traffic_buffer, 0, VK_WHOLE_SIZE};
 	VkDescriptorBufferInfo levelInfo = {r->splc_level_buffer, 0, VK_WHOLE_SIZE};
+	VkDescriptorBufferInfo maxInfo = {r->splc_max_buffer, 0, VK_WHOLE_SIZE};
 	VkWriteDescriptorSet splcWrites[] = {
-		{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 0, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &nodeInfo, NULL},
-		{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 1, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeInfo, NULL},
-		{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &trafficInfo, NULL},
-		{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 3, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &levelInfo, NULL},
+		{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 0, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &nodeInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 1, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &trafficInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 3, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &levelInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 4, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &maxInfo, NULL},
 	};
-	vkUpdateDescriptorSets(r->core.device, 4, splcWrites, 0, NULL);
+	vkUpdateDescriptorSets(r->core.device, 5, splcWrites, 0, NULL);
 
-	// Update the graphics pipeline edge weight SSBO descriptor set (binding 2 of the main descriptor set).
-	// Same buffer as the compute edges buffer - barrier ensures correctness.
+	// Update the graphics pipeline SSBO descriptor sets (binding 2 = edge weights, binding 3 = max weight).
+	// Same buffers as the compute shader - barrier ensures correctness.
 	// descriptorSets is NULL during first renderer_init call before sets are allocated; skip until later.
 	if (r->descriptorSets != NULL) {
 		VkDescriptorBufferInfo edgeWeightInfo = {r->splc_edges_buffer, 0, VK_WHOLE_SIZE};
+		VkDescriptorBufferInfo maxWeightInfo = {r->splc_max_buffer, 0, VK_WHOLE_SIZE};
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-			VkWriteDescriptorSet weightWrite = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeWeightInfo, NULL};
-			vkUpdateDescriptorSets(r->core.device, 1, &weightWrite, 0, NULL);
+			VkWriteDescriptorSet descWrites[] = {
+				{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeWeightInfo, NULL},
+				{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 3, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &maxWeightInfo, NULL},
+			};
+			vkUpdateDescriptorSets(r->core.device, 2, descWrites, 0, NULL);
 		}
 	}
 
@@ -318,10 +337,6 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	free(splc_edges);
 	free(traffic);
 	igraph_vector_int_destroy(&levels);
-
-	// Set max weight to node count for logarithmic normalization in the shader.
-	// SPLC values grow combinatorially; log scale prevents early clamping.
-	r->splc_max_weight = (float)n;
 
 	// Destroy old buffers now that descriptor sets reference the new ones
 	if (old_nodes_buf != VK_NULL_HANDLE)
@@ -340,6 +355,10 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 		vkDestroyBuffer(r->core.device, old_level_buf, NULL);
 	if (old_level_mem != VK_NULL_HANDLE)
 		vkFreeMemory(r->core.device, old_level_mem, NULL);
+	if (old_max_buf != VK_NULL_HANDLE)
+		vkDestroyBuffer(r->core.device, old_max_buf, NULL);
+	if (old_max_mem != VK_NULL_HANDLE)
+		vkFreeMemory(r->core.device, old_max_mem, NULL);
 
 	r->splc_active = true;
 	r->splc_current_level = 0;

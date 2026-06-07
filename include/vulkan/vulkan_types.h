@@ -365,7 +365,8 @@ typedef struct Renderer
 	int splc_timer;
 	int splc_frames_per_level;
 	bool splc_active;
-	float splc_max_weight;
+	VkBuffer splc_max_buffer;
+	VkDeviceMemory splc_max_memory;
 	VkDescriptorPool splc_descriptor_pool;
 	VkDescriptorSet splc_descriptor_set;
 	VkPipeline splc_compute_pipeline;

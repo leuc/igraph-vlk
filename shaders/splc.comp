@@ -35,6 +35,11 @@ layout(std430, binding = 3) readonly buffer LevelBuffer
 	uint current_level_nodes[];
 };
 
+layout(std430, binding = 4) buffer MaxBuffer
+{
+	uint global_max_weight_uint;
+};
+
 layout(push_constant) uniform Constants
 {
 	uint num_nodes_in_level;
@@ -58,5 +63,8 @@ void main()
 		uint target = edges[edge_idx].target_node;
 		atomicAdd(edges[edge_idx].weight, current_traffic);
 		atomicAdd(traffic[target], current_traffic);
+
+		uint uint_weight = floatBitsToUint(edges[edge_idx].weight);
+		atomicMax(global_max_weight_uint, uint_weight);
 	}
 }
