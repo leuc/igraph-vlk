@@ -32,7 +32,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->edgePipeline);
 		// Push SPLC max weight + segments per edge for edge index calculation
 		int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
-		float maxWeight = r->splc_max_weight > 0.0f ? r->splc_max_weight : 1.0f;
+		float maxWeight = r->splc_active ? r->splc_max_weight : 0.0f;
 		struct
 		{
 			float maxWeight;
@@ -143,10 +143,6 @@ void renderer_draw_frame(Renderer *r)
 		r->splc_timer++;
 		if (r->splc_timer >= r->splc_frames_per_level) {
 			renderer_dispatch_splc_level(r, r->commands.commandBuffers[r->commands.currentFrame]);
-			// After all levels are processed, update max_weight for normalization
-			if (!r->splc_active) {
-				printf("SPLC animation finished (%d levels, max weight heur=%.0f)\n", r->splc_num_levels, r->splc_max_weight);
-			}
 		}
 	}
 

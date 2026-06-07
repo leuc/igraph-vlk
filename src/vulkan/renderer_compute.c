@@ -351,7 +351,6 @@ void renderer_dispatch_splc_level(Renderer *r, VkCommandBuffer cmd)
 	if (!r->splc_active || r->splc_level_groups == NULL)
 		return;
 	if (r->splc_current_level >= r->splc_num_levels) {
-		r->splc_active = false;
 		return;
 	}
 
