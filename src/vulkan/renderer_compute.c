@@ -362,6 +362,7 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	if (old_max_mem != VK_NULL_HANDLE)
 		vkFreeMemory(r->core.device, old_max_mem, NULL);
 
+	r->edgeCount = graph->edge_count; // Sync edge count so renderer_update_graph doesn't reset splc_active
 	r->splc_active = true;
 	r->splc_current_level = 0;
 	r->splc_last_level_time = glfwGetTime();
