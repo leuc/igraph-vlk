@@ -57,9 +57,4 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph);
  */
 void renderer_dispatch_splc_level(Renderer *r, VkCommandBuffer cmd);
 
-/**
- * Reset SPLC traffic state for a new animation run.
- */
-void renderer_reset_splc(Renderer *r);
-
 #endif

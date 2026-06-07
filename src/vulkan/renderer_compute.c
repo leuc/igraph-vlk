@@ -348,52 +348,6 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	r->splc_timer = 0;
 }
 
-void renderer_reset_splc(Renderer *r)
-{
-	if (r->splc_traffic_buffer == VK_NULL_HANDLE)
-		return;
-	// Reset traffic: source nodes get 1.0, others 0.0
-	// Re-read from level groups since we don't store in-degrees
-	uint32_t n = 0;
-	for (int i = 0; i < r->splc_num_levels; i++)
-		n += (uint32_t)igraph_vector_int_size(r->splc_level_groups[i]);
-
-	float *traffic = calloc(n > 0 ? n : 1, sizeof(float));
-	// Source nodes are in level 0
-	if (r->splc_num_levels > 0) {
-		for (int i = 0; i < igraph_vector_int_size(r->splc_level_groups[0]); i++) {
-			uint32_t src = (uint32_t)VECTOR(*r->splc_level_groups[0])[i];
-			if (src < n)
-				traffic[src] = 1.0f;
-		}
-	}
-	update_buffer(r->core.device, r->splc_traffic_memory, sizeof(float) * n, traffic);
-	free(traffic);
-
-	// Zero out edge weights
-	uint32_t edge_count = 0;
-	if (r->splc_edges_buffer != VK_NULL_HANDLE) {
-		// Estimate edge count from node buffer (we don't store total count separately)
-		// Read back node buffer to compute total edges
-		void *mapped;
-		vkMapMemory(r->core.device, r->splc_nodes_memory, 0, VK_WHOLE_SIZE, 0, &mapped);
-		SPLCNode *nodes = (SPLCNode *)mapped;
-		for (uint32_t i = 0; i < n; i++)
-			edge_count += nodes[i].out_degree;
-		vkUnmapMemory(r->core.device, r->splc_nodes_memory);
-	}
-
-	if (edge_count > 0) {
-		float *zero_weights = calloc(edge_count, sizeof(SPLCEdge));
-		update_buffer(r->core.device, r->splc_edges_memory, sizeof(SPLCEdge) * edge_count, zero_weights);
-		free(zero_weights);
-	}
-
-	r->splc_current_level = 0;
-	r->splc_timer = 0;
-	r->splc_active = true;
-}
-
 void renderer_dispatch_splc_level(Renderer *r, VkCommandBuffer cmd)
 {
 	if (!r->splc_active || r->splc_level_groups == NULL)

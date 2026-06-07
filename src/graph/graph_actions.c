@@ -74,7 +74,5 @@ void graph_action_start_splc(AppState *state)
 	graph_refresh_data(&state->current_graph);
 	renderer_update_graph(&state->renderer, &state->current_graph);
 
-	// Reset SPLC state so animation starts from level 0
-	renderer_reset_splc(&state->renderer);
 	printf("SPLC animation started (graph has %d levels)\n", state->renderer.splc_num_levels);
 }
