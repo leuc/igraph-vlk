@@ -23,8 +23,8 @@ static const int VALIDATION_LAYER_COUNT = 1;
 #endif
 
 // Required device extensions
-static const char *BASE_DEVICE_EXTENSIONS[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME};
-static const int BASE_DEVICE_EXTENSION_COUNT = 2;
+static const char *BASE_DEVICE_EXTENSIONS[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME};
+static const int BASE_DEVICE_EXTENSION_COUNT = 3;
 
 static int rate_device_suitability(VkPhysicalDevice device)
 {
@@ -277,7 +277,12 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 		.shaderBufferFloat32Atomics = VK_TRUE,
 		.shaderBufferFloat32AtomicAdd = VK_TRUE,
 	};
-	VkDeviceCreateInfo deviceInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .queueCreateInfoCount = queueCreateInfoCount, .pQueueCreateInfos = queueCreateInfos, .enabledExtensionCount = deviceExtensionCount, .ppEnabledExtensionNames = deviceExtensions, .pEnabledFeatures = &deviceFeatures, .pNext = &atomicFloatFeatures, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
+	VkPhysicalDeviceDescriptorIndexingFeaturesEXT descIndexingFeatures = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
+		.pNext = &atomicFloatFeatures,
+		.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE,
+	};
+	VkDeviceCreateInfo deviceInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .queueCreateInfoCount = queueCreateInfoCount, .pQueueCreateInfos = queueCreateInfos, .enabledExtensionCount = deviceExtensionCount, .ppEnabledExtensionNames = deviceExtensions, .pEnabledFeatures = &deviceFeatures, .pNext = &descIndexingFeatures, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
 
 	VK_CHECK(vkCreateDevice(core->physicalDevice, &deviceInfo, NULL, &core->device), "Failed to create logical device");
 
