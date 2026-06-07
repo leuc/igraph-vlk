@@ -42,6 +42,9 @@ void graph_action_reset(AppState *state)
 
 void graph_action_start_splc(AppState *state)
 {
+	if (state->renderer.splc_active)
+		return;
+
 	igraph_t *g = &state->current_graph.g;
 
 	if (!igraph_is_directed(g)) {

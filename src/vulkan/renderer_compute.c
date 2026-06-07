@@ -149,23 +149,25 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 
 void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 {
-	// Destroy old buffers if they exist
-	if (r->splc_nodes_buffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->splc_nodes_buffer, NULL);
-		vkFreeMemory(r->core.device, r->splc_nodes_memory, NULL);
-	}
-	if (r->splc_edges_buffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->splc_edges_buffer, NULL);
-		vkFreeMemory(r->core.device, r->splc_edges_memory, NULL);
-	}
-	if (r->splc_traffic_buffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->splc_traffic_buffer, NULL);
-		vkFreeMemory(r->core.device, r->splc_traffic_memory, NULL);
-	}
-	if (r->splc_level_buffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->splc_level_buffer, NULL);
-		vkFreeMemory(r->core.device, r->splc_level_memory, NULL);
-	}
+	// Save old buffer handles before zeroing — destroy AFTER descriptor sets are updated to new buffers
+	VkBuffer old_nodes_buf = r->splc_nodes_buffer;
+	VkDeviceMemory old_nodes_mem = r->splc_nodes_memory;
+	VkBuffer old_edges_buf = r->splc_edges_buffer;
+	VkDeviceMemory old_edges_mem = r->splc_edges_memory;
+	VkBuffer old_traffic_buf = r->splc_traffic_buffer;
+	VkDeviceMemory old_traffic_mem = r->splc_traffic_memory;
+	VkBuffer old_level_buf = r->splc_level_buffer;
+	VkDeviceMemory old_level_mem = r->splc_level_memory;
+
+	r->splc_nodes_buffer = VK_NULL_HANDLE;
+	r->splc_nodes_memory = VK_NULL_HANDLE;
+	r->splc_edges_buffer = VK_NULL_HANDLE;
+	r->splc_edges_memory = VK_NULL_HANDLE;
+	r->splc_traffic_buffer = VK_NULL_HANDLE;
+	r->splc_traffic_memory = VK_NULL_HANDLE;
+	r->splc_level_buffer = VK_NULL_HANDLE;
+	r->splc_level_memory = VK_NULL_HANDLE;
+
 	// Free old level groups
 	if (r->splc_level_groups) {
 		for (int i = 0; i < r->splc_num_levels; i++) {
@@ -206,6 +208,11 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 				VkWriteDescriptorSet weightWrite = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeWeightInfo, NULL};
 				vkUpdateDescriptorSets(r->core.device, 1, &weightWrite, 0, NULL);
 			}
+		}
+		// Destroy old buffers now that descriptor sets no longer reference them
+		if (old_edges_buf != VK_NULL_HANDLE) {
+			vkDestroyBuffer(r->core.device, old_edges_buf, NULL);
+			vkFreeMemory(r->core.device, old_edges_mem, NULL);
 		}
 		return;
 	}
@@ -318,6 +325,24 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	else
 		r->splc_max_weight = 1.0f;
 
+	// Destroy old buffers now that descriptor sets reference the new ones
+	if (old_nodes_buf != VK_NULL_HANDLE)
+		vkDestroyBuffer(r->core.device, old_nodes_buf, NULL);
+	if (old_nodes_mem != VK_NULL_HANDLE)
+		vkFreeMemory(r->core.device, old_nodes_mem, NULL);
+	if (old_edges_buf != VK_NULL_HANDLE)
+		vkDestroyBuffer(r->core.device, old_edges_buf, NULL);
+	if (old_edges_mem != VK_NULL_HANDLE)
+		vkFreeMemory(r->core.device, old_edges_mem, NULL);
+	if (old_traffic_buf != VK_NULL_HANDLE)
+		vkDestroyBuffer(r->core.device, old_traffic_buf, NULL);
+	if (old_traffic_mem != VK_NULL_HANDLE)
+		vkFreeMemory(r->core.device, old_traffic_mem, NULL);
+	if (old_level_buf != VK_NULL_HANDLE)
+		vkDestroyBuffer(r->core.device, old_level_buf, NULL);
+	if (old_level_mem != VK_NULL_HANDLE)
+		vkFreeMemory(r->core.device, old_level_mem, NULL);
+
 	r->splc_active = true;
 	r->splc_current_level = 0;
 	r->splc_timer = 0;
@@ -366,7 +391,6 @@ void renderer_reset_splc(Renderer *r)
 
 	r->splc_current_level = 0;
 	r->splc_timer = 0;
-	r->splc_max_weight = 0.0f;
 	r->splc_active = true;
 }
 
