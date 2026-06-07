@@ -44,6 +44,7 @@ void vulkan_commands_create(VulkanCommands *cmds, VulkanCore *core, uint32_t ima
 
 void vulkan_commands_destroy(VulkanCommands *cmds, VkDevice device)
 {
+	VK_CHECK(vkDeviceWaitIdle(device), "Failed to wait for device idle before command destruction");
 	if (cmds->imageAvailableSemaphores) {
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			if (cmds->imageAvailableSemaphores[i] != VK_NULL_HANDLE)
