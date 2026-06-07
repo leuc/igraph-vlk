@@ -11,9 +11,8 @@ layout(binding = 1) uniform sampler2D texSampler;
 layout(location = 0) in vec3 fragNormal;
 layout(location = 1) in vec2 fragTexCoord;
 layout(location = 2) in vec3 fragColor;
-layout(location = 3) in float fragGlow;
-layout(location = 4) in flat int fragDegree;
-layout(location = 5) in float fragSelected;
+layout(location = 3) in flat int fragDegree;
+layout(location = 4) in float fragSelected;
 
 layout(location = 0) out vec4 outColor;
 
@@ -42,13 +41,12 @@ void main()
 	float diff = max(dot(fragNormal, lightDir), 0.2);
 
 	vec3 baseColor = fragColor * diff;
-	vec3 glowColor = fragColor * fragGlow * 1.5;
 
 	// Edge ring color (brighter, slightly desaturated)
 	vec3 edgeColor = mix(baseColor, vec3(1.0), 0.6);
 
 	// Blend interior with edge ring
-	vec3 finalColor = mix(baseColor + glowColor, edgeColor * 1.5, edge_factor);
+	vec3 finalColor = mix(baseColor, edgeColor * 1.5, edge_factor);
 
 	// Circuit board border styling
 	if (d > 0.5 && d <= 0.6) {

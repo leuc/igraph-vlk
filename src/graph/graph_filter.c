@@ -36,7 +36,7 @@ void graph_filter_degree(GraphData *data, int min_degree)
 		igraph_matrix_init(&data->current_layout, 0, 0);
 		int side = (int)ceil(pow(igraph_vcount(&data->g), 1.0 / 3.0));
 		igraph_layout_grid_3d(&data->g, &data->current_layout, side, side);
-		graph_refresh_data(data);
+		graph_build_visualization(data);
 	}
 	igraph_vector_int_destroy(&vids);
 	igraph_vector_int_destroy(&degrees);
@@ -69,19 +69,7 @@ void graph_filter_coreness(GraphData *data, int min_coreness)
 		igraph_matrix_init(&data->current_layout, 0, 0);
 		int side = (int)ceil(pow(igraph_vcount(&data->g), 1.0 / 3.0));
 		igraph_layout_grid_3d(&data->g, &data->current_layout, side, side);
-		graph_refresh_data(data);
-
-		// Set glow based on coreness
-		int max_core = 0;
-		for (int i = 0; i < data->node_count; i++)
-			if (data->nodes[i].coreness > max_core)
-				max_core = data->nodes[i].coreness;
-		for (int i = 0; i < data->node_count; i++) {
-			if (max_core > 0)
-				data->nodes[i].glow = (float)data->nodes[i].coreness / (float)max_core;
-			else
-				data->nodes[i].glow = 0.5f;
-		}
+		graph_build_visualization(data);
 	}
 	igraph_vector_int_destroy(&vids);
 	igraph_vector_int_destroy(&coreness);
@@ -92,17 +80,12 @@ void graph_highlight_infrastructure(GraphData *data)
 	if (!data->graph_initialized)
 		return;
 
-	// Reset glow
-	for (int i = 0; i < data->node_count; i++)
-		data->nodes[i].glow = 0.0f;
-
 	// Articulation points
 	igraph_vector_int_t ap;
 	igraph_vector_int_init(&ap, 0);
 	igraph_articulation_points(&data->g, &ap);
 	for (int i = 0; i < igraph_vector_int_size(&ap); i++) {
 		int v_idx = VECTOR(ap)[i];
-		data->nodes[v_idx].glow = 1.0f;
 		data->nodes[v_idx].color[0] = 1.0f;
 		data->nodes[v_idx].color[1] = 0.2f;
 		data->nodes[v_idx].color[2] = 0.2f;
@@ -116,8 +99,6 @@ void graph_highlight_infrastructure(GraphData *data)
 	for (int i = 0; i < igraph_vector_int_size(&bridges); i++) {
 		igraph_integer_t from, to;
 		igraph_edge(&data->g, VECTOR(bridges)[i], &from, &to);
-		data->nodes[from].glow = 1.0f;
-		data->nodes[to].glow = 1.0f;
 		// Optionally color nodes connected to bridges differently
 		data->nodes[from].color[0] = 1.0f;
 		data->nodes[from].color[1] = 0.5f;

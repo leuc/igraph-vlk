@@ -5,7 +5,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 igraph_integer_t calculate_dag_levels(const igraph_t *graph, igraph_vector_int_t *levels)
 {
@@ -110,25 +109,8 @@ void apply_splc_animation(ExecutionContext *ctx, void *result_data)
 	AppState *state = ctx->app_state;
 	GraphData *data = &state->current_graph;
 
-	// Preserve existing node colors — graph_refresh_data re-randomizes them
-	vec3 *saved_colors = NULL;
-	uint32_t saved_count = data->node_count;
-	if (data->nodes && saved_count > 0) {
-		saved_colors = malloc(sizeof(vec3) * saved_count);
-		for (uint32_t i = 0; i < saved_count; i++)
-			glm_vec3_copy(data->nodes[i].color, saved_colors[i]);
-	}
-
 	state->renderer.needsAttributeUpload = VK_TRUE;
-	graph_refresh_data(data);
-
-	// Restore colors
-	if (saved_colors) {
-		uint32_t restore_count = data->node_count < saved_count ? data->node_count : saved_count;
-		for (uint32_t i = 0; i < restore_count; i++)
-			glm_vec3_copy(saved_colors[i], data->nodes[i].color);
-		free(saved_colors);
-	}
+	graph_rebuild_edges(data);
 	renderer_update_graph(&state->renderer, data);
 	state->renderer.labelTreeNeedsRebuild = true;
 

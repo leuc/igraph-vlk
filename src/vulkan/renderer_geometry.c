@@ -96,7 +96,6 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 				memcpy(nodeAttributes[currentOffset + count].color, sorted[currentOffset + count].color, sizeof(vec3));
 				nodeAttributes[currentOffset + count].size = size;
 				nodeAttributes[currentOffset + count].degree = sorted[currentOffset + count].degree;
-				nodeAttributes[currentOffset + count].glow = sorted[currentOffset + count].glow;
 				nodeAttributes[currentOffset + count].selected = sorted[currentOffset + count].selected;
 				count++;
 			}
@@ -164,14 +163,12 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 
 				memcpy(edgePositions[idx].pos, cEdges[i].path[p], 12);
 				memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].from].color, 12);
-				edgeAttributes[idx].size = graph->edges[i].size;
 				edgeAttributes[idx].selected = graph->edges[i].selected;
 				edgeAttributes[idx].normalized_pos = current_segment_start_len / (total_length > 0.0f ? total_length : 1.0f);
 				idx++;
 
 				memcpy(edgePositions[idx].pos, cEdges[i].path[p + 1], 12);
 				memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].to].color, 12);
-				edgeAttributes[idx].size = graph->edges[i].size;
 				edgeAttributes[idx].selected = graph->edges[i].selected;
 				edgeAttributes[idx].normalized_pos = (current_segment_start_len + segment_length) / (total_length > 0.0f ? total_length : 1.0f);
 				idx++;
@@ -188,14 +185,12 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 
 			memcpy(edgePositions[idx].pos, p1, 12);
 			memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].from].color, 12);
-			edgeAttributes[idx].size = graph->edges[i].size;
 			edgeAttributes[idx].selected = graph->edges[i].selected;
 			edgeAttributes[idx].normalized_pos = 0.0f;
 			idx++;
 
 			memcpy(edgePositions[idx].pos, p2, 12);
 			memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].to].color, 12);
-			edgeAttributes[idx].size = graph->edges[i].size;
 			edgeAttributes[idx].selected = graph->edges[i].selected;
 			edgeAttributes[idx].normalized_pos = 1.0f;
 			idx++;

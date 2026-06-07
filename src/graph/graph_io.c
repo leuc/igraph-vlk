@@ -22,7 +22,6 @@ bool graph_load_graphml(const char *filename, GraphData *data, LayoutType layout
 	igraph_simplify(&data->g, 1, 1, NULL);
 	data->graph_initialized = true;
 	data->node_attr_name = node_attr ? strdup(node_attr) : strdup("pagerank");
-	data->edge_attr_name = edge_attr ? strdup(edge_attr) : strdup("betweenness");
 	data->nodes = NULL;
 	data->edges = NULL;
 	data->hubs = NULL;
@@ -38,6 +37,6 @@ bool graph_load_graphml(const char *filename, GraphData *data, LayoutType layout
 	}
 	data->active_layout = layout_type;
 
-	graph_refresh_data(data);
+	graph_build_visualization(data);
 	return true;
 }

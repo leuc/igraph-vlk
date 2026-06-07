@@ -28,9 +28,8 @@ splcPC;
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inColor;
-layout(location = 2) in float inSize;
-layout(location = 3) in float inSelected;
-layout(location = 4) in float inNormalizedPos;
+layout(location = 2) in float inSelected;
+layout(location = 3) in float inNormalizedPos;
 
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out float fragSelected;

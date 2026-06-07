@@ -40,7 +40,7 @@ void apply_remove_feedback_arc_set(ExecutionContext *ctx, void *result_data)
 	AppState *state = ctx->app_state;
 	GraphData *data = &state->current_graph;
 
-	graph_refresh_data(data);
+	graph_rebuild_edges(data);
 	renderer_update_graph(&state->renderer, data);
 	state->renderer.labelTreeNeedsRebuild = true;
 

@@ -444,9 +444,7 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 		IGRAPH_FREE(layout);
 	}
 
-	// Refresh all derived data structures (nodes, edges, etc.)
-	// This will sync node positions from data->current_layout
-	graph_refresh_data(data);
+	graph_build_visualization(data);
 
 	// Refresh renderer
 	renderer_update_graph(renderer, data);

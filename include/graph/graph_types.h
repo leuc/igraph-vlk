@@ -24,8 +24,6 @@ typedef struct
 	float size;
 	char *label;
 	int degree;
-	int coreness;
-	float glow;
 	float selected;
 } Node;
 
@@ -38,7 +36,6 @@ typedef struct
 {
 	uint32_t from;
 	uint32_t to;
-	float size;
 	float selected;
 } Edge;
 
@@ -60,7 +57,6 @@ typedef struct
 	igraph_matrix_t current_layout;
 	bool graph_initialized;
 	char *node_attr_name;
-	char *edge_attr_name;
 	GraphProperties props;
 	LayoutType active_layout;
 	Hub *hubs;

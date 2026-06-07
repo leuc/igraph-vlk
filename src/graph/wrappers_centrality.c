@@ -290,9 +290,6 @@ void apply_centrality_scores(ExecutionContext *ctx, void *result_data)
 
 		// Apply to node size (scale between 0.5 and 2.0)
 		data->nodes[i].size = 0.5f + normalized * 1.5f;
-
-		// Apply to glow (same as size-based glow)
-		data->nodes[i].glow = normalized;
 	}
 
 	// Refresh renderer

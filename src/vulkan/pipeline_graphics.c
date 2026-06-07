@@ -2,7 +2,6 @@
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_geometry.h"
 #include "vulkan/utils.h"
-#include "vulkan/utils.h"
 #include <stddef.h>
 
 void renderer_create_graphics_pipelines(Renderer *r)
@@ -27,8 +26,8 @@ void renderer_create_graphics_pipelines(Renderer *r)
 	// Nodes
 	VkPipelineShaderStageCreateInfo nodeShaderStages[] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, vertexShaderModule, "main", NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, fragmentShaderModule, "main", NULL}};
 	VkVertexInputBindingDescription nodeBindings[] = {{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX}, {1, sizeof(NodePosition), VK_VERTEX_INPUT_RATE_INSTANCE}, {2, sizeof(NodeAttribute), VK_VERTEX_INPUT_RATE_INSTANCE}};
-	VkVertexInputAttributeDescription nodeAttributes[] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0}, {1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12}, {2, 0, VK_FORMAT_R32_SFLOAT, 24}, {3, 1, VK_FORMAT_R32G32B32_SFLOAT, 0}, {4, 2, VK_FORMAT_R32G32B32_SFLOAT, 0}, {5, 2, VK_FORMAT_R32_SFLOAT, 12}, {6, 2, VK_FORMAT_R32_SFLOAT, 20}, {7, 2, VK_FORMAT_R32_SINT, 16}, {8, 2, VK_FORMAT_R32_SFLOAT, 24}};
-	VkPipelineVertexInputStateCreateInfo nodeVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 3, .pVertexBindingDescriptions = nodeBindings, .vertexAttributeDescriptionCount = 9, .pVertexAttributeDescriptions = nodeAttributes};
+	VkVertexInputAttributeDescription nodeAttributes[] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0}, {1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12}, {2, 0, VK_FORMAT_R32_SFLOAT, 24}, {3, 1, VK_FORMAT_R32G32B32_SFLOAT, 0}, {4, 2, VK_FORMAT_R32G32B32_SFLOAT, 0}, {5, 2, VK_FORMAT_R32_SFLOAT, 12}, {6, 2, VK_FORMAT_R32_SINT, 16}, {7, 2, VK_FORMAT_R32_SFLOAT, 20}};
+	VkPipelineVertexInputStateCreateInfo nodeVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 3, .pVertexBindingDescriptions = nodeBindings, .vertexAttributeDescriptionCount = 8, .pVertexAttributeDescriptions = nodeAttributes};
 	VkPipelineInputAssemblyStateCreateInfo nodeInputAssembly = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
 	VkGraphicsPipelineCreateInfo nodePipelineInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = nodeShaderStages, .pVertexInputState = &nodeVertexInput, .pInputAssemblyState = &nodeInputAssembly, .pViewportState = &viewportState, .pRasterizationState = &rasterizationState, .pMultisampleState = &multisampleState, .pColorBlendState = &colorBlendState, .pDepthStencilState = &nodeDepthStencilState, .pDynamicState = &dynamicState, .layout = r->pipelineLayout, .renderPass = r->renderPass.renderPass};
 	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &nodePipelineInfo, NULL, &r->nodePipeline), "Failed to create node graphics pipeline");
@@ -36,8 +35,8 @@ void renderer_create_graphics_pipelines(Renderer *r)
 	// Edges
 	VkPipelineShaderStageCreateInfo edgeShaderStages[] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, edgeVertexShaderModule, "main", NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, edgeFragmentShaderModule, "main", NULL}};
 	VkVertexInputBindingDescription edgeBindings[] = {{0, sizeof(EdgePosition), VK_VERTEX_INPUT_RATE_VERTEX}, {1, sizeof(EdgeAttribute), VK_VERTEX_INPUT_RATE_VERTEX}};
-	VkVertexInputAttributeDescription edgeAttributes[] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0}, {1, 1, VK_FORMAT_R32G32B32_SFLOAT, 0}, {2, 1, VK_FORMAT_R32_SFLOAT, 12}, {3, 1, VK_FORMAT_R32_SFLOAT, 16}, {4, 1, VK_FORMAT_R32_SFLOAT, 20}};
-	VkPipelineVertexInputStateCreateInfo edgeVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 2, .pVertexBindingDescriptions = edgeBindings, .vertexAttributeDescriptionCount = 5, .pVertexAttributeDescriptions = edgeAttributes};
+	VkVertexInputAttributeDescription edgeAttributes[] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0}, {1, 1, VK_FORMAT_R32G32B32_SFLOAT, 0}, {2, 1, VK_FORMAT_R32_SFLOAT, 12}, {3, 1, VK_FORMAT_R32_SFLOAT, 16}};
+	VkPipelineVertexInputStateCreateInfo edgeVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 2, .pVertexBindingDescriptions = edgeBindings, .vertexAttributeDescriptionCount = 4, .pVertexAttributeDescriptions = edgeAttributes};
 	VkPipelineInputAssemblyStateCreateInfo edgeInputAssembly = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST};
 	VkGraphicsPipelineCreateInfo edgePipelineInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = edgeShaderStages, .pVertexInputState = &edgeVertexInput, .pInputAssemblyState = &edgeInputAssembly, .pViewportState = &viewportState, .pRasterizationState = &rasterizationState, .pMultisampleState = &multisampleState, .pColorBlendState = &colorBlendState, .pDepthStencilState = &nodeDepthStencilState, .pDynamicState = &dynamicState, .layout = r->pipelineLayout, .renderPass = r->renderPass.renderPass};
 	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &edgePipelineInfo, NULL, &r->edgePipeline), "Failed to create edge graphics pipeline");

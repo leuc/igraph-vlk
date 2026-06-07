@@ -423,7 +423,6 @@ void apply_community_membership(ExecutionContext *ctx, void *result_data)
 			data->nodes[i].color[0] = r;
 			data->nodes[i].color[1] = g;
 			data->nodes[i].color[2] = b;
-			data->nodes[i].glow = (max_cluster_size > 0) ? (float)cluster_sizes[comm] / (float)max_cluster_size : 0.0f;
 		}
 	}
 
