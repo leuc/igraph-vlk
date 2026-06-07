@@ -21,8 +21,8 @@ layout(std430, binding = 2) readonly buffer SPLCEdgeBuffer
 
 layout(push_constant) uniform SPLCConstants
 {
-	float maxSPLCWeight;
-	uint segmentsPerEdge;
+	layout(offset = 128) float maxSPLCWeight;
+	layout(offset = 132) uint segmentsPerEdge;
 }
 splcPC;
 

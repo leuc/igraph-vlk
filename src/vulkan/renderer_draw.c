@@ -38,7 +38,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 			float maxWeight;
 			uint32_t segments;
 		} splcPC = {maxWeight, (uint32_t)segments};
-		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(splcPC), &splcPC);
+		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(mat4) * 2, sizeof(splcPC), &splcPC);
 		VkBuffer eBs[] = {r->edgePositionBuffer, r->edgeAttributeBuffer};
 		VkDeviceSize eOs[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, eBs, eOs);
