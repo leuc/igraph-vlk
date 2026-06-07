@@ -32,7 +32,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->edgePipeline);
 		// Push SPLC max weight for edge color intensity normalization
 		float maxWeight = r->splc_max_weight > 0.0f ? r->splc_max_weight : 1.0f;
-		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(float), &maxWeight);
+		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float), &maxWeight);
 		VkBuffer eBs[] = {r->edgePositionBuffer, r->edgeAttributeBuffer};
 		VkDeviceSize eOs[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, eBs, eOs);

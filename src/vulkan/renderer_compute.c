@@ -238,14 +238,16 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	igraph_vector_int_destroy(&out_neis);
 
 	// Initialize traffic: 1.0 for source nodes (in-degree 0), 0.0 otherwise
+	igraph_vector_int_t in_neis;
+	igraph_vector_int_init(&in_neis, 0);
 	float *traffic = calloc(n, sizeof(float));
 	for (igraph_integer_t i = 0; i < n; i++) {
-		igraph_vector_int_clear(&out_neis);
-		igraph_neighbors(&graph->g, &out_neis, i, IGRAPH_IN, IGRAPH_LOOPS, IGRAPH_NO_MULTIPLE);
-		if (igraph_vector_int_size(&out_neis) == 0)
+		igraph_vector_int_clear(&in_neis);
+		igraph_neighbors(&graph->g, &in_neis, i, IGRAPH_IN, IGRAPH_LOOPS, IGRAPH_NO_MULTIPLE);
+		if (igraph_vector_int_size(&in_neis) == 0)
 			traffic[i] = 1.0f;
 	}
-	igraph_vector_int_destroy(&out_neis);
+	igraph_vector_int_destroy(&in_neis);
 
 	// Count total edges from the flat array
 	uint32_t total_splc_edges = 0;
@@ -283,10 +285,13 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 
 	// Update the graphics pipeline edge weight SSBO descriptor set (binding 2 of the main descriptor set).
 	// Same buffer as the compute edges buffer - barrier ensures correctness.
-	VkDescriptorBufferInfo edgeWeightInfo = {r->splc_edges_buffer, 0, VK_WHOLE_SIZE};
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-		VkWriteDescriptorSet weightWrite = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeWeightInfo, NULL};
-		vkUpdateDescriptorSets(r->core.device, 1, &weightWrite, 0, NULL);
+	// descriptorSets is NULL during first renderer_init call before sets are allocated; skip until later.
+	if (r->descriptorSets != NULL) {
+		VkDescriptorBufferInfo edgeWeightInfo = {r->splc_edges_buffer, 0, VK_WHOLE_SIZE};
+		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
+			VkWriteDescriptorSet weightWrite = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeWeightInfo, NULL};
+			vkUpdateDescriptorSets(r->core.device, 1, &weightWrite, 0, NULL);
+		}
 	}
 
 	free(splc_nodes);
