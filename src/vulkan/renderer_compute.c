@@ -319,11 +319,9 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	free(traffic);
 	igraph_vector_int_destroy(&levels);
 
-	// Set max weight as number of source nodes (level 0 count) for normalization
-	if (r->splc_num_levels > 0)
-		r->splc_max_weight = (float)igraph_vector_int_size(r->splc_level_groups[0]);
-	else
-		r->splc_max_weight = 1.0f;
+	// Set max weight to node count for logarithmic normalization in the shader.
+	// SPLC values grow combinatorially; log scale prevents early clamping.
+	r->splc_max_weight = (float)n;
 
 	// Destroy old buffers now that descriptor sets reference the new ones
 	if (old_nodes_buf != VK_NULL_HANDLE)

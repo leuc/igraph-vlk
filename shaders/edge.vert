@@ -43,7 +43,7 @@ void main()
 	// Modulate color by SPLC weight
 	uint edge_index = gl_VertexIndex / (splcPC.segmentsPerEdge * 2);
 	float w = splc_edges[edge_index].weight;
-	float intensity = clamp(w / max(splcPC.maxSPLCWeight, 0.001), 0.0, 1.0);
+	float intensity = clamp(log(w + 1.0) / log(max(splcPC.maxSPLCWeight, 1.0) + 1.0), 0.0, 1.0);
 	fragColor = inColor * (0.2 + 0.8 * intensity);
 	fragSelected = inSelected;
 	fragNormalizedPos = inNormalizedPos;

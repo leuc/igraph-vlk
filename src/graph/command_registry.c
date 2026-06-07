@@ -135,9 +135,9 @@ const CommandDef g_command_registry[] = {
 	{"Analysis/Cycles", "remove_feedback_arc_set", "Remove feedback arc set", compute_remove_feedback_arc_set, apply_remove_feedback_arc_set, free_noop},
 
 	// =========================================================================
-	// SPLC menu
+	// Analysis menu - Main Path
 	// =========================================================================
-	{"SPLC", "splc_animation", "Start SPLC Animation", compute_splc_animation, apply_splc_animation, free_noop},
+	{"Analysis/Main Path", "splc_animation", "Search Path Link Count", compute_splc_animation, apply_splc_animation, free_noop},
 
 	// =========================================================================
 	// Communities menu - Detection
