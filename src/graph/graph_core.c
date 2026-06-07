@@ -38,7 +38,7 @@ void graph_refresh_data(GraphData *data)
 		free(data->edges);
 
 	data->nodes = malloc(sizeof(Node) * data->node_count);
-	bool has_node_attr = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, data->node_attr_name);
+	bool has_node_attr = data->node_attr_name && igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, data->node_attr_name);
 	bool has_label = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, "label");
 	float max_n_val = 0.0f;
 	if (has_node_attr) {
@@ -70,7 +70,7 @@ void graph_refresh_data(GraphData *data)
 	igraph_vector_int_destroy(&coreness);
 	graph_sync_node_positions(data);
 
-	bool has_edge_attr = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_EDGE, data->edge_attr_name);
+	bool has_edge_attr = data->edge_attr_name && igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_EDGE, data->edge_attr_name);
 	float max_e_val = 0.0f;
 	if (has_edge_attr) {
 		for (int i = 0; i < data->edge_count; i++) {

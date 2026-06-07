@@ -2,6 +2,7 @@
 #include "graph/wrappers_centrality.h"
 #include "graph/wrappers_community.h"
 #include "graph/wrappers_constructors.h"
+#include "graph/wrappers_cycles.h"
 #include "graph/wrappers_layout.h"
 #include "graph/wrappers_paths.h"
 #include "graph/wrappers_structural.h"
@@ -126,6 +127,11 @@ const CommandDef g_command_registry[] = {
 	{"Analysis/Global Properties", "igraph_assortativity_degree", "Assortativity", compute_igraph_assortativity_degree, apply_info_card, info_card_free},
 	{"Analysis/Global Properties", "igraph_density", "Density", compute_igraph_density, apply_info_card, info_card_free},
 	{"Analysis/Global Properties", "igraph_transitivity_undirected", "Transitivity (undirected)", compute_igraph_transitivity_undirected, apply_info_card, info_card_free},
+
+	// =========================================================================
+	// Analysis menu - Cycles
+	// =========================================================================
+	{"Analysis/Cycles", "remove_feedback_arc_set", "Remove feedback arc set", compute_remove_feedback_arc_set, apply_remove_feedback_arc_set, free_noop},
 
 	// =========================================================================
 	// Communities menu - Detection
