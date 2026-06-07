@@ -8,6 +8,8 @@
 #include <igraph_barnes_hut.h>
 #include <vulkan/vulkan.h>
 
+#include <stdbool.h>
+
 #include "graph/graph_types.h"
 #include "vulkan/polyhedron.h"
 #include "vulkan/text.h"
@@ -17,6 +19,19 @@
 #define GRAPH_UPDATE_RING_SIZE 3
 
 typedef enum { ROUTING_MODE_STRAIGHT = 0, ROUTING_MODE_SPHERICAL_PCB = 1 } EdgeRoutingMode;
+
+// SPLC compute buffer types
+typedef struct
+{
+	uint32_t edge_offset;
+	uint32_t out_degree;
+} SPLCNode;
+
+typedef struct
+{
+	uint32_t target_node;
+	float weight;
+} SPLCEdge;
 
 typedef struct
 {
@@ -336,6 +351,28 @@ typedef struct Renderer
 
 	// Persistent compute context
 	ComputeContext computeCtx;
+
+	// SPLC (Search Path Link Count) animation
+	VkBuffer splc_nodes_buffer;
+	VkDeviceMemory splc_nodes_memory;
+	VkBuffer splc_edges_buffer;
+	VkDeviceMemory splc_edges_memory;
+	VkBuffer splc_traffic_buffer;
+	VkDeviceMemory splc_traffic_memory;
+	VkBuffer splc_level_buffer;
+	VkDeviceMemory splc_level_memory;
+	igraph_vector_int_t **splc_level_groups;
+	int splc_num_levels;
+	int splc_current_level;
+	int splc_timer;
+	int splc_frames_per_level;
+	bool splc_active;
+	float splc_max_weight;
+	VkDescriptorPool splc_descriptor_pool;
+	VkDescriptorSet splc_descriptor_set;
+	VkPipeline splc_compute_pipeline;
+	VkPipelineLayout splc_compute_pipeline_layout;
+	VkDescriptorSetLayout splc_compute_descriptor_set_layout;
 } Renderer;
 
 #endif // VULKAN_TYPES_H

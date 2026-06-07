@@ -48,8 +48,8 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	vulkan_render_pass_create(&r->renderPass, &r->core, &r->swapchain);
 	vulkan_commands_create(&r->commands, &r->core, r->swapchain.imageCount);
 
-	VkDescriptorSetLayoutBinding descriptorSetLayoutBindings[] = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL}};
-	VkDescriptorSetLayoutCreateInfo layoutInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 2, .pBindings = descriptorSetLayoutBindings};
+	VkDescriptorSetLayoutBinding descriptorSetLayoutBindings[] = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL}, {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}};
+	VkDescriptorSetLayoutCreateInfo layoutInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 3, .pBindings = descriptorSetLayoutBindings};
 	VK_CHECK(vkCreateDescriptorSetLayout(r->core.device, &layoutInfo, NULL, &r->descriptorSetLayout), "Failed to create descriptor set layout");
 
 	VkPushConstantRange pushConstantRange = {.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, .offset = 0, .size = sizeof(mat4) * 2};
@@ -149,6 +149,22 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->computeCtx.fence = VK_NULL_HANDLE;
 	r->computeCtx.initialized = VK_FALSE;
 
+	r->splc_nodes_buffer = VK_NULL_HANDLE;
+	r->splc_nodes_memory = VK_NULL_HANDLE;
+	r->splc_edges_buffer = VK_NULL_HANDLE;
+	r->splc_edges_memory = VK_NULL_HANDLE;
+	r->splc_traffic_buffer = VK_NULL_HANDLE;
+	r->splc_traffic_memory = VK_NULL_HANDLE;
+	r->splc_level_buffer = VK_NULL_HANDLE;
+	r->splc_level_memory = VK_NULL_HANDLE;
+	r->splc_level_groups = NULL;
+	r->splc_num_levels = 0;
+	r->splc_current_level = 0;
+	r->splc_timer = 0;
+	r->splc_frames_per_level = 5;
+	r->splc_active = false;
+	r->splc_max_weight = 0.0f;
+
 	renderer_update_graph(r, graph);
 	r->labelTreeNeedsRebuild = true;
 
@@ -159,7 +175,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 		VK_CHECK(vkMapMemory(r->core.device, r->uniformBuffersMemory[i], 0, sizeof(UniformBufferObject), 0, &r->uboMapped[i]), "Failed to map UBO memory");
 	}
 
-	VkDescriptorPoolSize descriptorPoolSizes[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4}};
+	VkDescriptorPoolSize descriptorPoolSizes[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4}, {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4}};
 	VkDescriptorPoolCreateInfo descriptorPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .poolSizeCount = 2, .pPoolSizes = descriptorPoolSizes, .maxSets = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4};
 	VK_CHECK(vkCreateDescriptorPool(r->core.device, &descriptorPoolInfo, NULL, &r->descriptorPool), "Failed to create descriptor pool");
 
@@ -413,6 +429,40 @@ void renderer_cleanup(Renderer *r)
 	vkDestroyImageView(r->core.device, r->textureImageView, NULL);
 	vkDestroyImage(r->core.device, r->textureImage, NULL);
 	vkFreeMemory(r->core.device, r->textureImageMemory, NULL);
+
+	// SPLC cleanup
+	if (r->splc_nodes_buffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->core.device, r->splc_nodes_buffer, NULL);
+		vkFreeMemory(r->core.device, r->splc_nodes_memory, NULL);
+	}
+	if (r->splc_edges_buffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->core.device, r->splc_edges_buffer, NULL);
+		vkFreeMemory(r->core.device, r->splc_edges_memory, NULL);
+	}
+	if (r->splc_traffic_buffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->core.device, r->splc_traffic_buffer, NULL);
+		vkFreeMemory(r->core.device, r->splc_traffic_memory, NULL);
+	}
+	if (r->splc_level_buffer != VK_NULL_HANDLE) {
+		vkDestroyBuffer(r->core.device, r->splc_level_buffer, NULL);
+		vkFreeMemory(r->core.device, r->splc_level_memory, NULL);
+	}
+	if (r->splc_level_groups) {
+		for (int i = 0; i < r->splc_num_levels; i++) {
+			if (r->splc_level_groups[i])
+				igraph_vector_int_destroy(r->splc_level_groups[i]);
+			free(r->splc_level_groups[i]);
+		}
+		free(r->splc_level_groups);
+	}
+	if (r->splc_descriptor_pool != VK_NULL_HANDLE)
+		vkDestroyDescriptorPool(r->core.device, r->splc_descriptor_pool, NULL);
+	if (r->splc_compute_pipeline != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->splc_compute_pipeline, NULL);
+	if (r->splc_compute_pipeline_layout != VK_NULL_HANDLE)
+		vkDestroyPipelineLayout(r->core.device, r->splc_compute_pipeline_layout, NULL);
+	if (r->splc_compute_descriptor_set_layout != VK_NULL_HANDLE)
+		vkDestroyDescriptorSetLayout(r->core.device, r->splc_compute_descriptor_set_layout, NULL);
 
 	vkDestroyPipeline(r->core.device, r->computeSphericalPipeline, NULL);
 	vkDestroyPipelineLayout(r->core.device, r->computePipelineLayout, NULL);

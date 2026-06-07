@@ -4,5 +4,6 @@
 #include "vulkan/vulkan_types.h"
 
 void renderer_create_compute_pipelines(Renderer *r);
+void renderer_create_splc_compute_pipeline(Renderer *r);
 
 #endif // PIPELINE_COMPUTE_H

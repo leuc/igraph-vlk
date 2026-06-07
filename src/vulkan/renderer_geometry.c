@@ -217,6 +217,9 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	r->needsAttributeUpload = VK_FALSE;
 	r->labelTreeNeedsRebuild = true;
 
+	// Rebuild SPLC buffers for the updated graph
+	renderer_init_splc_buffers(r, graph);
+
 	// Signal the ring fence for this slot so the next update can proceed
 	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 0, NULL, r->graphUpdateFences[ringIdx]), "Failed to signal graph update fence");
 }

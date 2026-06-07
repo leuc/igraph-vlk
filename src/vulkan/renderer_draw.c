@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "vulkan/renderer.h"
+#include "vulkan/renderer_compute.h"
 #include "vulkan/renderer_lifecycle.h"
 #include "vulkan/utils.h"
 
@@ -29,6 +30,9 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 
 	if (r->showEdges && r->edgeCount > 0) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->edgePipeline);
+		// Push SPLC max weight for edge color intensity normalization
+		float maxWeight = r->splc_max_weight > 0.0f ? r->splc_max_weight : 1.0f;
+		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(float), &maxWeight);
 		VkBuffer eBs[] = {r->edgePositionBuffer, r->edgeAttributeBuffer};
 		VkDeviceSize eOs[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, eBs, eOs);
@@ -127,6 +131,21 @@ void renderer_draw_frame(Renderer *r)
 	VK_CHECK(vkResetCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], 0), "Failed to reset command buffer");
 	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 	VK_CHECK(vkBeginCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], &beginInfo), "Failed to begin command buffer");
+
+	// SPLC animation: advance one level every splc_frames_per_level frames
+	if (r->splc_active) {
+		r->splc_timer++;
+		if (r->splc_timer >= r->splc_frames_per_level) {
+			renderer_dispatch_splc_level(r, r->commands.commandBuffers[r->commands.currentFrame]);
+			// After all levels are processed, update max_weight for normalization
+			if (!r->splc_active) {
+				// Read back max edge weight from GPU for normalization
+				// Simple heuristic: use number of source nodes as estimate
+				// This can be refined later
+			}
+		}
+	}
+
 	renderer_render_scene(r, r->commands.commandBuffers[r->commands.currentFrame], r->renderPass.renderPass, r->renderPass.framebuffers[imageIndex], r->swapchain.extent, r->ubo.view, r->ubo.proj, 0, false, (vec3){0}, (vec3){0});
 	VK_CHECK(vkEndCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame]), "Failed to end command buffer");
 

@@ -1,0 +1,61 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+struct SPLCNode
+{
+	uint edge_offset;
+	uint out_degree;
+};
+
+struct SPLCEdge
+{
+	uint target_node;
+	float weight;
+};
+
+layout(std430, binding = 0) readonly buffer NodeBuffer
+{
+	SPLCNode nodes[];
+};
+
+layout(std430, binding = 1) buffer EdgeBuffer
+{
+	SPLCEdge edges[];
+};
+
+layout(std430, binding = 2) buffer TrafficBuffer
+{
+	float traffic[];
+};
+
+layout(std430, binding = 3) readonly buffer LevelBuffer
+{
+	uint current_level_nodes[];
+};
+
+layout(push_constant) uniform Constants
+{
+	uint num_nodes_in_level;
+}
+pc;
+
+void main()
+{
+	uint idx = gl_GlobalInvocationID.x;
+	if (idx >= pc.num_nodes_in_level)
+		return;
+
+	uint node_id = current_level_nodes[idx];
+	float current_traffic = traffic[node_id];
+	if (current_traffic <= 0.0)
+		return;
+
+	SPLCNode node = nodes[node_id];
+	for (uint i = 0; i < node.out_degree; i++) {
+		uint edge_idx = node.edge_offset + i;
+		uint target = edges[edge_idx].target_node;
+		edges[edge_idx].weight += current_traffic;
+		traffic[target] += current_traffic;
+	}
+}

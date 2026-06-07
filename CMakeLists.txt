@@ -34,23 +34,24 @@ endif()
 find_path(CGLM_INCLUDE_DIR cglm/cglm.h)
 find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
 
-set(SHADERS
-    shaders/shader.vert
-    shaders/shader.frag
-    shaders/edge.vert
-    shaders/edge.frag
-    shaders/label.vert
-    shaders/label.frag
-    shaders/ui.vert
-    shaders/ui.frag
-    shaders/menu.vert
-    shaders/menu.frag
-    shaders/textquad.vert
-    shaders/textquad.frag
-    shaders/routing.comp
-    shaders/ray.vert
-    shaders/ray.frag
-)
+	set(SHADERS
+	    shaders/shader.vert
+	    shaders/shader.frag
+	    shaders/edge.vert
+	    shaders/edge.frag
+	    shaders/label.vert
+	    shaders/label.frag
+	    shaders/ui.vert
+	    shaders/ui.frag
+	    shaders/menu.vert
+	    shaders/menu.frag
+	    shaders/textquad.vert
+	    shaders/textquad.frag
+	    shaders/routing.comp
+	    shaders/splc.comp
+	    shaders/ray.vert
+	    shaders/ray.frag
+	)
 
 foreach(SHADER ${SHADERS})
     get_filename_component(SHADER_NAME ${SHADER} NAME)
@@ -119,6 +120,7 @@ add_executable(igraph-vlk
      src/graph/wrappers_community.c
      src/graph/wrappers_centrality.c
 src/graph/wrappers_constructors.c
+      src/graph/wrappers_splc.c
       src/graph/wrappers_paths.c
       src/graph/wrappers_structural.c
       src/graph/worker_thread.c
@@ -177,6 +179,7 @@ target_compile_definitions(igraph-vlk PRIVATE
     TEXTQUAD_VERT_SHADER_PATH="shaders/textquad.vert.spv"
     TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv"
     ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv"
+    SPLC_COMP_SHADER_PATH="shaders/splc.comp.spv"
     RAY_VERT_SHADER_PATH="shaders/ray.vert.spv"
     RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv"
 )
