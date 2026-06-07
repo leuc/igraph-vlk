@@ -14,6 +14,12 @@ igraph_integer_t calculate_dag_levels(const igraph_t *graph, igraph_vector_int_t
 		return -1;
 	}
 
+	igraph_bool_t is_dag = false;
+	igraph_is_dag(graph, &is_dag);
+	if (!is_dag) {
+		return -1;
+	}
+
 	igraph_vector_int_t topo_order;
 	igraph_vector_int_init(&topo_order, 0);
 

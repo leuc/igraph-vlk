@@ -22,6 +22,7 @@ layout(std430, binding = 2) readonly buffer SPLCEdgeBuffer
 layout(push_constant) uniform SPLCConstants
 {
 	float maxSPLCWeight;
+	uint segmentsPerEdge;
 }
 splcPC;
 
@@ -40,7 +41,7 @@ void main()
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
 
 	// Modulate color by SPLC weight
-	uint edge_index = gl_VertexIndex / 2;
+	uint edge_index = gl_VertexIndex / (splcPC.segmentsPerEdge * 2);
 	float w = splc_edges[edge_index].weight;
 	float intensity = clamp(w / max(splcPC.maxSPLCWeight, 0.001), 0.0, 1.0);
 	fragColor = inColor * (0.2 + 0.8 * intensity);

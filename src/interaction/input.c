@@ -248,6 +248,9 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 	case GLFW_KEY_J:
 		graph_action_highlight_infrastructure(state);
 		break;
+	case GLFW_KEY_F:
+		graph_action_start_splc(state);
+		break;
 	case GLFW_KEY_KP_ADD:
 	case GLFW_KEY_EQUAL:
 		state->renderer.layoutScale *= 1.2f;

@@ -3,6 +3,7 @@
 #include "graph/graph_filter.h"
 #include "graph/graph_io.h"
 #include "vulkan/renderer.h"
+#include "vulkan/renderer_compute.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -37,4 +38,40 @@ void graph_action_reset(AppState *state)
 		renderer_update_graph(&state->renderer, &state->current_graph);
 		state->renderer.labelTreeNeedsRebuild = true;
 	}
+}
+
+void graph_action_start_splc(AppState *state)
+{
+	igraph_t *g = &state->current_graph.g;
+
+	if (!igraph_is_directed(g)) {
+		fprintf(stderr, "SPLC requires a directed graph\n");
+		return;
+	}
+
+	igraph_bool_t is_dag = false;
+	igraph_is_dag(g, &is_dag);
+
+	if (!is_dag) {
+		printf("Graph has cycles; removing feedback arc set...\n");
+		igraph_vector_int_t fas;
+		igraph_vector_int_init(&fas, 0);
+		if (igraph_feedback_arc_set(g, &fas, NULL, IGRAPH_FAS_APPROX_EADES) == IGRAPH_SUCCESS) {
+			if (igraph_vector_int_size(&fas) > 0) {
+				igraph_es_t es = igraph_ess_vector(&fas);
+				igraph_delete_edges(g, es);
+				printf("Removed %d edges to make graph acyclic\n", (int)igraph_vector_int_size(&fas));
+			}
+		}
+		igraph_vector_int_destroy(&fas);
+	}
+
+	// Refresh graph data and upload to GPU (includes SPLC buffer init)
+	state->renderer.needsAttributeUpload = VK_TRUE;
+	graph_refresh_data(&state->current_graph);
+	renderer_update_graph(&state->renderer, &state->current_graph);
+
+	// Reset SPLC state so animation starts from level 0
+	renderer_reset_splc(&state->renderer);
+	printf("SPLC animation started (graph has %d levels)\n", state->renderer.splc_num_levels);
 }
