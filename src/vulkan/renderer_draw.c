@@ -145,9 +145,7 @@ void renderer_draw_frame(Renderer *r)
 			renderer_dispatch_splc_level(r, r->commands.commandBuffers[r->commands.currentFrame]);
 			// After all levels are processed, update max_weight for normalization
 			if (!r->splc_active) {
-				// Read back max edge weight from GPU for normalization
-				// Simple heuristic: use number of source nodes as estimate
-				// This can be refined later
+				printf("SPLC animation finished (%d levels, max weight heur=%.0f)\n", r->splc_num_levels, r->splc_max_weight);
 			}
 		}
 	}

@@ -194,6 +194,19 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	igraph_integer_t max_level = calculate_dag_levels(&graph->g, &levels);
 	if (max_level < 0) {
 		igraph_vector_int_destroy(&levels);
+		// Still create a zero-initialized edge buffer so the graphics descriptor binding is valid
+		VkDeviceSize edge_buf_size = sizeof(SPLCEdge) * m;
+		create_buffer(r->core.device, r->core.physicalDevice, edge_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_edges_buffer, &r->splc_edges_memory);
+		SPLCEdge *zero_edges = calloc(m, sizeof(SPLCEdge));
+		update_buffer(r->core.device, r->splc_edges_memory, edge_buf_size, zero_edges);
+		free(zero_edges);
+		if (r->descriptorSets != NULL) {
+			VkDescriptorBufferInfo edgeWeightInfo = {r->splc_edges_buffer, 0, VK_WHOLE_SIZE};
+			for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
+				VkWriteDescriptorSet weightWrite = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeWeightInfo, NULL};
+				vkUpdateDescriptorSets(r->core.device, 1, &weightWrite, 0, NULL);
+			}
+		}
 		return;
 	}
 	r->splc_num_levels = (int)max_level + 1;
