@@ -7,6 +7,8 @@
 #include "vulkan/renderer_lifecycle.h"
 #include "vulkan/utils.h"
 
+#include "graph/graph_types.h"
+
 void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index, bool has_ray, vec3 ray_origin, vec3 ray_dir)
 {
 	uint32_t ubo_idx = r->commands.currentFrame * MAX_VIEWS + view_index;
@@ -111,13 +113,21 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	vkCmdEndRenderPass(cmd);
 }
 
-void renderer_draw_frame(Renderer *r)
+void renderer_draw_frame(Renderer *r, GraphData *graph)
 {
 	if (r->framebufferResized) {
 		renderer_recreate_swapchain(r);
 		return;
 	}
 	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->commands.inFlightFences[r->commands.currentFrame], VK_TRUE, UINT64_MAX), "Failed to wait for in-flight fences");
+
+	// SPLC readback: sync GPU edge weights to host graph after animation completes
+	if (r->splc_readback_pending) {
+		renderer_readback_splc_weights(r, graph);
+		r->splc_readback_pending = false;
+		r->splc_active = false;
+	}
+
 	uint32_t imageIndex;
 	VkResult res = vkAcquireNextImageKHR(r->core.device, r->swapchain.swapchain, UINT64_MAX, r->commands.imageAvailableSemaphores[r->commands.currentFrame], VK_NULL_HANDLE, &imageIndex);
 	if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR) {

@@ -365,6 +365,7 @@ typedef struct Renderer
 	double splc_last_level_time;
 	float splc_level_interval;
 	bool splc_active;
+	bool splc_readback_pending;
 	VkBuffer splc_max_buffer;
 	VkDeviceMemory splc_max_memory;
 	VkDescriptorPool splc_descriptor_pool;

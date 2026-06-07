@@ -71,6 +71,7 @@ void graph_build_visualization(GraphData *data)
 		igraph_edge(&data->g, i, &from, &to);
 		data->edges[i].from = (uint32_t)from;
 		data->edges[i].to = (uint32_t)to;
+		data->edges[i].weight = 0.0f;
 	}
 }
 
@@ -92,6 +93,7 @@ void graph_rebuild_edges(GraphData *data)
 		igraph_edge(&data->g, i, &from, &to);
 		data->edges[i].from = (uint32_t)from;
 		data->edges[i].to = (uint32_t)to;
+		data->edges[i].weight = 0.0f;
 	}
 
 	// Recompute degree on existing nodes — it affects node shape rendering

@@ -147,20 +147,12 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	return VK_SUCCESS;
 }
 
-void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
-{
-	// Save old buffer handles before zeroing — destroy AFTER descriptor sets are updated to new buffers
-	VkBuffer old_nodes_buf = r->splc_nodes_buffer;
-	VkDeviceMemory old_nodes_mem = r->splc_nodes_memory;
-	VkBuffer old_edges_buf = r->splc_edges_buffer;
-	VkDeviceMemory old_edges_mem = r->splc_edges_memory;
-	VkBuffer old_traffic_buf = r->splc_traffic_buffer;
-	VkDeviceMemory old_traffic_mem = r->splc_traffic_memory;
-	VkBuffer old_level_buf = r->splc_level_buffer;
-	VkDeviceMemory old_level_mem = r->splc_level_memory;
-	VkBuffer old_max_buf = r->splc_max_buffer;
-	VkDeviceMemory old_max_mem = r->splc_max_memory;
+// ============================================================================
+// SPLC buffer helpers
+// ============================================================================
 
+static void splc_destroy_old_buffers(Renderer *r)
+{
 	r->splc_nodes_buffer = VK_NULL_HANDLE;
 	r->splc_nodes_memory = VK_NULL_HANDLE;
 	r->splc_edges_buffer = VK_NULL_HANDLE;
@@ -172,7 +164,6 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	r->splc_max_buffer = VK_NULL_HANDLE;
 	r->splc_max_memory = VK_NULL_HANDLE;
 
-	// Free old level groups
 	if (r->splc_level_groups) {
 		for (int i = 0; i < r->splc_num_levels; i++) {
 			if (r->splc_level_groups[i])
@@ -186,85 +177,75 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	r->splc_active = false;
 	r->splc_current_level = 0;
 	r->splc_last_level_time = 0.0;
+}
 
-	igraph_integer_t n = graph->node_count;
-	igraph_integer_t m = graph->edge_count;
-	if (n == 0 || !igraph_is_directed(&graph->g))
-		return;
+static void splc_destroy_buffer(VkDevice dev, VkBuffer buf, VkDeviceMemory mem)
+{
+	if (buf != VK_NULL_HANDLE)
+		vkDestroyBuffer(dev, buf, NULL);
+	if (mem != VK_NULL_HANDLE)
+		vkFreeMemory(dev, mem, NULL);
+}
 
-	// Compute levels
-	igraph_vector_int_t levels;
-	igraph_vector_int_init(&levels, 0);
-	igraph_integer_t max_level = calculate_dag_levels(&graph->g, &levels);
-	if (max_level < 0) {
-		igraph_vector_int_destroy(&levels);
-		// Still create zero-initialized buffers so the graphics descriptor bindings are valid
-		VkDeviceSize edge_buf_size = sizeof(SPLCEdge) * m;
-		create_buffer(r->core.device, r->core.physicalDevice, edge_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_edges_buffer, &r->splc_edges_memory);
-		create_buffer(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_max_buffer, &r->splc_max_memory);
-		SPLCEdge *zero_edges = calloc(m, sizeof(SPLCEdge));
-		update_buffer(r->core.device, r->splc_edges_memory, edge_buf_size, zero_edges);
-		free(zero_edges);
-		uint32_t zero_max = 0;
-		update_buffer(r->core.device, r->splc_max_memory, sizeof(uint32_t), &zero_max);
-		if (r->descriptorSets != NULL) {
-			VkDescriptorBufferInfo edgeWeightInfo = {r->splc_edges_buffer, 0, VK_WHOLE_SIZE};
-			VkDescriptorBufferInfo maxWeightInfo = {r->splc_max_buffer, 0, VK_WHOLE_SIZE};
-			for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-				VkWriteDescriptorSet descWrites[] = {
-					{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeWeightInfo, NULL},
-					{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 3, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &maxWeightInfo, NULL},
-				};
-				vkUpdateDescriptorSets(r->core.device, 2, descWrites, 0, NULL);
-			}
-		}
-		// Destroy old buffers now that descriptor sets no longer reference them
-		if (old_edges_buf != VK_NULL_HANDLE) {
-			vkDestroyBuffer(r->core.device, old_edges_buf, NULL);
-			vkFreeMemory(r->core.device, old_edges_mem, NULL);
-		}
-		if (old_max_buf != VK_NULL_HANDLE) {
-			vkDestroyBuffer(r->core.device, old_max_buf, NULL);
-			vkFreeMemory(r->core.device, old_max_mem, NULL);
-		}
+static void splc_create_fallback_buffers(Renderer *r, uint32_t m)
+{
+	VkDeviceSize edge_buf_size = sizeof(SPLCEdge) * m;
+	create_buffer(r->core.device, r->core.physicalDevice, edge_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_edges_buffer, &r->splc_edges_memory);
+	create_buffer(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_max_buffer, &r->splc_max_memory);
+	SPLCEdge *zero_edges = calloc(m, sizeof(SPLCEdge));
+	update_buffer(r->core.device, r->splc_edges_memory, edge_buf_size, zero_edges);
+	free(zero_edges);
+	uint32_t zero_max = 0;
+	update_buffer(r->core.device, r->splc_max_memory, sizeof(uint32_t), &zero_max);
+}
+
+static void splc_write_graphics_descriptors(Renderer *r)
+{
+	if (r->descriptorSets == NULL)
 		return;
+	VkDescriptorBufferInfo edgeWeightInfo = {r->splc_edges_buffer, 0, VK_WHOLE_SIZE};
+	VkDescriptorBufferInfo maxWeightInfo = {r->splc_max_buffer, 0, VK_WHOLE_SIZE};
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
+		VkWriteDescriptorSet descWrites[] = {
+			{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeWeightInfo, NULL},
+			{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 3, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &maxWeightInfo, NULL},
+		};
+		vkUpdateDescriptorSets(r->core.device, 2, descWrites, 0, NULL);
 	}
-	r->splc_num_levels = (int)max_level + 1;
-	r->splc_level_interval = r->splc_num_levels > 0 ? 5.0f / r->splc_num_levels : 0.5f;
-	if (r->splc_level_interval < 0.016f)
-		r->splc_level_interval = 0.016f;
+}
 
-	// Build level groups
+static void splc_build_level_groups(Renderer *r, igraph_vector_int_t *levels, igraph_integer_t n)
+{
 	r->splc_level_groups = calloc(r->splc_num_levels, sizeof(igraph_vector_int_t *));
 	for (int l = 0; l < r->splc_num_levels; l++) {
 		r->splc_level_groups[l] = malloc(sizeof(igraph_vector_int_t));
 		igraph_vector_int_init(r->splc_level_groups[l], 0);
 	}
 	for (igraph_integer_t i = 0; i < n; i++) {
-		int lvl = (int)VECTOR(levels)[i];
+		int lvl = (int)VECTOR(*levels)[i];
 		if (lvl >= 0 && lvl < r->splc_num_levels)
 			igraph_vector_int_push_back(r->splc_level_groups[lvl], i);
 	}
+}
 
-	// Build SPLC node and edge arrays (flattened)
-	// First pass: compute edge_offset for each node
+static void splc_build_topology(const igraph_t *g, igraph_integer_t n, SPLCNode **out_nodes, SPLCEdge **out_edges, float **out_traffic, uint32_t *out_total_edges)
+{
 	SPLCNode *splc_nodes = calloc(n, sizeof(SPLCNode));
 	igraph_vector_int_t out_neis;
 	igraph_vector_int_init(&out_neis, 0);
 	uint32_t edge_offset = 0;
 	for (igraph_integer_t i = 0; i < n; i++) {
 		splc_nodes[i].edge_offset = edge_offset;
-		igraph_neighbors(&graph->g, &out_neis, i, IGRAPH_OUT, IGRAPH_LOOPS, IGRAPH_NO_MULTIPLE);
+		igraph_neighbors(g, &out_neis, i, IGRAPH_OUT, IGRAPH_LOOPS, IGRAPH_NO_MULTIPLE);
 		splc_nodes[i].out_degree = (uint32_t)igraph_vector_int_size(&out_neis);
 		edge_offset += (uint32_t)igraph_vector_int_size(&out_neis);
 	}
 
-	// Second pass: fill edges
-	SPLCEdge *splc_edges = calloc(m, sizeof(SPLCEdge));
+	SPLCEdge *splc_edges = calloc(edge_offset, sizeof(SPLCEdge));
 	uint32_t e_idx = 0;
 	for (igraph_integer_t i = 0; i < n; i++) {
 		igraph_vector_int_clear(&out_neis);
-		igraph_neighbors(&graph->g, &out_neis, i, IGRAPH_OUT, IGRAPH_LOOPS, IGRAPH_NO_MULTIPLE);
+		igraph_neighbors(g, &out_neis, i, IGRAPH_OUT, IGRAPH_LOOPS, IGRAPH_NO_MULTIPLE);
 		for (igraph_integer_t j = 0; j < igraph_vector_int_size(&out_neis); j++) {
 			splc_edges[e_idx].target_node = (uint32_t)VECTOR(out_neis)[j];
 			splc_edges[e_idx].weight = 0.0f;
@@ -273,26 +254,27 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	}
 	igraph_vector_int_destroy(&out_neis);
 
-	// Initialize traffic: 1.0 for source nodes (in-degree 0), 0.0 otherwise
 	igraph_vector_int_t in_neis;
 	igraph_vector_int_init(&in_neis, 0);
 	float *traffic = calloc(n, sizeof(float));
 	for (igraph_integer_t i = 0; i < n; i++) {
 		igraph_vector_int_clear(&in_neis);
-		igraph_neighbors(&graph->g, &in_neis, i, IGRAPH_IN, IGRAPH_LOOPS, IGRAPH_NO_MULTIPLE);
+		igraph_neighbors(g, &in_neis, i, IGRAPH_IN, IGRAPH_LOOPS, IGRAPH_NO_MULTIPLE);
 		if (igraph_vector_int_size(&in_neis) == 0)
 			traffic[i] = 1.0f;
 	}
 	igraph_vector_int_destroy(&in_neis);
 
-	// Count total edges from the flat array
-	uint32_t total_splc_edges = 0;
-	for (igraph_integer_t i = 0; i < n; i++)
-		total_splc_edges += splc_nodes[i].out_degree;
+	*out_nodes = splc_nodes;
+	*out_edges = splc_edges;
+	*out_traffic = traffic;
+	*out_total_edges = edge_offset;
+}
 
-	// Create GPU buffers
+static void splc_create_gpu_buffers(Renderer *r, igraph_integer_t n, uint32_t total_edges, SPLCNode *splc_nodes, SPLCEdge *splc_edges, float *traffic)
+{
 	VkDeviceSize node_buf_size = sizeof(SPLCNode) * n;
-	VkDeviceSize edge_buf_size = sizeof(SPLCEdge) * total_splc_edges;
+	VkDeviceSize edge_buf_size = sizeof(SPLCEdge) * total_edges;
 	VkDeviceSize traffic_buf_size = sizeof(float) * n;
 	VkDeviceSize level_buf_size = sizeof(uint32_t) * n;
 
@@ -302,14 +284,15 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	create_buffer(r->core.device, r->core.physicalDevice, level_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_level_buffer, &r->splc_level_memory);
 	create_buffer(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_max_buffer, &r->splc_max_memory);
 
-	// Upload data
 	update_buffer(r->core.device, r->splc_nodes_memory, node_buf_size, splc_nodes);
 	update_buffer(r->core.device, r->splc_edges_memory, edge_buf_size, splc_edges);
 	update_buffer(r->core.device, r->splc_traffic_memory, traffic_buf_size, traffic);
 	uint32_t zero_max = 0;
 	update_buffer(r->core.device, r->splc_max_memory, sizeof(uint32_t), &zero_max);
+}
 
-	// Update SPLC compute descriptor set
+static void splc_write_compute_descriptors(Renderer *r)
+{
 	VkDescriptorBufferInfo nodeInfo = {r->splc_nodes_buffer, 0, VK_WHOLE_SIZE};
 	VkDescriptorBufferInfo edgeInfo = {r->splc_edges_buffer, 0, VK_WHOLE_SIZE};
 	VkDescriptorBufferInfo trafficInfo = {r->splc_traffic_buffer, 0, VK_WHOLE_SIZE};
@@ -319,50 +302,72 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 		{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 0, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &nodeInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 1, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &trafficInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 3, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &levelInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 4, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &maxInfo, NULL},
 	};
 	vkUpdateDescriptorSets(r->core.device, 5, splcWrites, 0, NULL);
+}
 
-	// Update the graphics pipeline SSBO descriptor sets (binding 2 = edge weights, binding 3 = max weight).
-	// Same buffers as the compute shader - barrier ensures correctness.
-	// descriptorSets is NULL during first renderer_init call before sets are allocated; skip until later.
-	if (r->descriptorSets != NULL) {
-		VkDescriptorBufferInfo edgeWeightInfo = {r->splc_edges_buffer, 0, VK_WHOLE_SIZE};
-		VkDescriptorBufferInfo maxWeightInfo = {r->splc_max_buffer, 0, VK_WHOLE_SIZE};
-		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-			VkWriteDescriptorSet descWrites[] = {
-				{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeWeightInfo, NULL},
-				{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 3, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &maxWeightInfo, NULL},
-			};
-			vkUpdateDescriptorSets(r->core.device, 2, descWrites, 0, NULL);
-		}
+// ============================================================================
+// Initialize SPLC buffers from a GraphData instance
+// ============================================================================
+void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
+{
+	VkBuffer old_nodes_buf = r->splc_nodes_buffer;
+	VkDeviceMemory old_nodes_mem = r->splc_nodes_memory;
+	VkBuffer old_edges_buf = r->splc_edges_buffer;
+	VkDeviceMemory old_edges_mem = r->splc_edges_memory;
+	VkBuffer old_traffic_buf = r->splc_traffic_buffer;
+	VkDeviceMemory old_traffic_mem = r->splc_traffic_memory;
+	VkBuffer old_level_buf = r->splc_level_buffer;
+	VkDeviceMemory old_level_mem = r->splc_level_memory;
+	VkBuffer old_max_buf = r->splc_max_buffer;
+	VkDeviceMemory old_max_mem = r->splc_max_memory;
+
+	splc_destroy_old_buffers(r);
+
+	igraph_integer_t n = graph->node_count;
+	igraph_integer_t m = graph->edge_count;
+	if (n == 0 || !igraph_is_directed(&graph->g))
+		return;
+
+	igraph_vector_int_t levels;
+	igraph_vector_int_init(&levels, 0);
+	igraph_integer_t max_level = calculate_dag_levels(&graph->g, &levels);
+	if (max_level < 0) {
+		igraph_vector_int_destroy(&levels);
+		splc_create_fallback_buffers(r, m);
+		splc_write_graphics_descriptors(r);
+		splc_destroy_buffer(r->core.device, old_edges_buf, old_edges_mem);
+		splc_destroy_buffer(r->core.device, old_max_buf, old_max_mem);
+		return;
 	}
+
+	r->splc_num_levels = (int)max_level + 1;
+	r->splc_level_interval = r->splc_num_levels > 0 ? 5.0f / r->splc_num_levels : 0.5f;
+	if (r->splc_level_interval < 0.016f)
+		r->splc_level_interval = 0.016f;
+
+	splc_build_level_groups(r, &levels, n);
+
+	SPLCNode *splc_nodes;
+	SPLCEdge *splc_edges;
+	float *traffic;
+	uint32_t total_splc_edges;
+	splc_build_topology(&graph->g, n, &splc_nodes, &splc_edges, &traffic, &total_splc_edges);
+
+	splc_create_gpu_buffers(r, n, total_splc_edges, splc_nodes, splc_edges, traffic);
+	splc_write_compute_descriptors(r);
+	splc_write_graphics_descriptors(r);
 
 	free(splc_nodes);
 	free(splc_edges);
 	free(traffic);
 	igraph_vector_int_destroy(&levels);
 
-	// Destroy old buffers now that descriptor sets reference the new ones
-	if (old_nodes_buf != VK_NULL_HANDLE)
-		vkDestroyBuffer(r->core.device, old_nodes_buf, NULL);
-	if (old_nodes_mem != VK_NULL_HANDLE)
-		vkFreeMemory(r->core.device, old_nodes_mem, NULL);
-	if (old_edges_buf != VK_NULL_HANDLE)
-		vkDestroyBuffer(r->core.device, old_edges_buf, NULL);
-	if (old_edges_mem != VK_NULL_HANDLE)
-		vkFreeMemory(r->core.device, old_edges_mem, NULL);
-	if (old_traffic_buf != VK_NULL_HANDLE)
-		vkDestroyBuffer(r->core.device, old_traffic_buf, NULL);
-	if (old_traffic_mem != VK_NULL_HANDLE)
-		vkFreeMemory(r->core.device, old_traffic_mem, NULL);
-	if (old_level_buf != VK_NULL_HANDLE)
-		vkDestroyBuffer(r->core.device, old_level_buf, NULL);
-	if (old_level_mem != VK_NULL_HANDLE)
-		vkFreeMemory(r->core.device, old_level_mem, NULL);
-	if (old_max_buf != VK_NULL_HANDLE)
-		vkDestroyBuffer(r->core.device, old_max_buf, NULL);
-	if (old_max_mem != VK_NULL_HANDLE)
-		vkFreeMemory(r->core.device, old_max_mem, NULL);
+	splc_destroy_buffer(r->core.device, old_nodes_buf, old_nodes_mem);
+	splc_destroy_buffer(r->core.device, old_edges_buf, old_edges_mem);
+	splc_destroy_buffer(r->core.device, old_traffic_buf, old_traffic_mem);
+	splc_destroy_buffer(r->core.device, old_level_buf, old_level_mem);
+	splc_destroy_buffer(r->core.device, old_max_buf, old_max_mem);
 
-	r->edgeCount = graph->edge_count; // Sync edge count so renderer_update_graph doesn't reset splc_active
+	r->edgeCount = graph->edge_count;
 	r->splc_active = true;
 	r->splc_current_level = 0;
 	r->splc_last_level_time = glfwGetTime();
@@ -373,6 +378,7 @@ void renderer_dispatch_splc_level(Renderer *r, VkCommandBuffer cmd)
 	if (!r->splc_active || r->splc_level_groups == NULL)
 		return;
 	if (r->splc_current_level >= r->splc_num_levels) {
+		r->splc_readback_pending = true;
 		return;
 	}
 
@@ -409,4 +415,44 @@ advance:
 	// Barrier: synchronize compute writes (edges, traffic) with vertex shader reads
 	VkMemoryBarrier computeToVertexBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT};
 	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 1, &computeToVertexBarrier, 0, NULL, 0, NULL);
+}
+
+// ============================================================================
+// Read back SPLC edge weights from GPU and sync to host GraphData
+// ============================================================================
+void renderer_readback_splc_weights(Renderer *r, GraphData *graph)
+{
+	if (r->splc_edges_memory == VK_NULL_HANDLE)
+		return;
+
+	VkDeviceSize edge_buf_size = sizeof(SPLCEdge) * graph->edge_count;
+	void *mapped;
+	VK_CHECK(vkMapMemory(r->core.device, r->splc_edges_memory, 0, edge_buf_size, 0, &mapped), "Failed to map SPLC edges for readback");
+	SPLCEdge *splc_edges = malloc(edge_buf_size);
+	memcpy(splc_edges, mapped, edge_buf_size);
+	vkUnmapMemory(r->core.device, r->splc_edges_memory);
+
+	igraph_vector_int_t out_neis;
+	igraph_vector_int_init(&out_neis, 0);
+	uint32_t e_idx = 0;
+	float max_w = 0.0f;
+	double total_w = 0.0;
+	for (igraph_integer_t i = 0; i < graph->node_count; i++) {
+		igraph_neighbors(&graph->g, &out_neis, i, IGRAPH_OUT, IGRAPH_LOOPS, IGRAPH_NO_MULTIPLE);
+		for (igraph_integer_t j = 0; j < igraph_vector_int_size(&out_neis); j++) {
+			igraph_integer_t eid;
+			igraph_get_eid(&graph->g, &eid, i, VECTOR(out_neis)[j], IGRAPH_DIRECTED, false);
+			float w = splc_edges[e_idx].weight;
+			graph->edges[eid].weight = w;
+			if (w > max_w)
+				max_w = w;
+			total_w += w;
+			e_idx++;
+		}
+		igraph_vector_int_clear(&out_neis);
+	}
+	igraph_vector_int_destroy(&out_neis);
+	free(splc_edges);
+
+	printf("SPLC readback: %u edges, max weight: %.2f, total: %.2f\n", e_idx, max_w, total_w);
 }

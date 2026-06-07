@@ -258,7 +258,7 @@ int main(int argc, char **argv)
 				// Update node labels (LOD atlas, nearest 200 nodes + detail card)
 				renderer_update_node_labels(&app.renderer, &app.current_graph, app.camera.pos, app.last_picked_node);
 
-				renderer_draw_frame(&app.renderer);
+				renderer_draw_frame(&app.renderer, &app.current_graph);
 			}
 #ifdef USE_OPENXR
 		}

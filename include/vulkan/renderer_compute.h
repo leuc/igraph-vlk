@@ -57,4 +57,11 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph);
  */
 void renderer_dispatch_splc_level(Renderer *r, VkCommandBuffer cmd);
 
+/**
+ * Read back SPLC edge weights from the GPU and sync them to host-side GraphData.
+ * Maps the GPU edge buffer, walks the same adjacency traversal used during init,
+ * and writes weights to graph->edges[].weight via igraph_get_eid.
+ */
+void renderer_readback_splc_weights(Renderer *r, GraphData *graph);
+
 #endif

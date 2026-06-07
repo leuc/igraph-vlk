@@ -37,6 +37,7 @@ typedef struct
 	uint32_t from;
 	uint32_t to;
 	float selected;
+	float weight;
 } Edge;
 
 typedef struct
