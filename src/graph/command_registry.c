@@ -5,6 +5,7 @@
 #include "graph/wrappers_cycles.h"
 #include "graph/wrappers_layout.h"
 #include "graph/wrappers_paths.h"
+#include "graph/wrappers_splc.h"
 #include "graph/wrappers_structural.h"
 
 const CommandDef g_command_registry[] = {
@@ -132,6 +133,11 @@ const CommandDef g_command_registry[] = {
 	// Analysis menu - Cycles
 	// =========================================================================
 	{"Analysis/Cycles", "remove_feedback_arc_set", "Remove feedback arc set", compute_remove_feedback_arc_set, apply_remove_feedback_arc_set, free_noop},
+
+	// =========================================================================
+	// SPLC menu
+	// =========================================================================
+	{"SPLC", "splc_animation", "Start SPLC Animation", compute_splc_animation, apply_splc_animation, free_noop},
 
 	// =========================================================================
 	// Communities menu - Detection

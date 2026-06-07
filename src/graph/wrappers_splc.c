@@ -1,4 +1,7 @@
 #include "graph/wrappers_splc.h"
+#include "app_state.h"
+#include "graph/graph_core.h"
+#include "vulkan/renderer.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,4 +62,57 @@ igraph_integer_t calculate_dag_levels(const igraph_t *graph, igraph_vector_int_t
 	igraph_vector_int_destroy(&topo_order);
 
 	return max_level;
+}
+
+// ============================================================================
+// Worker: Prepare graph for SPLC animation
+// Checks directed, makes acyclic if needed (in-place), returns graph on success
+// ============================================================================
+void *compute_splc_animation(igraph_t *graph)
+{
+	if (!graph || igraph_vcount(graph) == 0)
+		return NULL;
+
+	if (!igraph_is_directed(graph)) {
+		fprintf(stderr, "SPLC requires a directed graph\n");
+		return NULL;
+	}
+
+	igraph_bool_t is_dag = false;
+	igraph_is_dag(graph, &is_dag);
+
+	if (!is_dag) {
+		igraph_vector_int_t fas;
+		igraph_vector_int_init(&fas, 0);
+		if (igraph_feedback_arc_set(graph, &fas, NULL, IGRAPH_FAS_APPROX_EADES) == IGRAPH_SUCCESS) {
+			if (igraph_vector_int_size(&fas) > 0) {
+				igraph_es_t es = igraph_ess_vector(&fas);
+				igraph_delete_edges(graph, es);
+				printf("Removed %d edges to make graph acyclic\n", (int)igraph_vector_int_size(&fas));
+			}
+		}
+		igraph_vector_int_destroy(&fas);
+	}
+
+	return graph;
+}
+
+// ============================================================================
+// Apply: Refresh graph data and trigger SPLC buffer init via renderer update
+// ============================================================================
+void apply_splc_animation(ExecutionContext *ctx, void *result_data)
+{
+	if (!ctx || !ctx->app_state || !ctx->current_graph || !result_data)
+		return;
+	(void)result_data;
+
+	AppState *state = ctx->app_state;
+	GraphData *data = &state->current_graph;
+
+	state->renderer.needsAttributeUpload = VK_TRUE;
+	graph_refresh_data(data);
+	renderer_update_graph(&state->renderer, data);
+	state->renderer.labelTreeNeedsRebuild = true;
+
+	printf("SPLC animation started (graph has %d levels)\n", state->renderer.splc_num_levels);
 }

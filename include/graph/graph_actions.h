@@ -28,9 +28,3 @@ void graph_action_highlight_infrastructure(AppState *state);
  * @param state Pointer to the application state
  */
 void graph_action_reset(AppState *state);
-
-/**
- * Start SPLC animation: ensure DAG (remove cycles via feedback arc set), then activate.
- * @param state Pointer to the application state
- */
-void graph_action_start_splc(AppState *state);

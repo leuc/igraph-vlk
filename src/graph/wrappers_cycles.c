@@ -7,8 +7,7 @@
 #include <string.h>
 
 // ============================================================================
-// Worker: Remove feedback arc set from graph (make it acyclic)
-// Modifies graph in-place, returns graph pointer on success, NULL on failure
+// Worker: Check if graph is acyclic, fail if not
 // ============================================================================
 void *compute_remove_feedback_arc_set(igraph_t *graph)
 {
@@ -20,19 +19,12 @@ void *compute_remove_feedback_arc_set(igraph_t *graph)
 		return NULL;
 
 	if (!is_dag) {
-		igraph_vector_int_t fas;
-		igraph_vector_int_init(&fas, 0);
-		if (igraph_feedback_arc_set(graph, &fas, NULL, IGRAPH_FAS_APPROX_EADES) == IGRAPH_SUCCESS) {
-			if (igraph_vector_int_size(&fas) > 0) {
-				igraph_es_t es = igraph_ess_vector(&fas);
-				igraph_delete_edges(graph, es);
-				printf("Removed %d edges to make graph acyclic\n", (int)igraph_vector_int_size(&fas));
-			}
-		}
-		igraph_vector_int_destroy(&fas);
+		fprintf(stderr, "Graph has cycles, cannot make acyclic\n");
+		return NULL;
 	}
 
-	return graph;
+	printf("Graph is already acyclic\n");
+	return NULL;
 }
 
 // ============================================================================
