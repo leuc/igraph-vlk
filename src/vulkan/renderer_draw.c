@@ -133,10 +133,10 @@ void renderer_draw_frame(Renderer *r)
 	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 	VK_CHECK(vkBeginCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], &beginInfo), "Failed to begin command buffer");
 
-	// SPLC animation: advance one level every splc_frames_per_level frames
+	// SPLC animation: advance one level every splc_level_interval seconds
 	if (r->splc_active) {
-		r->splc_timer++;
-		if (r->splc_timer >= r->splc_frames_per_level) {
+		double now = glfwGetTime();
+		if (now - r->splc_last_level_time >= r->splc_level_interval) {
 			renderer_dispatch_splc_level(r, r->commands.commandBuffers[r->commands.currentFrame]);
 		}
 	}

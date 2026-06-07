@@ -164,8 +164,8 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->splc_level_groups = NULL;
 	r->splc_num_levels = 0;
 	r->splc_current_level = 0;
-	r->splc_timer = 0;
-	r->splc_frames_per_level = 5;
+	r->splc_last_level_time = 0.0;
+	r->splc_level_interval = 0.5f;
 	r->splc_active = false;
 
 	renderer_update_graph(r, graph);

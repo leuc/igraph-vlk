@@ -362,8 +362,8 @@ typedef struct Renderer
 	igraph_vector_int_t **splc_level_groups;
 	int splc_num_levels;
 	int splc_current_level;
-	int splc_timer;
-	int splc_frames_per_level;
+	double splc_last_level_time;
+	float splc_level_interval;
 	bool splc_active;
 	VkBuffer splc_max_buffer;
 	VkDeviceMemory splc_max_memory;
