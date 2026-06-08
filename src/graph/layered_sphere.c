@@ -332,7 +332,11 @@ static bool layered_sphere_iterate(LayeredSphereContext *ctx, const igraph_t *ig
 		double graph_density = (vcount > 1) ? (2.0 * ecount) / ((double)vcount * (vcount - 1)) : 0.0;
 		double cpm_resolution = fmax(graph_density * 3.0, 0.001);
 
-		igraph_community_leiden_simple(ig, NULL, IGRAPH_LEIDEN_OBJECTIVE_CPM, cpm_resolution, 0.01, true, 2, &membership, NULL, NULL);
+		if (igraph_is_directed(ig)) {
+			igraph_community_leiden(ig, NULL, NULL, NULL, cpm_resolution, 0.01, 1, -1, &membership, NULL, NULL);
+		} else {
+			igraph_community_leiden_simple(ig, NULL, IGRAPH_LEIDEN_OBJECTIVE_CPM, cpm_resolution, 0.01, 1, -1, &membership, NULL, NULL);
+		}
 
 		int num_communities = get_vector_int_max(&membership) + 1;
 

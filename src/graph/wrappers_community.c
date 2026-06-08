@@ -58,10 +58,10 @@ void *compute_igraph_community_leiden(igraph_t *graph)
 	igraph_error_t code;
 	if (igraph_is_directed(graph)) {
 		// For directed graphs, use full leiden with vertex weights
-		code = igraph_community_leiden(graph, NULL, NULL, NULL, resolution, 0.01, 1, 100, membership, &nb_clusters, &quality);
+		code = igraph_community_leiden(graph, NULL, NULL, NULL, resolution, 0.01, 1, -1, membership, &nb_clusters, &quality);
 	} else {
 		// For undirected graphs, use leiden_simple without vertex weights
-		code = igraph_community_leiden_simple(graph, NULL, IGRAPH_LEIDEN_OBJECTIVE_CPM, resolution, 0.01, 1, 100, membership, &nb_clusters, &quality);
+		code = igraph_community_leiden_simple(graph, NULL, IGRAPH_LEIDEN_OBJECTIVE_CPM, resolution, 0.01, 1, -1, membership, &nb_clusters, &quality);
 	}
 
 	if (code != IGRAPH_SUCCESS) {
