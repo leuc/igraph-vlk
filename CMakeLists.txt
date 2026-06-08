@@ -92,7 +92,6 @@ add_executable(igraph-vlk
     src/vulkan/images.c
     src/vulkan/utils.c
     src/vulkan/app_path.c
-    src/vulkan/polyhedron.c
     src/vulkan/text.c
 
     # Graph modules

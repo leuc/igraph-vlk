@@ -70,43 +70,18 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 		r->needsAttributeUpload = VK_TRUE;
 	}
 
-	// Build node instances sorted by platonic type
-	Node *sorted = malloc(sizeof(Node) * graph->node_count);
+	// Build node instances
 	NodePosition *nodePositions = malloc(sizeof(NodePosition) * graph->node_count);
 	NodeAttribute *nodeAttributes = malloc(sizeof(NodeAttribute) * graph->node_count);
-	uint32_t currentOffset = 0;
-	for (int t = 0; t < PLATONIC_COUNT; t++) {
-		r->platonicDrawCalls[t].firstInstance = currentOffset;
-		uint32_t count = 0;
-		for (uint32_t i = 0; i < graph->node_count; i++) {
-			int deg = graph->nodes[i].degree;
-			PlatonicType pt;
-			if (deg < 4)
-				pt = PLATONIC_TETRAHEDRON;
-			else if (deg < 6)
-				pt = PLATONIC_CUBE;
-			else if (deg < 8)
-				pt = PLATONIC_OCTAHEDRON;
-			else if (deg < 12)
-				pt = PLATONIC_DODECAHEDRON;
-			else
-				pt = PLATONIC_ICOSAHEDRON;
-			if (pt == (PlatonicType)t) {
-				sorted[currentOffset + count] = graph->nodes[i];
-				float size = sorted[currentOffset + count].size;
-				if (size < 0.1f)
-					size = 0.1f;
-				// Split into position (scaled) + attributes
-				glm_vec3_scale(sorted[currentOffset + count].position, r->layoutScale, nodePositions[currentOffset + count].pos);
-				memcpy(nodeAttributes[currentOffset + count].color, sorted[currentOffset + count].color, sizeof(vec3));
-				nodeAttributes[currentOffset + count].size = size;
-				nodeAttributes[currentOffset + count].degree = sorted[currentOffset + count].degree;
-				nodeAttributes[currentOffset + count].selected = sorted[currentOffset + count].selected;
-				count++;
-			}
-		}
-		r->platonicDrawCalls[t].count = count;
-		currentOffset += count;
+	for (uint32_t i = 0; i < graph->node_count; i++) {
+		float size = graph->nodes[i].size;
+		if (size < 0.1f)
+			size = 0.1f;
+		glm_vec3_scale(graph->nodes[i].position, r->layoutScale, nodePositions[i].pos);
+		memcpy(nodeAttributes[i].color, graph->nodes[i].color, sizeof(vec3));
+		nodeAttributes[i].size = size;
+		nodeAttributes[i].degree = graph->nodes[i].degree;
+		nodeAttributes[i].selected = graph->nodes[i].selected;
 	}
 	// Fast path: update positions via mapped buffer
 	update_buffer_mapped(r->core.device, r->nodePositionMemory, sizeof(NodePosition) * graph->node_count, nodePositions, &r->core.deviceProperties);
@@ -114,7 +89,6 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	if (r->needsAttributeUpload) {
 		update_buffer_staged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(NodeAttribute) * graph->node_count, nodeAttributes, r->nodeAttributeStagingBuffer, r->nodeAttributeStagingMemory, r->nodeAttributeBuffer, &r->core.deviceProperties);
 	}
-	free(sorted);
 	free(nodePositions);
 	free(nodeAttributes);
 

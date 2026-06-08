@@ -48,12 +48,14 @@ void graph_build_visualization(GraphData *data)
 		data->nodes[i].color[2] = (float)rand() / RAND_MAX;
 		data->nodes[i].size = (has_node_attr && max_n_val > 0) ? (float)VAN(&data->g, data->node_attr_name, i) / max_n_val : 1.0f;
 		data->nodes[i].label = has_label ? strdup(VAS(&data->g, "label", i)) : NULL;
-		igraph_vector_int_t neighbors;
-		igraph_vector_int_init(&neighbors, 0);
-		igraph_neighbors(&data->g, &neighbors, i, IGRAPH_ALL, IGRAPH_NO_LOOPS, 1);
-		data->nodes[i].degree = igraph_vector_int_size(&neighbors);
-		igraph_vector_int_destroy(&neighbors);
 	}
+	igraph_vector_int_t degrees;
+	igraph_vector_int_init(&degrees, data->node_count);
+	igraph_degree(&data->g, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS);
+	for (int i = 0; i < data->node_count; i++) {
+		data->nodes[i].degree = VECTOR(degrees)[i];
+	}
+	igraph_vector_int_destroy(&degrees);
 
 	// Sync node positions from layout matrix
 	if (data->nodes) {
@@ -97,13 +99,13 @@ void graph_rebuild_edges(GraphData *data)
 	}
 
 	// Recompute degree on existing nodes — it affects node shape rendering
+	igraph_vector_int_t degrees;
+	igraph_vector_int_init(&degrees, data->node_count);
+	igraph_degree(&data->g, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS);
 	for (uint32_t i = 0; i < data->node_count; i++) {
-		igraph_vector_int_t neis;
-		igraph_vector_int_init(&neis, 0);
-		igraph_neighbors(&data->g, &neis, i, IGRAPH_ALL, IGRAPH_NO_LOOPS, 1);
-		data->nodes[i].degree = igraph_vector_int_size(&neis);
-		igraph_vector_int_destroy(&neis);
+		data->nodes[i].degree = VECTOR(degrees)[i];
 	}
+	igraph_vector_int_destroy(&degrees);
 }
 
 // ============================================================================

@@ -9,19 +9,16 @@ layout(binding = 0) uniform UniformBufferObject
 ubo;
 
 layout(location = 0) in vec3 inPosition;
-layout(location = 1) in vec3 inNormal;
-layout(location = 2) in vec2 inTexCoord;
-layout(location = 3) in vec3 instancePos;
-layout(location = 4) in vec3 instanceColor;
-layout(location = 5) in float instanceSize;
-layout(location = 6) in int instanceDegree;
-layout(location = 7) in float instanceSelected;
+layout(location = 1) in vec3 instancePos;
+layout(location = 2) in vec3 instanceColor;
+layout(location = 3) in float instanceSize;
+layout(location = 4) in int instanceDegree;
+layout(location = 5) in float instanceSelected;
 
-layout(location = 0) out vec3 fragNormal;
-layout(location = 1) out vec2 fragTexCoord;
-layout(location = 2) out vec3 fragColor;
-layout(location = 3) out flat int fragDegree;
-layout(location = 4) out float fragSelected;
+layout(location = 0) out vec2 fragTexCoord;
+layout(location = 1) out vec3 fragColor;
+layout(location = 2) out flat int fragDegree;
+layout(location = 3) out float fragSelected;
 
 void main()
 {
@@ -45,7 +42,6 @@ void main()
 
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(worldPos, 1.0);
 
-	fragNormal = normal;		  // Normal always faces exactly outward from the sphere
 	fragTexCoord = inPosition.xy; // Pass the local flattened X/Y coordinates to the SDF cutter
 	fragColor = instanceColor;
 	fragDegree = instanceDegree;

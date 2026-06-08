@@ -89,6 +89,19 @@ static char *build_detail_card_text(igraph_t *g, int node, size_t *out_len)
 		igraph_vector_int_destroy(&vtypes);
 	igraph_set_error_handler(prev_handler);
 
+	// Compute graph degree
+	igraph_vector_int_t degree_vec;
+	igraph_vector_int_init(&degree_vec, 1);
+	igraph_integer_t node_id = node;
+	igraph_degree(g, &degree_vec, igraph_vss_1(node_id), IGRAPH_ALL, IGRAPH_LOOPS);
+	int deg = (int)VECTOR(degree_vec)[0];
+	igraph_vector_int_destroy(&degree_vec);
+	{
+		int w = snprintf(buf + pos, cap - pos, "degree: %d\n", deg);
+		if (w > 0)
+			pos += (size_t)w;
+	}
+
 	// Always have at least one printable line so the atlas region is non-zero
 	if (pos == 0) {
 		int w = snprintf(buf, cap, "(no attributes)\n");

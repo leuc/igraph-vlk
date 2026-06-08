@@ -88,17 +88,11 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 
 	renderer_create_pipelines(r);
 
-	for (int i = 0; i < PLATONIC_COUNT; i++) {
-		Vertex *v;
-		uint32_t vc;
-		uint32_t *idx;
-		polyhedron_generate_platonic(i, &v, &vc, &idx, &r->platonicIndexCounts[i]);
-		create_buffer(r->core.device, r->core.physicalDevice, sizeof(Vertex) * vc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->vertexBuffers[i], &r->vertexBufferMemories[i]);
-		update_buffer(r->core.device, r->vertexBufferMemories[i], sizeof(Vertex) * vc, v);
-		create_buffer(r->core.device, r->core.physicalDevice, sizeof(uint32_t) * r->platonicIndexCounts[i], VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->indexBuffers[i], &r->indexBufferMemories[i]);
-		update_buffer(r->core.device, r->indexBufferMemories[i], sizeof(uint32_t) * r->platonicIndexCounts[i], idx);
-		free(v);
-		free(idx);
+	{
+		// Single triangle covering [-1,1]x[-1,1] for SDF node shapes
+		float tri[3][3] = {{-1.0f, -1.0f, 0.0f}, {3.0f, -1.0f, 0.0f}, {-1.0f, 3.0f, 0.0f}};
+		create_buffer(r->core.device, r->core.physicalDevice, sizeof(tri), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->circleVertexBuffer, &r->circleVertexBufferMemory);
+		update_buffer(r->core.device, r->circleVertexBufferMemory, sizeof(tri), tri);
 	}
 
 	LabelVertex lvs[] = {{{0, 0, 0}, {0, 0}}, {{1, 0, 0}, {1, 0}}, {{0, 1, 0}, {0, 1}}, {{1, 1, 0}, {1, 1}}};
@@ -385,12 +379,8 @@ void renderer_cleanup(Renderer *r)
 		vkFreeMemory(r->core.device, r->nodeAttributeStagingMemory, NULL);
 	}
 
-	for (int i = 0; i < PLATONIC_COUNT; i++) {
-		vkDestroyBuffer(r->core.device, r->vertexBuffers[i], NULL);
-		vkFreeMemory(r->core.device, r->vertexBufferMemories[i], NULL);
-		vkDestroyBuffer(r->core.device, r->indexBuffers[i], NULL);
-		vkFreeMemory(r->core.device, r->indexBufferMemories[i], NULL);
-	}
+	vkDestroyBuffer(r->core.device, r->circleVertexBuffer, NULL);
+	vkFreeMemory(r->core.device, r->circleVertexBufferMemory, NULL);
 	if (r->rayVertexBuffer != VK_NULL_HANDLE) {
 		vkDestroyBuffer(r->core.device, r->rayVertexBuffer, NULL);
 		vkFreeMemory(r->core.device, r->rayVertexBufferMemory, NULL);

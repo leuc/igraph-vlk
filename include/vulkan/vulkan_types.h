@@ -11,7 +11,7 @@
 #include <stdbool.h>
 
 #include "graph/graph_types.h"
-#include "vulkan/polyhedron.h"
+
 #include "vulkan/text.h"
 
 #define MAX_FRAMES_IN_FLIGHT 2
@@ -228,17 +228,8 @@ typedef struct Renderer
 	VkFramebuffer **xrFramebuffers; // [view_index][image_index]
 	uint32_t *xrFramebufferImageCount;
 
-	VkBuffer vertexBuffers[PLATONIC_COUNT];
-	VkDeviceMemory vertexBufferMemories[PLATONIC_COUNT];
-	VkBuffer indexBuffers[PLATONIC_COUNT];
-	VkDeviceMemory indexBufferMemories[PLATONIC_COUNT];
-	uint32_t platonicIndexCounts[PLATONIC_COUNT];
-
-	struct
-	{
-		uint32_t count;
-		uint32_t firstInstance;
-	} platonicDrawCalls[PLATONIC_COUNT];
+	VkBuffer circleVertexBuffer;
+	VkDeviceMemory circleVertexBufferMemory;
 
 	VkBuffer *uniformBuffers;
 	VkDeviceMemory *uniformBuffersMemory;
