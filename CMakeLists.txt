@@ -35,8 +35,8 @@ find_path(CGLM_INCLUDE_DIR cglm/cglm.h)
 find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
 
 	set(SHADERS
-	    shaders/shader.vert
-	    shaders/shader.frag
+	    shaders/node.vert
+	    shaders/node.frag
 	    shaders/edge.vert
 	    shaders/edge.frag
 	    shaders/label.vert
@@ -166,8 +166,8 @@ if(USE_OPENXR)
 endif()
 
 target_compile_definitions(igraph-vlk PRIVATE
-    VERT_SHADER_PATH="shaders/shader.vert.spv"
-    FRAG_SHADER_PATH="shaders/shader.frag.spv"
+    NODE_VERT_SHADER_PATH="shaders/node.vert.spv"
+    NODE_FRAG_SHADER_PATH="shaders/node.frag.spv"
     EDGE_VERT_SHADER_PATH="shaders/edge.vert.spv"
     EDGE_FRAG_SHADER_PATH="shaders/edge.frag.spv"
     LABEL_VERT_SHADER_PATH="shaders/label.vert.spv"

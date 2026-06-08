@@ -45,7 +45,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		float a = 1.0f;
 		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 4, &a);
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->nodePipeline);
-		VkBuffer vbs[] = {r->circleVertexBuffer, r->nodePositionBuffer, r->nodeAttributeBuffer};
+		VkBuffer vbs[] = {r->nodeVertexBuffer, r->nodePositionBuffer, r->nodeAttributeBuffer};
 		VkDeviceSize vos[] = {0, 0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 3, vbs, vos);
 		vkCmdDraw(cmd, 3, r->nodeCount, 0, 0);

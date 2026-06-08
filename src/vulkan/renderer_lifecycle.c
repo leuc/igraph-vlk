@@ -91,8 +91,8 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	{
 		// Single triangle covering [-1,1]x[-1,1] for SDF node shapes
 		float tri[3][3] = {{-1.0f, -1.0f, 0.0f}, {3.0f, -1.0f, 0.0f}, {-1.0f, 3.0f, 0.0f}};
-		create_buffer(r->core.device, r->core.physicalDevice, sizeof(tri), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->circleVertexBuffer, &r->circleVertexBufferMemory);
-		update_buffer(r->core.device, r->circleVertexBufferMemory, sizeof(tri), tri);
+		create_buffer(r->core.device, r->core.physicalDevice, sizeof(tri), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->nodeVertexBuffer, &r->nodeVertexBufferMemory);
+		update_buffer(r->core.device, r->nodeVertexBufferMemory, sizeof(tri), tri);
 	}
 
 	LabelVertex lvs[] = {{{0, 0, 0}, {0, 0}}, {{1, 0, 0}, {1, 0}}, {{0, 1, 0}, {0, 1}}, {{1, 1, 0}, {1, 1}}};
@@ -379,8 +379,8 @@ void renderer_cleanup(Renderer *r)
 		vkFreeMemory(r->core.device, r->nodeAttributeStagingMemory, NULL);
 	}
 
-	vkDestroyBuffer(r->core.device, r->circleVertexBuffer, NULL);
-	vkFreeMemory(r->core.device, r->circleVertexBufferMemory, NULL);
+	vkDestroyBuffer(r->core.device, r->nodeVertexBuffer, NULL);
+	vkFreeMemory(r->core.device, r->nodeVertexBufferMemory, NULL);
 	if (r->rayVertexBuffer != VK_NULL_HANDLE) {
 		vkDestroyBuffer(r->core.device, r->rayVertexBuffer, NULL);
 		vkFreeMemory(r->core.device, r->rayVertexBufferMemory, NULL);

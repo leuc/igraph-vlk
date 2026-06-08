@@ -6,9 +6,9 @@
 
 void renderer_create_graphics_pipelines(Renderer *r)
 {
-	VkShaderModule vertexShaderModule, fragmentShaderModule, edgeVertexShaderModule, edgeFragmentShaderModule, rayVertexShaderModule, rayFragmentShaderModule;
-	VK_CHECK(create_shader_module(r->core.device, VERT_SHADER_PATH, &vertexShaderModule), "Failed to create vertex shader module");
-	VK_CHECK(create_shader_module(r->core.device, FRAG_SHADER_PATH, &fragmentShaderModule), "Failed to create fragment shader module");
+	VkShaderModule nodeVertModule, nodeFragModule, edgeVertexShaderModule, edgeFragmentShaderModule, rayVertexShaderModule, rayFragmentShaderModule;
+	VK_CHECK(create_shader_module(r->core.device, NODE_VERT_SHADER_PATH, &nodeVertModule), "Failed to create node vertex shader module");
+	VK_CHECK(create_shader_module(r->core.device, NODE_FRAG_SHADER_PATH, &nodeFragModule), "Failed to create node fragment shader module");
 	VK_CHECK(create_shader_module(r->core.device, EDGE_VERT_SHADER_PATH, &edgeVertexShaderModule), "Failed to create edge vertex shader module");
 	VK_CHECK(create_shader_module(r->core.device, EDGE_FRAG_SHADER_PATH, &edgeFragmentShaderModule), "Failed to create edge fragment shader module");
 	VK_CHECK(create_shader_module(r->core.device, RAY_VERT_SHADER_PATH, &rayVertexShaderModule), "Failed to create ray vertex shader module");
@@ -24,7 +24,7 @@ void renderer_create_graphics_pipelines(Renderer *r)
 	VkPipelineDepthStencilStateCreateInfo nodeDepthStencilState = VK_DEPTH_STENCIL_STATE_TEST_WRITE_LESS;
 
 	// Nodes
-	VkPipelineShaderStageCreateInfo nodeShaderStages[] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, vertexShaderModule, "main", NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, fragmentShaderModule, "main", NULL}};
+	VkPipelineShaderStageCreateInfo nodeShaderStages[] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, nodeVertModule, "main", NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, nodeFragModule, "main", NULL}};
 	VkVertexInputBindingDescription nodeBindings[] = {{0, 3 * sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX}, {1, sizeof(NodePosition), VK_VERTEX_INPUT_RATE_INSTANCE}, {2, sizeof(NodeAttribute), VK_VERTEX_INPUT_RATE_INSTANCE}};
 	VkVertexInputAttributeDescription nodeAttributes[] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0}, {1, 1, VK_FORMAT_R32G32B32_SFLOAT, 0}, {2, 2, VK_FORMAT_R32G32B32_SFLOAT, 0}, {3, 2, VK_FORMAT_R32_SFLOAT, 12}, {4, 2, VK_FORMAT_R32_SINT, 16}, {5, 2, VK_FORMAT_R32_SFLOAT, 20}};
 	VkPipelineVertexInputStateCreateInfo nodeVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 3, .pVertexBindingDescriptions = nodeBindings, .vertexAttributeDescriptionCount = 6, .pVertexAttributeDescriptions = nodeAttributes};
@@ -53,6 +53,6 @@ void renderer_create_graphics_pipelines(Renderer *r)
 	vkDestroyShaderModule(r->core.device, rayVertexShaderModule, NULL);
 	vkDestroyShaderModule(r->core.device, edgeFragmentShaderModule, NULL);
 	vkDestroyShaderModule(r->core.device, edgeVertexShaderModule, NULL);
-	vkDestroyShaderModule(r->core.device, fragmentShaderModule, NULL);
-	vkDestroyShaderModule(r->core.device, vertexShaderModule, NULL);
+	vkDestroyShaderModule(r->core.device, nodeFragModule, NULL);
+	vkDestroyShaderModule(r->core.device, nodeVertModule, NULL);
 }

@@ -228,8 +228,8 @@ typedef struct Renderer
 	VkFramebuffer **xrFramebuffers; // [view_index][image_index]
 	uint32_t *xrFramebufferImageCount;
 
-	VkBuffer circleVertexBuffer;
-	VkDeviceMemory circleVertexBufferMemory;
+	VkBuffer nodeVertexBuffer;
+	VkDeviceMemory nodeVertexBufferMemory;
 
 	VkBuffer *uniformBuffers;
 	VkDeviceMemory *uniformBuffersMemory;
