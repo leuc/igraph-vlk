@@ -29,16 +29,13 @@ void vulkan_commands_create(VulkanCommands *cmds, VulkanCore *core, uint32_t ima
 	cmds->renderFinishedSemaphores = malloc(sizeof(VkSemaphore) * imageCount);
 	cmds->inFlightFences = malloc(sizeof(VkFence) * MAX_FRAMES_IN_FLIGHT);
 
-	VkSemaphoreCreateInfo semaphoreInfo = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
-
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-		VK_CHECK(vkCreateSemaphore(core->device, &semaphoreInfo, NULL, &cmds->imageAvailableSemaphores[i]), "Failed to create image available semaphore");
-		VK_CHECK(vkCreateFence(core->device, &fenceInfo, NULL, &cmds->inFlightFences[i]), "Failed to create in-flight fence");
+		VK_CHECK(vkCreateSemaphore(core->device, &VK_SEMAPHORE_INFO, NULL, &cmds->imageAvailableSemaphores[i]), "Failed to create image available semaphore");
+		VK_CHECK(vkCreateFence(core->device, &VK_SIGNALED_FENCE_INFO, NULL, &cmds->inFlightFences[i]), "Failed to create in-flight fence");
 	}
 
 	for (uint32_t i = 0; i < imageCount; i++) {
-		VK_CHECK(vkCreateSemaphore(core->device, &semaphoreInfo, NULL, &cmds->renderFinishedSemaphores[i]), "Failed to create render finished semaphore");
+		VK_CHECK(vkCreateSemaphore(core->device, &VK_SEMAPHORE_INFO, NULL, &cmds->renderFinishedSemaphores[i]), "Failed to create render finished semaphore");
 	}
 }
 
@@ -81,8 +78,7 @@ VkCommandBuffer begin_single_time_commands(VkDevice device, VkCommandPool comman
 	VkCommandBufferAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandPool = commandPool, .commandBufferCount = 1};
 	VkCommandBuffer commandBuffer;
 	VK_CHECK(vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer), "Failed to allocate one-time command buffer");
-	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed to begin one-time command buffer");
+	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin one-time command buffer");
 	return commandBuffer;
 }
 

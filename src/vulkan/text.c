@@ -1,10 +1,10 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "vulkan/text.h"
 
-#include "vulkan/utils.h"
 #include "vulkan/buffers.h"
-#include "vulkan/images.h"
 #include "vulkan/commands.h"
+#include "vulkan/images.h"
+#include "vulkan/utils.h"
 #include <stb/stb_truetype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -212,8 +212,7 @@ void text_atlas_ensure_uploaded(TextAtlas *ta, VkDevice device, VkPhysicalDevice
 	if (ta->image == VK_NULL_HANDLE) {
 		create_image(device, physicalDevice, ta->width, ta->height, VK_FORMAT_R8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &ta->image, &ta->memory);
 
-		VkImageViewCreateInfo viewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = ta->image, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_R8_UNORM, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
-		vkCreateImageView(device, &viewInfo, NULL, &ta->view);
+		vkCreateImageView(device, &VK_IMAGE_VIEW_2D(ta->image, VK_FORMAT_R8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT), NULL, &ta->view);
 
 		transition_image_layout(device, commandPool, queue, ta->image, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	} else {
@@ -223,7 +222,7 @@ void text_atlas_ensure_uploaded(TextAtlas *ta, VkDevice device, VkPhysicalDevice
 	// Upload via staging buffer
 	VkBuffer stagingBuf;
 	VkDeviceMemory stagingMem;
-	create_buffer(device, physicalDevice, imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuf, &stagingMem);
+	VK_CREATE_HOST_BUFFER(device, physicalDevice, imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &stagingBuf, &stagingMem);
 
 	void *mapped;
 	vkMapMemory(device, stagingMem, 0, imgSize, 0, &mapped);
@@ -235,8 +234,7 @@ void text_atlas_ensure_uploaded(TextAtlas *ta, VkDevice device, VkPhysicalDevice
 	vkCmdCopyBufferToImage(cmd, stagingBuf, ta->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 	end_single_time_commands(device, commandPool, queue, cmd);
 
-	vkDestroyBuffer(device, stagingBuf, NULL);
-	vkFreeMemory(device, stagingMem, NULL);
+	VK_DESTROY_BUFFER(device, stagingBuf, stagingMem);
 
 	transition_image_layout(device, commandPool, queue, ta->image, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 

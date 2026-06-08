@@ -66,7 +66,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	VkDeviceSize imgSize = globalAtlas.width * globalAtlas.height;
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
-	create_buffer(r->core.device, r->core.physicalDevice, imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &stagingBuffer, &stagingBufferMemory);
 	void *dataPtr;
 	VK_CHECK(vkMapMemory(r->core.device, stagingBufferMemory, 0, imgSize, 0, &dataPtr), "Failed to map texture staging buffer memory");
 	memcpy(dataPtr, globalAtlas.atlasData, imgSize);
@@ -77,12 +77,10 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	VkBufferImageCopy bufferImageCopy = {.bufferOffset = 0, .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .imageExtent = {(uint32_t)globalAtlas.width, (uint32_t)globalAtlas.height, 1}};
 	vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, r->textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopy);
 	end_single_time_commands(r->core.device, r->commands.commandPool, r->core.graphicsQueue, commandBuffer);
-	vkDestroyBuffer(r->core.device, stagingBuffer, NULL);
-	vkFreeMemory(r->core.device, stagingBufferMemory, NULL);
+	VK_DESTROY_BUFFER(r->core.device, stagingBuffer, stagingBufferMemory);
 	transition_image_layout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-	VkImageViewCreateInfo imageViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->textureImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = VK_FORMAT_R8_UNORM, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
-	VK_CHECK(vkCreateImageView(r->core.device, &imageViewInfo, NULL, &r->textureImageView), "Failed to create texture image view");
+	VK_CHECK(vkCreateImageView(r->core.device, &VK_IMAGE_VIEW_2D(r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT), NULL, &r->textureImageView), "Failed to create texture image view");
 	VkSamplerCreateInfo samplerInfo = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = VK_FILTER_LINEAR, .minFilter = VK_FILTER_LINEAR, .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR, .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE};
 	VK_CHECK(vkCreateSampler(r->core.device, &samplerInfo, NULL, &r->textureSampler), "Failed to create texture sampler");
 
@@ -91,30 +89,30 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	{
 		// Single triangle covering [-1,1]x[-1,1] for SDF node shapes
 		float tri[3][3] = {{-1.0f, -1.0f, 0.0f}, {3.0f, -1.0f, 0.0f}, {-1.0f, 3.0f, 0.0f}};
-		create_buffer(r->core.device, r->core.physicalDevice, sizeof(tri), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->nodeVertexBuffer, &r->nodeVertexBufferMemory);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(tri), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->nodeVertexBuffer, &r->nodeVertexBufferMemory);
 		update_buffer(r->core.device, r->nodeVertexBufferMemory, sizeof(tri), tri);
 	}
 
 	LabelVertex lvs[] = {{{0, 0, 0}, {0, 0}}, {{1, 0, 0}, {1, 0}}, {{0, 1, 0}, {0, 1}}, {{1, 1, 0}, {1, 1}}};
-	create_buffer(r->core.device, r->core.physicalDevice, sizeof(lvs), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->labelVertexBuffer, &r->labelVertexBufferMemory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(lvs), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->labelVertexBuffer, &r->labelVertexBufferMemory);
 	update_buffer(r->core.device, r->labelVertexBufferMemory, sizeof(lvs), lvs);
 
 	// Shared quad vertex/index buffers for menus, text quads, and node labels
 	QuadVertex qv[] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}, {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}}, {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}};
 	uint32_t qi[] = {0, 1, 2, 2, 3, 0};
-	create_buffer(r->core.device, r->core.physicalDevice, sizeof(qv), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuQuadVertexBuffer, &r->menuQuadVertexBufferMemory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(qv), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->menuQuadVertexBuffer, &r->menuQuadVertexBufferMemory);
 	update_buffer(r->core.device, r->menuQuadVertexBufferMemory, sizeof(qv), qv);
-	create_buffer(r->core.device, r->core.physicalDevice, sizeof(qi), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuQuadIndexBuffer, &r->menuQuadIndexBufferMemory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(qi), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, &r->menuQuadIndexBuffer, &r->menuQuadIndexBufferMemory);
 	update_buffer(r->core.device, r->menuQuadIndexBufferMemory, sizeof(qi), qi);
 	r->menuQuadIndexCount = 6;
 
 	UIVertex uiBg[] = {{{0, 0, 0}, {0, 0}}, {{1, 0, 0}, {1, 0}}, {{0, 1, 0}, {0, 1}}, {{1, 1, 0}, {1, 1}}};
-	create_buffer(r->core.device, r->core.physicalDevice, sizeof(uiBg), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uiBgVertexBuffer, &r->uiBgVertexBufferMemory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(uiBg), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->uiBgVertexBuffer, &r->uiBgVertexBufferMemory);
 	update_buffer(r->core.device, r->uiBgVertexBufferMemory, sizeof(uiBg), uiBg);
-	create_buffer(r->core.device, r->core.physicalDevice, sizeof(UIInstance) * 1024, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uiTextInstanceBuffer, &r->uiTextInstanceBufferMemory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(UIInstance) * 1024, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->uiTextInstanceBuffer, &r->uiTextInstanceBufferMemory);
 
 	UIInstance bgInst = {.color = {0, 0, 0, -1.0f}};
-	create_buffer(r->core.device, r->core.physicalDevice, sizeof(UIInstance), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uiBgInstanceBuffer, &r->uiBgInstanceBufferMemory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(UIInstance), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->uiBgInstanceBuffer, &r->uiBgInstanceBufferMemory);
 	update_buffer(r->core.device, r->uiBgInstanceBufferMemory, sizeof(UIInstance), &bgInst);
 
 	r->menuInstanceBuffer = VK_NULL_HANDLE;
@@ -168,7 +166,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->uniformBuffers = malloc(sizeof(VkBuffer) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
 	r->uniformBuffersMemory = malloc(sizeof(VkDeviceMemory) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-		create_buffer(r->core.device, r->core.physicalDevice, sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->uniformBuffers[i], &r->uniformBuffersMemory[i]);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &r->uniformBuffers[i], &r->uniformBuffersMemory[i]);
 		VK_CHECK(vkMapMemory(r->core.device, r->uniformBuffersMemory[i], 0, sizeof(UniformBufferObject), 0, &r->uboMapped[i]), "Failed to map UBO memory");
 	}
 
@@ -191,12 +189,12 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 		VkDescriptorBufferInfo bufferInfo = {r->uniformBuffers[i], 0, sizeof(UniformBufferObject)};
 		VkDescriptorImageInfo imageInfo = {r->textureSampler, r->textureImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-		VkWriteDescriptorSet descriptorWrites[] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &bufferInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imageInfo, NULL, NULL}};
+		VkWriteDescriptorSet descriptorWrites[] = {VK_WRITE_DESC_BUFFER(r->descriptorSets[i], 0, &bufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER), VK_WRITE_DESC_IMAGE(r->descriptorSets[i], 1, &imageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)};
 		vkUpdateDescriptorSets(r->core.device, 2, descriptorWrites, 0, NULL);
 	}
 
 	// Create a dummy SPLC max weight buffer so binding 3 is always valid
-	create_buffer(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_max_buffer, &r->splc_max_memory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc_max_buffer, &r->splc_max_memory);
 	uint32_t zero = 0;
 	update_buffer(r->core.device, r->splc_max_memory, sizeof(uint32_t), &zero);
 
@@ -206,15 +204,15 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 		VkDescriptorBufferInfo maxWeightInfo = {r->splc_max_buffer, 0, VK_WHOLE_SIZE};
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 			VkWriteDescriptorSet descWrites[] = {
-				{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeWeightInfo, NULL},
-				{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 3, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &maxWeightInfo, NULL},
+				VK_WRITE_DESC_BUFFER(r->descriptorSets[i], 2, &edgeWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+				VK_WRITE_DESC_BUFFER(r->descriptorSets[i], 3, &maxWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
 			};
 			vkUpdateDescriptorSets(r->core.device, 2, descWrites, 0, NULL);
 		}
 	} else {
 		VkDescriptorBufferInfo maxWeightInfo = {r->splc_max_buffer, 0, VK_WHOLE_SIZE};
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-			VkWriteDescriptorSet maxWrite = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 3, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &maxWeightInfo, NULL};
+			VkWriteDescriptorSet maxWrite = VK_WRITE_DESC_BUFFER(r->descriptorSets[i], 3, &maxWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 			vkUpdateDescriptorSets(r->core.device, 1, &maxWrite, 0, NULL);
 		}
 	}
@@ -248,10 +246,9 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->detailCardNode = -1;
 	r->labelCacheValid = false;
 
-	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
 	r->graphUpdateRingIndex = 0;
 	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++) {
-		VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &r->graphUpdateFences[i]), "Failed to create graph update fence");
+		VK_CHECK(vkCreateFence(r->core.device, &VK_SIGNALED_FENCE_INFO, NULL, &r->graphUpdateFences[i]), "Failed to create graph update fence");
 	}
 
 	glm_mat4_identity(r->ubo.model);
@@ -299,24 +296,14 @@ void renderer_recreate_swapchain(Renderer *r)
 	r->renderPass.framebuffers = malloc(sizeof(VkFramebuffer) * r->swapchain.imageCount);
 	for (uint32_t i = 0; i < r->swapchain.imageCount; i++) {
 		VkImageView attachmentViews[] = {r->swapchain.views[i], r->swapchain.depthView};
-		VkFramebufferCreateInfo framebufferInfo = {
-			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-			.renderPass = r->renderPass.renderPass,
-			.attachmentCount = 2,
-			.pAttachments = attachmentViews,
-			.width = r->swapchain.extent.width,
-			.height = r->swapchain.extent.height,
-			.layers = 1,
-		};
-		VK_CHECK(vkCreateFramebuffer(r->core.device, &framebufferInfo, NULL, &r->renderPass.framebuffers[i]), "Failed to create framebuffer");
+		VK_CHECK(vkCreateFramebuffer(r->core.device, &VK_FRAMEBUFFER_INFO(r->renderPass.renderPass, attachmentViews, r->swapchain.extent.width, r->swapchain.extent.height), NULL, &r->renderPass.framebuffers[i]), "Failed to create framebuffer");
 	}
 
 	// Recreate renderFinishedSemaphores for new image count
 	r->commands.imageCount = r->swapchain.imageCount;
 	r->commands.renderFinishedSemaphores = malloc(sizeof(VkSemaphore) * r->commands.imageCount);
-	VkSemaphoreCreateInfo semaphoreInfo = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
 	for (uint32_t i = 0; i < r->commands.imageCount; i++) {
-		VK_CHECK(vkCreateSemaphore(r->core.device, &semaphoreInfo, NULL, &r->commands.renderFinishedSemaphores[i]), "Failed to create render finished semaphore");
+		VK_CHECK(vkCreateSemaphore(r->core.device, &VK_SEMAPHORE_INFO, NULL, &r->commands.renderFinishedSemaphores[i]), "Failed to create render finished semaphore");
 	}
 
 	// Update projection matrix for new aspect ratio
@@ -331,8 +318,7 @@ void renderer_cleanup(Renderer *r)
 {
 	VK_CHECK(vkDeviceWaitIdle(r->core.device), "Failed to wait for device idle on cleanup");
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-		vkDestroyBuffer(r->core.device, r->uniformBuffers[i], NULL);
-		vkFreeMemory(r->core.device, r->uniformBuffersMemory[i], NULL);
+		VK_DESTROY_BUFFER(r->core.device, r->uniformBuffers[i], r->uniformBuffersMemory[i]);
 	}
 	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++)
 		vkDestroyFence(r->core.device, r->graphUpdateFences[i], NULL);
@@ -345,83 +331,36 @@ void renderer_cleanup(Renderer *r)
 		vkDestroyCommandPool(r->core.device, r->computeCtx.cmdPool, NULL);
 	if (r->computeCtx.pool != VK_NULL_HANDLE)
 		vkDestroyDescriptorPool(r->core.device, r->computeCtx.pool, NULL);
-	if (r->computeCtx.nodeBuf != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->computeCtx.nodeBuf, NULL);
-		vkFreeMemory(r->core.device, r->computeCtx.nodeMem, NULL);
-	}
-	if (r->computeCtx.edgeBuf != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->computeCtx.edgeBuf, NULL);
-		vkFreeMemory(r->core.device, r->computeCtx.edgeMem, NULL);
-	}
-	if (r->computeCtx.hubBuf != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->computeCtx.hubBuf, NULL);
-		vkFreeMemory(r->core.device, r->computeCtx.hubMem, NULL);
-	}
+	VK_DESTROY_BUFFER(r->core.device, r->computeCtx.nodeBuf, r->computeCtx.nodeMem);
+	VK_DESTROY_BUFFER(r->core.device, r->computeCtx.edgeBuf, r->computeCtx.edgeMem);
+	VK_DESTROY_BUFFER(r->core.device, r->computeCtx.hubBuf, r->computeCtx.hubMem);
 
-	vkDestroyBuffer(r->core.device, r->labelVertexBuffer, NULL);
-	vkFreeMemory(r->core.device, r->labelVertexBufferMemory, NULL);
+	VK_DESTROY_BUFFER(r->core.device, r->labelVertexBuffer, r->labelVertexBufferMemory);
 
-	vkDestroyBuffer(r->core.device, r->edgePositionBuffer, NULL);
-	vkFreeMemory(r->core.device, r->edgePositionMemory, NULL);
-	vkDestroyBuffer(r->core.device, r->edgeAttributeBuffer, NULL);
-	vkFreeMemory(r->core.device, r->edgeAttributeMemory, NULL);
-	if (r->edgeAttributeStagingBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->edgeAttributeStagingBuffer, NULL);
-		vkFreeMemory(r->core.device, r->edgeAttributeStagingMemory, NULL);
-	}
+	VK_DESTROY_BUFFER(r->core.device, r->edgePositionBuffer, r->edgePositionMemory);
+	VK_DESTROY_BUFFER(r->core.device, r->edgeAttributeBuffer, r->edgeAttributeMemory);
+	VK_DESTROY_BUFFER(r->core.device, r->edgeAttributeStagingBuffer, r->edgeAttributeStagingMemory);
 
-	vkDestroyBuffer(r->core.device, r->nodePositionBuffer, NULL);
-	vkFreeMemory(r->core.device, r->nodePositionMemory, NULL);
-	vkDestroyBuffer(r->core.device, r->nodeAttributeBuffer, NULL);
-	vkFreeMemory(r->core.device, r->nodeAttributeMemory, NULL);
-	if (r->nodeAttributeStagingBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->nodeAttributeStagingBuffer, NULL);
-		vkFreeMemory(r->core.device, r->nodeAttributeStagingMemory, NULL);
-	}
+	VK_DESTROY_BUFFER(r->core.device, r->nodePositionBuffer, r->nodePositionMemory);
+	VK_DESTROY_BUFFER(r->core.device, r->nodeAttributeBuffer, r->nodeAttributeMemory);
+	VK_DESTROY_BUFFER(r->core.device, r->nodeAttributeStagingBuffer, r->nodeAttributeStagingMemory);
 
-	vkDestroyBuffer(r->core.device, r->nodeVertexBuffer, NULL);
-	vkFreeMemory(r->core.device, r->nodeVertexBufferMemory, NULL);
-	if (r->rayVertexBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->rayVertexBuffer, NULL);
-		vkFreeMemory(r->core.device, r->rayVertexBufferMemory, NULL);
-	}
-	vkDestroyBuffer(r->core.device, r->uiBgVertexBuffer, NULL);
-	vkFreeMemory(r->core.device, r->uiBgVertexBufferMemory, NULL);
-	vkDestroyBuffer(r->core.device, r->uiTextInstanceBuffer, NULL);
-	vkFreeMemory(r->core.device, r->uiTextInstanceBufferMemory, NULL);
-	if (r->uiBgInstanceBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->uiBgInstanceBuffer, NULL);
-		vkFreeMemory(r->core.device, r->uiBgInstanceBufferMemory, NULL);
-	}
+	VK_DESTROY_BUFFER(r->core.device, r->nodeVertexBuffer, r->nodeVertexBufferMemory);
+	VK_DESTROY_BUFFER(r->core.device, r->rayVertexBuffer, r->rayVertexBufferMemory);
+	VK_DESTROY_BUFFER(r->core.device, r->uiBgVertexBuffer, r->uiBgVertexBufferMemory);
+	VK_DESTROY_BUFFER(r->core.device, r->uiTextInstanceBuffer, r->uiTextInstanceBufferMemory);
+	VK_DESTROY_BUFFER(r->core.device, r->uiBgInstanceBuffer, r->uiBgInstanceBufferMemory);
 
-	if (r->menuQuadVertexBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->menuQuadVertexBuffer, NULL);
-		vkFreeMemory(r->core.device, r->menuQuadVertexBufferMemory, NULL);
-	}
-	if (r->menuQuadIndexBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->menuQuadIndexBuffer, NULL);
-		vkFreeMemory(r->core.device, r->menuQuadIndexBufferMemory, NULL);
-	}
-	if (r->menuInstanceBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->menuInstanceBuffer, NULL);
-		vkFreeMemory(r->core.device, r->menuInstanceBufferMemory, NULL);
-	}
-	if (r->textQuadInstanceBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->textQuadInstanceBuffer, NULL);
-		vkFreeMemory(r->core.device, r->textQuadInstanceBufferMemory, NULL);
-	}
+	VK_DESTROY_BUFFER(r->core.device, r->menuQuadVertexBuffer, r->menuQuadVertexBufferMemory);
+	VK_DESTROY_BUFFER(r->core.device, r->menuQuadIndexBuffer, r->menuQuadIndexBufferMemory);
+	VK_DESTROY_BUFFER(r->core.device, r->menuInstanceBuffer, r->menuInstanceBufferMemory);
+	VK_DESTROY_BUFFER(r->core.device, r->textQuadInstanceBuffer, r->textQuadInstanceBufferMemory);
 	text_atlas_destroy(&r->menuTextAtlas, r->core.device);
 	text_atlas_destroy(&r->nodeTextAtlas, r->core.device);
 	text_atlas_destroy(&r->detailCardAtlas, r->core.device);
 	igraph_bh_tree_destroy(&r->labelTree);
-	if (r->nodeLabelInstanceBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->nodeLabelInstanceBuffer, NULL);
-		vkFreeMemory(r->core.device, r->nodeLabelInstanceBufferMemory, NULL);
-	}
-	if (r->detailCardInstanceBuffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->detailCardInstanceBuffer, NULL);
-		vkFreeMemory(r->core.device, r->detailCardInstanceBufferMemory, NULL);
-	}
+	VK_DESTROY_BUFFER(r->core.device, r->nodeLabelInstanceBuffer, r->nodeLabelInstanceBufferMemory);
+	VK_DESTROY_BUFFER(r->core.device, r->detailCardInstanceBuffer, r->detailCardInstanceBufferMemory);
 	if (r->xrFramebuffers) {
 		for (uint32_t i = 0; i < r->xr_view_count; i++) {
 			if (r->xrDepthImageViews[i] != VK_NULL_HANDLE)
@@ -448,26 +387,11 @@ void renderer_cleanup(Renderer *r)
 	vkFreeMemory(r->core.device, r->textureImageMemory, NULL);
 
 	// SPLC cleanup
-	if (r->splc_nodes_buffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->splc_nodes_buffer, NULL);
-		vkFreeMemory(r->core.device, r->splc_nodes_memory, NULL);
-	}
-	if (r->splc_edges_buffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->splc_edges_buffer, NULL);
-		vkFreeMemory(r->core.device, r->splc_edges_memory, NULL);
-	}
-	if (r->splc_traffic_buffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->splc_traffic_buffer, NULL);
-		vkFreeMemory(r->core.device, r->splc_traffic_memory, NULL);
-	}
-	if (r->splc_level_buffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->splc_level_buffer, NULL);
-		vkFreeMemory(r->core.device, r->splc_level_memory, NULL);
-	}
-	if (r->splc_max_buffer != VK_NULL_HANDLE) {
-		vkDestroyBuffer(r->core.device, r->splc_max_buffer, NULL);
-		vkFreeMemory(r->core.device, r->splc_max_memory, NULL);
-	}
+	VK_DESTROY_BUFFER(r->core.device, r->splc_nodes_buffer, r->splc_nodes_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->splc_edges_buffer, r->splc_edges_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->splc_traffic_buffer, r->splc_traffic_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->splc_level_buffer, r->splc_level_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->splc_max_buffer, r->splc_max_memory);
 	if (r->splc_level_groups) {
 		for (int i = 0; i < r->splc_num_levels; i++) {
 			if (r->splc_level_groups[i])

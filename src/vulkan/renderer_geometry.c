@@ -30,14 +30,9 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 
 	// Pre-allocate or grow node buffers (split: position + attribute)
 	if (r->nodeCapacity < graph->node_count) {
-		if (r->nodePositionBuffer != VK_NULL_HANDLE) {
-			vkDestroyBuffer(r->core.device, r->nodePositionBuffer, NULL);
-			vkFreeMemory(r->core.device, r->nodePositionMemory, NULL);
-			vkDestroyBuffer(r->core.device, r->nodeAttributeBuffer, NULL);
-			vkFreeMemory(r->core.device, r->nodeAttributeMemory, NULL);
-			vkDestroyBuffer(r->core.device, r->nodeAttributeStagingBuffer, NULL);
-			vkFreeMemory(r->core.device, r->nodeAttributeStagingMemory, NULL);
-		}
+		VK_DESTROY_BUFFER(r->core.device, r->nodePositionBuffer, r->nodePositionMemory);
+		VK_DESTROY_BUFFER(r->core.device, r->nodeAttributeBuffer, r->nodeAttributeMemory);
+		VK_DESTROY_BUFFER(r->core.device, r->nodeAttributeStagingBuffer, r->nodeAttributeStagingMemory);
 		// Position buffer: HOST_COHERENT for fast mapped updates
 		create_mapped_buffer(r->core.device, r->core.physicalDevice, sizeof(NodePosition) * graph->node_count, &r->nodePositionBuffer, &r->nodePositionMemory);
 		// Attribute buffer: DEVICE_LOCAL with staging buffer for rare updates
@@ -54,14 +49,9 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	r->edgeVertexCount = graph->edge_count * segments * 2;
 	uint32_t neededEdgeVerts = r->edgeVertexCount;
 	if (r->edgeCapacity < neededEdgeVerts) {
-		if (r->edgePositionBuffer != VK_NULL_HANDLE) {
-			vkDestroyBuffer(r->core.device, r->edgePositionBuffer, NULL);
-			vkFreeMemory(r->core.device, r->edgePositionMemory, NULL);
-			vkDestroyBuffer(r->core.device, r->edgeAttributeBuffer, NULL);
-			vkFreeMemory(r->core.device, r->edgeAttributeMemory, NULL);
-			vkDestroyBuffer(r->core.device, r->edgeAttributeStagingBuffer, NULL);
-			vkFreeMemory(r->core.device, r->edgeAttributeStagingMemory, NULL);
-		}
+		VK_DESTROY_BUFFER(r->core.device, r->edgePositionBuffer, r->edgePositionMemory);
+		VK_DESTROY_BUFFER(r->core.device, r->edgeAttributeBuffer, r->edgeAttributeMemory);
+		VK_DESTROY_BUFFER(r->core.device, r->edgeAttributeStagingBuffer, r->edgeAttributeStagingMemory);
 		// Position buffer: HOST_COHERENT for fast mapped updates
 		create_mapped_buffer(r->core.device, r->core.physicalDevice, sizeof(EdgePosition) * neededEdgeVerts, &r->edgePositionBuffer, &r->edgePositionMemory);
 		// Attribute buffer: DEVICE_LOCAL with staging buffer for rare updates
@@ -211,7 +201,7 @@ void renderer_render_ray(Renderer *r, VkCommandBuffer cmd, vec3 origin, vec3 dir
 
 	// Update ray buffer (host-visible)
 	if (r->rayVertexBuffer == VK_NULL_HANDLE) {
-		create_buffer(r->core.device, r->core.physicalDevice, sizeof(vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->rayVertexBuffer, &r->rayVertexBufferMemory);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->rayVertexBuffer, &r->rayVertexBufferMemory);
 		r->rayVertexCount = 2;
 	}
 	update_buffer(r->core.device, r->rayVertexBufferMemory, sizeof(vertices), vertices);

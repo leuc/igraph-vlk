@@ -27,7 +27,7 @@ void create_buffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSiz
 	VkPhysicalDeviceProperties props;
 	vkGetPhysicalDeviceProperties(physicalDevice, &props);
 	VkDeviceSize atomSize = props.limits.nonCoherentAtomSize;
-	VkDeviceSize allocSize = (memReqs.size + atomSize - 1) & ~(atomSize - 1);
+	VkDeviceSize allocSize = VK_ALIGN_UP(memReqs.size, atomSize);
 	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = find_memory_type(physicalDevice, memReqs.memoryTypeBits, properties)};
 	VK_CHECK(vkAllocateMemory(device, &allocInfo, NULL, bufferMemory), "Failed to allocate buffer memory");
 	VK_CHECK(vkBindBufferMemory(device, *buffer, *bufferMemory, 0), "Failed to bind buffer memory");
@@ -46,7 +46,7 @@ void update_buffer_mapped(VkDevice device, VkDeviceMemory memory, VkDeviceSize s
 	if (size == 0)
 		return;
 	VkDeviceSize atomSize = deviceProps->limits.nonCoherentAtomSize;
-	VkDeviceSize alignedSize = (size + atomSize - 1) & ~(atomSize - 1);
+	VkDeviceSize alignedSize = VK_ALIGN_UP(size, atomSize);
 	void *mapped;
 	VK_CHECK(vkMapMemory(device, memory, 0, alignedSize, 0, &mapped), "Failed to map buffer memory for updateMapped");
 	memcpy(mapped, data, size);
@@ -66,7 +66,7 @@ void create_mapped_buffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDe
 	VkPhysicalDeviceProperties props;
 	vkGetPhysicalDeviceProperties(physicalDevice, &props);
 	VkDeviceSize atomSize = props.limits.nonCoherentAtomSize;
-	VkDeviceSize allocSize = (req.size + atomSize - 1) & ~(atomSize - 1);
+	VkDeviceSize allocSize = VK_ALIGN_UP(req.size, atomSize);
 	VkMemoryAllocateInfo alloc = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = find_memory_type(physicalDevice, req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)};
 	VK_CHECK(vkAllocateMemory(device, &alloc, NULL, memory), "Failed to allocate mapped buffer memory");
 	VK_CHECK(vkBindBufferMemory(device, *buffer, *memory, 0), "Failed to bind mapped buffer memory");
@@ -81,7 +81,7 @@ void create_staging_buffer(VkDevice device, VkPhysicalDevice physicalDevice, VkD
 	VkPhysicalDeviceProperties props;
 	vkGetPhysicalDeviceProperties(physicalDevice, &props);
 	VkDeviceSize atomSize = props.limits.nonCoherentAtomSize;
-	VkDeviceSize allocSize = (memReqs.size + atomSize - 1) & ~(atomSize - 1);
+	VkDeviceSize allocSize = VK_ALIGN_UP(memReqs.size, atomSize);
 	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = find_memory_type(physicalDevice, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)};
 	VK_CHECK(vkAllocateMemory(device, &allocInfo, NULL, stagingMem), "Failed to allocate staging buffer memory");
 	VK_CHECK(vkBindBufferMemory(device, *stagingBuf, *stagingMem, 0), "Failed to bind staging buffer memory");
@@ -98,7 +98,7 @@ void create_staging_buffer(VkDevice device, VkPhysicalDevice physicalDevice, VkD
 void update_buffer_staged(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkDeviceSize size, const void *data, VkBuffer stagingBuf, VkDeviceMemory stagingMem, VkBuffer deviceBuf, const VkPhysicalDeviceProperties *deviceProps)
 {
 	VkDeviceSize atomSize = deviceProps->limits.nonCoherentAtomSize;
-	VkDeviceSize alignedSize = (size + atomSize - 1) & ~(atomSize - 1);
+	VkDeviceSize alignedSize = VK_ALIGN_UP(size, atomSize);
 	void *mapped;
 	VK_CHECK(vkMapMemory(device, stagingMem, 0, alignedSize, 0, &mapped), "Failed to map staging buffer memory");
 	memcpy(mapped, data, size);

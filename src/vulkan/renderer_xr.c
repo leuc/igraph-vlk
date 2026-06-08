@@ -1,7 +1,7 @@
 #include "vulkan/renderer_xr.h"
 
-#include "vulkan/utils.h"
 #include "vulkan/images.h"
+#include "vulkan/utils.h"
 
 #ifdef USE_OPENXR
 void renderer_setup_xr(Renderer *r, XrContext *xr)
@@ -34,16 +34,13 @@ void renderer_setup_xr(Renderer *r, XrContext *xr)
 		xr->swapchains[i].image_views = malloc(sizeof(VkImageView) * xr->swapchains[i].image_count);
 
 		create_image(r->core.device, r->core.physicalDevice, xr->swapchains[i].width, xr->swapchains[i].height, r->swapchain.depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->xrDepthImages[i], &r->xrDepthImageMemories[i]);
-		VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->xrDepthImages[i], .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = r->swapchain.depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
-		VK_CHECK(vkCreateImageView(r->core.device, &depthViewInfo, NULL, &r->xrDepthImageViews[i]), "Failed to create XR depth image view");
+		VK_CHECK(vkCreateImageView(r->core.device, &VK_IMAGE_VIEW_2D(r->xrDepthImages[i], r->swapchain.depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT), NULL, &r->xrDepthImageViews[i]), "Failed to create XR depth image view");
 		transition_image_layout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->xrDepthImages[i], r->swapchain.depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
 		for (uint32_t j = 0; j < xr->swapchains[i].image_count; j++) {
-			VkImageViewCreateInfo ivInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = xr->swapchains[i].images[j], .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = xr->swapchain_format, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
-			VK_CHECK(vkCreateImageView(r->core.device, &ivInfo, NULL, &xr->swapchains[i].image_views[j]), "Failed to create XR swapchain image view");
+			VK_CHECK(vkCreateImageView(r->core.device, &VK_IMAGE_VIEW_2D(xr->swapchains[i].images[j], xr->swapchain_format, VK_IMAGE_ASPECT_COLOR_BIT), NULL, &xr->swapchains[i].image_views[j]), "Failed to create XR swapchain image view");
 			VkImageView attachments[] = {xr->swapchains[i].image_views[j], r->xrDepthImageViews[i]};
-			VkFramebufferCreateInfo fbInfo = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = xrRenderPass, .attachmentCount = 2, .pAttachments = attachments, .width = xr->swapchains[i].width, .height = xr->swapchains[i].height, .layers = 1};
-			VK_CHECK(vkCreateFramebuffer(r->core.device, &fbInfo, NULL, &r->xrFramebuffers[i][j]), "Failed to create XR framebuffer");
+			VK_CHECK(vkCreateFramebuffer(r->core.device, &VK_FRAMEBUFFER_INFO(xrRenderPass, attachments, xr->swapchains[i].width, xr->swapchains[i].height), NULL, &r->xrFramebuffers[i][j]), "Failed to create XR framebuffer");
 		}
 	}
 }

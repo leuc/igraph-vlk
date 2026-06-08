@@ -47,8 +47,7 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 
 		VkCommandBufferAllocateInfo commandBufferAllocInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = ctx->cmdPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
 		VK_CHECK(vkAllocateCommandBuffers(r->core.device, &commandBufferAllocInfo, &ctx->cmdBuf), "Failed to allocate compute command buffer");
-		VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
-		VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &ctx->fence), "Failed to create compute fence");
+		VK_CHECK(vkCreateFence(r->core.device, &VK_SIGNALED_FENCE_INFO, NULL, &ctx->fence), "Failed to create compute fence");
 		VK_CHECK(vkResetFences(r->core.device, 1, &ctx->fence), "Failed to reset compute fence after creation");
 
 		VkDescriptorPoolSize descriptorPoolSizes = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3};
@@ -70,30 +69,26 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 		VkMemoryRequirements memReqs;
 		vkGetBufferMemoryRequirements(r->core.device, ctx->nodeBuf, &memReqs);
 		if (memReqs.size < nodeSize) {
-			vkDestroyBuffer(r->core.device, ctx->nodeBuf, NULL);
-			vkFreeMemory(r->core.device, ctx->nodeMem, NULL);
-			ctx->nodeBuf = VK_NULL_HANDLE;
+			VK_DESTROY_BUFFER(r->core.device, ctx->nodeBuf, ctx->nodeMem);
 		}
 	}
 	if (ctx->nodeBuf == VK_NULL_HANDLE) {
-		create_buffer(r->core.device, r->core.physicalDevice, nodeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->nodeBuf, &ctx->nodeMem);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, nodeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &ctx->nodeBuf, &ctx->nodeMem);
 	}
 
 	if (ctx->edgeBuf != VK_NULL_HANDLE) {
 		VkMemoryRequirements memReqs;
 		vkGetBufferMemoryRequirements(r->core.device, ctx->edgeBuf, &memReqs);
 		if (memReqs.size < edgeSize) {
-			vkDestroyBuffer(r->core.device, ctx->edgeBuf, NULL);
-			vkFreeMemory(r->core.device, ctx->edgeMem, NULL);
-			ctx->edgeBuf = VK_NULL_HANDLE;
+			VK_DESTROY_BUFFER(r->core.device, ctx->edgeBuf, ctx->edgeMem);
 		}
 	}
 	if (ctx->edgeBuf == VK_NULL_HANDLE) {
-		create_buffer(r->core.device, r->core.physicalDevice, edgeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->edgeBuf, &ctx->edgeMem);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, edgeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &ctx->edgeBuf, &ctx->edgeMem);
 	}
 
 	if (ctx->hubBuf == VK_NULL_HANDLE) {
-		create_buffer(r->core.device, r->core.physicalDevice, sizeof(CompHub), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &ctx->hubBuf, &ctx->hubMem);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(CompHub), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &ctx->hubBuf, &ctx->hubMem);
 	}
 
 	// Upload node and edge data to GPU
@@ -102,13 +97,12 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 
 	// Update descriptor set with storage buffers
 	VkDescriptorBufferInfo nodeBufferInfo = {ctx->nodeBuf, 0, VK_WHOLE_SIZE}, edgeBufferInfo = {ctx->edgeBuf, 0, VK_WHOLE_SIZE}, hubBufferInfo = {ctx->hubBuf, 0, VK_WHOLE_SIZE};
-	VkWriteDescriptorSet writes[3] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 0, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &nodeBufferInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 1, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeBufferInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, ctx->descSet, 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &hubBufferInfo, NULL}};
+	VkWriteDescriptorSet writes[3] = {VK_WRITE_DESC_BUFFER(ctx->descSet, 0, &nodeBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(ctx->descSet, 1, &edgeBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(ctx->descSet, 2, &hubBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)};
 	vkUpdateDescriptorSets(r->core.device, 3, writes, 0, NULL);
 
 	// Record command buffer
 	VK_CHECK(vkResetCommandBuffer(ctx->cmdBuf, 0), "Failed to reset compute command buffer");
-	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-	VK_CHECK(vkBeginCommandBuffer(ctx->cmdBuf, &beginInfo), "Failed to begin compute command buffer");
+	VK_CHECK(vkBeginCommandBuffer(ctx->cmdBuf, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin compute command buffer");
 
 	vkCmdBindPipeline(ctx->cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computeSphericalPipeline);
 	vkCmdBindDescriptorSets(ctx->cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computePipelineLayout, 0, 1, &ctx->descSet, 0, NULL);
@@ -190,8 +184,8 @@ static void splc_destroy_buffer(VkDevice dev, VkBuffer buf, VkDeviceMemory mem)
 static void splc_create_fallback_buffers(Renderer *r, uint32_t m)
 {
 	VkDeviceSize edge_buf_size = sizeof(SPLCEdge) * m;
-	create_buffer(r->core.device, r->core.physicalDevice, edge_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_edges_buffer, &r->splc_edges_memory);
-	create_buffer(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_max_buffer, &r->splc_max_memory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, edge_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc_edges_buffer, &r->splc_edges_memory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc_max_buffer, &r->splc_max_memory);
 	SPLCEdge *zero_edges = calloc(m, sizeof(SPLCEdge));
 	update_buffer(r->core.device, r->splc_edges_memory, edge_buf_size, zero_edges);
 	free(zero_edges);
@@ -207,8 +201,8 @@ static void splc_write_graphics_descriptors(Renderer *r)
 	VkDescriptorBufferInfo maxWeightInfo = {r->splc_max_buffer, 0, VK_WHOLE_SIZE};
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 		VkWriteDescriptorSet descWrites[] = {
-			{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeWeightInfo, NULL},
-			{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->descriptorSets[i], 3, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &maxWeightInfo, NULL},
+			VK_WRITE_DESC_BUFFER(r->descriptorSets[i], 2, &edgeWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+			VK_WRITE_DESC_BUFFER(r->descriptorSets[i], 3, &maxWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
 		};
 		vkUpdateDescriptorSets(r->core.device, 2, descWrites, 0, NULL);
 	}
@@ -278,11 +272,11 @@ static void splc_create_gpu_buffers(Renderer *r, igraph_integer_t n, uint32_t to
 	VkDeviceSize traffic_buf_size = sizeof(float) * n;
 	VkDeviceSize level_buf_size = sizeof(uint32_t) * n;
 
-	create_buffer(r->core.device, r->core.physicalDevice, node_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_nodes_buffer, &r->splc_nodes_memory);
-	create_buffer(r->core.device, r->core.physicalDevice, edge_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_edges_buffer, &r->splc_edges_memory);
-	create_buffer(r->core.device, r->core.physicalDevice, traffic_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_traffic_buffer, &r->splc_traffic_memory);
-	create_buffer(r->core.device, r->core.physicalDevice, level_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_level_buffer, &r->splc_level_memory);
-	create_buffer(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->splc_max_buffer, &r->splc_max_memory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, node_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc_nodes_buffer, &r->splc_nodes_memory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, edge_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc_edges_buffer, &r->splc_edges_memory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, traffic_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc_traffic_buffer, &r->splc_traffic_memory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, level_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc_level_buffer, &r->splc_level_memory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc_max_buffer, &r->splc_max_memory);
 
 	update_buffer(r->core.device, r->splc_nodes_memory, node_buf_size, splc_nodes);
 	update_buffer(r->core.device, r->splc_edges_memory, edge_buf_size, splc_edges);
@@ -299,7 +293,7 @@ static void splc_write_compute_descriptors(Renderer *r)
 	VkDescriptorBufferInfo levelInfo = {r->splc_level_buffer, 0, VK_WHOLE_SIZE};
 	VkDescriptorBufferInfo maxInfo = {r->splc_max_buffer, 0, VK_WHOLE_SIZE};
 	VkWriteDescriptorSet splcWrites[] = {
-		{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 0, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &nodeInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 1, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &edgeInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &trafficInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 3, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &levelInfo, NULL}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->splc_descriptor_set, 4, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, NULL, &maxInfo, NULL},
+		VK_WRITE_DESC_BUFFER(r->splc_descriptor_set, 0, &nodeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->splc_descriptor_set, 1, &edgeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->splc_descriptor_set, 2, &trafficInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->splc_descriptor_set, 3, &levelInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->splc_descriptor_set, 4, &maxInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
 	};
 	vkUpdateDescriptorSets(r->core.device, 5, splcWrites, 0, NULL);
 }

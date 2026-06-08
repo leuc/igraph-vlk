@@ -32,8 +32,7 @@ void vulkan_render_pass_create(VulkanRenderPass *pass, VulkanCore *core, VulkanS
 	pass->framebuffers = malloc(sizeof(VkFramebuffer) * swapchain->imageCount);
 	for (uint32_t i = 0; i < swapchain->imageCount; i++) {
 		VkImageView attachmentViews[] = {swapchain->views[i], swapchain->depthView};
-		VkFramebufferCreateInfo framebufferInfo = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = pass->renderPass, .attachmentCount = 2, .pAttachments = attachmentViews, .width = swapchain->extent.width, .height = swapchain->extent.height, .layers = 1};
-		VK_CHECK(vkCreateFramebuffer(core->device, &framebufferInfo, NULL, &pass->framebuffers[i]), "Failed to create framebuffer");
+		VK_CHECK(vkCreateFramebuffer(core->device, &VK_FRAMEBUFFER_INFO(pass->renderPass, attachmentViews, swapchain->extent.width, swapchain->extent.height), NULL, &pass->framebuffers[i]), "Failed to create framebuffer");
 	}
 }
 

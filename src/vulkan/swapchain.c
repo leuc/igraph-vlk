@@ -86,16 +86,14 @@ void vulkan_swapchain_create(VulkanSwapchain *swapchain, VulkanCore *core, GLFWw
 
 	swapchain->views = malloc(sizeof(VkImageView) * imageCount);
 	for (uint32_t i = 0; i < imageCount; i++) {
-		VkImageViewCreateInfo imageViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = swapchain->images[i], .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = swapchain->imageFormat, .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
-		VK_CHECK(vkCreateImageView(core->device, &imageViewInfo, NULL, &swapchain->views[i]), "Failed to create image views");
+		VK_CHECK(vkCreateImageView(core->device, &VK_IMAGE_VIEW_2D(swapchain->images[i], swapchain->imageFormat, VK_IMAGE_ASPECT_COLOR_BIT), NULL, &swapchain->views[i]), "Failed to create image views");
 	}
 
 	// Depth Buffer
 	swapchain->depthFormat = VK_FORMAT_D32_SFLOAT;
 	create_image(core->device, core->physicalDevice, extent.width, extent.height, swapchain->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &swapchain->depthImage, &swapchain->depthMemory);
 
-	VkImageViewCreateInfo depthViewInfo = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = swapchain->depthImage, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = swapchain->depthFormat, .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
-	VK_CHECK(vkCreateImageView(core->device, &depthViewInfo, NULL, &swapchain->depthView), "Failed to create depth image view");
+	VK_CHECK(vkCreateImageView(core->device, &VK_IMAGE_VIEW_2D(swapchain->depthImage, swapchain->depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT), NULL, &swapchain->depthView), "Failed to create depth image view");
 
 	free(surfaceFormats);
 	free(presentModes);
@@ -201,27 +199,13 @@ void vulkan_swapchain_recreate(VulkanSwapchain *swapchain, VulkanCore *core, GLF
 
 	swapchain->views = malloc(sizeof(VkImageView) * imageCount);
 	for (uint32_t i = 0; i < imageCount; i++) {
-		VkImageViewCreateInfo imageViewInfo = {
-			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-			.image = swapchain->images[i],
-			.viewType = VK_IMAGE_VIEW_TYPE_2D,
-			.format = swapchain->imageFormat,
-			.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
-		};
-		VK_CHECK(vkCreateImageView(core->device, &imageViewInfo, NULL, &swapchain->views[i]), "Failed to create image views");
+		VK_CHECK(vkCreateImageView(core->device, &VK_IMAGE_VIEW_2D(swapchain->images[i], swapchain->imageFormat, VK_IMAGE_ASPECT_COLOR_BIT), NULL, &swapchain->views[i]), "Failed to create image views");
 	}
 
 	// Create new depth buffer with new extent
 	create_image(core->device, core->physicalDevice, extent.width, extent.height, swapchain->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &swapchain->depthImage, &swapchain->depthMemory);
 
-	VkImageViewCreateInfo depthViewInfo = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-		.image = swapchain->depthImage,
-		.viewType = VK_IMAGE_VIEW_TYPE_2D,
-		.format = swapchain->depthFormat,
-		.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1},
-	};
-	VK_CHECK(vkCreateImageView(core->device, &depthViewInfo, NULL, &swapchain->depthView), "Failed to create depth image view");
+	VK_CHECK(vkCreateImageView(core->device, &VK_IMAGE_VIEW_2D(swapchain->depthImage, swapchain->depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT), NULL, &swapchain->depthView), "Failed to create depth image view");
 
 	free(surfaceFormats);
 	free(presentModes);

@@ -2,7 +2,6 @@
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_ui.h"
 #include "vulkan/utils.h"
-#include "vulkan/utils.h"
 #include <stddef.h>
 
 void renderer_create_ui_pipelines(Renderer *r)
@@ -17,18 +16,12 @@ void renderer_create_ui_pipelines(Renderer *r)
 	VK_CHECK(create_shader_module(r->core.device, TEXTQUAD_VERT_SHADER_PATH, &textQuadVertexShaderModule), "Failed to create text quad vertex shader module");
 	VK_CHECK(create_shader_module(r->core.device, TEXTQUAD_FRAG_SHADER_PATH, &textQuadFragmentShaderModule), "Failed to create text quad fragment shader module");
 
-	VkPipelineViewportStateCreateInfo viewportState = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, .viewportCount = 1, .scissorCount = 1};
-	VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-	VkPipelineDynamicStateCreateInfo dynamicState = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO, .dynamicStateCount = 2, .pDynamicStates = dynamicStates};
-	VkPipelineRasterizationStateCreateInfo rasterizationState = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO, .polygonMode = VK_POLYGON_MODE_FILL, .lineWidth = 1.0f, .cullMode = VK_CULL_MODE_NONE, .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE};
-	VkPipelineMultisampleStateCreateInfo multisampleState = {.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT};
-	VkPipelineColorBlendAttachmentState colorBlendAttachment = VK_DEFAULT_COLOR_BLEND_ATTACHMENT;
-	VkPipelineColorBlendStateCreateInfo colorBlendState = {.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO, .attachmentCount = 1, .pAttachments = &colorBlendAttachment};
+	VK_PIPELINE_COMMON_STATE_DECLS();
 	VkPipelineDepthStencilStateCreateInfo uiDepthStencilState = VK_DEPTH_STENCIL_STATE_DISABLED;
 	VkPipelineDepthStencilStateCreateInfo menuDepthStencilState = VK_DEPTH_STENCIL_STATE_TEST_NO_WRITE_LESS_EQUAL;
 
 	// UI
-	VkPipelineShaderStageCreateInfo uiShaderStages[] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, uiVertexShaderModule, "main", NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, uiFragmentShaderModule, "main", NULL}};
+	VkPipelineShaderStageCreateInfo uiShaderStages[] = {VK_SHADER_STAGE_VERT(uiVertexShaderModule), VK_SHADER_STAGE_FRAG(uiFragmentShaderModule)};
 	VkVertexInputBindingDescription uiBindings[] = {{0, sizeof(UIVertex), VK_VERTEX_INPUT_RATE_VERTEX}, {1, sizeof(UIInstance), VK_VERTEX_INPUT_RATE_INSTANCE}};
 	VkVertexInputAttributeDescription uiAttributes[] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(UIVertex, pos)}, {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(UIVertex, tex)}, {2, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(UIInstance, screenPos)}, {3, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(UIInstance, charRect)}, {4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(UIInstance, charUV)}, {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(UIInstance, color)}};
 	VkPipelineVertexInputStateCreateInfo uiVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 2, .pVertexBindingDescriptions = uiBindings, .vertexAttributeDescriptionCount = 6, .pVertexAttributeDescriptions = uiAttributes};
@@ -37,7 +30,7 @@ void renderer_create_ui_pipelines(Renderer *r)
 	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &uiPipelineInfo, NULL, &r->uiPipeline), "Failed to create UI graphics pipeline");
 
 	// Node Labels (single quad per label, surface-oriented, depth-writing opaque)
-	VkPipelineShaderStageCreateInfo labelShaderStages[] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, labelVertexShaderModule, "main", NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, labelFragmentShaderModule, "main", NULL}};
+	VkPipelineShaderStageCreateInfo labelShaderStages[] = {VK_SHADER_STAGE_VERT(labelVertexShaderModule), VK_SHADER_STAGE_FRAG(labelFragmentShaderModule)};
 	VkPipelineInputAssemblyStateCreateInfo labelInputAssemblyState = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
 	VkVertexInputBindingDescription labelBindings[] = {{0, sizeof(QuadVertex), VK_VERTEX_INPUT_RATE_VERTEX}, {1, sizeof(NodeLabelInstance), VK_VERTEX_INPUT_RATE_INSTANCE}};
 	VkVertexInputAttributeDescription labelAttributes[] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(QuadVertex, pos)}, {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(QuadVertex, tex)}, {2, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(NodeLabelInstance, worldPos)}, {3, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(NodeLabelInstance, bgColor)}, {4, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(NodeLabelInstance, scale)}, {5, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(NodeLabelInstance, right)}, {6, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(NodeLabelInstance, up)}, {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(NodeLabelInstance, textUV)}, {8, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(NodeLabelInstance, textRegion)}};
@@ -48,7 +41,7 @@ void renderer_create_ui_pipelines(Renderer *r)
 	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &labelPipelineInfo, NULL, &r->labelPipeline), "Failed to create label graphics pipeline");
 
 	// Menu
-	VkPipelineShaderStageCreateInfo menuShaderStages[] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, menuVertexShaderModule, "main", NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, menuFragmentShaderModule, "main", NULL}};
+	VkPipelineShaderStageCreateInfo menuShaderStages[] = {VK_SHADER_STAGE_VERT(menuVertexShaderModule), VK_SHADER_STAGE_FRAG(menuFragmentShaderModule)};
 	VkVertexInputBindingDescription menuBindings[] = {{0, sizeof(QuadVertex), VK_VERTEX_INPUT_RATE_VERTEX}, {1, sizeof(MenuInstance), VK_VERTEX_INPUT_RATE_INSTANCE}};
 	VkVertexInputAttributeDescription menuAttributes[] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(QuadVertex, pos)}, {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(QuadVertex, tex)}, {2, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(MenuInstance, worldPos)}, {3, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(MenuInstance, texCoord)}, {4, 1, VK_FORMAT_R32_SFLOAT, offsetof(MenuInstance, texId)}, {5, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(MenuInstance, scale)}, {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(MenuInstance, rotation)}, {7, 1, VK_FORMAT_R32_SFLOAT, offsetof(MenuInstance, hovered)}};
 	VkPipelineVertexInputStateCreateInfo menuVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 2, .pVertexBindingDescriptions = menuBindings, .vertexAttributeDescriptionCount = 8, .pVertexAttributeDescriptions = menuAttributes};
@@ -57,7 +50,7 @@ void renderer_create_ui_pipelines(Renderer *r)
 	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &menuPipelineInfo, NULL, &r->menuPipeline), "Failed to create menu graphics pipeline");
 
 	// Text Quad (generic: background color + text atlas compositing)
-	VkPipelineShaderStageCreateInfo textQuadShaderStages[] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_VERTEX_BIT, textQuadVertexShaderModule, "main", NULL}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0, VK_SHADER_STAGE_FRAGMENT_BIT, textQuadFragmentShaderModule, "main", NULL}};
+	VkPipelineShaderStageCreateInfo textQuadShaderStages[] = {VK_SHADER_STAGE_VERT(textQuadVertexShaderModule), VK_SHADER_STAGE_FRAG(textQuadFragmentShaderModule)};
 	VkVertexInputBindingDescription textQuadBindings[] = {{0, sizeof(QuadVertex), VK_VERTEX_INPUT_RATE_VERTEX}, {1, sizeof(TextQuadInstance), VK_VERTEX_INPUT_RATE_INSTANCE}};
 	VkVertexInputAttributeDescription textQuadAttributes[] = {
 		{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(QuadVertex, pos)}, {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(QuadVertex, tex)}, {2, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(TextQuadInstance, worldPos)}, {3, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(TextQuadInstance, bgColor)}, {4, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(TextQuadInstance, scale)}, {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(TextQuadInstance, rotation)}, {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(TextQuadInstance, textUV)}, {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(TextQuadInstance, textRegion)},

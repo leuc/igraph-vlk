@@ -137,8 +137,7 @@ void renderer_draw_frame(Renderer *r, GraphData *graph)
 
 	VK_CHECK(vkResetFences(r->core.device, 1, &r->commands.inFlightFences[r->commands.currentFrame]), "Failed to reset in-flight fences");
 	VK_CHECK(vkResetCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], 0), "Failed to reset command buffer");
-	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-	VK_CHECK(vkBeginCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], &beginInfo), "Failed to begin command buffer");
+	VK_CHECK(vkBeginCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], &VK_CMD_BEGIN_INFO), "Failed to begin command buffer");
 
 	// SPLC animation: advance one level every splc_level_interval seconds
 	if (r->splc_active) {

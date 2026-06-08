@@ -1,9 +1,9 @@
 #include "vulkan/menu.h"
+#include "vulkan/buffers.h"
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_geometry.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
-#include "vulkan/buffers.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -470,8 +470,8 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 		VkDescriptorBufferInfo bufferInfo = {r->uniformBuffers[i], 0, sizeof(UniformBufferObject)};
 		VkDescriptorImageInfo imageInfo = {r->textureSampler, r->menuTextAtlas.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 		VkWriteDescriptorSet writes[] = {
-			{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->textQuadDescriptorSets[i], 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &bufferInfo, NULL},
-			{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, r->textQuadDescriptorSets[i], 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imageInfo, NULL, NULL},
+			VK_WRITE_DESC_BUFFER(r->textQuadDescriptorSets[i], 0, &bufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER),
+			VK_WRITE_DESC_IMAGE(r->textQuadDescriptorSets[i], 1, &imageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER),
 		};
 		vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
 	}
@@ -479,12 +479,8 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 	// --- Upload MenuInstance buffer (background-only quads) ---
 	if (instance_count > 0) {
 		VkDeviceSize bufferSize = sizeof(MenuInstance) * instance_count;
-		if (r->menuInstanceBuffer != VK_NULL_HANDLE) {
-			VK_CHECK(vkDeviceWaitIdle(r->core.device), "Failed to wait for device idle before menu buffer rebuild");
-			vkDestroyBuffer(r->core.device, r->menuInstanceBuffer, NULL);
-			vkFreeMemory(r->core.device, r->menuInstanceBufferMemory, NULL);
-		}
-		create_buffer(r->core.device, r->core.physicalDevice, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->menuInstanceBuffer, &r->menuInstanceBufferMemory);
+		VK_DESTROY_BUFFER(r->core.device, r->menuInstanceBuffer, r->menuInstanceBufferMemory);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->menuInstanceBuffer, &r->menuInstanceBufferMemory);
 		update_buffer(r->core.device, r->menuInstanceBufferMemory, bufferSize, instances);
 		r->menuNodeCount = instance_count;
 	}
@@ -492,14 +488,8 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 	// --- Upload TextQuadInstance buffer (text-bearing quads) ---
 	if (tq_count > 0) {
 		VkDeviceSize tqBufferSize = sizeof(TextQuadInstance) * tq_count;
-		if (r->textQuadInstanceBuffer != VK_NULL_HANDLE) {
-			if (instance_count == 0) {
-				VK_CHECK(vkDeviceWaitIdle(r->core.device), "Failed to wait for device idle before text quad buffer rebuild");
-			}
-			vkDestroyBuffer(r->core.device, r->textQuadInstanceBuffer, NULL);
-			vkFreeMemory(r->core.device, r->textQuadInstanceBufferMemory, NULL);
-		}
-		create_buffer(r->core.device, r->core.physicalDevice, tqBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->textQuadInstanceBuffer, &r->textQuadInstanceBufferMemory);
+		VK_DESTROY_BUFFER(r->core.device, r->textQuadInstanceBuffer, r->textQuadInstanceBufferMemory);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, tqBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->textQuadInstanceBuffer, &r->textQuadInstanceBufferMemory);
 		update_buffer(r->core.device, r->textQuadInstanceBufferMemory, tqBufferSize, tq_instances);
 		r->textQuadInstanceCount = tq_count;
 	}
