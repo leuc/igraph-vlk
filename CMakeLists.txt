@@ -93,6 +93,10 @@ add_executable(igraph-vlk
     src/vulkan/utils.c
     src/vulkan/app_path.c
     src/vulkan/text.c
+    # Extracted refactor modules
+    src/vulkan/renderer_cleanup.c
+    src/vulkan/renderer_update_node_labels.c
+    src/vulkan/renderer_init_splc_buffers.c
 
     # Graph modules
     src/graph/graph_core.c

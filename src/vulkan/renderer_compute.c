@@ -5,6 +5,7 @@
 
 #include "graph/wrappers_splc.h"
 #include "vulkan/buffers.h"
+#include "vulkan/renderer_init_splc_buffers.h"
 #include "vulkan/utils.h"
 
 VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge *edgeResults)
@@ -303,17 +304,8 @@ static void splc_write_compute_descriptors(Renderer *r)
 // ============================================================================
 void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 {
-	VkBuffer old_nodes_buf = r->splc_nodes_buffer;
-	VkDeviceMemory old_nodes_mem = r->splc_nodes_memory;
-	VkBuffer old_edges_buf = r->splc_edges_buffer;
-	VkDeviceMemory old_edges_mem = r->splc_edges_memory;
-	VkBuffer old_traffic_buf = r->splc_traffic_buffer;
-	VkDeviceMemory old_traffic_mem = r->splc_traffic_memory;
-	VkBuffer old_level_buf = r->splc_level_buffer;
-	VkDeviceMemory old_level_mem = r->splc_level_memory;
-	VkBuffer old_max_buf = r->splc_max_buffer;
-	VkDeviceMemory old_max_mem = r->splc_max_memory;
-
+	BufPair old_bufs[5];
+	splc_save_old_buffers(r, old_bufs);
 	splc_destroy_old_buffers(r);
 
 	igraph_integer_t n = graph->node_count;
@@ -328,8 +320,8 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 		igraph_vector_int_destroy(&levels);
 		splc_create_fallback_buffers(r, m);
 		splc_write_graphics_descriptors(r);
-		splc_destroy_buffer(r->core.device, old_edges_buf, old_edges_mem);
-		splc_destroy_buffer(r->core.device, old_max_buf, old_max_mem);
+		splc_destroy_buffer(r->core.device, old_bufs[1].buf, old_bufs[1].mem);
+		splc_destroy_buffer(r->core.device, old_bufs[4].buf, old_bufs[4].mem);
 		return;
 	}
 
@@ -355,11 +347,8 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	free(traffic);
 	igraph_vector_int_destroy(&levels);
 
-	splc_destroy_buffer(r->core.device, old_nodes_buf, old_nodes_mem);
-	splc_destroy_buffer(r->core.device, old_edges_buf, old_edges_mem);
-	splc_destroy_buffer(r->core.device, old_traffic_buf, old_traffic_mem);
-	splc_destroy_buffer(r->core.device, old_level_buf, old_level_mem);
-	splc_destroy_buffer(r->core.device, old_max_buf, old_max_mem);
+	for (int i = 0; i < 5; i++)
+		splc_destroy_buffer(r->core.device, old_bufs[i].buf, old_bufs[i].mem);
 
 	r->edgeCount = graph->edge_count;
 	r->splc_active = true;
