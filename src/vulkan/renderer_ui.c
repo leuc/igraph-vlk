@@ -2,10 +2,10 @@
 
 #include <string.h>
 
+#include "vulkan/buffers.h"
 #include "vulkan/renderer_geometry.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
-#include "vulkan/buffers.h"
 
 extern FontAtlas globalAtlas;
 
@@ -16,8 +16,8 @@ void renderer_update_ui(Renderer *r, const char *text)
 	int total_len = 0;
 
 	UIInstance instances[1024];
-	float xoff = -0.98f;
-	float scale = 0.65f;
+	float xoff = -0.995f;
+	float scale = 1.6f;
 
 	// Start with main HUD text
 	int len = strlen(text);
@@ -40,7 +40,7 @@ void renderer_update_ui(Renderer *r, const char *text)
 		instances[total_len].color[1] = 1;
 		instances[total_len].color[2] = 1;
 		instances[total_len].color[3] = 1;
-		xoff += (ci->xadvance * scale) / 1720.0f;
+		xoff += (ci->xadvance * scale) / (float)r->swapchain.extent.width;
 		total_len++;
 	}
 

@@ -96,6 +96,8 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[ubo_idx], 0, NULL);
 	}
 	if (r->showUI) {
+		float viewportSize[2] = {(float)extent.width, (float)extent.height};
+		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(mat4) * 2 + sizeof(float) + sizeof(uint32_t), sizeof(float) * 2, viewportSize);
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->uiPipeline);
 		VkBuffer bVs[] = {r->uiBgVertexBuffer, r->uiBgInstanceBuffer};
 		VkDeviceSize bOs[] = {0, 0};
