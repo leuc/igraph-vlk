@@ -399,6 +399,10 @@ static void escape_record_iteration(VkCommandBuffer cmd, Renderer *r, EscapeSimP
 
 	// RT Pass: compute escape vectors via ray tracing (writes escape_vector in physics buffer)
 	if (r->escape_rt_supported) {
+		// Barrier: previous compute writes / host writes -> RT read (memory domain visibility)
+		VkMemoryBarrier preRtBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT};
+		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 1, &preRtBarrier, 0, NULL, 0, NULL);
+
 		renderer_escape_record_rt_pass(cmd, r, node_count, frame_index);
 
 		// Barrier: RT shaders -> compute (physics reads escape_vector)
@@ -664,4 +668,5 @@ void igraph_vlk_layout_escape_cleanup(Renderer *r)
 	}
 
 	r->escape_initialized = VK_FALSE;
+	r->escape_rt_initialized = false;
 }

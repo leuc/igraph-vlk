@@ -434,8 +434,8 @@ void renderer_escape_create_rt_pipeline(Renderer *r, VkBuffer physics_buffer)
 
 	// Each region: aligned to baseAlignment
 	uint32_t raygenRegionSize = VK_ALIGN_UP(handleSize, baseAlign);
-	uint32_t missRegionSize = VK_ALIGN_UP(handleSize, handleAlign);
-	uint32_t hitRegionSize = VK_ALIGN_UP(handleSize, handleAlign);
+	uint32_t missRegionSize = VK_ALIGN_UP(handleSize, baseAlign);
+	uint32_t hitRegionSize = VK_ALIGN_UP(handleSize, baseAlign);
 
 	uint32_t sbtSize = raygenRegionSize + missRegionSize + hitRegionSize;
 	// Pad to baseAlignment boundary
@@ -616,7 +616,6 @@ void renderer_escape_update_tlas_cpu(Renderer *r, uint32_t node_count)
 	pfnGetAccelerationStructureBuildSizesKHR(dev, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primCount, &sizeInfo);
 
 	// Recreate TLAS buffer
-	pfnDestroyAccelerationStructureKHR(dev, r->escape_tlas, NULL);
 	VK_DESTROY_BUFFER(dev, r->escape_tlas_buffer, r->escape_tlas_memory);
 	create_buffer(dev, r->core.physicalDevice, sizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->escape_tlas_buffer, &r->escape_tlas_memory);
 
