@@ -234,6 +234,14 @@ int main(int argc, char **argv)
 			igraph_matrix_destroy(&snap);
 		}
 
+		// Tick GPU escape simulation if active (non-blocking, one iteration per frame)
+		if (app.renderer.escape_sim_active && app.current_graph.graph_initialized) {
+			if (!igraph_vlk_layout_escape_tick(&app.renderer)) {
+				app.renderer.escape_running = false;
+				app.renderer.labelTreeNeedsRebuild = true;
+			}
+		}
+
 		// Generate menu buffers if menu is open or processing
 		if (app.app_ctx.current_state == STATE_MENU_OPEN || app.app_ctx.current_state == STATE_JOB_IN_PROGRESS || app.app_ctx.current_state == STATE_EXECUTING) {
 			generate_vulkan_menu_buffers(&app.app_ctx, &app.renderer);

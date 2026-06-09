@@ -153,10 +153,19 @@ void update_app_state(AppState *state)
 			if (status == JOB_STATUS_COMPLETED) {
 				WorkerJob *job = state->current_worker_job;
 				if (job) {
+					// Call apply_func only once (first time we see COMPLETED)
 					if (job->apply_func && job->result_data) {
 						job->apply_func(job->ctx, job->result_data);
 						Renderer *r = &state->renderer;
 						r->labelTreeNeedsRebuild = true;
+						job->apply_func = NULL; // Prevent re-invocation
+					}
+
+					// If GPU simulation is still running (e.g. escape layout), keep job alive for progress tracking
+					if (state->renderer.escape_sim_active) {
+						state->job_progress = (float)state->renderer.escape_current_iter / (float)state->renderer.escape_max_iters;
+						snprintf(state->job_status_message, sizeof(state->job_status_message), "GPU Simulation");
+						break;
 					}
 
 					if (job->free_func && job->result_data) {

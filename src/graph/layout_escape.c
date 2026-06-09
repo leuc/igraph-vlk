@@ -89,6 +89,21 @@ typedef struct
 	uint32_t nodeB;
 } EdgeGPU;
 
+typedef struct
+{
+	float dt;
+	float alpha;
+	float beta;
+	float ideal_length;
+	float friction;
+	uint32_t node_count;
+} EscapeSimParams;
+
+// Forward declarations for per-frame tick
+static bool escape_check_convergence(Renderer *r, float epsilon);
+static void escape_readback_positions(Renderer *r, GraphData *data);
+static void escape_record_iteration(VkCommandBuffer cmd, Renderer *r, EscapeSimParams *params, uint32_t node_count, uint32_t edge_count, uint32_t frame_index);
+
 // ============================================================================
 // CPU worker: topology analysis + space-filling curve placement
 // ============================================================================
@@ -183,15 +198,79 @@ void *compute_escape_layout(igraph_t *graph)
 // GPU simulation context management
 // ============================================================================
 
-typedef struct
+// ============================================================================
+// Per-frame GPU simulation tick (non-blocking)
+// ============================================================================
+
+bool igraph_vlk_layout_escape_tick(Renderer *r)
 {
-	float dt;
-	float alpha;
-	float beta;
-	float ideal_length;
-	float friction;
-	uint32_t node_count;
-} EscapeSimParams;
+	if (!r->escape_sim_active)
+		return false;
+
+	uint32_t n = r->escape_node_count;
+	uint32_t m = r->escape_edge_count;
+
+	if (r->escape_needs_wait) {
+		VK_CHECK(vkWaitForFences(r->core.device, 1, &r->escape_fence, VK_TRUE, UINT64_MAX), "Failed to wait for escape fence");
+		VK_CHECK(vkResetFences(r->core.device, 1, &r->escape_fence), "Failed to reset escape fence");
+
+		// CPU-side TLAS update for next frame's RT pass
+		if (r->escape_rt_supported) {
+			renderer_escape_update_tlas_cpu(r, n);
+		}
+
+		if (escape_check_convergence(r, r->escape_epsilon)) {
+			printf("[Escape] Converged at iteration %u (stress=%.2f)\n", r->escape_current_iter, r->escape_previous_stress);
+			escape_readback_positions(r, r->escape_graph_data);
+			r->escape_sim_active = false;
+			return false;
+		}
+
+		if (r->escape_current_iter >= r->escape_max_iters) {
+			printf("[Escape] Max iterations reached (%u)\n", r->escape_max_iters);
+			escape_readback_positions(r, r->escape_graph_data);
+			r->escape_sim_active = false;
+			return false;
+		}
+	}
+
+	// Decay forces
+	r->escape_alpha *= r->escape_force_decay;
+	if (r->escape_alpha < r->escape_alpha_floor)
+		r->escape_alpha = r->escape_alpha_floor;
+	r->escape_beta *= r->escape_force_decay;
+
+	EscapeSimParams params = {
+		.dt = r->escape_dt,
+		.alpha = r->escape_alpha,
+		.beta = r->escape_beta,
+		.ideal_length = r->escape_ideal_length,
+		.friction = r->escape_friction,
+		.node_count = n,
+	};
+
+	// Record and submit iteration
+	VK_CHECK(vkResetCommandBuffer(r->escape_cmd_buf, 0), "Failed to reset escape command buffer");
+	VK_CHECK(vkBeginCommandBuffer(r->escape_cmd_buf, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin escape command buffer");
+	escape_record_iteration(r->escape_cmd_buf, r, &params, n, m, r->escape_current_iter);
+	VK_CHECK(vkEndCommandBuffer(r->escape_cmd_buf), "Failed to end escape command buffer");
+
+	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &r->escape_cmd_buf};
+	VkResult res = vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, r->escape_fence);
+	if (res != VK_SUCCESS) {
+		fprintf(stderr, "[escape] Queue submit failed at iteration %u\n", r->escape_current_iter);
+		r->escape_sim_active = false;
+		return false;
+	}
+
+	r->escape_needs_wait = true;
+	r->escape_current_iter++;
+
+	if (r->escape_current_iter % 10 == 0 || r->escape_current_iter == r->escape_max_iters)
+		printf("[Escape] iter %4u / %u | stress=%.2f alpha=%.3f beta=%.3f\n", r->escape_current_iter, r->escape_max_iters, r->escape_previous_stress, r->escape_alpha, r->escape_beta);
+
+	return true;
+}
 
 static void escape_ensure_command_resources(Renderer *r)
 {
@@ -628,7 +707,7 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 }
 
 // ============================================================================
-// Custom apply function: applies initial Hilbert positions then runs GPU drive
+// Setup-only apply: applies initial Hilbert positions then starts GPU sim
 // ============================================================================
 
 void apply_escape_layout(ExecutionContext *ctx, void *result_data)
@@ -642,7 +721,84 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	}
 
 	AppState *state = ctx->app_state;
-	igraph_vlk_layout_escape_drive(state, 0.15f, 200, 0.0001f);
+	Renderer *r = &state->renderer;
+	GraphData *data = &state->current_graph;
+	uint32_t n = data->node_count;
+	uint32_t m = data->edge_count;
+
+	if (n == 0)
+		return;
+
+	// Compute bounding box diagonal
+	float bb_min_x = FLT_MAX, bb_max_x = -FLT_MAX;
+	float bb_min_y = FLT_MAX, bb_max_y = -FLT_MAX;
+	float bb_min_z = FLT_MAX, bb_max_z = -FLT_MAX;
+	for (uint32_t i = 0; i < n; i++) {
+		float x = data->nodes[i].position[0], y = data->nodes[i].position[1], z = data->nodes[i].position[2];
+		if (x < bb_min_x)
+			bb_min_x = x;
+		if (x > bb_max_x)
+			bb_max_x = x;
+		if (y < bb_min_y)
+			bb_min_y = y;
+		if (y > bb_max_y)
+			bb_max_y = y;
+		if (z < bb_min_z)
+			bb_min_z = z;
+		if (z > bb_max_z)
+			bb_max_z = z;
+	}
+	float bb_diag = sqrtf((bb_max_x - bb_min_x) * (bb_max_x - bb_min_x) + (bb_max_y - bb_min_y) * (bb_max_y - bb_min_y) + (bb_max_z - bb_min_z) * (bb_max_z - bb_min_z));
+	r->escape_bb_diag = bb_diag;
+	printf("[Escape] Setup: %u nodes %u edges bb_diag=%.1f\n", n, m, bb_diag);
+
+	escape_ensure_command_resources(r);
+	escape_create_gpu_buffers(r, data);
+
+	// --- Dynamic parameter scaling based on graph properties ---
+	float avg_degree = (n > 0) ? (float)m / (float)n : 1.0f;
+	float density = (n > 1) ? (float)m / ((float)n * (float)(n - 1)) : 0.0f;
+	float log_n = logf((float)n + 1.0f);
+
+	float node_spacing = bb_diag / cbrtf((float)n);
+	float density_scale = 1.0f / (1.0f + avg_degree * 0.1f);
+	float ideal_length = node_spacing * density_scale;
+	if (ideal_length < 0.5f)
+		ideal_length = 0.5f;
+
+	float alpha0 = 0.50f;
+	float beta0 = 0.50f;
+
+	float friction0 = 0.90f - 0.03f * fminf(log_n / 10.0f, 1.0f);
+	if (friction0 < 0.78f)
+		friction0 = 0.78f;
+
+	float dt0 = 0.05f / (1.0f + log_n * 0.04f);
+
+	float force_decay = 0.992f;
+	float alpha_floor = 0.10f;
+
+	printf("[Escape] Params: avg_deg=%.1f density=%.4f ideal=%.1f alpha=%.3f beta=%.3f friction=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, ideal_length, alpha0, beta0, friction0, dt0, force_decay);
+
+	// Store simulation state in Renderer for per-frame tick
+	r->escape_previous_stress = INFINITY;
+	r->escape_stable_frames = 0;
+	r->escape_running = true;
+	r->escape_sim_active = true;
+	r->escape_needs_wait = false;
+	r->escape_current_iter = 0;
+	r->escape_max_iters = 200;
+	r->escape_epsilon = 0.0001f;
+	r->escape_dt = dt0;
+	r->escape_alpha = alpha0;
+	r->escape_beta = beta0;
+	r->escape_ideal_length = ideal_length;
+	r->escape_friction = friction0;
+	r->escape_force_decay = force_decay;
+	r->escape_alpha_floor = alpha_floor;
+	r->escape_node_count = n;
+	r->escape_edge_count = m;
+	r->escape_graph_data = data;
 }
 
 // ============================================================================

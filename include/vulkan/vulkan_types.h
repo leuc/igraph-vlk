@@ -373,6 +373,23 @@ typedef struct Renderer
 	bool escape_running;
 	int escape_iteration;
 
+	// Escape per-frame GPU tick state
+	bool escape_sim_active;
+	bool escape_needs_wait;
+	uint32_t escape_max_iters;
+	uint32_t escape_current_iter;
+	float escape_force_decay;
+	float escape_alpha_floor;
+	float escape_epsilon;
+	float escape_dt;
+	float escape_alpha;
+	float escape_beta;
+	float escape_ideal_length;
+	float escape_friction;
+	uint32_t escape_node_count;
+	uint32_t escape_edge_count;
+	GraphData *escape_graph_data;
+
 	// Ray Tracing (Hybrid Escape Layout)
 	bool escape_rt_supported;
 	bool escape_rt_initialized;

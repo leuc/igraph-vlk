@@ -67,4 +67,7 @@ struct AppState;
 void igraph_vlk_layout_escape_drive(struct AppState *state, float max_bb_diag_ratio, uint32_t max_iters, float epsilon);
 void igraph_vlk_layout_escape_cleanup(struct Renderer *r);
 
+// Per-frame GPU simulation tick (returns true if simulation should continue)
+bool igraph_vlk_layout_escape_tick(struct Renderer *r);
+
 #endif // GRAPH_WRAPPERS_LAYOUT_H
