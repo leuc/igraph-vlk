@@ -5,6 +5,7 @@
 #include "interaction/state.h"
 #include "vulkan/buffers.h"
 #include "vulkan/renderer.h"
+#include "vulkan/renderer_escape_layout.h"
 #include "vulkan/utils.h"
 #include <float.h>
 #include <igraph.h>
@@ -369,19 +370,38 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 		VK_WRITE_DESC_BUFFER(r->escape_stress_desc_set, 2, &stressInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
 	};
 	vkUpdateDescriptorSets(r->core.device, 3, stressWrites, 0, NULL);
+
+	// Build RT acceleration structures and pipeline on first call
+	if (!r->escape_rt_initialized) {
+		fprintf(stderr, "[Escape] Building RT acceleration structures...\n");
+		renderer_escape_build_blas(r);
+		renderer_escape_build_tlas(r, data, n);
+		renderer_escape_create_rt_pipeline(r, r->escape_physics_buffer);
+		r->escape_rt_supported = true;
+		r->escape_rt_initialized = true;
+	}
 }
 
 // ============================================================================
 // Record a single simulation iteration into command buffer
 // ============================================================================
 
-static void escape_record_iteration(VkCommandBuffer cmd, Renderer *r, EscapeSimParams *params, uint32_t node_count, uint32_t edge_count)
+static void escape_record_iteration(VkCommandBuffer cmd, Renderer *r, EscapeSimParams *params, uint32_t node_count, uint32_t edge_count, uint32_t frame_index)
 {
 	vkCmdFillBuffer(cmd, r->escape_global_stress_buffer, 0, sizeof(float), 0);
 
 	// Barrier: transfer -> compute
 	VkMemoryBarrier clearBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT};
 	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &clearBarrier, 0, NULL, 0, NULL);
+
+	// RT Pass: compute escape vectors via ray tracing (writes escape_vector in physics buffer)
+	if (r->escape_rt_supported) {
+		renderer_escape_record_rt_pass(cmd, r, node_count, frame_index);
+
+		// Barrier: RT shaders -> compute (physics reads escape_vector)
+		VkMemoryBarrier rtBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT};
+		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &rtBarrier, 0, NULL, 0, NULL);
+	}
 
 	// Dispatch physics (force blend)
 	uint32_t group_nodes = (node_count + 255) / 256;
@@ -390,7 +410,7 @@ static void escape_record_iteration(VkCommandBuffer cmd, Renderer *r, EscapeSimP
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->escape_physics_pipeline_layout, 0, 1, &r->escape_physics_desc_set, 0, NULL);
 	vkCmdPushConstants(cmd, r->escape_physics_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(EscapeSimParams), params);
 	vkCmdDispatch(cmd, group_nodes, 1, 1);
-	// Barrier: physics -> stress + TLAS
+	// Barrier: physics -> stress
 	VkMemoryBarrier physicsBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT};
 	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &physicsBarrier, 0, NULL, 0, NULL);
 
@@ -494,6 +514,7 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 			bb_max_z = z;
 	}
 	float bb_diag = sqrtf((bb_max_x - bb_min_x) * (bb_max_x - bb_min_x) + (bb_max_y - bb_min_y) * (bb_max_y - bb_min_y) + (bb_max_z - bb_min_z) * (bb_max_z - bb_min_z));
+	r->escape_bb_diag = bb_diag;
 	float ideal_length = bb_diag * max_bb_diag_ratio;
 	printf("[Escape] Drive: %u nodes %u edges bb_diag=%.1f ideal=%.1f\n", n, m, bb_diag, ideal_length);
 
@@ -528,7 +549,7 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 		VK_CHECK(vkResetCommandBuffer(r->escape_cmd_buf, 0), "Failed to reset escape command buffer");
 		VK_CHECK(vkBeginCommandBuffer(r->escape_cmd_buf, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin escape command buffer");
 
-		escape_record_iteration(r->escape_cmd_buf, r, &params, n, m);
+		escape_record_iteration(r->escape_cmd_buf, r, &params, n, m, iter);
 
 		VK_CHECK(vkEndCommandBuffer(r->escape_cmd_buf), "Failed to end escape command buffer");
 
@@ -543,6 +564,12 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 
 		// Wait for completion and check convergence
 		VK_CHECK(vkWaitForFences(r->core.device, 1, &r->escape_fence, VK_TRUE, UINT64_MAX), "Failed to wait for escape fence on readback");
+
+		// CPU-side TLAS update for next frame's RT pass
+		if (r->escape_rt_supported) {
+			renderer_escape_update_tlas_cpu(r, n);
+		}
+
 		bool converged = escape_check_convergence(r, epsilon);
 		if (iter % 10 == 0 || converged || iter == max_iters - 1)
 			printf("[Escape] iter %4u / %u | stress=%.2f stable=%u alpha=%.3f\n", iter + 1, max_iters, r->escape_previous_stress, r->escape_stable_frames, params.alpha);
@@ -582,6 +609,8 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 
 void igraph_vlk_layout_escape_cleanup(Renderer *r)
 {
+	renderer_escape_cleanup_rt(r);
+
 	VK_DESTROY_BUFFER(r->core.device, r->escape_physics_buffer, r->escape_physics_memory);
 	VK_DESTROY_BUFFER(r->core.device, r->escape_adjacency_buffer, r->escape_adjacency_memory);
 	VK_DESTROY_BUFFER(r->core.device, r->escape_offsets_buffer, r->escape_offsets_memory);

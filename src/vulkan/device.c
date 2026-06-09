@@ -23,8 +23,8 @@ static const int VALIDATION_LAYER_COUNT = 1;
 #endif
 
 // Required device extensions
-static const char *BASE_DEVICE_EXTENSIONS[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME};
-static const int BASE_DEVICE_EXTENSION_COUNT = 3;
+static const char *BASE_DEVICE_EXTENSIONS[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
+static const int BASE_DEVICE_EXTENSION_COUNT = 7;
 
 static int rate_device_suitability(VkPhysicalDevice device)
 {
@@ -282,7 +282,22 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 		.pNext = &atomicFloatFeatures,
 		.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE,
 	};
-	VkDeviceCreateInfo deviceInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .queueCreateInfoCount = queueCreateInfoCount, .pQueueCreateInfos = queueCreateInfos, .enabledExtensionCount = deviceExtensionCount, .ppEnabledExtensionNames = deviceExtensions, .pEnabledFeatures = &deviceFeatures, .pNext = &descIndexingFeatures, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeatures = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+		.pNext = &descIndexingFeatures,
+		.accelerationStructure = VK_TRUE,
+	};
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeatures = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+		.pNext = &accelFeatures,
+		.rayTracingPipeline = VK_TRUE,
+	};
+	VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddrFeatures = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+		.pNext = &rtPipelineFeatures,
+		.bufferDeviceAddress = VK_TRUE,
+	};
+	VkDeviceCreateInfo deviceInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .queueCreateInfoCount = queueCreateInfoCount, .pQueueCreateInfos = queueCreateInfos, .enabledExtensionCount = deviceExtensionCount, .ppEnabledExtensionNames = deviceExtensions, .pEnabledFeatures = &deviceFeatures, .pNext = &bufferDeviceAddrFeatures, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
 
 	VK_CHECK(vkCreateDevice(core->physicalDevice, &deviceInfo, NULL, &core->device), "Failed to create logical device");
 

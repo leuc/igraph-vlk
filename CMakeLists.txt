@@ -51,6 +51,9 @@ find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
 	    shaders/splc.comp
 	    shaders/physics_step.comp
 	    shaders/stress_calc.comp
+	    shaders/escape.rgen
+	    shaders/escape.rchit
+	    shaders/escape.rmiss
 	    shaders/ray.vert
 	    shaders/ray.frag
 	)
@@ -61,7 +64,7 @@ foreach(SHADER ${SHADERS})
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/shaders")
     add_custom_command(
         OUTPUT ${SPIRV}
-        COMMAND ${GLSL_COMPILER} -V ${CMAKE_CURRENT_SOURCE_DIR}/${SHADER} -o ${SPIRV}
+        COMMAND ${GLSL_COMPILER} -V --target-env vulkan1.2 ${CMAKE_CURRENT_SOURCE_DIR}/${SHADER} -o ${SPIRV}
         DEPENDS ${SHADER}
     )
     list(APPEND SPIRV_SHADERS ${SPIRV})
@@ -123,6 +126,7 @@ add_executable(igraph-vlk
      src/graph/layouts_tsne.c
      src/graph/layouts_apply.c
      src/graph/layout_escape.c
+     src/vulkan/renderer_escape_layout.c
      src/graph/wrappers_community.c
      src/graph/wrappers_centrality.c
 src/graph/wrappers_constructors.c
@@ -189,6 +193,9 @@ target_compile_definitions(igraph-vlk PRIVATE
     SPLC_COMP_SHADER_PATH="shaders/splc.comp.spv"
     PHYSICS_STEP_COMP_SHADER_PATH="shaders/physics_step.comp.spv"
     STRESS_CALC_COMP_SHADER_PATH="shaders/stress_calc.comp.spv"
+    ESCAPE_RGEN_SHADER_PATH="shaders/escape.rgen.spv"
+    ESCAPE_RCHIT_SHADER_PATH="shaders/escape.rchit.spv"
+    ESCAPE_RMISS_SHADER_PATH="shaders/escape.rmiss.spv"
     RAY_VERT_SHADER_PATH="shaders/ray.vert.spv"
     RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv"
 )

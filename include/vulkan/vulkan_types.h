@@ -373,6 +373,41 @@ typedef struct Renderer
 	bool escape_running;
 	int escape_iteration;
 
+	// Ray Tracing (Hybrid Escape Layout)
+	bool escape_rt_supported;
+	bool escape_rt_initialized;
+	float escape_bb_diag;
+	uint32_t escape_rt_handle_size;
+	uint32_t escape_rt_handle_alignment;
+	uint32_t escape_rt_base_alignment;
+	uint32_t escape_as_scratch_alignment;
+
+	VkAccelerationStructureKHR escape_blas;
+	VkBuffer escape_blas_buffer;
+	VkDeviceMemory escape_blas_memory;
+
+	VkAccelerationStructureKHR escape_tlas;
+	VkBuffer escape_tlas_buffer;
+	VkDeviceMemory escape_tlas_memory;
+	VkBuffer escape_tlas_instance_buffer;
+	VkDeviceMemory escape_tlas_instance_memory;
+	VkBuffer escape_tlas_scratch_buffer;
+	VkDeviceMemory escape_tlas_scratch_memory;
+	VkDeviceAddress escape_blas_device_address;
+
+	VkPipeline escape_rt_pipeline;
+	VkPipelineLayout escape_rt_pipeline_layout;
+	VkDescriptorSetLayout escape_rt_desc_layout;
+	VkDescriptorSet escape_rt_desc_set;
+	VkDescriptorPool escape_rt_descriptor_pool;
+
+	VkBuffer escape_sbt_buffer;
+	VkDeviceMemory escape_sbt_memory;
+	VkStridedDeviceAddressRegionKHR escape_sbt_raygen;
+	VkStridedDeviceAddressRegionKHR escape_sbt_miss;
+	VkStridedDeviceAddressRegionKHR escape_sbt_hit;
+	VkStridedDeviceAddressRegionKHR escape_sbt_callable;
+
 	// SPLC (Search Path Link Count) animation
 	VkBuffer splc_nodes_buffer;
 	VkDeviceMemory splc_nodes_memory;

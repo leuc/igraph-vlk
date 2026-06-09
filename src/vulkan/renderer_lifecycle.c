@@ -160,6 +160,26 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->splc_level_interval = 0.5f;
 	r->splc_active = false;
 
+	// Escape RT initialization
+	r->escape_rt_supported = false;
+	r->escape_rt_initialized = false;
+	r->escape_blas = VK_NULL_HANDLE;
+	r->escape_tlas = VK_NULL_HANDLE;
+	r->escape_rt_pipeline = VK_NULL_HANDLE;
+	r->escape_rt_pipeline_layout = VK_NULL_HANDLE;
+	r->escape_rt_desc_layout = VK_NULL_HANDLE;
+	r->escape_rt_desc_set = VK_NULL_HANDLE;
+	r->escape_rt_descriptor_pool = VK_NULL_HANDLE;
+	r->escape_sbt_buffer = VK_NULL_HANDLE;
+	r->escape_sbt_memory = VK_NULL_HANDLE;
+	r->escape_tlas_instance_buffer = VK_NULL_HANDLE;
+	r->escape_tlas_instance_memory = VK_NULL_HANDLE;
+	r->escape_tlas_buffer = VK_NULL_HANDLE;
+	r->escape_tlas_memory = VK_NULL_HANDLE;
+	r->escape_blas_buffer = VK_NULL_HANDLE;
+	r->escape_blas_memory = VK_NULL_HANDLE;
+	r->escape_bb_diag = 0.0f;
+
 	renderer_update_graph(r, graph);
 	r->labelTreeNeedsRebuild = true;
 
