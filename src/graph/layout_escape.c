@@ -522,8 +522,7 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 	}
 	float bb_diag = sqrtf((bb_max_x - bb_min_x) * (bb_max_x - bb_min_x) + (bb_max_y - bb_min_y) * (bb_max_y - bb_min_y) + (bb_max_z - bb_min_z) * (bb_max_z - bb_min_z));
 	r->escape_bb_diag = bb_diag;
-	float ideal_length = bb_diag * max_bb_diag_ratio;
-	printf("[Escape] Drive: %u nodes %u edges bb_diag=%.1f ideal=%.1f\n", n, m, bb_diag, ideal_length);
+	printf("[Escape] Drive: %u nodes %u edges bb_diag=%.1f\n", n, m, bb_diag);
 
 	escape_ensure_command_resources(r);
 	escape_create_gpu_buffers(r, data);
@@ -533,9 +532,18 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 	float density = (n > 1) ? (float)m / ((float)n * (float)(n - 1)) : 0.0f;
 	float log_n = logf((float)n + 1.0f);
 
-	// Alpha (repulsion blend) and beta (attraction blend): keep balanced.
-	// Alpha starts slightly above beta; alpha decays to let springs win long-term.
-	float alpha0 = 0.55f;
+	// Ideal length: scale by average node spacing, not a fraction of bb_diag.
+	// bb_diag/cbrt(N) gives the typical inter-node distance in a uniform spread.
+	// Reduce further for dense graphs (more edges need shorter springs).
+	float node_spacing = bb_diag / cbrtf((float)n);
+	float density_scale = 1.0f / (1.0f + avg_degree * 0.1f);
+	float ideal_length = node_spacing * density_scale;
+	if (ideal_length < 0.5f)
+		ideal_length = 0.5f;
+
+	// Alpha (repulsion blend) and beta (attraction blend): start balanced.
+	// Both decay together so neither force dominates completely.
+	float alpha0 = 0.50f;
 	float beta0 = 0.50f;
 
 	// Friction: more damping for larger graphs (prevents runaway velocities)
@@ -546,8 +554,10 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 	// Time step: smaller for larger graphs (stability)
 	float dt0 = 0.05f / (1.0f + log_n * 0.04f);
 
-	// Alpha decay: repulsion fades, springs dominate by end
-	float alpha_decay = 0.985f;
+	// Decay: both alpha and beta decay, keeping repulsion/attraction balanced.
+	// Floor alpha at 0.10 so RT repulsion persists throughout.
+	float force_decay = 0.992f;
+	float alpha_floor = 0.10f;
 
 	EscapeSimParams params = {
 		.dt = dt0,
@@ -557,7 +567,7 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 		.friction = friction0,
 	};
 
-	printf("[Escape] Params: avg_deg=%.1f density=%.4f alpha=%.3f beta=%.3f friction=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, alpha0, beta0, friction0, dt0, alpha_decay);
+	printf("[Escape] Params: avg_deg=%.1f density=%.4f ideal=%.1f alpha=%.3f beta=%.3f friction=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, ideal_length, alpha0, beta0, friction0, dt0, force_decay);
 
 	r->escape_previous_stress = INFINITY;
 	r->escape_stable_frames = 0;
@@ -566,12 +576,11 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 	for (uint32_t iter = 0; iter < max_iters && r->escape_running; iter++) {
 		r->escape_iteration = (int)iter;
 
-		params.alpha *= alpha_decay;
-		float alpha_min = alpha0 * 0.02f;
-		if (alpha_min < 0.005f)
-			alpha_min = 0.005f;
-		if (params.alpha < alpha_min)
-			params.alpha = 0.01f;
+		// Both alpha and beta decay together, maintaining balanced force ratio
+		params.alpha *= force_decay;
+		if (params.alpha < alpha_floor)
+			params.alpha = alpha_floor;
+		params.beta *= force_decay;
 
 		if (iter > 0) {
 			VK_CHECK(vkWaitForFences(r->core.device, 1, &r->escape_fence, VK_TRUE, UINT64_MAX), "Failed to wait for escape fence");
@@ -605,7 +614,7 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 
 		bool converged = escape_check_convergence(r, epsilon);
 		if (iter % 10 == 0 || converged || iter == max_iters - 1)
-			printf("[Escape] iter %4u / %u | stress=%.2f stable=%u alpha=%.3f\n", iter + 1, max_iters, r->escape_previous_stress, r->escape_stable_frames, params.alpha);
+			printf("[Escape] iter %4u / %u | stress=%.2f stable=%u alpha=%.3f beta=%.3f\n", iter + 1, max_iters, r->escape_previous_stress, r->escape_stable_frames, params.alpha, params.beta);
 		if (r->escape_stable_frames >= 10) {
 			printf("[Escape] Converged at iteration %u (stress=%.2f)\n", iter, r->escape_previous_stress);
 			break;
