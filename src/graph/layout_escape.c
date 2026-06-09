@@ -95,17 +95,13 @@ typedef struct
 void *compute_escape_layout(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
-	fprintf(stderr, "[Escape DEBUG] CPU worker: vcount=%ld\n", (long)vcount);
-	if (vcount == 0) {
-		fprintf(stderr, "[Escape DEBUG] CPU worker: empty graph, returning NULL\n");
+	fprintf(stderr, "[Escape] Worker: vcount=%ld\n", (long)vcount);
+	if (vcount == 0)
 		return NULL;
-	}
 
 	NodeTopology *sorted = (NodeTopology *)malloc(vcount * sizeof(NodeTopology));
-	if (!sorted) {
-		fprintf(stderr, "[Escape DEBUG] CPU worker: malloc failed for sorted\n");
+	if (!sorted)
 		return NULL;
-	}
 
 	igraph_vector_int_t degrees, coreness;
 	igraph_vector_int_init(&degrees, vcount);
@@ -115,7 +111,6 @@ void *compute_escape_layout(igraph_t *graph)
 	igraph_coreness(graph, &coreness, IGRAPH_ALL);
 
 	igraph_integer_t max_deg = 0, max_core = 0;
-	igraph_integer_t core_bins[10] = {0};
 	for (igraph_integer_t i = 0; i < vcount; i++) {
 		sorted[i].id = i;
 		sorted[i].degree = VECTOR(degrees)[i];
@@ -124,24 +119,15 @@ void *compute_escape_layout(igraph_t *graph)
 			max_deg = sorted[i].degree;
 		if (sorted[i].coreness > max_core)
 			max_core = sorted[i].coreness;
-		int bin = (sorted[i].coreness < 9) ? (int)sorted[i].coreness : 9;
-		core_bins[bin]++;
 	}
-	fprintf(stderr, "[Escape DEBUG] CPU worker: max_degree=%ld max_coreness=%ld\n", (long)max_deg, (long)max_core);
-	fprintf(stderr, "[Escape DEBUG] CPU worker: coreness bins: ");
-	for (int b = 0; b < 10; b++)
-		fprintf(stderr, "%ld ", (long)core_bins[b]);
-	fprintf(stderr, "\n");
 
 	igraph_vector_int_destroy(&degrees);
 	igraph_vector_int_destroy(&coreness);
 
 	qsort(sorted, vcount, sizeof(NodeTopology), compare_topology);
-	fprintf(stderr, "[Escape DEBUG] CPU worker: sorted nodes by coreness+degree\n");
 
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
-		fprintf(stderr, "[Escape DEBUG] CPU worker: igraph_matrix_init failed\n");
 		IGRAPH_FREE(result);
 		free(sorted);
 		return NULL;
@@ -149,7 +135,6 @@ void *compute_escape_layout(igraph_t *graph)
 
 	int *sorted_rank = (int *)malloc(vcount * sizeof(int));
 	if (!sorted_rank) {
-		fprintf(stderr, "[Escape DEBUG] CPU worker: malloc failed for sorted_rank\n");
 		igraph_matrix_destroy(result);
 		IGRAPH_FREE(result);
 		free(sorted);
@@ -163,7 +148,6 @@ void *compute_escape_layout(igraph_t *graph)
 		hilbert_order = 1;
 	if (hilbert_order > 10)
 		hilbert_order = 10;
-	fprintf(stderr, "[Escape DEBUG] CPU worker: hilbert_order=%d grid=%d^3\n", hilbert_order, 1 << hilbert_order);
 
 	float min_x = INFINITY, max_x = -INFINITY, min_y = INFINITY, max_y = -INFINITY, min_z = INFINITY, max_z = -INFINITY;
 	for (igraph_integer_t i = 0; i < vcount; i++) {
@@ -187,9 +171,7 @@ void *compute_escape_layout(igraph_t *graph)
 		if (z > max_z)
 			max_z = z;
 	}
-	fprintf(stderr, "[Escape DEBUG] CPU worker: position bounds X=[%.2f,%.2f] Y=[%.2f,%.2f] Z=[%.2f,%.2f]\n", min_x, max_x, min_y, max_y, min_z, max_z);
-	fprintf(stderr, "[Escape DEBUG] CPU worker: first 3 pos: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n", (float)MATRIX(*result, 0, 0), (float)MATRIX(*result, 0, 1), (float)MATRIX(*result, 0, 2), (float)MATRIX(*result, 1, 0), (float)MATRIX(*result, 1, 1), (float)MATRIX(*result, 1, 2), (float)MATRIX(*result, 2, 0), (float)MATRIX(*result, 2, 1), (float)MATRIX(*result, 2, 2));
-	fprintf(stderr, "[Escape DEBUG] CPU worker: computed %ld Hilbert positions, returning matrix\n", (long)vcount);
+	fprintf(stderr, "[Escape] Worker: %ld nodes max_deg=%ld max_core=%ld bounds X=[%.0f,%.0f] Y=[%.0f,%.0f] Z=[%.0f,%.0f]\n", (long)vcount, (long)max_deg, (long)max_core, min_x, max_x, min_y, max_y, min_z, max_z);
 
 	free(sorted_rank);
 	free(sorted);
@@ -212,11 +194,8 @@ typedef struct
 
 static void escape_ensure_command_resources(Renderer *r)
 {
-	if (r->escape_cmd_pool != VK_NULL_HANDLE) {
-		fprintf(stderr, "[Escape DEBUG] Command resources already exist\n");
+	if (r->escape_cmd_pool != VK_NULL_HANDLE)
 		return;
-	}
-	fprintf(stderr, "[Escape DEBUG] Creating command pool, buffer, and fence\n");
 
 	VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = 0, .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT};
 	VK_CHECK(vkCreateCommandPool(r->core.device, &poolInfo, NULL, &r->escape_cmd_pool), "Failed to create escape command pool");
@@ -232,9 +211,7 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 {
 	uint32_t n = data->node_count;
 	uint32_t m = data->edge_count;
-	fprintf(stderr, "[Escape DEBUG] Creating GPU buffers: nodes=%u edges=%u\n", n, m);
 
-	// Compute adjacency data from igraph
 	uint32_t *adj_neighbors = NULL;
 	uint32_t *adj_offsets = NULL;
 	uint32_t *adj_edge_counts = NULL;
@@ -255,8 +232,6 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 			total_edges += deg;
 		}
 
-		fprintf(stderr, "[Escape DEBUG] Building adjacency: n=%u total_neighbors=%u\n", n, total_edges);
-
 		adj_neighbors = (uint32_t *)calloc(total_edges, sizeof(uint32_t));
 		uint32_t idx = 0;
 		for (uint32_t i = 0; i < n; i++) {
@@ -265,11 +240,8 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 				adj_neighbors[idx++] = (uint32_t)VECTOR(neis)[j];
 		}
 		igraph_vector_int_destroy(&neis);
-	} else {
-		fprintf(stderr, "[Escape DEBUG] No nodes, skipping adjacency\n");
 	}
 
-	// Build edge list for stress calculation
 	EdgeGPU *edges = NULL;
 	if (m > 0) {
 		edges = (EdgeGPU *)calloc(m, sizeof(EdgeGPU));
@@ -277,9 +249,6 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 			edges[i].nodeA = data->edges[i].from;
 			edges[i].nodeB = data->edges[i].to;
 		}
-		fprintf(stderr, "[Escape DEBUG] Built edge list: m=%u\n", m);
-	} else {
-		fprintf(stderr, "[Escape DEBUG] No edges for stress calc\n");
 	}
 
 	// Destroy old buffers if any
@@ -305,16 +274,60 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, edge_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->escape_edges_buffer, &r->escape_edges_memory);
 	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, stress_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->escape_global_stress_buffer, &r->escape_global_stress_memory);
 
-	// Upload initial physics data
+	// Compute centroid for escape vector direction
+	float cx = 0.0f, cy = 0.0f, cz = 0.0f;
+	for (uint32_t i = 0; i < n; i++) {
+		cx += data->nodes[i].position[0];
+		cy += data->nodes[i].position[1];
+		cz += data->nodes[i].position[2];
+	}
+	cx /= (float)n;
+	cy /= (float)n;
+	cz /= (float)n;
+
+	// Compute bounding box diagonal for ideal_length scaling
+	float bb_min_x = FLT_MAX, bb_max_x = -FLT_MAX;
+	float bb_min_y = FLT_MAX, bb_max_y = -FLT_MAX;
+	float bb_min_z = FLT_MAX, bb_max_z = -FLT_MAX;
+	for (uint32_t i = 0; i < n; i++) {
+		float x = data->nodes[i].position[0], y = data->nodes[i].position[1], z = data->nodes[i].position[2];
+		if (x < bb_min_x)
+			bb_min_x = x;
+		if (x > bb_max_x)
+			bb_max_x = x;
+		if (y < bb_min_y)
+			bb_min_y = y;
+		if (y > bb_max_y)
+			bb_max_y = y;
+		if (z < bb_min_z)
+			bb_min_z = z;
+		if (z > bb_max_z)
+			bb_max_z = z;
+	}
+	float bb_diag = sqrtf((bb_max_x - bb_min_x) * (bb_max_x - bb_min_x) + (bb_max_y - bb_min_y) * (bb_max_y - bb_min_y) + (bb_max_z - bb_min_z) * (bb_max_z - bb_min_z));
+
+	// Upload initial physics data with escape vectors
 	NodePhysicsGPU *phys = (NodePhysicsGPU *)calloc(n, sizeof(NodePhysicsGPU));
 	for (uint32_t i = 0; i < n; i++) {
 		phys[i].position[0] = data->nodes[i].position[0];
 		phys[i].position[1] = data->nodes[i].position[1];
 		phys[i].position[2] = data->nodes[i].position[2];
 		phys[i].position[3] = 1.0f; // mass
-									// velocity and escape_vector are zero-initialized
+		// Escape vector: radial repulsion away from centroid, scaled by coreness
+		float dx = data->nodes[i].position[0] - cx;
+		float dy = data->nodes[i].position[1] - cy;
+		float dz = data->nodes[i].position[2] - cz;
+		float len = sqrtf(dx * dx + dy * dy + dz * dz);
+		if (len > 0.001f) {
+			phys[i].escape_vector[0] = dx / len;
+			phys[i].escape_vector[1] = dy / len;
+			phys[i].escape_vector[2] = dz / len;
+		} else {
+			phys[i].escape_vector[0] = 0.0f;
+			phys[i].escape_vector[1] = 1.0f; // fallback: up
+			phys[i].escape_vector[2] = 0.0f;
+		}
 	}
-	fprintf(stderr, "[Escape DEBUG] Uploading %u nodes to GPU: first pos=(%.2f,%.2f,%.2f) last pos=(%.2f,%.2f,%.2f)\n", n, phys[0].position[0], phys[0].position[1], phys[0].position[2], phys[n - 1].position[0], phys[n - 1].position[1], phys[n - 1].position[2]);
 	update_buffer(r->core.device, r->escape_physics_memory, phys_size, phys);
 	free(phys);
 
@@ -356,8 +369,6 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 		VK_WRITE_DESC_BUFFER(r->escape_stress_desc_set, 2, &stressInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
 	};
 	vkUpdateDescriptorSets(r->core.device, 3, stressWrites, 0, NULL);
-
-	fprintf(stderr, "[Escape DEBUG] GPU buffers created and descriptors updated\n");
 }
 
 // ============================================================================
@@ -366,9 +377,7 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 
 static void escape_record_iteration(VkCommandBuffer cmd, Renderer *r, EscapeSimParams *params, uint32_t node_count, uint32_t edge_count)
 {
-	// Clear stress buffer
 	vkCmdFillBuffer(cmd, r->escape_global_stress_buffer, 0, sizeof(float), 0);
-	fprintf(stderr, "[Escape RECORD] Filled stress buffer with 0\n");
 
 	// Barrier: transfer -> compute
 	VkMemoryBarrier clearBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT};
@@ -381,8 +390,6 @@ static void escape_record_iteration(VkCommandBuffer cmd, Renderer *r, EscapeSimP
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->escape_physics_pipeline_layout, 0, 1, &r->escape_physics_desc_set, 0, NULL);
 	vkCmdPushConstants(cmd, r->escape_physics_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(EscapeSimParams), params);
 	vkCmdDispatch(cmd, group_nodes, 1, 1);
-	fprintf(stderr, "[Escape RECORD] Dispatched physics: groups=%u node_count=%u dt=%.4f alpha=%.2f beta=%.2f ideal=%.2f friction=%.2f\n", group_nodes, node_count, params->dt, params->alpha, params->beta, params->ideal_length, params->friction);
-
 	// Barrier: physics -> stress + TLAS
 	VkMemoryBarrier physicsBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT};
 	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &physicsBarrier, 0, NULL, 0, NULL);
@@ -399,9 +406,6 @@ static void escape_record_iteration(VkCommandBuffer cmd, Renderer *r, EscapeSimP
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->escape_stress_pipeline_layout, 0, 1, &r->escape_stress_desc_set, 0, NULL);
 		vkCmdPushConstants(cmd, r->escape_stress_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(stress_pc), &stress_pc);
 		vkCmdDispatch(cmd, group_edges, 1, 1);
-		fprintf(stderr, "[Escape RECORD] Dispatched stress calc: groups=%u edge_count=%u ideal_length=%.2f\n", group_edges, edge_count, params->ideal_length);
-	} else {
-		fprintf(stderr, "[Escape RECORD] No edges, skipping stress calc\n");
 	}
 }
 
@@ -425,8 +429,6 @@ static bool escape_check_convergence(Renderer *r, float epsilon)
 	} else {
 		r->escape_stable_frames = 0;
 	}
-
-	fprintf(stderr, "[Escape CONV] stress=%.6f delta=%.6f stable=%u\n", current_stress, delta, r->escape_stable_frames);
 
 	return r->escape_stable_frames >= 10;
 }
@@ -463,47 +465,60 @@ static void escape_readback_positions(Renderer *r, GraphData *data)
 // Main GPU simulation driver
 // ============================================================================
 
-void igraph_vlk_layout_escape_drive(AppState *state, float ideal_length, uint32_t max_iters, float epsilon)
+void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, uint32_t max_iters, float epsilon)
 {
-	printf("[Escape DRIVE] ENTERING igraph_vlk_layout_escape_drive: ideal_length=%.2f max_iters=%u epsilon=%.6f\n", ideal_length, max_iters, epsilon);
-
 	Renderer *r = &state->renderer;
 	GraphData *data = &state->current_graph;
 	uint32_t n = data->node_count;
 	uint32_t m = data->edge_count;
 
-	printf("[Escape DRIVE] nodes=%u edges=%u\n", n, m);
-
-	if (n == 0) {
-		printf("[Escape DRIVE] no nodes, returning\n");
+	if (n == 0)
 		return;
+
+	float bb_min_x = FLT_MAX, bb_max_x = -FLT_MAX;
+	float bb_min_y = FLT_MAX, bb_max_y = -FLT_MAX;
+	float bb_min_z = FLT_MAX, bb_max_z = -FLT_MAX;
+	for (uint32_t i = 0; i < n; i++) {
+		float x = data->nodes[i].position[0], y = data->nodes[i].position[1], z = data->nodes[i].position[2];
+		if (x < bb_min_x)
+			bb_min_x = x;
+		if (x > bb_max_x)
+			bb_max_x = x;
+		if (y < bb_min_y)
+			bb_min_y = y;
+		if (y > bb_max_y)
+			bb_max_y = y;
+		if (z < bb_min_z)
+			bb_min_z = z;
+		if (z > bb_max_z)
+			bb_max_z = z;
 	}
+	float bb_diag = sqrtf((bb_max_x - bb_min_x) * (bb_max_x - bb_min_x) + (bb_max_y - bb_min_y) * (bb_max_y - bb_min_y) + (bb_max_z - bb_min_z) * (bb_max_z - bb_min_z));
+	float ideal_length = bb_diag * max_bb_diag_ratio;
+	printf("[Escape] Drive: %u nodes %u edges bb_diag=%.1f ideal=%.1f\n", n, m, bb_diag, ideal_length);
 
-	// Initialize command resources
 	escape_ensure_command_resources(r);
-
-	// Create / update GPU buffers
 	escape_create_gpu_buffers(r, data);
 
-	// Simulation parameters
 	EscapeSimParams params = {
-		.dt = 0.016f,
-		.alpha = 1.0f,
-		.beta = 0.75f,
+		.dt = 0.05f,
+		.alpha = 0.5f,
+		.beta = 0.8f,
 		.ideal_length = ideal_length,
-		.friction = 0.85f,
+		.friction = 0.92f,
 	};
 
 	r->escape_previous_stress = INFINITY;
 	r->escape_stable_frames = 0;
 	r->escape_running = true;
 
-	printf("[Escape DRIVE] Starting simulation loop: max_iters=%u nodes=%u edges=%u\n", max_iters, n, m);
-
 	for (uint32_t iter = 0; iter < max_iters && r->escape_running; iter++) {
 		r->escape_iteration = (int)iter;
-		printf("[Escape] === iter %u / %u ===\n", iter + 1, max_iters);
-		// Wait for previous iteration
+
+		params.alpha *= 0.985f;
+		if (params.alpha < 0.01f)
+			params.alpha = 0.01f;
+
 		if (iter > 0) {
 			VK_CHECK(vkWaitForFences(r->core.device, 1, &r->escape_fence, VK_TRUE, UINT64_MAX), "Failed to wait for escape fence");
 		}
@@ -529,24 +544,18 @@ void igraph_vlk_layout_escape_drive(AppState *state, float ideal_length, uint32_
 		// Wait for completion and check convergence
 		VK_CHECK(vkWaitForFences(r->core.device, 1, &r->escape_fence, VK_TRUE, UINT64_MAX), "Failed to wait for escape fence on readback");
 		bool converged = escape_check_convergence(r, epsilon);
-		printf("[Escape] iter %4u | stress=%.6f stable=%u converged=%d\n", iter, r->escape_previous_stress, r->escape_stable_frames, converged);
+		if (iter % 10 == 0 || converged || iter == max_iters - 1)
+			printf("[Escape] iter %4u / %u | stress=%.2f stable=%u alpha=%.3f\n", iter + 1, max_iters, r->escape_previous_stress, r->escape_stable_frames, params.alpha);
 		if (r->escape_stable_frames >= 10) {
-			printf("[Escape Layout] Converged at iteration %u (stress: %f)\n", iter, r->escape_previous_stress);
+			printf("[Escape] Converged at iteration %u (stress=%.2f)\n", iter, r->escape_previous_stress);
 			break;
 		}
-
-		// Cooling: reduce repulsion weight over time
-		if (iter > max_iters / 2)
-			params.alpha *= 0.95f;
 	}
 
-	// Read back final positions and update graph
-	printf("[Escape DRIVE] Simulation loop ended, reading back final positions...\n");
 	escape_readback_positions(r, data);
 	r->escape_running = false;
 
-	printf("[Escape Layout] Completed %u iterations (converged at iter %u)\n", max_iters, r->escape_iteration);
-	printf("[Escape DRIVE] EXITING igraph_vlk_layout_escape_drive\n");
+	printf("[Escape] Done: %u iters stress=%.2f\n", r->escape_iteration + 1, r->escape_previous_stress);
 }
 
 // ============================================================================
@@ -555,21 +564,16 @@ void igraph_vlk_layout_escape_drive(AppState *state, float ideal_length, uint32_
 
 void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 {
-	fprintf(stderr, "[Escape] apply_escape_layout: applying initial positions\n");
+	printf("[Escape] Apply: initial positions\n");
 	apply_layout_matrix(ctx, result_data);
 
 	if (!ctx || !ctx->app_state) {
-		fprintf(stderr, "[Escape] apply_escape_layout: no app_state, skipping GPU drive\n");
+		fprintf(stderr, "[Escape] Apply: no app_state, skipping GPU drive\n");
 		return;
 	}
 
 	AppState *state = ctx->app_state;
-	igraph_integer_t n = igraph_vcount(ctx->current_graph);
-	igraph_integer_t m = igraph_ecount(ctx->current_graph);
-	fprintf(stderr, "[Escape] apply_escape_layout: calling GPU drive with n=%ld m=%ld\n", (long)n, (long)m);
-
-	igraph_vlk_layout_escape_drive(state, 2.0f, 100, 0.001f);
-	fprintf(stderr, "[Escape] apply_escape_layout: GPU drive completed\n");
+	igraph_vlk_layout_escape_drive(state, 0.15f, 200, 0.0001f);
 }
 
 // ============================================================================

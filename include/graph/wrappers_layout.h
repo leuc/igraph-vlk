@@ -64,7 +64,7 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data);
 // GPU escape layout simulation driver and cleanup
 struct Renderer;
 struct AppState;
-void igraph_vlk_layout_escape_drive(struct AppState *state, float ideal_length, uint32_t max_iters, float epsilon);
+void igraph_vlk_layout_escape_drive(struct AppState *state, float max_bb_diag_ratio, uint32_t max_iters, float epsilon);
 void igraph_vlk_layout_escape_cleanup(struct Renderer *r);
 
 #endif // GRAPH_WRAPPERS_LAYOUT_H
