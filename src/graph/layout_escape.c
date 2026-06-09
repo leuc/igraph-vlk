@@ -94,8 +94,8 @@ typedef struct
 	float dt;
 	float alpha;
 	float beta;
-	float ideal_length;
 	float friction;
+	float avg_degree;
 	uint32_t node_count;
 } EscapeSimParams;
 
@@ -288,8 +288,8 @@ bool igraph_vlk_layout_escape_tick(Renderer *r)
 		.dt = r->escape_dt,
 		.alpha = r->escape_alpha,
 		.beta = r->escape_beta,
-		.ideal_length = r->escape_ideal_length,
 		.friction = r->escape_friction,
+		.avg_degree = r->escape_avg_degree,
 		.node_count = n,
 	};
 
@@ -409,7 +409,7 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 	cy /= (float)n;
 	cz /= (float)n;
 
-	// Compute bounding box diagonal for ideal_length scaling
+	// Compute bounding box diagonal for parameter scaling
 	float bb_min_x = FLT_MAX, bb_max_x = -FLT_MAX;
 	float bb_min_y = FLT_MAX, bb_max_y = -FLT_MAX;
 	float bb_min_z = FLT_MAX, bb_max_z = -FLT_MAX;
@@ -550,9 +550,8 @@ static void escape_record_iteration(VkCommandBuffer cmd, Renderer *r, EscapeSimP
 		uint32_t group_edges = (edge_count + 255) / 256;
 		struct
 		{
-			float ideal_length;
 			uint32_t edge_count;
-		} stress_pc = {params->ideal_length, edge_count};
+		} stress_pc = {edge_count};
 
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->escape_stress_pipeline);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->escape_stress_pipeline_layout, 0, 1, &r->escape_stress_desc_set, 0, NULL);
@@ -657,15 +656,6 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 	float density = (n > 1) ? (float)m / ((float)n * (float)(n - 1)) : 0.0f;
 	float log_n = logf((float)n + 1.0f);
 
-	// Ideal length: scale by average node spacing, not a fraction of bb_diag.
-	// bb_diag/cbrt(N) gives the typical inter-node distance in a uniform spread.
-	// Reduce further for dense graphs (more edges need shorter springs).
-	float node_spacing = bb_diag / cbrtf((float)n);
-	float density_scale = 1.0f / (1.0f + avg_degree * 0.1f);
-	float ideal_length = node_spacing * density_scale;
-	if (ideal_length < 0.5f)
-		ideal_length = 0.5f;
-
 	// Alpha (escape force multiplier) and beta (spring force multiplier).
 	// alpha must be larger because escape vector has magnitude openness (0-1)
 	// while spring displacement is in world units (can be much larger).
@@ -689,11 +679,11 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 		.dt = dt0,
 		.alpha = alpha0,
 		.beta = beta0,
-		.ideal_length = ideal_length,
 		.friction = friction0,
+		.avg_degree = avg_degree,
 	};
 
-	printf("[Escape] Params: avg_deg=%.1f density=%.4f ideal=%.1f alpha=%.3f beta=%.3f friction=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, ideal_length, alpha0, beta0, friction0, dt0, force_decay);
+	printf("[Escape] Params: avg_deg=%.1f density=%.4f alpha=%.3f beta=%.3f friction=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, alpha0, beta0, friction0, dt0, force_decay);
 
 	r->escape_previous_stress = INFINITY;
 	r->escape_stable_frames = 0;
@@ -807,12 +797,6 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	float density = (n > 1) ? (float)m / ((float)n * (float)(n - 1)) : 0.0f;
 	float log_n = logf((float)n + 1.0f);
 
-	float node_spacing = bb_diag / cbrtf((float)n);
-	float density_scale = 1.0f / (1.0f + avg_degree * 0.1f);
-	float ideal_length = node_spacing * density_scale;
-	if (ideal_length < 0.5f)
-		ideal_length = 0.5f;
-
 	float alpha0 = 2.0f;
 	float beta0 = 0.30f;
 
@@ -825,7 +809,7 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	float force_decay = 0.9995f;
 	float alpha_floor = 0.15f;
 
-	printf("[Escape] Params: avg_deg=%.1f density=%.4f ideal=%.1f alpha=%.3f beta=%.3f friction=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, ideal_length, alpha0, beta0, friction0, dt0, force_decay);
+	printf("[Escape] Params: avg_deg=%.1f density=%.4f alpha=%.3f beta=%.3f friction=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, alpha0, beta0, friction0, dt0, force_decay);
 
 	// Store simulation state in Renderer for per-frame tick
 	r->escape_previous_stress = INFINITY;
@@ -839,8 +823,8 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	r->escape_dt = dt0;
 	r->escape_alpha = alpha0;
 	r->escape_beta = beta0;
-	r->escape_ideal_length = ideal_length;
 	r->escape_friction = friction0;
+	r->escape_avg_degree = avg_degree;
 	r->escape_force_decay = force_decay;
 	r->escape_alpha_floor = alpha_floor;
 	r->escape_node_count = n;

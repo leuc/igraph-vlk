@@ -20,8 +20,7 @@ layout(std430, binding = 2, set = 0) buffer GlobalStress {
 	float total_stress;
 };
 
-layout(push_constant) uniform SimParams {
-	float ideal_length;
+layout(push_constant) uniform StressParams {
 	uint edge_count;
 } params;
 
@@ -36,9 +35,8 @@ void main() {
 	vec3 posB = positions[nB].xyz;
 
 	float current_length = length(posA - posB);
-	float diff = current_length - params.ideal_length;
 
-	float local_stress = diff * diff;
+	float local_stress = current_length * current_length;
 
 	atomicAdd(total_stress, local_stress);
 }

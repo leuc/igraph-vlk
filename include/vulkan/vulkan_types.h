@@ -384,8 +384,8 @@ typedef struct Renderer
 	float escape_dt;
 	float escape_alpha;
 	float escape_beta;
-	float escape_ideal_length;
 	float escape_friction;
+	float escape_avg_degree;
 	uint32_t escape_node_count;
 	uint32_t escape_edge_count;
 	GraphData *escape_graph_data;

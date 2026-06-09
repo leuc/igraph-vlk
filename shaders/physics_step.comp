@@ -28,8 +28,8 @@ layout(push_constant) uniform SimParams {
 	float dt;
 	float alpha;
 	float beta;
-	float ideal_length;
 	float friction;
+	float avg_degree;
 	uint node_count;
 } params;
 
@@ -48,15 +48,25 @@ void main() {
 		uint neighbor_id = neighbors[start_idx + i];
 		vec3 neighbor_pos = nodes[neighbor_id].position.xyz;
 
-		vec3 dir = neighbor_pos - pos;
-		float dist = length(dir);
+		vec3 diff = neighbor_pos - pos;
+		float dist = length(diff);
 
 		if (dist > 0.001) {
-			dir = normalize(dir);
-			float displacement = dist - params.ideal_length;
-			spring_force += dir * displacement;
+			// Linear attraction proportional to distance (no ideal length)
+			spring_force += diff;
 		}
 	}
+
+	// Scale spring force by degree: high-degree nodes feel weaker attraction per edge
+	// (outbound attraction distribution, similar to ForceAtlas2)
+	if (count > 0) {
+		float degree_weight = (1.0 + params.avg_degree) / (1.0 + float(count));
+		spring_force *= degree_weight;
+	}
+
+	// Scale escape force by degree: high-degree nodes push outward more
+	if (count > 0)
+		escape_force *= float(count);
 
 	vec3 total_force = (escape_force * params.alpha) + (spring_force * params.beta);
 
