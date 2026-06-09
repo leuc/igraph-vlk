@@ -168,8 +168,8 @@ void *compute_escape_layout(igraph_t *graph)
 	float min_x = INFINITY, max_x = -INFINITY, min_y = INFINITY, max_y = -INFINITY, min_z = INFINITY, max_z = -INFINITY;
 	for (igraph_integer_t i = 0; i < vcount; i++) {
 		float px, py, pz;
-		get_hilbert_3d_position(sorted_rank[i], hilbert_order, &px, &py, &pz, 2.0f);
-		float core_scale = 1.0f + (float)sorted[i].coreness * 0.5f;
+		get_hilbert_3d_position(sorted_rank[i], hilbert_order, &px, &py, &pz, 4.0f);
+		float core_scale = 1.0f + log2f((float)sorted[i].degree + 2.0f) * 0.5f;
 		MATRIX(*result, i, 0) = (igraph_real_t)(px * core_scale);
 		MATRIX(*result, i, 1) = (igraph_real_t)(py * core_scale);
 		MATRIX(*result, i, 2) = (igraph_real_t)(pz * core_scale);
@@ -436,9 +436,9 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 		phys[i].position[0] = data->nodes[i].position[0];
 		phys[i].position[1] = data->nodes[i].position[1];
 		phys[i].position[2] = data->nodes[i].position[2];
-		// Pack node's collision radius (tetrahedron scale) into .w
+		// Pack node's collision radius (tetrahedron scale) into .w, scaled by degree
 		// Used by RT shader to offset ray origin outside own geometry
-		phys[i].position[3] = 1.0f;
+		phys[i].position[3] = log2f((float)data->nodes[i].degree + 2.0f) * 0.5f;
 		// Escape vector: radial repulsion away from centroid, scaled by coreness
 		float dx = data->nodes[i].position[0] - cx;
 		float dy = data->nodes[i].position[1] - cy;
@@ -818,7 +818,7 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	r->escape_sim_active = true;
 	r->escape_needs_wait = false;
 	r->escape_current_iter = 0;
-	r->escape_max_iters = 1000;
+	r->escape_max_iters = 5000;
 	r->escape_epsilon = 0.0001f;
 	r->escape_dt = dt0;
 	r->escape_alpha = alpha0;

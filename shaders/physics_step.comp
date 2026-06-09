@@ -64,9 +64,11 @@ void main() {
 		spring_force *= degree_weight;
 	}
 
-	// Scale escape force by degree: high-degree nodes push outward more
-	if (count > 0)
-		escape_force *= float(count);
+	// Scale escape force inversely by degree: low-degree nodes push outward more
+	if (count > 0) {
+		float degree_weight = (1.0 + params.avg_degree) / (1.0 + float(count));
+		escape_force *= degree_weight;
+	}
 
 	vec3 total_force = (escape_force * params.alpha) + (spring_force * params.beta);
 
