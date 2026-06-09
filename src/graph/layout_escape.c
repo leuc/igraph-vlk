@@ -528,13 +528,36 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 	escape_ensure_command_resources(r);
 	escape_create_gpu_buffers(r, data);
 
+	// --- Dynamic parameter scaling based on graph properties ---
+	float avg_degree = (n > 0) ? (float)m / (float)n : 1.0f;
+	float density = (n > 1) ? (float)m / ((float)n * (float)(n - 1)) : 0.0f;
+	float log_n = logf((float)n + 1.0f);
+
+	// Alpha (repulsion blend) and beta (attraction blend): keep balanced.
+	// Alpha starts slightly above beta; alpha decays to let springs win long-term.
+	float alpha0 = 0.55f;
+	float beta0 = 0.50f;
+
+	// Friction: more damping for larger graphs (prevents runaway velocities)
+	float friction0 = 0.90f - 0.03f * fminf(log_n / 10.0f, 1.0f);
+	if (friction0 < 0.78f)
+		friction0 = 0.78f;
+
+	// Time step: smaller for larger graphs (stability)
+	float dt0 = 0.05f / (1.0f + log_n * 0.04f);
+
+	// Alpha decay: repulsion fades, springs dominate by end
+	float alpha_decay = 0.985f;
+
 	EscapeSimParams params = {
-		.dt = 0.05f,
-		.alpha = 0.5f,
-		.beta = 0.8f,
+		.dt = dt0,
+		.alpha = alpha0,
+		.beta = beta0,
 		.ideal_length = ideal_length,
-		.friction = 0.92f,
+		.friction = friction0,
 	};
+
+	printf("[Escape] Params: avg_deg=%.1f density=%.4f alpha=%.3f beta=%.3f friction=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, alpha0, beta0, friction0, dt0, alpha_decay);
 
 	r->escape_previous_stress = INFINITY;
 	r->escape_stable_frames = 0;
@@ -543,8 +566,11 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 	for (uint32_t iter = 0; iter < max_iters && r->escape_running; iter++) {
 		r->escape_iteration = (int)iter;
 
-		params.alpha *= 0.985f;
-		if (params.alpha < 0.01f)
+		params.alpha *= alpha_decay;
+		float alpha_min = alpha0 * 0.02f;
+		if (alpha_min < 0.005f)
+			alpha_min = 0.005f;
+		if (params.alpha < alpha_min)
 			params.alpha = 0.01f;
 
 		if (iter > 0) {

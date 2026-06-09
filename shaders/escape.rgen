@@ -53,6 +53,8 @@ void main() {
 		finalEscape -= dir * weight;
 	}
 
-	nodes[nodeId].escape_vector.xyz =
-		normalize(finalEscape) * length(finalEscape) / float(RAY_COUNT);
+	// Normalize to unit length: direction only, magnitude controlled by alpha on CPU.
+	// This prevents 1/d² divergence from overwhelming spring forces at close range.
+	float len = length(finalEscape);
+	nodes[nodeId].escape_vector.xyz = (len > 0.0001) ? finalEscape / len : vec3(0.0);
 }
