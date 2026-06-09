@@ -379,6 +379,9 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 		renderer_escape_create_rt_pipeline(r, r->escape_physics_buffer);
 		r->escape_rt_supported = true;
 		r->escape_rt_initialized = true;
+	} else {
+		// Physics buffer was recreated — rebind it in the RT descriptor set
+		renderer_escape_update_rt_physics_buffer(r, r->escape_physics_buffer);
 	}
 }
 

@@ -534,6 +534,26 @@ void renderer_escape_create_rt_pipeline(Renderer *r, VkBuffer physics_buffer)
 }
 
 // ============================================================================
+// Update RT descriptor set with new physics buffer handle (after buffer recreation)
+// ============================================================================
+
+void renderer_escape_update_rt_physics_buffer(Renderer *r, VkBuffer physics_buffer)
+{
+	VkDevice dev = r->core.device;
+	VkDescriptorBufferInfo physBufInfo = {physics_buffer, 0, VK_WHOLE_SIZE};
+	VkWriteDescriptorSet write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = r->escape_rt_desc_set,
+		.dstBinding = 1,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &physBufInfo,
+	};
+	vkUpdateDescriptorSets(dev, 1, &write, 0, NULL);
+}
+
+// ============================================================================
 // CPU-side TLAS update — copy new positions into instance transforms, rebuild
 // ============================================================================
 
