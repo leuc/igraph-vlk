@@ -84,12 +84,14 @@ void renderer_escape_build_blas(Renderer *r)
 	VkPhysicalDevice phys = r->core.physicalDevice;
 	load_rt_function_pointers(dev);
 
-	// Vertex buffer (with build input + device address usage)
+	// Vertex buffer (local — destroyed after BLAS build, geometry data baked in)
 	VkDeviceSize vertSize = sizeof(TETRA_VERTICES);
-	create_buffer(dev, phys, vertSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &r->escape_blas_buffer, &r->escape_blas_memory);
-	update_buffer(dev, r->escape_blas_memory, vertSize, TETRA_VERTICES);
+	VkBuffer vertBuf;
+	VkDeviceMemory vertMem;
+	create_buffer(dev, phys, vertSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vertBuf, &vertMem);
+	update_buffer(dev, vertMem, vertSize, TETRA_VERTICES);
 
-	// Index buffer (reuse vertex buffer memory region for indices)
+	// Index buffer (local — destroyed after BLAS build)
 	VkDeviceSize idxSize = sizeof(TETRA_INDICES);
 	VkBuffer idxBuffer;
 	VkDeviceMemory idxMemory;
@@ -97,7 +99,7 @@ void renderer_escape_build_blas(Renderer *r)
 	update_buffer(dev, idxMemory, idxSize, TETRA_INDICES);
 
 	// Get device addresses
-	VkBufferDeviceAddressInfoKHR vertAddrInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = r->escape_blas_buffer};
+	VkBufferDeviceAddressInfoKHR vertAddrInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = vertBuf};
 	VkDeviceAddress vertAddr = pfnGetBufferDeviceAddressKHR(dev, &vertAddrInfo);
 	VkBufferDeviceAddressInfoKHR idxAddrInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = idxBuffer};
 	VkDeviceAddress idxAddr = pfnGetBufferDeviceAddressKHR(dev, &idxAddrInfo);
@@ -163,7 +165,7 @@ void renderer_escape_build_blas(Renderer *r)
 	VkCommandBuffer cmd;
 	VkCommandBufferAllocateInfo cmdAllocInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-		.commandPool = r->commands.commandPool,
+		.commandPool = r->escape_cmd_pool,
 		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 		.commandBufferCount = 1,
 	};
@@ -177,7 +179,7 @@ void renderer_escape_build_blas(Renderer *r)
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cmd};
 	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit BLAS build");
 	VK_CHECK(vkQueueWaitIdle(r->core.graphicsQueue), "Failed to wait for BLAS build");
-	vkFreeCommandBuffers(dev, r->commands.commandPool, 1, &cmd);
+	vkFreeCommandBuffers(dev, r->escape_cmd_pool, 1, &cmd);
 
 	// Get BLAS device address
 	VkAccelerationStructureDeviceAddressInfoKHR addrInfo = {
@@ -186,12 +188,10 @@ void renderer_escape_build_blas(Renderer *r)
 	};
 	r->escape_blas_device_address = pfnGetAccelerationStructureDeviceAddressKHR(dev, &addrInfo);
 
-	// Clean up scratch + index buffers (no longer needed)
+	// Clean up scratch + index + vertex buffers (no longer needed)
 	VK_DESTROY_BUFFER(dev, r->escape_tlas_scratch_buffer, r->escape_tlas_scratch_memory);
 	VK_DESTROY_BUFFER(dev, idxBuffer, idxMemory);
-
-	// Clean up vertex buffer (geometry data baked into BLAS)
-	VK_DESTROY_BUFFER(dev, r->escape_blas_buffer, r->escape_blas_memory);
+	VK_DESTROY_BUFFER(dev, vertBuf, vertMem);
 
 	fprintf(stderr, "[Escape RT] BLAS built: handle=%lu\n", (unsigned long)r->escape_blas);
 }
@@ -291,11 +291,11 @@ void renderer_escape_build_tlas(Renderer *r, GraphData *data, uint32_t node_coun
 	VkAccelerationStructureBuildRangeInfoKHR rangeInfo = {.primitiveCount = node_count};
 	const VkAccelerationStructureBuildRangeInfoKHR *pRangeInfo = &rangeInfo;
 
-	// Build TLAS
+	// Build TLAS (use escape_cmd_pool — worker-thread-safe)
 	VkCommandBuffer cmd;
 	VkCommandBufferAllocateInfo cmdAllocInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-		.commandPool = r->commands.commandPool,
+		.commandPool = r->escape_cmd_pool,
 		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 		.commandBufferCount = 1,
 	};
@@ -309,7 +309,7 @@ void renderer_escape_build_tlas(Renderer *r, GraphData *data, uint32_t node_coun
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cmd};
 	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit TLAS build");
 	VK_CHECK(vkQueueWaitIdle(r->core.graphicsQueue), "Failed to wait for TLAS build");
-	vkFreeCommandBuffers(dev, r->commands.commandPool, 1, &cmd);
+	vkFreeCommandBuffers(dev, r->escape_cmd_pool, 1, &cmd);
 
 	// Clean up scratch (instance buffer kept for CPU updates)
 	VK_DESTROY_BUFFER(dev, r->escape_tlas_scratch_buffer, r->escape_tlas_scratch_memory);
@@ -554,7 +554,6 @@ void renderer_escape_update_tlas_cpu(Renderer *r, uint32_t node_count)
 		float px = phys[i].position[0];
 		float py = phys[i].position[1];
 		float pz = phys[i].position[2];
-		// Scale stays constant (set at TLAS creation from degree)
 		float existingScale = instances[i].transform.matrix[0][0];
 		instances[i].transform.matrix[0][3] = px;
 		instances[i].transform.matrix[1][3] = py;
@@ -563,7 +562,10 @@ void renderer_escape_update_tlas_cpu(Renderer *r, uint32_t node_count)
 	vkUnmapMemory(dev, r->escape_physics_memory);
 	vkUnmapMemory(dev, r->escape_tlas_instance_memory);
 
-	// Rebuild TLAS with UPDATE mode
+	// Full TLAS rebuild (UPDATE_KHR is unreliable on Intel i915)
+	pfnDestroyAccelerationStructureKHR(dev, r->escape_tlas, NULL);
+	r->escape_tlas = VK_NULL_HANDLE;
+
 	VkBufferDeviceAddressInfoKHR instAddrInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = r->escape_tlas_instance_buffer};
 	VkDeviceAddress instAddr = pfnGetBufferDeviceAddressKHR(dev, &instAddrInfo);
 
@@ -579,39 +581,51 @@ void renderer_escape_update_tlas_cpu(Renderer *r, uint32_t node_count)
 		.geometry.instances = instancesData,
 	};
 
-	// Scratch buffer for update
-	VkAccelerationStructureBuildSizesInfoKHR sizeInfo = {
-		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
-	};
 	VkAccelerationStructureBuildGeometryInfoKHR buildInfo = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 		.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
-		.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR,
-		.srcAccelerationStructure = r->escape_tlas,
-		.dstAccelerationStructure = r->escape_tlas,
+		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
 		.geometryCount = 1,
 		.pGeometries = &geometry,
 	};
+
 	uint32_t primCount = node_count;
+	VkAccelerationStructureBuildSizesInfoKHR sizeInfo = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
+	};
 	pfnGetAccelerationStructureBuildSizesKHR(dev, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primCount, &sizeInfo);
 
-	// Reuse scratch buffer
+	// Recreate TLAS buffer
+	pfnDestroyAccelerationStructureKHR(dev, r->escape_tlas, NULL);
+	VK_DESTROY_BUFFER(dev, r->escape_tlas_buffer, r->escape_tlas_memory);
+	create_buffer(dev, r->core.physicalDevice, sizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->escape_tlas_buffer, &r->escape_tlas_memory);
+
+	VkAccelerationStructureCreateInfoKHR asCreateInfo = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
+		.buffer = r->escape_tlas_buffer,
+		.size = sizeInfo.accelerationStructureSize,
+		.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+	};
+	VK_CHECK(pfnCreateAccelerationStructureKHR(dev, &asCreateInfo, NULL, &r->escape_tlas), "Failed to recreate TLAS");
+
+	// Scratch buffer
 	VkBuffer scratchBuf;
 	VkDeviceMemory scratchMem;
-	create_buffer(dev, r->core.physicalDevice, sizeInfo.updateScratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &scratchBuf, &scratchMem);
+	create_buffer(dev, r->core.physicalDevice, sizeInfo.buildScratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &scratchBuf, &scratchMem);
 
 	VkBufferDeviceAddressInfoKHR scratchAddrInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = scratchBuf};
+	buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+	buildInfo.dstAccelerationStructure = r->escape_tlas;
 	buildInfo.scratchData.deviceAddress = pfnGetBufferDeviceAddressKHR(dev, &scratchAddrInfo);
 
 	VkAccelerationStructureBuildRangeInfoKHR rangeInfo = {.primitiveCount = node_count};
 	const VkAccelerationStructureBuildRangeInfoKHR *pRangeInfo = &rangeInfo;
 
-	// Record + submit
+	// Record + submit (use escape_cmd_pool — worker-thread-safe)
 	VkCommandBuffer cmd;
 	VkCommandBufferAllocateInfo cmdAllocInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-		.commandPool = r->commands.commandPool,
+		.commandPool = r->escape_cmd_pool,
 		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 		.commandBufferCount = 1,
 	};
@@ -625,9 +639,26 @@ void renderer_escape_update_tlas_cpu(Renderer *r, uint32_t node_count)
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cmd};
 	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit TLAS update");
 	VK_CHECK(vkQueueWaitIdle(r->core.graphicsQueue), "Failed to wait for TLAS update");
-	vkFreeCommandBuffers(dev, r->commands.commandPool, 1, &cmd);
+	vkFreeCommandBuffers(dev, r->escape_cmd_pool, 1, &cmd);
 
 	VK_DESTROY_BUFFER(dev, scratchBuf, scratchMem);
+
+	// Update TLAS device address in descriptor set (new handle)
+	VkWriteDescriptorSetAccelerationStructureKHR asInfo = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+		.accelerationStructureCount = 1,
+		.pAccelerationStructures = &r->escape_tlas,
+	};
+	VkWriteDescriptorSet write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.pNext = &asInfo,
+		.dstSet = r->escape_rt_desc_set,
+		.dstBinding = 0,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+	};
+	vkUpdateDescriptorSets(dev, 1, &write, 0, NULL);
 }
 
 // ============================================================================
