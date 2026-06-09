@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 
+#include "graph/wrappers_layout.h"
 #include "vulkan/buffers.h"
 #include "vulkan/commands.h"
 #include "vulkan/device.h"
@@ -144,5 +145,6 @@ void renderer_cleanup(Renderer *r)
 	cleanup_geometry_buffers(r);
 	cleanup_menu_label_atlases(r);
 	cleanup_xr_resources(r);
+	igraph_vlk_layout_escape_cleanup(r);
 	cleanup_splc_pipelines_core(r);
 }

@@ -341,6 +341,38 @@ typedef struct Renderer
 	// Persistent compute context
 	ComputeContext computeCtx;
 
+	// Escape layout (GPU physics simulation)
+	VkDescriptorSetLayout escape_physics_desc_layout;
+	VkPipelineLayout escape_physics_pipeline_layout;
+	VkPipeline escape_physics_pipeline;
+	VkDescriptorSetLayout escape_stress_desc_layout;
+	VkPipelineLayout escape_stress_pipeline_layout;
+	VkPipeline escape_stress_pipeline;
+	VkDescriptorPool escape_descriptor_pool;
+	VkDescriptorSet escape_physics_desc_set;
+	VkDescriptorSet escape_stress_desc_set;
+	VkBuffer escape_physics_buffer;
+	VkDeviceMemory escape_physics_memory;
+	VkBuffer escape_adjacency_buffer;
+	VkDeviceMemory escape_adjacency_memory;
+	VkBuffer escape_offsets_buffer;
+	VkDeviceMemory escape_offsets_memory;
+	VkBuffer escape_counts_buffer;
+	VkDeviceMemory escape_counts_memory;
+	VkBuffer escape_edges_buffer;
+	VkDeviceMemory escape_edges_memory;
+	VkBuffer escape_global_stress_buffer;
+	VkDeviceMemory escape_global_stress_memory;
+	VkCommandPool escape_cmd_pool;
+	VkCommandBuffer escape_cmd_buf;
+	VkFence escape_fence;
+	VkBool32 escape_initialized;
+	// Escape simulation convergence state
+	float escape_previous_stress;
+	uint32_t escape_stable_frames;
+	bool escape_running;
+	int escape_iteration;
+
 	// SPLC (Search Path Link Count) animation
 	VkBuffer splc_nodes_buffer;
 	VkDeviceMemory splc_nodes_memory;

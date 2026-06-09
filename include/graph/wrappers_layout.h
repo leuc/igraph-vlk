@@ -51,8 +51,17 @@ void *compute_igraph_layout_bhtsne(igraph_t *graph);
 // Community-based layouts
 void *compute_layout_layered_sphere(igraph_t *graph);
 
+// GPU-accelerated escape layout
+void *compute_escape_layout(igraph_t *graph);
+
 // Standard apply and free functions
 void free_layout_matrix(void *result_data);
 void apply_layout_matrix(ExecutionContext *ctx, void *result_data);
+
+// GPU escape layout simulation driver and cleanup
+struct Renderer;
+struct AppState;
+void igraph_vlk_layout_escape_drive(struct AppState *state, float ideal_length, uint32_t max_iters, float epsilon);
+void igraph_vlk_layout_escape_cleanup(struct Renderer *r);
 
 #endif // GRAPH_WRAPPERS_LAYOUT_H

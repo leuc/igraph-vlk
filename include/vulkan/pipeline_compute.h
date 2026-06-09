@@ -5,5 +5,6 @@
 
 void renderer_create_compute_pipelines(Renderer *r);
 void renderer_create_splc_compute_pipeline(Renderer *r);
+void renderer_create_escape_compute_pipelines(Renderer *r);
 
 #endif // PIPELINE_COMPUTE_H

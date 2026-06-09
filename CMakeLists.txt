@@ -49,6 +49,8 @@ find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
 	    shaders/textquad.frag
 	    shaders/routing.comp
 	    shaders/splc.comp
+	    shaders/physics_step.comp
+	    shaders/stress_calc.comp
 	    shaders/ray.vert
 	    shaders/ray.frag
 	)
@@ -120,6 +122,7 @@ add_executable(igraph-vlk
      src/graph/layouts_forceatlas2.c
      src/graph/layouts_tsne.c
      src/graph/layouts_apply.c
+     src/graph/layout_escape.c
      src/graph/wrappers_community.c
      src/graph/wrappers_centrality.c
 src/graph/wrappers_constructors.c
@@ -184,6 +187,8 @@ target_compile_definitions(igraph-vlk PRIVATE
     TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv"
     ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv"
     SPLC_COMP_SHADER_PATH="shaders/splc.comp.spv"
+    PHYSICS_STEP_COMP_SHADER_PATH="shaders/physics_step.comp.spv"
+    STRESS_CALC_COMP_SHADER_PATH="shaders/stress_calc.comp.spv"
     RAY_VERT_SHADER_PATH="shaders/ray.vert.spv"
     RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv"
 )
