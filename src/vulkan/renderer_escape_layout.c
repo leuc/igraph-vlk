@@ -38,8 +38,48 @@ static void load_rt_function_pointers(VkDevice device)
 	pfnCreateRayTracingPipelinesKHR = (PFN_vkCreateRayTracingPipelinesKHR)vkGetDeviceProcAddr(device, "vkCreateRayTracingPipelinesKHR");
 	pfnGetRayTracingShaderGroupHandlesKHR = (PFN_vkGetRayTracingShaderGroupHandlesKHR)vkGetDeviceProcAddr(device, "vkGetRayTracingShaderGroupHandlesKHR");
 	pfnCmdTraceRaysKHR = (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(device, "vkCmdTraceRaysKHR");
+
+	// Validate all pointers loaded
+	int null_count = 0;
+	if (!pfnGetBufferDeviceAddressKHR) {
+		fprintf(stderr, "[Escape RT] ERROR: pfnGetBufferDeviceAddressKHR is NULL\n");
+		null_count++;
+	}
+	if (!pfnCreateAccelerationStructureKHR) {
+		fprintf(stderr, "[Escape RT] ERROR: pfnCreateAccelerationStructureKHR is NULL\n");
+		null_count++;
+	}
+	if (!pfnDestroyAccelerationStructureKHR) {
+		fprintf(stderr, "[Escape RT] ERROR: pfnDestroyAccelerationStructureKHR is NULL\n");
+		null_count++;
+	}
+	if (!pfnGetAccelerationStructureBuildSizesKHR) {
+		fprintf(stderr, "[Escape RT] ERROR: pfnGetAccelerationStructureBuildSizesKHR is NULL\n");
+		null_count++;
+	}
+	if (!pfnGetAccelerationStructureDeviceAddressKHR) {
+		fprintf(stderr, "[Escape RT] ERROR: pfnGetAccelerationStructureDeviceAddressKHR is NULL\n");
+		null_count++;
+	}
+	if (!pfnCmdBuildAccelerationStructuresKHR) {
+		fprintf(stderr, "[Escape RT] ERROR: pfnCmdBuildAccelerationStructuresKHR is NULL\n");
+		null_count++;
+	}
+	if (!pfnCreateRayTracingPipelinesKHR) {
+		fprintf(stderr, "[Escape RT] ERROR: pfnCreateRayTracingPipelinesKHR is NULL\n");
+		null_count++;
+	}
+	if (!pfnGetRayTracingShaderGroupHandlesKHR) {
+		fprintf(stderr, "[Escape RT] ERROR: pfnGetRayTracingShaderGroupHandlesKHR is NULL\n");
+		null_count++;
+	}
+	if (!pfnCmdTraceRaysKHR) {
+		fprintf(stderr, "[Escape RT] ERROR: pfnCmdTraceRaysKHR is NULL\n");
+		null_count++;
+	}
+
 	rt_functions_loaded = true;
-	fprintf(stderr, "[Escape RT] Loaded extension function pointers\n");
+	fprintf(stderr, "[Escape RT] Loaded extension function pointers (%s)\n", null_count > 0 ? "HAS NULL PTRS" : "all valid");
 }
 
 // ============================================================================
@@ -686,6 +726,11 @@ void renderer_escape_update_tlas_cpu(Renderer *r, uint32_t node_count)
 
 void renderer_escape_record_rt_pass(VkCommandBuffer cmd, Renderer *r, uint32_t node_count, uint32_t frame_index)
 {
+	if (!pfnCmdTraceRaysKHR) {
+		fprintf(stderr, "[Escape RT] ERROR: pfnCmdTraceRaysKHR is NULL, skipping RT pass\n");
+		return;
+	}
+
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r->escape_rt_pipeline);
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r->escape_rt_pipeline_layout, 0, 1, &r->escape_rt_desc_set, 0, NULL);
 
@@ -697,6 +742,15 @@ void renderer_escape_record_rt_pass(VkCommandBuffer cmd, Renderer *r, uint32_t n
 	pc.frame_index = frame_index;
 	pc.ray_max_distance = r->escape_bb_diag * 2.0f;
 	vkCmdPushConstants(cmd, r->escape_rt_pipeline_layout, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 0, sizeof(pc), &pc);
+
+	if (frame_index == 0) {
+		fprintf(stderr, "[Escape RT] Dispatch: nodes=%u ray_max=%.1f\n", node_count, pc.ray_max_distance);
+		fprintf(stderr, "[Escape RT]   pipeline=%lu desc_set=%lu\n", (unsigned long)r->escape_rt_pipeline, (unsigned long)r->escape_rt_desc_set);
+		fprintf(stderr, "[Escape RT]   SBT raygen addr=%lu stride=%lu size=%lu\n", (unsigned long)r->escape_sbt_raygen.deviceAddress, (unsigned long)r->escape_sbt_raygen.stride, (unsigned long)r->escape_sbt_raygen.size);
+		fprintf(stderr, "[Escape RT]   SBT miss   addr=%lu stride=%lu size=%lu\n", (unsigned long)r->escape_sbt_miss.deviceAddress, (unsigned long)r->escape_sbt_miss.stride, (unsigned long)r->escape_sbt_miss.size);
+		fprintf(stderr, "[Escape RT]   SBT hit    addr=%lu stride=%lu size=%lu\n", (unsigned long)r->escape_sbt_hit.deviceAddress, (unsigned long)r->escape_sbt_hit.stride, (unsigned long)r->escape_sbt_hit.size);
+		fprintf(stderr, "[Escape RT]   physics_buf=%lu TLAS=%lu\n", (unsigned long)r->escape_physics_buffer, (unsigned long)r->escape_tlas);
+	}
 
 	pfnCmdTraceRaysKHR(cmd, &r->escape_sbt_raygen, &r->escape_sbt_miss, &r->escape_sbt_hit, &r->escape_sbt_callable, node_count, 1, 1);
 }

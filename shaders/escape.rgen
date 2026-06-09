@@ -37,24 +37,43 @@ void main() {
 	if (nodeId >= gl_LaunchSizeEXT.x) return;
 
 	vec3 origin = nodes[nodeId].position.xyz;
+	// Node's collision radius packed in position.w (tetrahedron scale)
+	float nodeRadius = nodes[nodeId].position.w;
 	vec3 finalEscape = vec3(0.0);
 	const int RAY_COUNT = 16;
+	float miss_count = 0.0;
 
 	for (int i = 0; i < RAY_COUNT; i++) {
 		vec3 dir = get_random_direction(nodeId, uint(i));
 		hitDistance = 0.0;
 
+		// Offset ray origin outward by node radius to skip self-intersection
+		// (ray starts inside own tetrahedron geometry, would always hit exit face)
+		vec3 rayOrigin = origin + dir * (nodeRadius + 0.01);
+
 		traceRayEXT(topLevelAS,
 			gl_RayFlagsOpaqueEXT,
 			0xFF, 0, 0, 0,
-			origin, 0.01, dir, pc.ray_max_distance, 0);
+			rayOrigin, 0.01, dir, pc.ray_max_distance, 0);
 
-		float weight = 1.0 / max(hitDistance * hitDistance, 0.01);
-		finalEscape -= dir * weight;
+		if (hitDistance >= pc.ray_max_distance * 0.99) {
+			// Miss: open space in this direction — pull toward it (expansion)
+			finalEscape += dir;
+			miss_count += 1.0;
+		} else {
+			// Hit: geometry nearby — push away (repulsion)
+			// Clamp weight so close hits don't dominate the signal
+			float weight = min(1.0 / max(hitDistance * hitDistance, 0.01), 4.0);
+			finalEscape -= dir * weight;
+		}
 	}
 
-	// Normalize to unit length: direction only, magnitude controlled by alpha on CPU.
-	// This prevents 1/d² divergence from overwhelming spring forces at close range.
+	// Magnitude = openness (fraction of rays that missed).
+	// This encodes HOW MUCH open space surrounds the node:
+	//   fully enclosed -> ~0 (no escape force, only springs act)
+	//   fully open     -> ~1 (strong escape force outward)
+	// Direction = weighted sum of open directions minus obstacles.
+	float openness = miss_count / float(RAY_COUNT);
 	float len = length(finalEscape);
-	nodes[nodeId].escape_vector.xyz = (len > 0.0001) ? finalEscape / len : vec3(0.0);
+	nodes[nodeId].escape_vector.xyz = (len > 0.0001) ? (finalEscape / len) * openness : vec3(0.0);
 }

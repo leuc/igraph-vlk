@@ -214,6 +214,50 @@ bool igraph_vlk_layout_escape_tick(Renderer *r)
 		VK_CHECK(vkWaitForFences(r->core.device, 1, &r->escape_fence, VK_TRUE, UINT64_MAX), "Failed to wait for escape fence");
 		VK_CHECK(vkResetFences(r->core.device, 1, &r->escape_fence), "Failed to reset escape fence");
 
+		// Read back positions from GPU and update graph visualization every iteration
+		escape_readback_positions(r, r->escape_graph_data);
+
+		// Debug: sample a few nodes' escape vectors and positions every 10 iters
+		if (r->escape_current_iter % 10 == 0 && r->escape_graph_data) {
+			VkDeviceSize phys_size = sizeof(NodePhysicsGPU) * n;
+			NodePhysicsGPU *phys = (NodePhysicsGPU *)malloc(phys_size);
+			void *mapped;
+			vkMapMemory(r->core.device, r->escape_physics_memory, 0, phys_size, 0, &mapped);
+			memcpy(phys, mapped, phys_size);
+			vkUnmapMemory(r->core.device, r->escape_physics_memory);
+
+			// Sample nodes 0, n/4, n/2, 3n/4, n-1
+			uint32_t samples[] = {0, n / 4, n / 2, (3 * n) / 4, n - 1};
+			float avg_escape_len = 0.0f;
+			float avg_pos_len = 0.0f;
+			for (uint32_t s = 0; s < 5 && samples[s] < n; s++) {
+				uint32_t idx = samples[s];
+				float ex = phys[idx].escape_vector[0], ey = phys[idx].escape_vector[1], ez = phys[idx].escape_vector[2];
+				float el = sqrtf(ex * ex + ey * ey + ez * ez);
+				float px = phys[idx].position[0], py = phys[idx].position[1], pz = phys[idx].position[2];
+				float pl = sqrtf(px * px + py * py + pz * pz);
+				avg_escape_len += el;
+				avg_pos_len += pl;
+				if (r->escape_current_iter == 10 || s == 0)
+					printf("[Escape]   node[%u] pos=(%.2f,%.2f,%.2f) r=%.2f  escape=(%.6f,%.6f,%.6f) |e|=%.6f\n", idx, px, py, pz, pl, ex, ey, ez, el);
+			}
+			avg_escape_len /= 5.0f;
+			avg_pos_len /= 5.0f;
+			printf("[Escape] iter %4u | avg |escape|=%.6f  avg |pos|=%.2f  rt_supported=%d\n", r->escape_current_iter, avg_escape_len, avg_pos_len, r->escape_rt_supported);
+
+			// On first readback, check if escape vectors are all zero (RT not working)
+			if (r->escape_current_iter == 10 && avg_escape_len < 0.0001f) {
+				fprintf(stderr, "[Escape RT] WARNING: All escape vectors are zero after RT pass!\n");
+				fprintf(stderr, "[Escape RT]   escape_rt_supported=%d escape_rt_initialized=%d\n", r->escape_rt_supported, r->escape_rt_initialized);
+				fprintf(stderr, "[Escape RT]   escape_physics_buffer=%lu\n", (unsigned long)r->escape_physics_buffer);
+				fprintf(stderr, "[Escape RT]   escape_tlas=%lu\n", (unsigned long)r->escape_tlas);
+				fprintf(stderr, "[Escape RT]   escape_rt_pipeline=%lu\n", (unsigned long)r->escape_rt_pipeline);
+				fprintf(stderr, "[Escape RT]   escape_rt_desc_set=%lu\n", (unsigned long)r->escape_rt_desc_set);
+				fprintf(stderr, "[Escape RT]   escape_sbt_buffer=%lu\n", (unsigned long)r->escape_sbt_buffer);
+			}
+			free(phys);
+		}
+
 		// CPU-side TLAS update for next frame's RT pass
 		if (r->escape_rt_supported) {
 			renderer_escape_update_tlas_cpu(r, n);
@@ -221,14 +265,12 @@ bool igraph_vlk_layout_escape_tick(Renderer *r)
 
 		if (escape_check_convergence(r, r->escape_epsilon)) {
 			printf("[Escape] Converged at iteration %u (stress=%.2f)\n", r->escape_current_iter, r->escape_previous_stress);
-			escape_readback_positions(r, r->escape_graph_data);
 			r->escape_sim_active = false;
 			return false;
 		}
 
 		if (r->escape_current_iter >= r->escape_max_iters) {
 			printf("[Escape] Max iterations reached (%u)\n", r->escape_max_iters);
-			escape_readback_positions(r, r->escape_graph_data);
 			r->escape_sim_active = false;
 			return false;
 		}
@@ -239,6 +281,8 @@ bool igraph_vlk_layout_escape_tick(Renderer *r)
 	if (r->escape_alpha < r->escape_alpha_floor)
 		r->escape_alpha = r->escape_alpha_floor;
 	r->escape_beta *= r->escape_force_decay;
+	if (r->escape_beta < 0.05f)
+		r->escape_beta = 0.05f;
 
 	EscapeSimParams params = {
 		.dt = r->escape_dt,
@@ -392,7 +436,9 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 		phys[i].position[0] = data->nodes[i].position[0];
 		phys[i].position[1] = data->nodes[i].position[1];
 		phys[i].position[2] = data->nodes[i].position[2];
-		phys[i].position[3] = 1.0f; // mass
+		// Pack node's collision radius (tetrahedron scale) into .w
+		// Used by RT shader to offset ray origin outside own geometry
+		phys[i].position[3] = log2f((float)data->nodes[i].degree + 2.0f) * 0.5f;
 		// Escape vector: radial repulsion away from centroid, scaled by coreness
 		float dx = data->nodes[i].position[0] - cx;
 		float dy = data->nodes[i].position[1] - cy;
@@ -622,8 +668,8 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 
 	// Alpha (repulsion blend) and beta (attraction blend): start balanced.
 	// Both decay together so neither force dominates completely.
-	float alpha0 = 0.50f;
-	float beta0 = 0.50f;
+	float alpha0 = 0.70f;
+	float beta0 = 0.30f;
 
 	// Friction: more damping for larger graphs (prevents runaway velocities)
 	float friction0 = 0.90f - 0.03f * fminf(log_n / 10.0f, 1.0f);
@@ -635,8 +681,8 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 
 	// Decay: both alpha and beta decay, keeping repulsion/attraction balanced.
 	// Floor alpha at 0.10 so RT repulsion persists throughout.
-	float force_decay = 0.992f;
-	float alpha_floor = 0.10f;
+	float force_decay = 0.9995f;
+	float alpha_floor = 0.20f;
 
 	EscapeSimParams params = {
 		.dt = dt0,
@@ -766,8 +812,8 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	if (ideal_length < 0.5f)
 		ideal_length = 0.5f;
 
-	float alpha0 = 0.50f;
-	float beta0 = 0.50f;
+	float alpha0 = 0.70f;
+	float beta0 = 0.30f;
 
 	float friction0 = 0.90f - 0.03f * fminf(log_n / 10.0f, 1.0f);
 	if (friction0 < 0.78f)
@@ -775,8 +821,8 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 
 	float dt0 = 0.05f / (1.0f + log_n * 0.04f);
 
-	float force_decay = 0.992f;
-	float alpha_floor = 0.10f;
+	float force_decay = 0.9995f;
+	float alpha_floor = 0.20f;
 
 	printf("[Escape] Params: avg_deg=%.1f density=%.4f ideal=%.1f alpha=%.3f beta=%.3f friction=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, ideal_length, alpha0, beta0, friction0, dt0, force_decay);
 
@@ -787,7 +833,7 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	r->escape_sim_active = true;
 	r->escape_needs_wait = false;
 	r->escape_current_iter = 0;
-	r->escape_max_iters = 200;
+	r->escape_max_iters = 1000;
 	r->escape_epsilon = 0.0001f;
 	r->escape_dt = dt0;
 	r->escape_alpha = alpha0;
