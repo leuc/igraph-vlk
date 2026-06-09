@@ -58,6 +58,9 @@ void *compute_escape_layout(igraph_t *graph);
 void free_layout_matrix(void *result_data);
 void apply_layout_matrix(ExecutionContext *ctx, void *result_data);
 
+// Custom apply function for escape layout (applies initial + runs GPU drive)
+void apply_escape_layout(ExecutionContext *ctx, void *result_data);
+
 // GPU escape layout simulation driver and cleanup
 struct Renderer;
 struct AppState;

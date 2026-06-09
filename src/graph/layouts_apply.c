@@ -79,7 +79,7 @@ void apply_layout_matrix(ExecutionContext *ctx, void *result_data)
 			if (z > max_z)
 				max_z = z;
 		}
-		// printf("[Layout Bounds] X: [%.3f, %.3f] Y: [%.3f, %.3f] Z: [%.3f, %.3f]\n", min_x, max_x, min_y, max_y, min_z, max_z);
+		printf("[apply_layout_matrix] Bounds: X=[%.3f, %.3f] Y=[%.3f, %.3f] Z=[%.3f, %.3f] nodes=%ld\n", min_x, max_x, min_y, max_y, min_z, max_z, (long)data->node_count);
 	}
 
 	renderer_update_graph(renderer, data);

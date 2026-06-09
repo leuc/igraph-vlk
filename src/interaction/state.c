@@ -80,6 +80,7 @@ void update_app_state(AppState *state)
 
 	case STATE_EXECUTING:
 		if (app->pending_command) {
+			printf("[State] STATE_EXECUTING: cmd='%s' has_cmd_def=%d\n", app->pending_command->display_name, app->pending_command->cmd_def != 0);
 			// Check if this is a data-driven command with cmd_def (background worker)
 			if (app->pending_command->cmd_def) {
 				printf("[State] Executing data-driven command: %s\n", app->pending_command->display_name);
@@ -158,15 +159,19 @@ void update_app_state(AppState *state)
 				// Safely apply layout on main thread from worker's result
 				WorkerJob *job = state->current_worker_job;
 				if (job) {
+					printf("[State] Job has apply_func=%d result_data=%p\n", job->apply_func != NULL, (void *)job->result_data);
 					// Apply dynamic result if available
 					if (job->apply_func && job->result_data) {
+						printf("[State] Calling apply_func...\n");
 						job->apply_func(job->ctx, job->result_data);
+						printf("[State] apply_func completed\n");
 						Renderer *r = &state->renderer;
 						r->labelTreeNeedsRebuild = true;
 					}
 
 					// Free dynamic result if available
 					if (job->free_func && job->result_data) {
+						printf("[State] Calling free_func...\n");
 						job->free_func(job->result_data);
 					}
 
@@ -178,9 +183,11 @@ void update_app_state(AppState *state)
 
 				// Check if this command produced visual results
 				if (app->pending_command && app->pending_command->produces_visual_output) {
+					printf("[State] Command produces visual output -> STATE_DISPLAY_RESULTS\n");
 					app->has_visual_results = true;
 					app->current_state = STATE_DISPLAY_RESULTS;
 				} else {
+					printf("[State] No visual output -> STATE_MENU_OPEN\n");
 					// Reset after execution but keep menu open
 					app->pending_command = NULL;
 					app->current_state = STATE_MENU_OPEN;

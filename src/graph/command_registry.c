@@ -76,7 +76,7 @@ const CommandDef g_command_registry[] = {
 
 	// Non-Igraph
 	{"Layout", "lay_layered_sphere", "Layered Sphere", compute_layout_layered_sphere, apply_layout_matrix, free_layout_matrix},
-	{"Layout", "lay_escape", "Escape (GPU Physics)", compute_escape_layout, apply_layout_matrix, free_layout_matrix},
+	{"Layout", "lay_escape", "Escape (GPU Physics)", compute_escape_layout, apply_escape_layout, free_layout_matrix},
 	// =========================================================================
 	// Layout menu - Geometric
 	// =========================================================================
