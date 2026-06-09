@@ -28,7 +28,12 @@ void create_buffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSiz
 	vkGetPhysicalDeviceProperties(physicalDevice, &props);
 	VkDeviceSize atomSize = props.limits.nonCoherentAtomSize;
 	VkDeviceSize allocSize = VK_ALIGN_UP(memReqs.size, atomSize);
+	VkMemoryAllocateFlagsInfo flagsInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO};
 	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = find_memory_type(physicalDevice, memReqs.memoryTypeBits, properties)};
+	if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
+		flagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+		allocInfo.pNext = &flagsInfo;
+	}
 	VK_CHECK(vkAllocateMemory(device, &allocInfo, NULL, bufferMemory), "Failed to allocate buffer memory");
 	VK_CHECK(vkBindBufferMemory(device, *buffer, *bufferMemory, 0), "Failed to bind buffer memory");
 }
