@@ -438,7 +438,7 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 		phys[i].position[2] = data->nodes[i].position[2];
 		// Pack node's collision radius (tetrahedron scale) into .w
 		// Used by RT shader to offset ray origin outside own geometry
-		phys[i].position[3] = log2f((float)data->nodes[i].degree + 2.0f) * 0.5f;
+		phys[i].position[3] = 1.0f;
 		// Escape vector: radial repulsion away from centroid, scaled by coreness
 		float dx = data->nodes[i].position[0] - cx;
 		float dy = data->nodes[i].position[1] - cy;
@@ -666,9 +666,10 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 	if (ideal_length < 0.5f)
 		ideal_length = 0.5f;
 
-	// Alpha (repulsion blend) and beta (attraction blend): start balanced.
-	// Both decay together so neither force dominates completely.
-	float alpha0 = 0.70f;
+	// Alpha (escape force multiplier) and beta (spring force multiplier).
+	// alpha must be larger because escape vector has magnitude openness (0-1)
+	// while spring displacement is in world units (can be much larger).
+	float alpha0 = 5.0f;
 	float beta0 = 0.30f;
 
 	// Friction: more damping for larger graphs (prevents runaway velocities)
@@ -682,7 +683,7 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 	// Decay: both alpha and beta decay, keeping repulsion/attraction balanced.
 	// Floor alpha at 0.10 so RT repulsion persists throughout.
 	float force_decay = 0.9995f;
-	float alpha_floor = 0.20f;
+	float alpha_floor = 0.15f;
 
 	EscapeSimParams params = {
 		.dt = dt0,
@@ -812,7 +813,7 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	if (ideal_length < 0.5f)
 		ideal_length = 0.5f;
 
-	float alpha0 = 0.70f;
+	float alpha0 = 2.0f;
 	float beta0 = 0.30f;
 
 	float friction0 = 0.90f - 0.03f * fminf(log_n / 10.0f, 1.0f);
@@ -822,7 +823,7 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	float dt0 = 0.05f / (1.0f + log_n * 0.04f);
 
 	float force_decay = 0.9995f;
-	float alpha_floor = 0.20f;
+	float alpha_floor = 0.15f;
 
 	printf("[Escape] Params: avg_deg=%.1f density=%.4f ideal=%.1f alpha=%.3f beta=%.3f friction=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, ideal_length, alpha0, beta0, friction0, dt0, force_decay);
 

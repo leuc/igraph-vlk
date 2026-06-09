@@ -20,16 +20,16 @@ layout(push_constant) uniform PushConstants {
 	float ray_max_distance;
 } pc;
 
-float hash(uint n) {
-	n = (n << 13U) ^ n;
-	return float(n * (n * n * 15731U + 789221U) + 1376312589U) / 4294967296.0;
-}
+#define RAY_COUNT 16
 
-vec3 get_random_direction(uint seed, uint ray_idx) {
-	uint s = seed * 1973U + pc.frame_index * 9277U + ray_idx * 26699U;
-	float theta = hash(s) * 2.0 * 3.14159265;
-	float phi = acos(2.0 * hash(s + 1U) - 1.0);
-	return vec3(sin(phi) * cos(theta), sin(phi) * sin(theta), cos(phi));
+// Fibonacci sphere: evenly distributes RAY_COUNT points around the sphere
+// Node-specific offset (deterministic, no frame_index) keeps distinct patterns per node
+vec3 fibonacci_sphere_dir(uint node_id, uint ray_idx) {
+	const float GOLDEN_ANGLE = 2.399963229728653;
+	float y = 1.0 - (2.0 * float(ray_idx) + 1.0) / float(RAY_COUNT);
+	float r = sqrt(1.0 - y * y);
+	float theta = GOLDEN_ANGLE * float(ray_idx) + GOLDEN_ANGLE * float(node_id) * 0.137;
+	return vec3(cos(theta) * r, sin(theta) * r, y);
 }
 
 void main() {
@@ -40,11 +40,10 @@ void main() {
 	// Node's collision radius packed in position.w (tetrahedron scale)
 	float nodeRadius = nodes[nodeId].position.w;
 	vec3 finalEscape = vec3(0.0);
-	const int RAY_COUNT = 16;
 	float miss_count = 0.0;
 
 	for (int i = 0; i < RAY_COUNT; i++) {
-		vec3 dir = get_random_direction(nodeId, uint(i));
+		vec3 dir = fibonacci_sphere_dir(nodeId, uint(i));
 		hitDistance = 0.0;
 
 		// Offset ray origin outward by node radius to skip self-intersection
