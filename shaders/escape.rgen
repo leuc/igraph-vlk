@@ -37,8 +37,6 @@ void main() {
 	if (nodeId >= gl_LaunchSizeEXT.x) return;
 
 	vec3 origin = nodes[nodeId].position.xyz;
-	// Node's collision radius packed in position.w (tetrahedron scale)
-	float nodeRadius = nodes[nodeId].position.w;
 	vec3 finalEscape = vec3(0.0);
 	float miss_count = 0.0;
 
@@ -46,14 +44,10 @@ void main() {
 		vec3 dir = fibonacci_sphere_dir(nodeId, uint(i));
 		hitDistance = 0.0;
 
-		// Offset ray origin outward by node radius to skip self-intersection
-		// (ray starts inside own tetrahedron geometry, would always hit exit face)
-		vec3 rayOrigin = origin + dir * (nodeRadius + 0.01);
-
 		traceRayEXT(topLevelAS,
-			gl_RayFlagsOpaqueEXT,
+			gl_RayFlagsOpaqueEXT | gl_RayFlagsCullBackFacingTrianglesEXT,
 			0xFF, 0, 0, 0,
-			rayOrigin, 0.01, dir, pc.ray_max_distance, 0);
+			origin, 0.001, dir, pc.ray_max_distance, 0);
 
 		if (hitDistance >= pc.ray_max_distance * 0.99) {
 			// Miss: open space in this direction — pull toward it (expansion)
