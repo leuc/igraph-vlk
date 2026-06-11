@@ -639,7 +639,7 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	float avg_degree = (n > 0) ? (float)m / (float)n : 1.0f;
 	float density = (n > 1) ? (float)m / ((float)n * (float)(n - 1)) : 0.0f;
 
-	float alpha0 = 5.0f;
+	float alpha0 = 10.0f;
 
 	printf("[Escape] Params: avg_deg=%.1f density=%.4f alpha=%.3f\n", avg_degree, density, alpha0);
 

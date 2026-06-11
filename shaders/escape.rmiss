@@ -2,11 +2,12 @@
 #extension GL_EXT_ray_tracing : require
 
 struct RayPayload {
-	float hitDistance;
+	uint hitCount;
 	uint originNodeId;
+	uint escaped;
 };
 layout(location = 0) rayPayloadInEXT RayPayload payload;
 
 void main() {
-	payload.hitDistance = gl_RayTmaxEXT;
+	payload.escaped = 1;
 }

@@ -2,8 +2,9 @@
 #extension GL_EXT_ray_tracing : require
 
 struct RayPayload {
-	float hitDistance;
+	uint hitCount;
 	uint originNodeId;
+	uint escaped; // 1 if ray reached open space (miss shader fired)
 };
 layout(location = 0) rayPayloadInEXT RayPayload payload;
 
@@ -29,4 +30,8 @@ void main() {
 			return;
 		}
 	}
+
+	// Non-neighbor object in the way — count it and continue traversal
+	payload.hitCount++;
+	ignoreIntersectionEXT;
 }

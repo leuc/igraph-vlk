@@ -37,7 +37,7 @@ void main() {
 	float freedom = nodes[id].freedom.x;
 	bool is_awake = (nodes[id].freedom.w > 0.5);
 
-	const float SLEEP_THRESHOLD = 0.85;
+	const float SLEEP_THRESHOLD = 0.95;
 	const float WAKE_THRESHOLD = 0.70;
 
 	if (is_awake) {
