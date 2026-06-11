@@ -91,16 +91,13 @@ typedef struct
 
 typedef struct
 {
-	float dt;
 	float alpha;
-	float beta;
 	float avg_degree;
 	uint32_t node_count;
 } EscapeSimParams;
 
 // Forward declarations for per-frame tick
-static bool escape_check_convergence(Renderer *r, float epsilon);
-static void escape_readback_positions(Renderer *r, GraphData *data);
+static uint32_t escape_readback_positions(Renderer *r, GraphData *data);
 static void escape_record_iteration(VkCommandBuffer cmd, Renderer *r, EscapeSimParams *params, uint32_t node_count, uint32_t edge_count, uint32_t frame_index);
 
 // ============================================================================
@@ -226,7 +223,7 @@ bool igraph_vlk_layout_escape_tick(Renderer *r)
 		VK_CHECK(vkResetFences(r->core.device, 1, &r->escape_fence), "Failed to reset escape fence");
 
 		// Read back positions from GPU and update graph visualization every iteration
-		escape_readback_positions(r, r->escape_graph_data);
+		uint32_t sleeping = escape_readback_positions(r, r->escape_graph_data);
 
 		// Debug: sample a few nodes' escape vectors and positions every 10 iters
 		if (r->escape_current_iter % 10 == 0 && r->escape_graph_data) {
@@ -258,18 +255,8 @@ bool igraph_vlk_layout_escape_tick(Renderer *r)
 			avg_escape_len /= 5.0f;
 			avg_pos_len /= 5.0f;
 			avg_freedom /= 5.0f;
-			printf("[Escape] iter %4u | avg |escape|=%.6f  avg |pos|=%.2f  avg freedom=%.3f  rt_supported=%d\n", r->escape_current_iter, avg_escape_len, avg_pos_len, avg_freedom, r->escape_rt_supported);
+			printf("[Escape] iter %4u | sleeping=%u/%u avg |escape|=%.6f  avg |pos|=%.2f  avg freedom=%.3f\n", r->escape_current_iter, sleeping, n, avg_escape_len, avg_pos_len, avg_freedom);
 
-			// On first readback, check if escape vectors are all zero (RT not working)
-			if (r->escape_current_iter == 10 && avg_escape_len < 0.0001f) {
-				fprintf(stderr, "[Escape RT] WARNING: All escape vectors are zero after RT pass!\n");
-				fprintf(stderr, "[Escape RT]   escape_rt_supported=%d escape_rt_initialized=%d\n", r->escape_rt_supported, r->escape_rt_initialized);
-				fprintf(stderr, "[Escape RT]   escape_physics_buffer=%lu\n", (unsigned long)r->escape_physics_buffer);
-				fprintf(stderr, "[Escape RT]   escape_tlas=%lu\n", (unsigned long)r->escape_tlas);
-				fprintf(stderr, "[Escape RT]   escape_rt_pipeline=%lu\n", (unsigned long)r->escape_rt_pipeline);
-				fprintf(stderr, "[Escape RT]   escape_rt_desc_set=%lu\n", (unsigned long)r->escape_rt_desc_set);
-				fprintf(stderr, "[Escape RT]   escape_sbt_buffer=%lu\n", (unsigned long)r->escape_sbt_buffer);
-			}
 			free(phys);
 		}
 
@@ -278,31 +265,22 @@ bool igraph_vlk_layout_escape_tick(Renderer *r)
 			renderer_escape_update_tlas_cpu(r, n);
 		}
 
-		if (escape_check_convergence(r, r->escape_epsilon)) {
-			printf("[Escape] Converged at iteration %u (stress=%.2f)\n", r->escape_current_iter, r->escape_previous_stress);
+		// Freedom-based convergence: all nodes asleep = done
+		if (sleeping == n) {
+			printf("[Escape] All nodes asleep at iteration %u\n", r->escape_current_iter);
 			r->escape_sim_active = false;
 			return false;
 		}
 
 		if (r->escape_current_iter >= r->escape_max_iters) {
-			printf("[Escape] Max iterations reached (%u)\n", r->escape_max_iters);
+			printf("[Escape] Max iterations reached (%u) sleeping=%u/%u\n", r->escape_max_iters, sleeping, n);
 			r->escape_sim_active = false;
 			return false;
 		}
 	}
 
-	// Decay forces
-	r->escape_alpha *= r->escape_force_decay;
-	if (r->escape_alpha < r->escape_alpha_floor)
-		r->escape_alpha = r->escape_alpha_floor;
-	r->escape_beta *= r->escape_force_decay;
-	if (r->escape_beta < 0.05f)
-		r->escape_beta = 0.05f;
-
 	EscapeSimParams params = {
-		.dt = r->escape_dt,
 		.alpha = r->escape_alpha,
-		.beta = r->escape_beta,
 		.avg_degree = r->escape_avg_degree,
 		.node_count = n,
 	};
@@ -325,7 +303,7 @@ bool igraph_vlk_layout_escape_tick(Renderer *r)
 	r->escape_current_iter++;
 
 	if (r->escape_current_iter % 10 == 0 || r->escape_current_iter == r->escape_max_iters)
-		printf("[Escape] iter %4u / %u | stress=%.2f alpha=%.3f beta=%.3f\n", r->escape_current_iter, r->escape_max_iters, r->escape_previous_stress, r->escape_alpha, r->escape_beta);
+		printf("[Escape] iter %4u / %u | alpha=%.3f\n", r->escape_current_iter, r->escape_max_iters, r->escape_alpha);
 
 	return true;
 }
@@ -578,34 +556,10 @@ static void escape_record_iteration(VkCommandBuffer cmd, Renderer *r, EscapeSimP
 }
 
 // ============================================================================
-// Convergence check (read back stress from GPU)
-// ============================================================================
-
-static bool escape_check_convergence(Renderer *r, float epsilon)
-{
-	float current_stress = 0.0f;
-	void *data;
-	vkMapMemory(r->core.device, r->escape_global_stress_memory, 0, sizeof(float), 0, &data);
-	memcpy(&current_stress, data, sizeof(float));
-	vkUnmapMemory(r->core.device, r->escape_global_stress_memory);
-
-	float delta = r->escape_previous_stress - current_stress;
-	r->escape_previous_stress = current_stress;
-
-	if (fabsf(delta) < epsilon) {
-		r->escape_stable_frames++;
-	} else {
-		r->escape_stable_frames = 0;
-	}
-
-	return r->escape_stable_frames >= 10;
-}
-
-// ============================================================================
 // Read back final positions from GPU to GraphData
 // ============================================================================
 
-static void escape_readback_positions(Renderer *r, GraphData *data)
+static uint32_t escape_readback_positions(Renderer *r, GraphData *data)
 {
 	VkDeviceSize phys_size = sizeof(NodePhysicsGPU) * data->node_count;
 	NodePhysicsGPU *phys = (NodePhysicsGPU *)malloc(phys_size);
@@ -615,18 +569,21 @@ static void escape_readback_positions(Renderer *r, GraphData *data)
 	memcpy(phys, mapped, phys_size);
 	vkUnmapMemory(r->core.device, r->escape_physics_memory);
 
+	uint32_t sleeping = 0;
 	for (uint32_t i = 0; i < (uint32_t)data->node_count; i++) {
 		data->nodes[i].position[0] = phys[i].position[0];
 		data->nodes[i].position[1] = phys[i].position[1];
 		data->nodes[i].position[2] = phys[i].position[2];
-		// Update the stored layout matrix for persistence
 		MATRIX(data->current_layout, i, 0) = (igraph_real_t)phys[i].position[0];
 		MATRIX(data->current_layout, i, 1) = (igraph_real_t)phys[i].position[1];
 		MATRIX(data->current_layout, i, 2) = (igraph_real_t)phys[i].position[2];
+		if (phys[i].freedom[3] < 0.5f)
+			sleeping++;
 	}
 
 	free(phys);
 	renderer_update_graph(r, data);
+	return sleeping;
 }
 
 // ============================================================================
@@ -681,33 +638,19 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	// --- Dynamic parameter scaling based on graph properties ---
 	float avg_degree = (n > 0) ? (float)m / (float)n : 1.0f;
 	float density = (n > 1) ? (float)m / ((float)n * (float)(n - 1)) : 0.0f;
-	float log_n = logf((float)n + 1.0f);
 
-	float alpha0 = 50.0f;
-	float beta0 = 2.00f;
+	float alpha0 = 5.0f;
 
-	float dt0 = bb_diag * 0.0002f / (1.0f + log_n * 0.04f);
-
-	float force_decay = 0.9995f;
-	float alpha_floor = 0.15f;
-
-	printf("[Escape] Params: avg_deg=%.1f density=%.4f alpha=%.3f beta=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, alpha0, beta0, dt0, force_decay);
+	printf("[Escape] Params: avg_deg=%.1f density=%.4f alpha=%.3f\n", avg_degree, density, alpha0);
 
 	// Store simulation state in Renderer for per-frame tick
-	r->escape_previous_stress = INFINITY;
-	r->escape_stable_frames = 0;
 	r->escape_running = true;
 	r->escape_sim_active = true;
 	r->escape_needs_wait = false;
 	r->escape_current_iter = 0;
-	r->escape_max_iters = 500;
-	r->escape_epsilon = 0.005f;
-	r->escape_dt = dt0;
+	r->escape_max_iters = 2000;
 	r->escape_alpha = alpha0;
-	r->escape_beta = beta0;
 	r->escape_avg_degree = avg_degree;
-	r->escape_force_decay = force_decay;
-	r->escape_alpha_floor = alpha_floor;
 	r->escape_node_count = n;
 	r->escape_edge_count = m;
 	r->escape_graph_data = data;

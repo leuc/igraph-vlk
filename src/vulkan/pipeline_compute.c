@@ -62,7 +62,7 @@ void renderer_create_escape_compute_pipelines(Renderer *r)
 	VkDescriptorSetLayoutCreateInfo physicsLayoutInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 4, .pBindings = physicsBindings};
 	VK_CHECK(vkCreateDescriptorSetLayout(r->core.device, &physicsLayoutInfo, NULL, &r->escape_physics_desc_layout), "Failed to create escape physics desc set layout");
 
-	VkPushConstantRange physicsPushConstant = {.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = sizeof(float) * 5 + sizeof(uint32_t)};
+	VkPushConstantRange physicsPushConstant = {.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = sizeof(float) * 2 + sizeof(uint32_t)};
 	VkPipelineLayoutCreateInfo physicsPipelineLayoutInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->escape_physics_desc_layout, .pushConstantRangeCount = 1, .pPushConstantRanges = &physicsPushConstant};
 	VK_CHECK(vkCreatePipelineLayout(r->core.device, &physicsPipelineLayoutInfo, NULL, &r->escape_physics_pipeline_layout), "Failed to create escape physics pipeline layout");
 

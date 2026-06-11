@@ -367,23 +367,15 @@ typedef struct Renderer
 	VkCommandBuffer escape_cmd_buf;
 	VkFence escape_fence;
 	VkBool32 escape_initialized;
-	// Escape simulation convergence state
-	float escape_previous_stress;
-	uint32_t escape_stable_frames;
+	// Escape simulation state
 	bool escape_running;
-	int escape_iteration;
 
 	// Escape per-frame GPU tick state
 	bool escape_sim_active;
 	bool escape_needs_wait;
 	uint32_t escape_max_iters;
 	uint32_t escape_current_iter;
-	float escape_force_decay;
-	float escape_alpha_floor;
-	float escape_epsilon;
-	float escape_dt;
 	float escape_alpha;
-	float escape_beta;
 	float escape_avg_degree;
 	uint32_t escape_node_count;
 	uint32_t escape_edge_count;
