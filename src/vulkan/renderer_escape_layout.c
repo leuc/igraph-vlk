@@ -101,7 +101,6 @@ static const uint32_t TETRA_INDICES[12] = {0, 1, 2, 0, 2, 3, 0, 3, 1, 1, 3, 2};
 typedef struct
 {
 	float position[4];
-	float velocity[4];
 	float escape_vector[4];
 	float freedom[4];
 } NodePhysicsGPU;

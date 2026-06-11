@@ -4,9 +4,8 @@ layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 struct NodePhysics {
 	vec4 position;      // xyz=pos, w=nodeRadius
-	vec4 velocity;      // xyz=vel, w=is_awake (1.0 awake, 0.0 asleep)
 	vec4 escape_vector; // xyz=escape_dir, w=openness
-	vec4 freedom;       // x=local_freedom [0..1], yzw=unused
+	vec4 freedom;       // x=local_freedom [0..1], w=is_awake (1.0 awake, 0.0 asleep)
 };
 
 layout(std430, binding = 0, set = 0) buffer PhysicsBuffer {
@@ -38,15 +37,14 @@ void main() {
 	if (id >= params.node_count) return;
 
 	float freedom = nodes[id].freedom.x;
-	bool is_awake = (nodes[id].velocity.w > 0.5);
+	bool is_awake = (nodes[id].freedom.w > 0.5);
 
 	const float SLEEP_THRESHOLD = 0.85;
 	const float WAKE_THRESHOLD = 0.70;
 
 	if (is_awake) {
-		if (freedom > SLEEP_THRESHOLD && length(nodes[id].velocity.xyz) < 0.1) {
+		if (freedom > SLEEP_THRESHOLD && length(nodes[id].escape_vector.xyz) < 0.01) {
 			is_awake = false;
-			nodes[id].velocity.xyz = vec3(0.0);
 		}
 	} else {
 		if (freedom < WAKE_THRESHOLD) {
@@ -54,7 +52,7 @@ void main() {
 		}
 	}
 
-	nodes[id].velocity.w = is_awake ? 1.0 : 0.0;
+	nodes[id].freedom.w = is_awake ? 1.0 : 0.0;
 
 	if (!is_awake) {
 		return;
@@ -95,10 +93,6 @@ void main() {
 
 	vec3 total_force = (escape_force * params.alpha) + (spring_force * params.beta);
 
-	vec3 vel = nodes[id].velocity.xyz;
-	// Velocity integrates force impulse
-	vel = vel + total_force * params.dt;
-
-	nodes[id].velocity.xyz = vel;
-	nodes[id].position.xyz = pos + (vel * params.dt);
+	// Direct displacement (overdamped, no velocity accumulator)
+	nodes[id].position.xyz = pos + total_force * params.dt;
 }

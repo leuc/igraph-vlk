@@ -79,9 +79,8 @@ static void get_hilbert_3d_position(int rank, int order, float *x, float *y, flo
 typedef struct
 {
 	float position[4];		// xyz = pos, w = mass
-	float velocity[4];		// xyz = vel, w = is_awake
 	float escape_vector[4]; // xyz = escape_dir, w = openness
-	float freedom[4];		// x = local_freedom [0..1]
+	float freedom[4];		// x = local_freedom [0..1], w = is_awake
 } NodePhysicsGPU;
 
 typedef struct
@@ -469,7 +468,7 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 			phys[i].escape_vector[2] = 0.0f;
 		}
 		// All nodes start awake with maximum freedom
-		phys[i].velocity[3] = 1.0f;
+		phys[i].freedom[3] = 1.0f;
 		phys[i].freedom[0] = 1.0f;
 	}
 	update_buffer(r->core.device, r->escape_physics_memory, phys_size, phys);
