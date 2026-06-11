@@ -7,24 +7,40 @@
 #include <string.h>
 
 // ============================================================================
-// Worker: Check if graph is acyclic, fail if not
+// Shared: Remove feedback arc set to make graph acyclic (in-place)
 // ============================================================================
-void *compute_remove_feedback_arc_set(igraph_t *graph)
+igraph_t *make_graph_acyclic(igraph_t *graph)
 {
 	if (!graph || igraph_vcount(graph) == 0)
 		return NULL;
 
-	igraph_bool_t is_dag;
+	igraph_bool_t is_dag = false;
 	if (igraph_is_dag(graph, &is_dag) != IGRAPH_SUCCESS)
 		return NULL;
 
-	if (!is_dag) {
-		fprintf(stderr, "Graph has cycles, cannot make acyclic\n");
-		return NULL;
-	}
+	if (is_dag)
+		return graph;
 
-	printf("Graph is already acyclic\n");
-	return NULL;
+	igraph_vector_int_t fas;
+	igraph_vector_int_init(&fas, 0);
+	if (igraph_feedback_arc_set(graph, &fas, NULL, IGRAPH_FAS_APPROX_EADES) == IGRAPH_SUCCESS) {
+		if (igraph_vector_int_size(&fas) > 0) {
+			igraph_es_t es = igraph_ess_vector(&fas);
+			igraph_delete_edges(graph, es);
+			printf("Removed %d edges to make graph acyclic\n", (int)igraph_vector_int_size(&fas));
+		}
+	}
+	igraph_vector_int_destroy(&fas);
+
+	return graph;
+}
+
+// ============================================================================
+// Worker: Remove feedback arc set to make graph acyclic
+// ============================================================================
+void *compute_remove_feedback_arc_set(igraph_t *graph)
+{
+	return make_graph_acyclic(graph);
 }
 
 // ============================================================================

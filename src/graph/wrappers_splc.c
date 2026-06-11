@@ -1,6 +1,7 @@
 #include "graph/wrappers_splc.h"
 #include "app_state.h"
 #include "graph/graph_core.h"
+#include "graph/wrappers_cycles.h"
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_compute.h"
 
@@ -83,16 +84,10 @@ void *compute_splc_animation(igraph_t *graph)
 	igraph_is_dag(graph, &is_dag);
 
 	if (!is_dag) {
-		igraph_vector_int_t fas;
-		igraph_vector_int_init(&fas, 0);
-		if (igraph_feedback_arc_set(graph, &fas, NULL, IGRAPH_FAS_APPROX_EADES) == IGRAPH_SUCCESS) {
-			if (igraph_vector_int_size(&fas) > 0) {
-				igraph_es_t es = igraph_ess_vector(&fas);
-				igraph_delete_edges(graph, es);
-				printf("Removed %d edges to make graph acyclic\n", (int)igraph_vector_int_size(&fas));
-			}
+		if (!make_graph_acyclic(graph)) {
+			fprintf(stderr, "SPLC: failed to make graph acyclic\n");
+			return NULL;
 		}
-		igraph_vector_int_destroy(&fas);
 	}
 
 	return graph;
