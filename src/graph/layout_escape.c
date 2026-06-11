@@ -94,7 +94,6 @@ typedef struct
 	float dt;
 	float alpha;
 	float beta;
-	float friction;
 	float avg_degree;
 	uint32_t node_count;
 } EscapeSimParams;
@@ -300,7 +299,6 @@ bool igraph_vlk_layout_escape_tick(Renderer *r)
 		.dt = r->escape_dt,
 		.alpha = r->escape_alpha,
 		.beta = r->escape_beta,
-		.friction = r->escape_friction,
 		.avg_degree = r->escape_avg_degree,
 		.node_count = n,
 	};
@@ -674,11 +672,6 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 	float alpha0 = 5.0f;
 	float beta0 = 0.30f;
 
-	// Friction: more damping for larger graphs (prevents runaway velocities)
-	float friction0 = 0.90f - 0.03f * fminf(log_n / 10.0f, 1.0f);
-	if (friction0 < 0.78f)
-		friction0 = 0.78f;
-
 	// Time step: smaller for larger graphs (stability)
 	float dt0 = 0.05f / (1.0f + log_n * 0.04f);
 
@@ -691,11 +684,10 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 		.dt = dt0,
 		.alpha = alpha0,
 		.beta = beta0,
-		.friction = friction0,
 		.avg_degree = avg_degree,
 	};
 
-	printf("[Escape] Params: avg_deg=%.1f density=%.4f alpha=%.3f beta=%.3f friction=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, alpha0, beta0, friction0, dt0, force_decay);
+	printf("[Escape] Params: avg_deg=%.1f density=%.4f alpha=%.3f beta=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, alpha0, beta0, dt0, force_decay);
 
 	r->escape_previous_stress = INFINITY;
 	r->escape_stable_frames = 0;
@@ -812,16 +804,12 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	float alpha0 = 2.0f;
 	float beta0 = 0.30f;
 
-	float friction0 = 0.90f - 0.03f * fminf(log_n / 10.0f, 1.0f);
-	if (friction0 < 0.78f)
-		friction0 = 0.78f;
-
 	float dt0 = 0.05f / (1.0f + log_n * 0.04f);
 
 	float force_decay = 0.9995f;
 	float alpha_floor = 0.15f;
 
-	printf("[Escape] Params: avg_deg=%.1f density=%.4f alpha=%.3f beta=%.3f friction=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, alpha0, beta0, friction0, dt0, force_decay);
+	printf("[Escape] Params: avg_deg=%.1f density=%.4f alpha=%.3f beta=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, alpha0, beta0, dt0, force_decay);
 
 	// Store simulation state in Renderer for per-frame tick
 	r->escape_previous_stress = INFINITY;
@@ -830,12 +818,11 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	r->escape_sim_active = true;
 	r->escape_needs_wait = false;
 	r->escape_current_iter = 0;
-	r->escape_max_iters = 5000;
+	r->escape_max_iters = 200;
 	r->escape_epsilon = 0.0001f;
 	r->escape_dt = dt0;
 	r->escape_alpha = alpha0;
 	r->escape_beta = beta0;
-	r->escape_friction = friction0;
 	r->escape_avg_degree = avg_degree;
 	r->escape_force_decay = force_decay;
 	r->escape_alpha_floor = alpha_floor;

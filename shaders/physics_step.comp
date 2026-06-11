@@ -28,7 +28,6 @@ layout(push_constant) uniform SimParams {
 	float dt;
 	float alpha;
 	float beta;
-	float friction;
 	float avg_degree;
 	uint node_count;
 } params;
@@ -73,8 +72,8 @@ void main() {
 	vec3 total_force = (escape_force * params.alpha) + (spring_force * params.beta);
 
 	vec3 vel = nodes[id].velocity.xyz;
-	// Friction damps existing velocity, but new force impulse is full-strength
-	vel = vel * params.friction + total_force * params.dt;
+	// Velocity integrates force impulse
+	vel = vel + total_force * params.dt;
 
 	nodes[id].velocity.xyz = vel;
 	nodes[id].position.xyz = pos + (vel * params.dt);
