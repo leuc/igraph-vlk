@@ -6,9 +6,10 @@ layout(location = 0) rayPayloadEXT float hitDistance;
 layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
 
 struct NodePhysics {
-	vec4 position;
-	vec4 velocity;
-	vec4 escape_vector;
+	vec4 position;      // xyz=pos, w=nodeRadius
+	vec4 velocity;      // xyz=vel, w=is_awake (1.0 awake, 0.0 asleep)
+	vec4 escape_vector; // xyz=escape_dir, w=openness
+	vec4 freedom;       // x=local_freedom [0..1], yzw=unused
 };
 
 layout(std430, binding = 1, set = 0) buffer PhysicsBuffer {
@@ -39,10 +40,17 @@ void main() {
 	vec3 origin = nodes[nodeId].position.xyz;
 	// Node's collision radius packed in position.w (tetrahedron scale)
 	float nodeRadius = nodes[nodeId].position.w;
+
+	// Awake nodes get full 16-ray pathfinding.
+	// Asleep nodes get a low-cost 4-ray tripwire to watch for intruders.
+	bool is_awake = (nodes[nodeId].velocity.w > 0.5);
+	int active_ray_count = is_awake ? RAY_COUNT : 4;
+
 	vec3 finalEscape = vec3(0.0);
 	float miss_count = 0.0;
+	float total_hit_distance = 0.0;
 
-	for (int i = 0; i < RAY_COUNT; i++) {
+	for (int i = 0; i < active_ray_count; i++) {
 		vec3 dir = fibonacci_sphere_dir(nodeId, uint(i));
 		hitDistance = 0.0;
 
@@ -54,6 +62,8 @@ void main() {
 			gl_RayFlagsOpaqueEXT,
 			0xFF, 0, 0, 0,
 			rayOrigin, 0.01, dir, pc.ray_max_distance, 0);
+
+		total_hit_distance += hitDistance;
 
 		if (hitDistance >= pc.ray_max_distance * 0.99) {
 			// Miss: open space in this direction — pull toward it (expansion)
@@ -67,12 +77,26 @@ void main() {
 		}
 	}
 
+	// Continuous Local Freedom [0.0 to 1.0]: fraction of ray_max_distance
+	// the average ray traveled before hitting geometry.
+	float mean_free_path = total_hit_distance / float(active_ray_count);
+	float local_freedom = mean_free_path / pc.ray_max_distance;
+	// Clamp to [0, 1] in case of numerical issues
+	nodes[nodeId].freedom.x = clamp(local_freedom, 0.0, 1.0);
+
 	// Magnitude = openness (fraction of rays that missed).
 	// This encodes HOW MUCH open space surrounds the node:
 	//   fully enclosed -> ~0 (no escape force, only springs act)
 	//   fully open     -> ~1 (strong escape force outward)
 	// Direction = weighted sum of open directions minus obstacles.
-	float openness = miss_count / float(RAY_COUNT);
-	float len = length(finalEscape);
-	nodes[nodeId].escape_vector.xyz = (len > 0.0001) ? (finalEscape / len) * openness : vec3(0.0);
+	float openness = miss_count / float(active_ray_count);
+
+	// In totally open space, we are already free — no escape pull needed.
+	if (miss_count == float(active_ray_count)) {
+		nodes[nodeId].escape_vector.xyz = vec3(0.0);
+	} else {
+		float len = length(finalEscape);
+		// Increase threshold to ignore minor asymmetric noise
+		nodes[nodeId].escape_vector.xyz = (len > 0.1) ? (finalEscape / len) * openness : vec3(0.0);
+	}
 }

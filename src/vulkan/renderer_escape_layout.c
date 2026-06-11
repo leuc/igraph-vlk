@@ -103,6 +103,7 @@ typedef struct
 	float position[4];
 	float velocity[4];
 	float escape_vector[4];
+	float freedom[4];
 } NodePhysicsGPU;
 
 static VkDeviceAddress get_buffer_device_address(VkDevice device, VkBuffer buffer)

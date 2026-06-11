@@ -78,9 +78,10 @@ static void get_hilbert_3d_position(int rank, int order, float *x, float *y, flo
 
 typedef struct
 {
-	float position[4]; // xyz = pos, w = mass
-	float velocity[4]; // xyz = vel, w = padding
-	float escape_vector[4];
+	float position[4];		// xyz = pos, w = mass
+	float velocity[4];		// xyz = vel, w = is_awake
+	float escape_vector[4]; // xyz = escape_dir, w = openness
+	float freedom[4];		// x = local_freedom [0..1]
 } NodePhysicsGPU;
 
 typedef struct
@@ -241,20 +242,24 @@ bool igraph_vlk_layout_escape_tick(Renderer *r)
 			uint32_t samples[] = {0, n / 4, n / 2, (3 * n) / 4, n - 1};
 			float avg_escape_len = 0.0f;
 			float avg_pos_len = 0.0f;
+			float avg_freedom = 0.0f;
 			for (uint32_t s = 0; s < 5 && samples[s] < n; s++) {
 				uint32_t idx = samples[s];
 				float ex = phys[idx].escape_vector[0], ey = phys[idx].escape_vector[1], ez = phys[idx].escape_vector[2];
 				float el = sqrtf(ex * ex + ey * ey + ez * ez);
 				float px = phys[idx].position[0], py = phys[idx].position[1], pz = phys[idx].position[2];
 				float pl = sqrtf(px * px + py * py + pz * pz);
+				float f = phys[idx].freedom[0];
 				avg_escape_len += el;
 				avg_pos_len += pl;
+				avg_freedom += f;
 				if (r->escape_current_iter == 10 || s == 0)
-					printf("[Escape]   node[%u] pos=(%.2f,%.2f,%.2f) r=%.2f  escape=(%.6f,%.6f,%.6f) |e|=%.6f\n", idx, px, py, pz, pl, ex, ey, ez, el);
+					printf("[Escape]   node[%u] pos=(%.2f,%.2f,%.2f) r=%.2f  escape=(%.6f,%.6f,%.6f) |e|=%.6f  f=%.3f\n", idx, px, py, pz, pl, ex, ey, ez, el, f);
 			}
 			avg_escape_len /= 5.0f;
 			avg_pos_len /= 5.0f;
-			printf("[Escape] iter %4u | avg |escape|=%.6f  avg |pos|=%.2f  rt_supported=%d\n", r->escape_current_iter, avg_escape_len, avg_pos_len, r->escape_rt_supported);
+			avg_freedom /= 5.0f;
+			printf("[Escape] iter %4u | avg |escape|=%.6f  avg |pos|=%.2f  avg freedom=%.3f  rt_supported=%d\n", r->escape_current_iter, avg_escape_len, avg_pos_len, avg_freedom, r->escape_rt_supported);
 
 			// On first readback, check if escape vectors are all zero (RT not working)
 			if (r->escape_current_iter == 10 && avg_escape_len < 0.0001f) {
@@ -463,6 +468,9 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 			phys[i].escape_vector[1] = 1.0f; // fallback: up
 			phys[i].escape_vector[2] = 0.0f;
 		}
+		// All nodes start awake with maximum freedom
+		phys[i].velocity[3] = 1.0f;
+		phys[i].freedom[0] = 1.0f;
 	}
 	update_buffer(r->core.device, r->escape_physics_memory, phys_size, phys);
 	free(phys);
@@ -669,8 +677,8 @@ void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, ui
 	// Alpha (escape force multiplier) and beta (spring force multiplier).
 	// alpha must be larger because escape vector has magnitude openness (0-1)
 	// while spring displacement is in world units (can be much larger).
-	float alpha0 = 5.0f;
-	float beta0 = 0.30f;
+	float alpha0 = 50.0f;
+	float beta0 = 0.20f;
 
 	// Time step: smaller for larger graphs (stability)
 	float dt0 = 0.05f / (1.0f + log_n * 0.04f);
@@ -818,8 +826,8 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	r->escape_sim_active = true;
 	r->escape_needs_wait = false;
 	r->escape_current_iter = 0;
-	r->escape_max_iters = 200;
-	r->escape_epsilon = 0.0001f;
+	r->escape_max_iters = 10000;
+	r->escape_epsilon = 0.005f;
 	r->escape_dt = dt0;
 	r->escape_alpha = alpha0;
 	r->escape_beta = beta0;
