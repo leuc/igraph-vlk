@@ -58,16 +58,10 @@ void *compute_escape_layout(igraph_t *graph);
 void free_layout_matrix(void *result_data);
 void apply_layout_matrix(ExecutionContext *ctx, void *result_data);
 
-// Custom apply function for escape layout (applies initial + runs GPU drive)
-void apply_escape_layout(ExecutionContext *ctx, void *result_data);
-
-// GPU escape layout simulation driver and cleanup
+// Escape layout apply function, cleanup, and per-frame tick
 struct Renderer;
-struct AppState;
-void igraph_vlk_layout_escape_drive(struct AppState *state, float max_bb_diag_ratio, uint32_t max_iters, float epsilon);
+void apply_escape_layout(ExecutionContext *ctx, void *result_data);
 void igraph_vlk_layout_escape_cleanup(struct Renderer *r);
-
-// Per-frame GPU simulation tick (returns true if simulation should continue)
 bool igraph_vlk_layout_escape_tick(struct Renderer *r);
 
 #endif // GRAPH_WRAPPERS_LAYOUT_H

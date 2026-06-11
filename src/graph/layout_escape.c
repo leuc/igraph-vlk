@@ -630,131 +630,6 @@ static void escape_readback_positions(Renderer *r, GraphData *data)
 }
 
 // ============================================================================
-// Main GPU simulation driver
-// ============================================================================
-
-void igraph_vlk_layout_escape_drive(AppState *state, float max_bb_diag_ratio, uint32_t max_iters, float epsilon)
-{
-	Renderer *r = &state->renderer;
-	GraphData *data = &state->current_graph;
-	uint32_t n = data->node_count;
-	uint32_t m = data->edge_count;
-
-	if (n == 0)
-		return;
-
-	float bb_min_x = FLT_MAX, bb_max_x = -FLT_MAX;
-	float bb_min_y = FLT_MAX, bb_max_y = -FLT_MAX;
-	float bb_min_z = FLT_MAX, bb_max_z = -FLT_MAX;
-	for (uint32_t i = 0; i < n; i++) {
-		float x = data->nodes[i].position[0], y = data->nodes[i].position[1], z = data->nodes[i].position[2];
-		if (x < bb_min_x)
-			bb_min_x = x;
-		if (x > bb_max_x)
-			bb_max_x = x;
-		if (y < bb_min_y)
-			bb_min_y = y;
-		if (y > bb_max_y)
-			bb_max_y = y;
-		if (z < bb_min_z)
-			bb_min_z = z;
-		if (z > bb_max_z)
-			bb_max_z = z;
-	}
-	float bb_diag = sqrtf((bb_max_x - bb_min_x) * (bb_max_x - bb_min_x) + (bb_max_y - bb_min_y) * (bb_max_y - bb_min_y) + (bb_max_z - bb_min_z) * (bb_max_z - bb_min_z));
-	r->escape_bb_diag = bb_diag;
-	printf("[Escape] Drive: %u nodes %u edges bb_diag=%.1f\n", n, m, bb_diag);
-
-	escape_ensure_command_resources(r);
-	escape_create_gpu_buffers(r, data);
-
-	// --- Dynamic parameter scaling based on graph properties ---
-	float avg_degree = (n > 0) ? (float)m / (float)n : 1.0f;
-	float density = (n > 1) ? (float)m / ((float)n * (float)(n - 1)) : 0.0f;
-	float log_n = logf((float)n + 1.0f);
-
-	// Alpha (escape force multiplier) and beta (spring force multiplier).
-	// alpha must be larger because escape vector has magnitude openness (0-1)
-	// while spring displacement is in world units (can be much larger).
-	float alpha0 = 50.0f;
-	float beta0 = 0.20f;
-
-	// Time step: smaller for larger graphs (stability)
-	float dt0 = 0.05f / (1.0f + log_n * 0.04f);
-
-	// Decay: both alpha and beta decay, keeping repulsion/attraction balanced.
-	// Floor alpha at 0.10 so RT repulsion persists throughout.
-	float force_decay = 0.9995f;
-	float alpha_floor = 0.15f;
-
-	EscapeSimParams params = {
-		.dt = dt0,
-		.alpha = alpha0,
-		.beta = beta0,
-		.avg_degree = avg_degree,
-	};
-
-	printf("[Escape] Params: avg_deg=%.1f density=%.4f alpha=%.3f beta=%.3f dt=%.4f decay=%.4f\n", avg_degree, density, alpha0, beta0, dt0, force_decay);
-
-	r->escape_previous_stress = INFINITY;
-	r->escape_stable_frames = 0;
-	r->escape_running = true;
-
-	for (uint32_t iter = 0; iter < max_iters && r->escape_running; iter++) {
-		r->escape_iteration = (int)iter;
-
-		// Both alpha and beta decay together, maintaining balanced force ratio
-		params.alpha *= force_decay;
-		if (params.alpha < alpha_floor)
-			params.alpha = alpha_floor;
-		params.beta *= force_decay;
-
-		if (iter > 0) {
-			VK_CHECK(vkWaitForFences(r->core.device, 1, &r->escape_fence, VK_TRUE, UINT64_MAX), "Failed to wait for escape fence");
-		}
-		VK_CHECK(vkResetFences(r->core.device, 1, &r->escape_fence), "Failed to reset escape fence");
-
-		// Record iteration
-		VK_CHECK(vkResetCommandBuffer(r->escape_cmd_buf, 0), "Failed to reset escape command buffer");
-		VK_CHECK(vkBeginCommandBuffer(r->escape_cmd_buf, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin escape command buffer");
-
-		escape_record_iteration(r->escape_cmd_buf, r, &params, n, m, iter);
-
-		VK_CHECK(vkEndCommandBuffer(r->escape_cmd_buf), "Failed to end escape command buffer");
-
-		// Submit
-		VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &r->escape_cmd_buf};
-		VkResult res = vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, r->escape_fence);
-		if (res != VK_SUCCESS) {
-			fprintf(stderr, "[escape] Queue submit failed at iteration %u\n", iter);
-			r->escape_running = false;
-			break;
-		}
-
-		// Wait for completion and check convergence
-		VK_CHECK(vkWaitForFences(r->core.device, 1, &r->escape_fence, VK_TRUE, UINT64_MAX), "Failed to wait for escape fence on readback");
-
-		// CPU-side TLAS update for next frame's RT pass
-		if (r->escape_rt_supported) {
-			renderer_escape_update_tlas_cpu(r, n);
-		}
-
-		bool converged = escape_check_convergence(r, epsilon);
-		if (iter % 10 == 0 || converged || iter == max_iters - 1)
-			printf("[Escape] iter %4u / %u | stress=%.2f stable=%u alpha=%.3f beta=%.3f\n", iter + 1, max_iters, r->escape_previous_stress, r->escape_stable_frames, params.alpha, params.beta);
-		if (r->escape_stable_frames >= 10) {
-			printf("[Escape] Converged at iteration %u (stress=%.2f)\n", iter, r->escape_previous_stress);
-			break;
-		}
-	}
-
-	escape_readback_positions(r, data);
-	r->escape_running = false;
-
-	printf("[Escape] Done: %u iters stress=%.2f\n", r->escape_iteration + 1, r->escape_previous_stress);
-}
-
-// ============================================================================
 // Setup-only apply: applies initial Hilbert positions then starts GPU sim
 // ============================================================================
 
@@ -808,10 +683,10 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	float density = (n > 1) ? (float)m / ((float)n * (float)(n - 1)) : 0.0f;
 	float log_n = logf((float)n + 1.0f);
 
-	float alpha0 = 2.0f;
-	float beta0 = 0.30f;
+	float alpha0 = 50.0f;
+	float beta0 = 2.00f;
 
-	float dt0 = 0.05f / (1.0f + log_n * 0.04f);
+	float dt0 = bb_diag * 0.0002f / (1.0f + log_n * 0.04f);
 
 	float force_decay = 0.9995f;
 	float alpha_floor = 0.15f;
@@ -825,7 +700,7 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	r->escape_sim_active = true;
 	r->escape_needs_wait = false;
 	r->escape_current_iter = 0;
-	r->escape_max_iters = 10000;
+	r->escape_max_iters = 500;
 	r->escape_epsilon = 0.005f;
 	r->escape_dt = dt0;
 	r->escape_alpha = alpha0;

@@ -614,16 +614,48 @@ void renderer_escape_update_rt_physics_buffer(Renderer *r, VkBuffer physics_buff
 {
 	VkDevice dev = r->core.device;
 	VkDescriptorBufferInfo physBufInfo = {physics_buffer, 0, VK_WHOLE_SIZE};
-	VkWriteDescriptorSet write = {
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = r->escape_rt_desc_set,
-		.dstBinding = 1,
-		.dstArrayElement = 0,
-		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.pBufferInfo = &physBufInfo,
+	VkDescriptorBufferInfo adjBufInfo = {r->escape_adjacency_buffer, 0, VK_WHOLE_SIZE};
+	VkDescriptorBufferInfo offsBufInfo = {r->escape_offsets_buffer, 0, VK_WHOLE_SIZE};
+	VkDescriptorBufferInfo cntsBufInfo = {r->escape_counts_buffer, 0, VK_WHOLE_SIZE};
+	VkWriteDescriptorSet writes[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = r->escape_rt_desc_set,
+			.dstBinding = 1,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &physBufInfo,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = r->escape_rt_desc_set,
+			.dstBinding = 2,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &adjBufInfo,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = r->escape_rt_desc_set,
+			.dstBinding = 3,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &offsBufInfo,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = r->escape_rt_desc_set,
+			.dstBinding = 4,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &cntsBufInfo,
+		},
 	};
-	vkUpdateDescriptorSets(dev, 1, &write, 0, NULL);
+	vkUpdateDescriptorSets(dev, 4, writes, 0, NULL);
 }
 
 // ============================================================================
