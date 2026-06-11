@@ -22,15 +22,15 @@ typedef struct
 {
 	igraph_integer_t id;
 	igraph_integer_t degree;
-	igraph_integer_t coreness;
+	igraph_integer_t topo_pos;
 } NodeTopology;
 
 static int compare_topology(const void *a, const void *b)
 {
 	const NodeTopology *nodeA = (const NodeTopology *)a;
 	const NodeTopology *nodeB = (const NodeTopology *)b;
-	if (nodeA->coreness != nodeB->coreness)
-		return (int)(nodeB->coreness - nodeA->coreness);
+	if (nodeA->topo_pos != nodeB->topo_pos)
+		return (int)(nodeA->topo_pos - nodeB->topo_pos);
 	return (int)(nodeB->degree - nodeA->degree);
 }
 
@@ -119,26 +119,38 @@ void *compute_escape_layout(igraph_t *graph)
 	if (!sorted)
 		return NULL;
 
-	igraph_vector_int_t degrees, coreness;
+	igraph_vector_int_t degrees;
 	igraph_vector_int_init(&degrees, vcount);
-	igraph_vector_int_init(&coreness, vcount);
-
 	igraph_degree(graph, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS_ONCE);
-	igraph_coreness(graph, &coreness, IGRAPH_ALL);
 
-	igraph_integer_t max_deg = 0, max_core = 0;
+	igraph_vector_int_t topo_order;
+	igraph_vector_int_init(&topo_order, 0);
+	igraph_error_t topo_ret = igraph_topological_sorting(graph, &topo_order, IGRAPH_OUT);
+	if (topo_ret != IGRAPH_SUCCESS) {
+		fprintf(stderr, "[Escape] Topological sorting failed (graph likely cyclic), using degree-only ordering\n");
+		igraph_vector_int_destroy(&degrees);
+		igraph_vector_int_destroy(&topo_order);
+		free(sorted);
+		return NULL;
+	}
+
+	igraph_vector_int_t rank;
+	igraph_vector_int_init(&rank, vcount);
+	for (igraph_integer_t i = 0; i < (igraph_integer_t)igraph_vector_int_size(&topo_order); i++)
+		VECTOR(rank)[VECTOR(topo_order)[i]] = i;
+
+	igraph_integer_t max_deg = 0;
 	for (igraph_integer_t i = 0; i < vcount; i++) {
 		sorted[i].id = i;
 		sorted[i].degree = VECTOR(degrees)[i];
-		sorted[i].coreness = VECTOR(coreness)[i];
+		sorted[i].topo_pos = VECTOR(rank)[i];
 		if (sorted[i].degree > max_deg)
 			max_deg = sorted[i].degree;
-		if (sorted[i].coreness > max_core)
-			max_core = sorted[i].coreness;
 	}
 
 	igraph_vector_int_destroy(&degrees);
-	igraph_vector_int_destroy(&coreness);
+	igraph_vector_int_destroy(&topo_order);
+	igraph_vector_int_destroy(&rank);
 
 	qsort(sorted, vcount, sizeof(NodeTopology), compare_topology);
 
@@ -187,7 +199,7 @@ void *compute_escape_layout(igraph_t *graph)
 		if (z > max_z)
 			max_z = z;
 	}
-	fprintf(stderr, "[Escape] Worker: %ld nodes max_deg=%ld max_core=%ld bounds X=[%.0f,%.0f] Y=[%.0f,%.0f] Z=[%.0f,%.0f]\n", (long)vcount, (long)max_deg, (long)max_core, min_x, max_x, min_y, max_y, min_z, max_z);
+	fprintf(stderr, "[Escape] Worker: %ld nodes max_deg=%ld bounds X=[%.0f,%.0f] Y=[%.0f,%.0f] Z=[%.0f,%.0f]\n", (long)vcount, (long)max_deg, min_x, max_x, min_y, max_y, min_z, max_z);
 
 	free(sorted_rank);
 	free(sorted);
