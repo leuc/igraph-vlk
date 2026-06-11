@@ -54,6 +54,7 @@ find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
 	    shaders/escape.rgen
 	    shaders/escape.rchit
 	    shaders/escape.rmiss
+	    shaders/escape.rahit
 	    shaders/ray.vert
 	    shaders/ray.frag
 	)
@@ -196,6 +197,7 @@ target_compile_definitions(igraph-vlk PRIVATE
     ESCAPE_RGEN_SHADER_PATH="shaders/escape.rgen.spv"
     ESCAPE_RCHIT_SHADER_PATH="shaders/escape.rchit.spv"
     ESCAPE_RMISS_SHADER_PATH="shaders/escape.rmiss.spv"
+    ESCAPE_RAHIT_SHADER_PATH="shaders/escape.rahit.spv"
     RAY_VERT_SHADER_PATH="shaders/ray.vert.spv"
     RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv"
 )

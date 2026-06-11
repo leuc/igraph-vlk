@@ -1,8 +1,12 @@
 #version 460
 #extension GL_EXT_ray_tracing : require
 
-layout(location = 0) rayPayloadInEXT float hitDistance;
+struct RayPayload {
+	float hitDistance;
+	uint originNodeId;
+};
+layout(location = 0) rayPayloadInEXT RayPayload payload;
 
 void main() {
-	hitDistance = gl_HitTEXT;
+	payload.hitDistance = gl_HitTEXT;
 }

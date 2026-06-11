@@ -1,7 +1,11 @@
 #version 460
 #extension GL_EXT_ray_tracing : require
 
-layout(location = 0) rayPayloadEXT float hitDistance;
+struct RayPayload {
+	float hitDistance;
+	uint originNodeId;
+};
+layout(location = 0) rayPayloadEXT RayPayload payload;
 
 layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
 
@@ -38,8 +42,6 @@ void main() {
 	if (nodeId >= gl_LaunchSizeEXT.x) return;
 
 	vec3 origin = nodes[nodeId].position.xyz;
-	// Node's collision radius packed in position.w (tetrahedron scale)
-	float nodeRadius = nodes[nodeId].position.w;
 
 	// Awake nodes get full 16-ray pathfinding.
 	// Asleep nodes get a low-cost 4-ray tripwire to watch for intruders.
@@ -52,27 +54,28 @@ void main() {
 
 	for (int i = 0; i < active_ray_count; i++) {
 		vec3 dir = fibonacci_sphere_dir(nodeId, uint(i));
-		hitDistance = 0.0;
+		payload.hitDistance = 0.0;
+		payload.originNodeId = nodeId;
 
-		// Offset ray origin outward by node radius to skip self-intersection
-		// (ray starts inside own tetrahedron geometry, would always hit exit face)
-		vec3 rayOrigin = origin + dir * (nodeRadius + 0.01);
+		// The any-hit shader handles self-intersection and neighbor transparency,
+		// so no need to offset ray origin.
+		vec3 rayOrigin = origin;
 
 		traceRayEXT(topLevelAS,
-			gl_RayFlagsOpaqueEXT,
+			gl_RayFlagsNoOpaqueEXT,
 			0xFF, 0, 0, 0,
 			rayOrigin, 0.01, dir, pc.ray_max_distance, 0);
 
-		total_hit_distance += hitDistance;
+		total_hit_distance += payload.hitDistance;
 
-		if (hitDistance >= pc.ray_max_distance * 0.99) {
+		if (payload.hitDistance >= pc.ray_max_distance * 0.99) {
 			// Miss: open space in this direction — pull toward it (expansion)
 			finalEscape += dir;
 			miss_count += 1.0;
 		} else {
 			// Hit: geometry nearby — push away (repulsion)
 			// Clamp weight so close hits don't dominate the signal
-			float weight = min(1.0 / max(hitDistance * hitDistance, 0.01), 4.0);
+			float weight = min(1.0 / max(payload.hitDistance * payload.hitDistance, 0.01), 4.0);
 			finalEscape -= dir * weight;
 		}
 	}

@@ -159,7 +159,7 @@ void renderer_escape_build_blas(Renderer *r)
 	VkAccelerationStructureGeometryKHR geometry = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
 		.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
-		.flags = VK_GEOMETRY_OPAQUE_BIT_KHR,
+		.flags = 0,
 		.geometry.triangles = triData,
 	};
 
@@ -271,7 +271,7 @@ void renderer_escape_build_tlas(Renderer *r, GraphData *data, uint32_t node_coun
 		instances[i].instanceCustomIndex = i;
 		instances[i].mask = 0xFF;
 		instances[i].instanceShaderBindingTableRecordOffset = 0;
-		instances[i].flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
+		instances[i].flags = 0;
 		instances[i].accelerationStructureReference = r->escape_blas_device_address;
 	}
 	vkUnmapMemory(dev, r->escape_tlas_instance_memory);
@@ -289,7 +289,7 @@ void renderer_escape_build_tlas(Renderer *r, GraphData *data, uint32_t node_coun
 	VkAccelerationStructureGeometryKHR geometry = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
 		.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR,
-		.flags = VK_GEOMETRY_OPAQUE_BIT_KHR,
+		.flags = 0,
 		.geometry.instances = instancesData,
 	};
 
@@ -369,12 +369,11 @@ void renderer_escape_create_rt_pipeline(Renderer *r, VkBuffer physics_buffer)
 
 	// --- Descriptor set layout ---
 	VkDescriptorSetLayoutBinding bindings[] = {
-		{0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, NULL},
-		{1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, NULL},
+		{0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, NULL}, {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ANY_HIT_BIT_KHR, NULL}, {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ANY_HIT_BIT_KHR, NULL}, {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ANY_HIT_BIT_KHR, NULL},
 	};
 	VkDescriptorSetLayoutCreateInfo layoutInfo = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = 2,
+		.bindingCount = 5,
 		.pBindings = bindings,
 	};
 	VK_CHECK(vkCreateDescriptorSetLayout(dev, &layoutInfo, NULL, &r->escape_rt_desc_layout), "Failed to create RT desc set layout");
@@ -398,15 +397,18 @@ void renderer_escape_create_rt_pipeline(Renderer *r, VkBuffer physics_buffer)
 	VkShaderModule rgenModule = VK_NULL_HANDLE;
 	VkShaderModule rchitModule = VK_NULL_HANDLE;
 	VkShaderModule rmissModule = VK_NULL_HANDLE;
+	VkShaderModule rahitModule = VK_NULL_HANDLE;
 	VK_CHECK(create_shader_module(dev, ESCAPE_RGEN_SHADER_PATH, &rgenModule), "Failed to create rgen shader module");
 	VK_CHECK(create_shader_module(dev, ESCAPE_RCHIT_SHADER_PATH, &rchitModule), "Failed to create rchit shader module");
 	VK_CHECK(create_shader_module(dev, ESCAPE_RMISS_SHADER_PATH, &rmissModule), "Failed to create rmiss shader module");
+	VK_CHECK(create_shader_module(dev, ESCAPE_RAHIT_SHADER_PATH, &rahitModule), "Failed to create rahit shader module");
 
 	// --- Shader stages ---
-	VkPipelineShaderStageCreateInfo stages[3] = {
+	VkPipelineShaderStageCreateInfo stages[4] = {
 		{.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR, .module = rgenModule, .pName = "main"},
 		{.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_MISS_BIT_KHR, .module = rmissModule, .pName = "main"},
 		{.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, .module = rchitModule, .pName = "main"},
+		{.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_ANY_HIT_BIT_KHR, .module = rahitModule, .pName = "main"},
 	};
 
 	// --- Shader groups ---
@@ -432,7 +434,7 @@ void renderer_escape_create_rt_pipeline(Renderer *r, VkBuffer physics_buffer)
 			.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
 			.generalShader = VK_SHADER_UNUSED_KHR,
 			.closestHitShader = 2,
-			.anyHitShader = VK_SHADER_UNUSED_KHR,
+			.anyHitShader = 3,
 			.intersectionShader = VK_SHADER_UNUSED_KHR,
 		},
 	};
@@ -440,7 +442,7 @@ void renderer_escape_create_rt_pipeline(Renderer *r, VkBuffer physics_buffer)
 	// --- Create RT pipeline ---
 	VkRayTracingPipelineCreateInfoKHR rtPipelineInfo = {
 		.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR,
-		.stageCount = 3,
+		.stageCount = 4,
 		.pStages = stages,
 		.groupCount = 3,
 		.pGroups = groups,
@@ -453,6 +455,7 @@ void renderer_escape_create_rt_pipeline(Renderer *r, VkBuffer physics_buffer)
 	vkDestroyShaderModule(dev, rgenModule, NULL);
 	vkDestroyShaderModule(dev, rchitModule, NULL);
 	vkDestroyShaderModule(dev, rmissModule, NULL);
+	vkDestroyShaderModule(dev, rahitModule, NULL);
 
 	// --- SBT (Shader Binding Table) ---
 	// Query handle sizes
@@ -524,7 +527,7 @@ void renderer_escape_create_rt_pipeline(Renderer *r, VkBuffer physics_buffer)
 	// --- Descriptor pool ---
 	VkDescriptorPoolSize poolSizes[] = {
 		{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1},
-		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
+		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4},
 	};
 	VkDescriptorPoolCreateInfo poolInfo = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -549,6 +552,9 @@ void renderer_escape_create_rt_pipeline(Renderer *r, VkBuffer physics_buffer)
 		.pAccelerationStructures = &r->escape_tlas,
 	};
 	VkDescriptorBufferInfo physBufInfo = {physics_buffer, 0, VK_WHOLE_SIZE};
+	VkDescriptorBufferInfo adjBufInfo = {r->escape_adjacency_buffer, 0, VK_WHOLE_SIZE};
+	VkDescriptorBufferInfo offsBufInfo = {r->escape_offsets_buffer, 0, VK_WHOLE_SIZE};
+	VkDescriptorBufferInfo cntsBufInfo = {r->escape_counts_buffer, 0, VK_WHOLE_SIZE};
 	VkWriteDescriptorSet writes[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -568,8 +574,35 @@ void renderer_escape_create_rt_pipeline(Renderer *r, VkBuffer physics_buffer)
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.pBufferInfo = &physBufInfo,
 		},
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = r->escape_rt_desc_set,
+			.dstBinding = 2,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &adjBufInfo,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = r->escape_rt_desc_set,
+			.dstBinding = 3,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &offsBufInfo,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = r->escape_rt_desc_set,
+			.dstBinding = 4,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &cntsBufInfo,
+		},
 	};
-	vkUpdateDescriptorSets(dev, 2, writes, 0, NULL);
+	vkUpdateDescriptorSets(dev, 5, writes, 0, NULL);
 
 	fprintf(stderr, "[Escape RT] RT pipeline + SBT + descriptors created\n");
 }
@@ -638,7 +671,7 @@ void renderer_escape_update_tlas_cpu(Renderer *r, uint32_t node_count)
 	VkAccelerationStructureGeometryKHR geometry = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
 		.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR,
-		.flags = VK_GEOMETRY_OPAQUE_BIT_KHR,
+		.flags = 0,
 		.geometry.instances = instancesData,
 	};
 
