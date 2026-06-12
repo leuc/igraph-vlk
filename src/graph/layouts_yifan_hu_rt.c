@@ -58,23 +58,13 @@ void *compute_igraph_layout_yifan_hu_rt_3d(igraph_t *graph)
 	igraph_progress("Yifan Hu (3D) [RT] layout", 0.0, NULL);
 
 	for (igraph_integer_t iter = 0; iter < maxiter; iter++) {
-		fprintf(stderr, "[YHRT-WORKER] iter=%d calling step...\n", (int)iter);
-		fflush(stderr);
-		// Blocking: record, submit, wait on GPU
-		if (!yhrt_worker_step(r)) {
-			fprintf(stderr, "[YHRT-WORKER] iter=%d step returned false\n", (int)iter);
-			fflush(stderr);
+		if (!yhrt_worker_step(r))
 			break;
-		}
 
-		// Report progress via igraph TLS handler
 		double pct = 100.0 * (iter + 1) / maxiter;
 		igraph_progress("Yifan Hu (3D) [RT] layout", pct, NULL);
 
-		// Push snapshot every 5 iterations for real-time visual updates
 		if ((iter + 1) % 5 == 0 || iter + 1 >= maxiter) {
-			fprintf(stderr, "[YHRT-WORKER] iter=%d reading back snapshot...\n", (int)iter);
-			fflush(stderr);
 			igraph_matrix_t *snap = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 			igraph_matrix_init(snap, vcount, 3);
 			if (yhrt_worker_readback(r, snap)) {

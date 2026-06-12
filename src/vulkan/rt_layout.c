@@ -187,10 +187,6 @@ static void yhrt_cleanup_session_buffers(Renderer *r)
 	if (r->yhrt_desc_pool != VK_NULL_HANDLE) {
 		vkDestroyDescriptorPool(r->core.device, r->yhrt_desc_pool, NULL);
 		r->yhrt_desc_pool = VK_NULL_HANDLE;
-		r->yhrt_cmd_pool = VK_NULL_HANDLE;
-		r->yhrt_cmd_buf = VK_NULL_HANDLE;
-		r->yhrt_node_staging_buf = VK_NULL_HANDLE;
-		r->yhrt_node_staging_mem = VK_NULL_HANDLE;
 	}
 	if (r->yhrt_dispatch_fence != VK_NULL_HANDLE) {
 		vkDestroyFence(r->core.device, r->yhrt_dispatch_fence, NULL);
