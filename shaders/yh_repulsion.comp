@@ -1,0 +1,66 @@
+#version 460
+#extension GL_EXT_ray_query : require
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+struct NodeData {
+	vec4 pos;
+};
+
+layout(std430, binding = 0) readonly buffer NodeBuffer {
+	NodeData nodes[];
+};
+
+layout(std430, binding = 1) buffer ForceBuffer {
+	vec4 forces[];
+};
+
+layout(binding = 3) uniform accelerationStructureEXT tlas;
+
+layout(push_constant) uniform PC {
+	float KP;
+	float CRK;
+	float p;
+	float step_size;
+	uint vertex_count;
+	uint edge_count;
+	float R;
+}
+pc;
+
+void main()
+{
+	uint i = gl_GlobalInvocationID.x;
+	if (i >= pc.vertex_count)
+		return;
+
+	vec3 pos = nodes[i].pos.xyz;
+	vec3 force = vec3(0.0);
+
+	rayQueryEXT rq;
+	rayQueryInitializeEXT(rq, tlas, gl_RayFlagsNoneEXT, 0xFF, pos, 0.0, vec3(1.0, 0.0, 0.0), 0.0001);
+
+	while (rayQueryProceedEXT(rq)) {
+		if (rayQueryGetIntersectionTypeEXT(rq, false) == gl_RayQueryCandidateIntersectionAABBEXT) {
+			uint j = rayQueryGetIntersectionInstanceIdEXT(rq, false);
+			if (i != j) {
+				vec3 npos = nodes[j].pos.xyz;
+				vec3 diff = pos - npos;
+				float d2 = dot(diff, diff);
+				if (d2 < 1e-12) {
+					float eps = (i > j) ? 1e-5 : -1e-5;
+					diff += vec3(eps);
+					d2 = dot(diff, diff);
+				}
+				float dist = sqrt(d2);
+				float mass = nodes[j].pos.w;
+				float scale = (pc.KP / pow(dist, pc.p + 1.0)) * mass;
+				if (isinf(scale) || isnan(scale))
+					scale = 1e10;
+				force += scale * diff;
+			}
+		}
+	}
+
+	forces[i].xyz = force;
+}

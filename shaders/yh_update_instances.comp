@@ -1,0 +1,57 @@
+#version 460
+#extension GL_EXT_nonuniform_qualifier : require
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+struct NodeData {
+	vec4 pos;
+};
+
+layout(std430, binding = 0) readonly buffer NodeBuffer {
+	NodeData nodes[];
+};
+
+layout(std430, binding = 5) buffer InstanceBuffer {
+	float m[12];
+	uint customIndex;
+	uint mask;
+	uint sbtRecordOffset;
+	uint flags;
+	uint accelRefLo;
+	uint accelRefHi;
+} instances[];
+
+layout(push_constant) uniform PC {
+	float KP;
+	float CRK;
+	float p;
+	float step_size;
+	uint vertex_count;
+	uint edge_count;
+	float R;
+}
+pc;
+
+void main()
+{
+	uint i = gl_GlobalInvocationID.x;
+	if (i >= pc.vertex_count)
+		return;
+
+	vec3 pos = nodes[i].pos.xyz;
+
+	instances[i].m[0] = 1.0;
+	instances[i].m[1] = 0.0;
+	instances[i].m[2] = 0.0;
+	instances[i].m[3] = pos.x;
+
+	instances[i].m[4] = 0.0;
+	instances[i].m[5] = 1.0;
+	instances[i].m[6] = 0.0;
+	instances[i].m[7] = pos.y;
+
+	instances[i].m[8] = 0.0;
+	instances[i].m[9] = 0.0;
+	instances[i].m[10] = 1.0;
+	instances[i].m[11] = pos.z;
+}

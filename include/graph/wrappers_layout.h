@@ -51,6 +51,11 @@ void *compute_igraph_layout_bhtsne(igraph_t *graph);
 // Community-based layouts
 void *compute_layout_layered_sphere(igraph_t *graph);
 
+// Yifan Hu RT layout (Vulkan ray tracing)
+void *compute_igraph_layout_yifan_hu_rt_3d(igraph_t *graph);
+void apply_yhrt_layout(ExecutionContext *ctx, void *result_data);
+void free_yhrt_data(void *result_data);
+
 // Standard apply and free functions
 void free_layout_matrix(void *result_data);
 void apply_layout_matrix(ExecutionContext *ctx, void *result_data);

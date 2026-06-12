@@ -5,6 +5,7 @@
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_compute.h"
 #include "vulkan/renderer_lifecycle.h"
+#include "vulkan/rt_layout.h"
 #include "vulkan/utils.h"
 
 #include "graph/graph_types.h"
@@ -144,6 +145,13 @@ void renderer_draw_frame(Renderer *r, GraphData *graph)
 		double now = glfwGetTime();
 		if (now - r->splc_last_level_time >= r->splc_level_interval) {
 			renderer_dispatch_splc_level(r, r->commands.commandBuffers[r->commands.currentFrame]);
+		}
+	}
+
+	// Yifan Hu RT layout: dispatch one GPU iteration
+	if (r->yhrt_active) {
+		if (!yhrt_dispatch_step(r, r->commands.commandBuffers[r->commands.currentFrame])) {
+			yhrt_finish(r, graph);
 		}
 	}
 

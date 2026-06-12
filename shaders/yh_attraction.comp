@@ -1,0 +1,59 @@
+#version 460
+#extension GL_EXT_shader_atomic_float : require
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) readonly buffer NodeBuffer {
+	vec4 nodes[];
+};
+
+layout(std430, binding = 1) buffer ForceBuffer {
+	vec4 forces[];
+};
+
+struct EdgeData {
+	uint from;
+	uint to;
+	float weight;
+};
+
+layout(std430, binding = 2) readonly buffer EdgeBuffer {
+	EdgeData edges[];
+};
+
+layout(push_constant) uniform PC {
+	float KP;
+	float CRK;
+	float p;
+	float step_size;
+	uint vertex_count;
+	uint edge_count;
+	float R;
+}
+pc;
+
+void main()
+{
+	uint e = gl_GlobalInvocationID.x;
+	if (e >= pc.edge_count)
+		return;
+
+	uint from = edges[e].from;
+	uint to = edges[e].to;
+	float weight = edges[e].weight;
+
+	vec3 diff = nodes[from].xyz - nodes[to].xyz;
+	float dist = length(diff);
+	if (dist < 1e-12)
+		return;
+
+	float scale = -pc.CRK * dist * weight;
+	vec3 f = scale * diff;
+
+	atomicAdd(forces[from].x, f.x);
+	atomicAdd(forces[from].y, f.y);
+	atomicAdd(forces[from].z, f.z);
+	atomicAdd(forces[to].x, -f.x);
+	atomicAdd(forces[to].y, -f.y);
+	atomicAdd(forces[to].z, -f.z);
+}

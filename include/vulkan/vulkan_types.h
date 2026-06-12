@@ -334,6 +334,51 @@ typedef struct Renderer
 	VkDeviceMemory rayVertexBufferMemory;
 	uint32_t rayVertexCount;
 
+	// Yifan Hu RT Layout
+	bool yhrt_active;
+	bool yhrt_supported;
+	bool yhrt_fnorm_readback_pending;
+	int yhrt_current_iter;
+	int yhrt_maxiter;
+	float yhrt_step;
+	float yhrt_Fnorm0;
+	float yhrt_tolerance;
+	float yhrt_K;
+	float yhrt_KP;
+	float yhrt_CRK;
+	float yhrt_p;
+	float yhrt_R;
+	uint32_t yhrt_vcount;
+	uint32_t yhrt_ecount;
+	VkBuffer yhrt_node_buf;
+	VkDeviceMemory yhrt_node_mem;
+	VkBuffer yhrt_force_buf;
+	VkDeviceMemory yhrt_force_mem;
+	VkBuffer yhrt_edge_buf;
+	VkDeviceMemory yhrt_edge_mem;
+	VkBuffer yhrt_fnorm_buf;
+	VkDeviceMemory yhrt_fnorm_mem;
+	VkBuffer yhrt_staging_buf;
+	VkDeviceMemory yhrt_staging_mem;
+	VkBuffer yhrt_as_scratch_buf;
+	VkDeviceMemory yhrt_as_scratch_mem;
+	VkBuffer yhrt_blas_buf;
+	VkDeviceMemory yhrt_blas_mem;
+	VkBuffer yhrt_tlas_buf;
+	VkDeviceMemory yhrt_tlas_mem;
+	VkBuffer yhrt_instance_buf;
+	VkDeviceMemory yhrt_instance_mem;
+	VkAccelerationStructureKHR yhrt_blas;
+	VkAccelerationStructureKHR yhrt_tlas;
+	VkDescriptorPool yhrt_desc_pool;
+	VkDescriptorSet yhrt_desc_set;
+	VkDescriptorSetLayout yhrt_desc_set_layout;
+	VkPipelineLayout yhrt_pipeline_layout;
+	VkPipeline yhrt_repulsion_pipeline;
+	VkPipeline yhrt_attraction_pipeline;
+	VkPipeline yhrt_update_pipeline;
+	VkPipeline yhrt_update_instances_pipeline;
+
 	// Ring-buffered sync for graph updates
 	VkFence graphUpdateFences[GRAPH_UPDATE_RING_SIZE];
 	uint32_t graphUpdateRingIndex;

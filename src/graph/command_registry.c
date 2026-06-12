@@ -66,6 +66,7 @@ const CommandDef g_command_registry[] = {
 	{"Layout/Force-Directed", "igraph_layout_forceatlas2_3d", "ForceAtlas2 (3D)", compute_igraph_layout_forceatlas2_3d, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "igraph_layout_yifan_hu", "Yifan Hu (2D)", compute_igraph_layout_yifan_hu, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "igraph_layout_yifan_hu_3d", "Yifan Hu (3D)", compute_igraph_layout_yifan_hu_3d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Force-Directed", "yhrt_layout_3d", "Yifan Hu (3D) [RT]", compute_igraph_layout_yifan_hu_rt_3d, apply_yhrt_layout, free_yhrt_data},
 
 	// =========================================================================
 	// Layout menu - Tree & Hierarchical

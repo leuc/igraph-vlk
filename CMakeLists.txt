@@ -49,6 +49,10 @@ find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
 	    shaders/textquad.frag
 	    shaders/routing.comp
 	    shaders/splc.comp
+	    shaders/yh_repulsion.comp
+	    shaders/yh_attraction.comp
+	    shaders/yh_update.comp
+	    shaders/yh_update_instances.comp
 	    shaders/ray.vert
 	    shaders/ray.frag
 	)
@@ -77,6 +81,7 @@ add_executable(igraph-vlk
     src/vulkan/renderer_labels.c
     src/vulkan/renderer_geometry.c
     src/vulkan/renderer_compute.c
+    src/vulkan/rt_layout.c
     src/vulkan/renderer_ui.c
     src/vulkan/renderer_pipelines.c
     src/vulkan/pipeline_graphics.c
@@ -117,6 +122,7 @@ add_executable(igraph-vlk
      src/graph/layouts_graphopt.c
      src/graph/layouts_gem.c
      src/graph/layouts_yifan_hu.c
+     src/graph/layouts_yifan_hu_rt.c
      src/graph/layouts_forceatlas2.c
      src/graph/layouts_tsne.c
      src/graph/layouts_apply.c
@@ -184,6 +190,10 @@ target_compile_definitions(igraph-vlk PRIVATE
     TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv"
     ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv"
     SPLC_COMP_SHADER_PATH="shaders/splc.comp.spv"
+    YHRT_REPULSION_COMP_SHADER_PATH="shaders/yh_repulsion.comp.spv"
+    YHRT_ATTRACTION_COMP_SHADER_PATH="shaders/yh_attraction.comp.spv"
+    YHRT_UPDATE_COMP_SHADER_PATH="shaders/yh_update.comp.spv"
+    YHRT_UPDATE_INSTANCES_COMP_SHADER_PATH="shaders/yh_update_instances.comp.spv"
     RAY_VERT_SHADER_PATH="shaders/ray.vert.spv"
     RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv"
 )

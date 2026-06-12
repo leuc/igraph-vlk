@@ -13,6 +13,7 @@
 #include "vulkan/renderer_compute.h"
 #include "vulkan/renderer_geometry.h"
 #include "vulkan/renderer_pipelines.h"
+#include "vulkan/rt_layout.h"
 #include "vulkan/swapchain.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
@@ -159,6 +160,10 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->splc_last_level_time = 0.0;
 	r->splc_level_interval = 0.5f;
 	r->splc_active = false;
+
+	// YHRT initialization
+	r->yhrt_active = false;
+	r->yhrt_supported = false;
 
 	renderer_update_graph(r, graph);
 	r->labelTreeNeedsRebuild = true;

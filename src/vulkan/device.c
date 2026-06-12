@@ -26,6 +26,12 @@ static const int VALIDATION_LAYER_COUNT = 1;
 static const char *BASE_DEVICE_EXTENSIONS[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME};
 static const int BASE_DEVICE_EXTENSION_COUNT = 3;
 
+// Optional ray tracing extensions (checked at runtime before enabling)
+static const char *RT_DEVICE_EXTENSIONS[] = {
+	VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, VK_KHR_SPIRV_1_4_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, VK_KHR_RAY_QUERY_EXTENSION_NAME,
+};
+static const int RT_DEVICE_EXTENSION_COUNT = 5;
+
 static int rate_device_suitability(VkPhysicalDevice device)
 {
 	VkPhysicalDeviceProperties props;
@@ -282,6 +288,61 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 		.pNext = &atomicFloatFeatures,
 		.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE,
 	};
+
+	// Check for optional RT extension support by enumerating device extensions
+	bool rt_supported = true;
+	{
+		uint32_t devExtCount = 0;
+		vkEnumerateDeviceExtensionProperties(core->physicalDevice, NULL, &devExtCount, NULL);
+		VkExtensionProperties *devExts = malloc(sizeof(VkExtensionProperties) * devExtCount);
+		vkEnumerateDeviceExtensionProperties(core->physicalDevice, NULL, &devExtCount, devExts);
+
+		for (int i = 0; i < RT_DEVICE_EXTENSION_COUNT; i++) {
+			bool found = false;
+			for (uint32_t j = 0; j < devExtCount; j++) {
+				if (strcmp(RT_DEVICE_EXTENSIONS[i], devExts[j].extensionName) == 0) {
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				fprintf(stderr, "[Vulkan] Warning: RT extension %s not supported, RT layout disabled.\n", RT_DEVICE_EXTENSIONS[i]);
+				rt_supported = false;
+				break;
+			}
+		}
+		free(devExts);
+	}
+
+	// Chain RT feature structs if supported
+	VkPhysicalDeviceBufferDeviceAddressFeaturesKHR bufAddrFeatures = {0};
+	VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {0};
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeatures = {0};
+	void *pNextTail = &descIndexingFeatures;
+
+	if (rt_supported) {
+		bufAddrFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR;
+		bufAddrFeatures.bufferDeviceAddress = VK_TRUE;
+		((VkPhysicalDeviceDescriptorIndexingFeaturesEXT *)pNextTail)->pNext = &bufAddrFeatures;
+		pNextTail = &bufAddrFeatures;
+
+		rayQueryFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+		rayQueryFeatures.rayQuery = VK_TRUE;
+		bufAddrFeatures.pNext = &rayQueryFeatures;
+		pNextTail = &rayQueryFeatures;
+
+		accelFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+		accelFeatures.accelerationStructure = VK_TRUE;
+		rayQueryFeatures.pNext = &accelFeatures;
+		pNextTail = &accelFeatures;
+
+		// Add RT extensions to device extension list
+		for (int i = 0; i < RT_DEVICE_EXTENSION_COUNT; i++) {
+			deviceExtensions[deviceExtensionCount++] = RT_DEVICE_EXTENSIONS[i];
+		}
+		printf("[Vulkan] Enabling %d ray tracing extensions\n", RT_DEVICE_EXTENSION_COUNT);
+	}
+
 	VkDeviceCreateInfo deviceInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .queueCreateInfoCount = queueCreateInfoCount, .pQueueCreateInfos = queueCreateInfos, .enabledExtensionCount = deviceExtensionCount, .ppEnabledExtensionNames = deviceExtensions, .pEnabledFeatures = &deviceFeatures, .pNext = &descIndexingFeatures, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
 
 	VK_CHECK(vkCreateDevice(core->physicalDevice, &deviceInfo, NULL, &core->device), "Failed to create logical device");

@@ -1,0 +1,46 @@
+#version 460
+#extension GL_EXT_shader_atomic_float : require
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) buffer NodeBuffer {
+	vec4 nodes[];
+};
+
+layout(std430, binding = 1) buffer ForceBuffer {
+	vec4 forces[];
+};
+
+layout(std430, binding = 4) buffer FnormBuffer {
+	float global_fnorm;
+};
+
+layout(push_constant) uniform PC {
+	float KP;
+	float CRK;
+	float p;
+	float step_size;
+	uint vertex_count;
+	uint edge_count;
+	float R;
+}
+pc;
+
+void main()
+{
+	uint i = gl_GlobalInvocationID.x;
+	if (i >= pc.vertex_count)
+		return;
+
+	vec3 f = forces[i].xyz;
+	float fmag = length(f);
+
+	if (fmag > 1e-12) {
+		f = f / fmag;
+	}
+
+	atomicAdd(global_fnorm, fmag);
+
+	nodes[i].xyz += pc.step_size * f;
+	forces[i] = vec4(0.0);
+}
