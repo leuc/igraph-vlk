@@ -22,15 +22,15 @@ typedef struct
 {
 	igraph_integer_t id;
 	igraph_integer_t degree;
-	igraph_integer_t topo_pos;
+	igraph_integer_t coreness;
 } NodeTopology;
 
-static int compare_topology(const void *a, const void *b)
+static int compare_kcore(const void *a, const void *b)
 {
 	const NodeTopology *nodeA = (const NodeTopology *)a;
 	const NodeTopology *nodeB = (const NodeTopology *)b;
-	if (nodeA->topo_pos != nodeB->topo_pos)
-		return (int)(nodeA->topo_pos - nodeB->topo_pos);
+	if (nodeA->coreness != nodeB->coreness)
+		return (int)(nodeA->coreness - nodeB->coreness);
 	return (int)(nodeB->degree - nodeA->degree);
 }
 
@@ -78,9 +78,10 @@ static void get_hilbert_3d_position(int rank, int order, float *x, float *y, flo
 
 typedef struct
 {
-	float position[4];		// xyz = pos, w = mass
-	float escape_vector[4]; // xyz = escape_dir, w = openness
-	float freedom[4];		// x = local_freedom [0..1], w = is_awake
+	float position[4];		   // xyz = pos, w = mass
+	float escape_vector[4];	   // xyz = escape_dir, w = openness
+	float freedom[4];		   // x = local_freedom [0..1], w = is_awake
+	float ideal_target_pos[4]; // xyz = consensus target, w = unused
 } NodePhysicsGPU;
 
 typedef struct
@@ -119,36 +120,28 @@ void *compute_escape_layout(igraph_t *graph)
 	igraph_vector_int_init(&degrees, vcount);
 	igraph_degree(graph, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS_ONCE);
 
-	igraph_vector_int_t topo_order;
-	igraph_vector_int_init(&topo_order, 0);
-	igraph_error_t topo_ret = igraph_topological_sorting(graph, &topo_order, IGRAPH_OUT);
-	if (topo_ret != IGRAPH_SUCCESS) {
-		fprintf(stderr, "[Escape] Topological sorting failed (graph likely cyclic), using degree-only ordering\n");
-		igraph_vector_int_destroy(&degrees);
-		igraph_vector_int_destroy(&topo_order);
-		free(sorted);
-		return NULL;
-	}
+	igraph_t undirected;
+	igraph_copy(&undirected, graph);
+	igraph_to_undirected(&undirected, IGRAPH_TO_UNDIRECTED_COLLAPSE, NULL);
 
-	igraph_vector_int_t rank;
-	igraph_vector_int_init(&rank, vcount);
-	for (igraph_integer_t i = 0; i < (igraph_integer_t)igraph_vector_int_size(&topo_order); i++)
-		VECTOR(rank)[VECTOR(topo_order)[i]] = i;
+	igraph_vector_int_t coreness;
+	igraph_vector_int_init(&coreness, vcount);
+	igraph_coreness(&undirected, &coreness, IGRAPH_ALL);
+	igraph_destroy(&undirected);
 
 	igraph_integer_t max_deg = 0;
 	for (igraph_integer_t i = 0; i < vcount; i++) {
 		sorted[i].id = i;
 		sorted[i].degree = VECTOR(degrees)[i];
-		sorted[i].topo_pos = VECTOR(rank)[i];
+		sorted[i].coreness = VECTOR(coreness)[i];
 		if (sorted[i].degree > max_deg)
 			max_deg = sorted[i].degree;
 	}
 
 	igraph_vector_int_destroy(&degrees);
-	igraph_vector_int_destroy(&topo_order);
-	igraph_vector_int_destroy(&rank);
+	igraph_vector_int_destroy(&coreness);
 
-	qsort(sorted, vcount, sizeof(NodeTopology), compare_topology);
+	qsort(sorted, vcount, sizeof(NodeTopology), compare_kcore);
 
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
@@ -448,6 +441,10 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 		// All nodes start awake with maximum freedom
 		phys[i].freedom[3] = 1.0f;
 		phys[i].freedom[0] = 1.0f;
+		phys[i].ideal_target_pos[0] = 0.0f;
+		phys[i].ideal_target_pos[1] = 0.0f;
+		phys[i].ideal_target_pos[2] = 0.0f;
+		phys[i].ideal_target_pos[3] = 0.0f;
 	}
 	update_buffer(r->core.device, r->escape_physics_memory, phys_size, phys);
 	free(phys);
@@ -639,7 +636,7 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	float avg_degree = (n > 0) ? (float)m / (float)n : 1.0f;
 	float density = (n > 1) ? (float)m / ((float)n * (float)(n - 1)) : 0.0f;
 
-	float alpha0 = 10.0f;
+	float alpha0 = 0.2f;
 
 	printf("[Escape] Params: avg_deg=%.1f density=%.4f alpha=%.3f\n", avg_degree, density, alpha0);
 

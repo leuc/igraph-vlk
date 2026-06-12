@@ -5,6 +5,7 @@ struct RayPayload {
 	uint hitCount;
 	uint originNodeId;
 	uint escaped;
+	float lastHitT;
 };
 layout(location = 0) rayPayloadInEXT RayPayload payload;
 

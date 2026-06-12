@@ -5,15 +5,17 @@ struct RayPayload {
 	uint hitCount;
 	uint originNodeId;
 	uint escaped;
+	float lastHitT;
 };
 layout(location = 0) rayPayloadEXT RayPayload payload;
 
 layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
 
 struct NodePhysics {
-	vec4 position;      // xyz=pos, w=nodeRadius
-	vec4 escape_vector; // xyz=escape_dir, w=openness
-	vec4 freedom;       // x=local_freedom [0..1], w=is_awake (1.0 awake, 0.0 asleep)
+	vec4 position;         // xyz=pos, w=nodeRadius
+	vec4 escape_vector;    // xyz=escape_dir, w=openness
+	vec4 freedom;          // x=local_freedom [0..1], w=is_awake (1.0 awake, 0.0 asleep)
+	vec4 ideal_target_pos; // xyz=consensus target, w=unused
 };
 
 layout(std430, binding = 1, set = 0) buffer PhysicsBuffer {
@@ -40,6 +42,7 @@ void main() {
 	if (nodeId >= gl_LaunchSizeEXT.x) return;
 
 	vec3 origin = nodes[nodeId].position.xyz;
+	vec3 home_dir = fibonacci_sphere_dir(nodeId, 0);
 
 	bool is_awake = (nodes[nodeId].freedom.w > 0.5);
 	int active_ray_count = is_awake ? RAY_COUNT : 4;
@@ -47,8 +50,8 @@ void main() {
 	uint escaped_count = 0;
 	uint min_hit_count = 0xFFFFFFFF;
 	vec3 best_direction = vec3(0.0);
-	vec3 accumulated_direction = vec3(0.0);
-	uint tie_count = 0;
+	float best_dot = -1.0;
+	float best_last_hit_t = 0.0;
 
 	for (int i = 0; i < active_ray_count; i++) {
 		vec3 dir = fibonacci_sphere_dir(nodeId, uint(i));
@@ -56,6 +59,7 @@ void main() {
 		payload.hitCount = 0;
 		payload.originNodeId = nodeId;
 		payload.escaped = 0;
+		payload.lastHitT = 0.0;
 
 		traceRayEXT(topLevelAS,
 			gl_RayFlagsNoOpaqueEXT,
@@ -69,11 +73,15 @@ void main() {
 			if (hc < min_hit_count) {
 				min_hit_count = hc;
 				best_direction = dir;
-				accumulated_direction = dir;
-				tie_count = 1;
+				best_dot = dot(dir, home_dir);
+				best_last_hit_t = payload.lastHitT;
 			} else if (hc == min_hit_count) {
-				accumulated_direction += dir;
-				tie_count++;
+				float d = dot(dir, home_dir);
+				if (d > best_dot) {
+					best_direction = dir;
+					best_dot = d;
+					best_last_hit_t = payload.lastHitT;
+				}
 			}
 		}
 	}
@@ -81,16 +89,27 @@ void main() {
 	float freedom = float(escaped_count) / float(active_ray_count);
 	nodes[nodeId].freedom.x = clamp(freedom, 0.0, 1.0);
 
-	if (escaped_count == 0) {
-		nodes[nodeId].escape_vector.xyz = vec3(0.0);
-	} else {
-		vec3 escape_dir;
-		if (tie_count > 1) {
-			escape_dir = accumulated_direction / float(tie_count);
-		} else {
-			escape_dir = best_direction;
-		}
+	vec3 new_escape = vec3(0.0);
+	vec3 escape_dir = vec3(0.0);
+
+	if (escaped_count > 0) {
+		escape_dir = best_direction;
 		float len = length(escape_dir);
-		nodes[nodeId].escape_vector.xyz = (len > 0.01) ? (escape_dir / len) * freedom : vec3(0.0);
+		if (len > 0.01) {
+			escape_dir /= len;
+			new_escape = escape_dir * freedom;
+		}
+	}
+
+	vec3 prev = nodes[nodeId].escape_vector.xyz;
+	nodes[nodeId].escape_vector.xyz = mix(prev, new_escape, 0.1);
+
+	if (length(new_escape) > 0.01) {
+		float safe_dist = best_last_hit_t;
+		if (safe_dist < 0.01) safe_dist = pc.ray_max_distance * 0.5;
+		safe_dist = min(safe_dist, pc.ray_max_distance * 0.5);
+		nodes[nodeId].ideal_target_pos.xyz = origin + escape_dir * safe_dist;
+	} else {
+		nodes[nodeId].ideal_target_pos.xyz = origin;
 	}
 }
