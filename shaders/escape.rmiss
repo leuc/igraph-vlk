@@ -2,7 +2,6 @@
 #extension GL_EXT_ray_tracing : require
 
 struct RayPayload {
-	uint hitCount;
 	uint originNodeId;
 	uint escaped;
 };

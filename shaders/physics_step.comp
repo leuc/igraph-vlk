@@ -45,7 +45,9 @@ void main() {
 			is_awake = false;
 		}
 	} else {
-		if (freedom < WAKE_THRESHOLD) {
+		// Wake if freedom dropped (node is no longer wide-open)
+		// or a strong escape direction appeared (e.g. neighbor moved away)
+		if (freedom < WAKE_THRESHOLD || length(nodes[id].escape_vector.xyz) > 0.5) {
 			is_awake = true;
 		}
 	}

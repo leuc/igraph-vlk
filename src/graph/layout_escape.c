@@ -10,6 +10,7 @@
 #include <float.h>
 #include <igraph.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -225,40 +226,9 @@ bool igraph_vlk_layout_escape_tick(Renderer *r)
 		// Read back positions from GPU and update graph visualization every iteration
 		uint32_t sleeping = escape_readback_positions(r, r->escape_graph_data);
 
-		// Debug: sample a few nodes' escape vectors and positions every 10 iters
-		if (r->escape_current_iter % 10 == 0 && r->escape_graph_data) {
-			VkDeviceSize phys_size = sizeof(NodePhysicsGPU) * n;
-			NodePhysicsGPU *phys = (NodePhysicsGPU *)malloc(phys_size);
-			void *mapped;
-			vkMapMemory(r->core.device, r->escape_physics_memory, 0, phys_size, 0, &mapped);
-			memcpy(phys, mapped, phys_size);
-			vkUnmapMemory(r->core.device, r->escape_physics_memory);
-
-			// Sample nodes 0, n/4, n/2, 3n/4, n-1
-			uint32_t samples[] = {0, n / 4, n / 2, (3 * n) / 4, n - 1};
-			float avg_escape_len = 0.0f;
-			float avg_pos_len = 0.0f;
-			float avg_freedom = 0.0f;
-			for (uint32_t s = 0; s < 5 && samples[s] < n; s++) {
-				uint32_t idx = samples[s];
-				float ex = phys[idx].escape_vector[0], ey = phys[idx].escape_vector[1], ez = phys[idx].escape_vector[2];
-				float el = sqrtf(ex * ex + ey * ey + ez * ez);
-				float px = phys[idx].position[0], py = phys[idx].position[1], pz = phys[idx].position[2];
-				float pl = sqrtf(px * px + py * py + pz * pz);
-				float f = phys[idx].freedom[0];
-				avg_escape_len += el;
-				avg_pos_len += pl;
-				avg_freedom += f;
-				if (r->escape_current_iter == 10 || s == 0)
-					printf("[Escape]   node[%u] pos=(%.2f,%.2f,%.2f) r=%.2f  escape=(%.6f,%.6f,%.6f) |e|=%.6f  f=%.3f\n", idx, px, py, pz, pl, ex, ey, ez, el, f);
-			}
-			avg_escape_len /= 5.0f;
-			avg_pos_len /= 5.0f;
-			avg_freedom /= 5.0f;
-			printf("[Escape] iter %4u | sleeping=%u/%u avg |escape|=%.6f  avg |pos|=%.2f  avg freedom=%.3f\n", r->escape_current_iter, sleeping, n, avg_escape_len, avg_pos_len, avg_freedom);
-
-			free(phys);
-		}
+		// Summary every 10 iters
+		if (r->escape_current_iter % 10 == 0)
+			printf("[Escape] iter %4u | sleeping=%u/%u\n", r->escape_current_iter, sleeping, n);
 
 		// CPU-side TLAS update for next frame's RT pass
 		if (r->escape_rt_supported) {
@@ -302,8 +272,8 @@ bool igraph_vlk_layout_escape_tick(Renderer *r)
 	r->escape_needs_wait = true;
 	r->escape_current_iter++;
 
-	if (r->escape_current_iter % 10 == 0 || r->escape_current_iter == r->escape_max_iters)
-		printf("[Escape] iter %4u / %u | alpha=%.3f\n", r->escape_current_iter, r->escape_max_iters, r->escape_alpha);
+	if (r->escape_current_iter % 100 == 0 || r->escape_current_iter == r->escape_max_iters)
+		printf("[Escape] Submitted iter %4u / %u\n", r->escape_current_iter, r->escape_max_iters);
 
 	return true;
 }
@@ -450,6 +420,7 @@ static void escape_create_gpu_buffers(Renderer *r, GraphData *data)
 		phys[i].freedom[0] = 1.0f;
 	}
 	update_buffer(r->core.device, r->escape_physics_memory, phys_size, phys);
+
 	free(phys);
 
 	if (adj_neighbors)
@@ -569,6 +540,19 @@ static uint32_t escape_readback_positions(Renderer *r, GraphData *data)
 	memcpy(phys, mapped, phys_size);
 	vkUnmapMemory(r->core.device, r->escape_physics_memory);
 
+	// Static snapshot of initial positions for stuck-node detection
+	static float *initial_pos = NULL;
+	static uint32_t initial_n = 0;
+	if (!initial_pos) {
+		initial_n = data->node_count;
+		initial_pos = (float *)malloc(initial_n * 3 * sizeof(float));
+		for (uint32_t i = 0; i < initial_n; i++) {
+			initial_pos[i * 3 + 0] = phys[i].position[0];
+			initial_pos[i * 3 + 1] = phys[i].position[1];
+			initial_pos[i * 3 + 2] = phys[i].position[2];
+		}
+	}
+
 	uint32_t sleeping = 0;
 	for (uint32_t i = 0; i < (uint32_t)data->node_count; i++) {
 		data->nodes[i].position[0] = phys[i].position[0];
@@ -579,6 +563,123 @@ static uint32_t escape_readback_positions(Renderer *r, GraphData *data)
 		MATRIX(data->current_layout, i, 2) = (igraph_real_t)phys[i].position[2];
 		if (phys[i].freedom[3] < 0.5f)
 			sleeping++;
+	}
+
+	// Comprehensive stats every 50 iters
+	if (r->escape_current_iter % 50 == 0 || r->escape_current_iter == 1) {
+		uint32_t n = data->node_count;
+		float min_pl = FLT_MAX, max_pl = 0, sum_pl = 0;
+		float min_x = FLT_MAX, max_x = -FLT_MAX;
+		float min_y = FLT_MAX, max_y = -FLT_MAX;
+		float min_z = FLT_MAX, max_z = -FLT_MAX;
+		int e_hist[5] = {0};   // 0, (0,0.01], (0.01,0.1], (0.1,0.5], >0.5
+		int f_hist[5] = {0};   // 0, (0,0.25], (0.25,0.5], (0.5,0.75], >0.75
+		int esc_hist[5] = {0}; // escaped_count buckets: 0, 1-4, 5-8, 9-12, 13-16
+		uint32_t stuck = 0;
+		uint32_t deg0_idx = UINT32_MAX, deg_max_idx = UINT32_MAX, deg_avg_idx = UINT32_MAX;
+		uint32_t deg_max_val = 0;
+		for (uint32_t i = 0; i < n; i++) {
+			float px = phys[i].position[0], py = phys[i].position[1], pz = phys[i].position[2];
+			float pl = sqrtf(px * px + py * py + pz * pz);
+			if (pl < min_pl)
+				min_pl = pl;
+			if (pl > max_pl)
+				max_pl = pl;
+			sum_pl += pl;
+			if (px < min_x)
+				min_x = px;
+			if (px > max_x)
+				max_x = px;
+			if (py < min_y)
+				min_y = py;
+			if (py > max_y)
+				max_y = py;
+			if (pz < min_z)
+				min_z = pz;
+			if (pz > max_z)
+				max_z = pz;
+
+			float elen = sqrtf(phys[i].escape_vector[0] * phys[i].escape_vector[0] + phys[i].escape_vector[1] * phys[i].escape_vector[1] + phys[i].escape_vector[2] * phys[i].escape_vector[2]);
+			if (elen == 0.0f)
+				e_hist[0]++;
+			else if (elen <= 0.01f)
+				e_hist[1]++;
+			else if (elen <= 0.1f)
+				e_hist[2]++;
+			else if (elen <= 0.5f)
+				e_hist[3]++;
+			else
+				e_hist[4]++;
+
+			float f = phys[i].freedom[0];
+			if (f == 0.0f)
+				f_hist[0]++;
+			else if (f <= 0.25f)
+				f_hist[1]++;
+			else if (f <= 0.5f)
+				f_hist[2]++;
+			else if (f <= 0.75f)
+				f_hist[3]++;
+			else
+				f_hist[4]++;
+
+			// Debug: hitCount from freedom.y, escaped_count from freedom.z
+			uint32_t ec = (uint32_t)(phys[i].freedom[2] + 0.5f);
+			if (ec == 0)
+				esc_hist[0]++;
+			else if (ec <= 4)
+				esc_hist[1]++;
+			else if (ec <= 8)
+				esc_hist[2]++;
+			else if (ec <= 12)
+				esc_hist[3]++;
+			else
+				esc_hist[4]++;
+
+			float dx = px - initial_pos[i * 3 + 0], dy = py - initial_pos[i * 3 + 1], dz = pz - initial_pos[i * 3 + 2];
+			if (sqrtf(dx * dx + dy * dy + dz * dz) < 0.001f)
+				stuck++;
+
+			uint32_t deg = data->nodes[i].degree;
+			if (deg == 0 && deg0_idx == UINT32_MAX)
+				deg0_idx = i;
+			if (deg > deg_max_val) {
+				deg_max_val = deg;
+				deg_max_idx = i;
+			}
+		}
+		float avg_pl = sum_pl / (float)n;
+
+		// Find one node near average degree
+		int32_t avg_deg_target = (int32_t)((float)data->edge_count / (float)n + 0.5f);
+		int32_t best_diff = INT32_MAX;
+		for (uint32_t i = 0; i < n && i < 1000; i++) {
+			int32_t diff = abs((int32_t)data->nodes[i].degree - avg_deg_target);
+			if (diff < best_diff) {
+				best_diff = diff;
+				deg_avg_idx = i;
+			}
+		}
+
+		printf("[Escape STATS iter %4u] pos: |p|=[%.1f..%.1f] avg=%.1f  bounds X=[%.1f,%.1f] Y=[%.1f,%.1f] Z=[%.1f,%.1f]\n", r->escape_current_iter, min_pl, max_pl, avg_pl, min_x, max_x, min_y, max_y, min_z, max_z);
+		printf("[Escape STATS iter %4u] |e|: zero=%d tiny=%d small=%d mid=%d large=%d  freedom: zero=%d low=%d mid=%d high=%d full=%d\n", r->escape_current_iter, e_hist[0], e_hist[1], e_hist[2], e_hist[3], e_hist[4], f_hist[0], f_hist[1], f_hist[2], f_hist[3], f_hist[4]);
+		printf("[Escape STATS iter %4u] escaped: 0=%d 1-4=%d 5-8=%d 9-12=%d 13-16=%d\n", r->escape_current_iter, esc_hist[0], esc_hist[1], esc_hist[2], esc_hist[3], esc_hist[4]);
+		printf("[Escape STATS iter %4u] stuck=%u/%u sleeping=%u\n", r->escape_current_iter, stuck, n, sleeping);
+
+		// Sample nodes: degree=0, degree=max, degree≈avg
+		uint32_t sample_ids[] = {deg0_idx, deg_max_idx, deg_avg_idx};
+		const char *sample_labels[] = {"deg=0", "deg=max", "deg~avg"};
+		for (int si = 0; si < 3; si++) {
+			uint32_t idx = sample_ids[si];
+			if (idx >= n)
+				continue;
+			float px = phys[idx].position[0], py = phys[idx].position[1], pz = phys[idx].position[2];
+			float pl = sqrtf(px * px + py * py + pz * pz);
+			float ex = phys[idx].escape_vector[0], ey = phys[idx].escape_vector[1], ez = phys[idx].escape_vector[2];
+			float el = sqrtf(ex * ex + ey * ey + ez * ez);
+			uint32_t ec = (uint32_t)(phys[idx].freedom[2] + 0.5f);
+			printf("[Escape SAMPLE iter %4u] node[%u] %s deg=%u pos=(%.1f,%.1f,%.1f) |p|=%.1f  |e|=%.4f  f=%.3f escaped=%u/%u awake=%d\n", r->escape_current_iter, idx, sample_labels[si], data->nodes[idx].degree, px, py, pz, pl, el, phys[idx].freedom[0], ec, 16, phys[idx].freedom[3] >= 0.5f ? 1 : 0);
+		}
 	}
 
 	free(phys);

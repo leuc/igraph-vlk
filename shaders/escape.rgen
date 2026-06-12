@@ -2,7 +2,6 @@
 #extension GL_EXT_ray_tracing : require
 
 struct RayPayload {
-	uint hitCount;
 	uint originNodeId;
 	uint escaped;
 };
@@ -45,15 +44,12 @@ void main() {
 	int active_ray_count = is_awake ? RAY_COUNT : 4;
 
 	uint escaped_count = 0;
-	uint min_hit_count = 0xFFFFFFFF;
-	vec3 best_direction = vec3(0.0);
-	vec3 accumulated_direction = vec3(0.0);
-	uint tie_count = 0;
+	vec3 escape_sum = vec3(0.0);
+	vec3 first_escaped_dir = vec3(0.0);
 
 	for (int i = 0; i < active_ray_count; i++) {
 		vec3 dir = fibonacci_sphere_dir(nodeId, uint(i));
 
-		payload.hitCount = 0;
 		payload.originNodeId = nodeId;
 		payload.escaped = 0;
 
@@ -63,34 +59,21 @@ void main() {
 			origin, 0.01, dir, pc.ray_max_distance, 0);
 
 		if (payload.escaped == 1) {
+			if (escaped_count == 0) first_escaped_dir = dir;
+			escape_sum += dir;
 			escaped_count++;
-			uint hc = payload.hitCount;
-
-			if (hc < min_hit_count) {
-				min_hit_count = hc;
-				best_direction = dir;
-				accumulated_direction = dir;
-				tie_count = 1;
-			} else if (hc == min_hit_count) {
-				accumulated_direction += dir;
-				tie_count++;
-			}
 		}
 	}
 
 	float freedom = float(escaped_count) / float(active_ray_count);
 	nodes[nodeId].freedom.x = clamp(freedom, 0.0, 1.0);
+	nodes[nodeId].freedom.z = float(escaped_count);
 
 	if (escaped_count == 0) {
 		nodes[nodeId].escape_vector.xyz = vec3(0.0);
 	} else {
-		vec3 escape_dir;
-		if (tie_count > 1) {
-			escape_dir = accumulated_direction / float(tie_count);
-		} else {
-			escape_dir = best_direction;
-		}
-		float len = length(escape_dir);
-		nodes[nodeId].escape_vector.xyz = (len > 0.01) ? (escape_dir / len) * freedom : vec3(0.0);
+		vec3 avg = escape_sum / float(escaped_count);
+		vec3 escape_dir = (length(avg) > 0.01) ? normalize(avg) : first_escaped_dir;
+		nodes[nodeId].escape_vector.xyz = escape_dir * freedom;
 	}
 }

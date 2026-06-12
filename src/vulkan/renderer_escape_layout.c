@@ -259,7 +259,7 @@ void renderer_escape_build_tlas(Renderer *r, GraphData *data, uint32_t node_coun
 		float px = data->nodes[i].position[0];
 		float py = data->nodes[i].position[1];
 		float pz = data->nodes[i].position[2];
-		float scale = log2f((float)data->nodes[i].degree + 2.0f) * 0.5f;
+		float scale = r->escape_bb_diag * 0.02f * log2f((float)data->nodes[i].degree + 2.0f) * 0.5f;
 
 		VkTransformMatrixKHR transform = {{
 			{scale, 0.0f, 0.0f, px},
