@@ -155,9 +155,9 @@ void renderer_draw_frame(Renderer *r, GraphData *graph)
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .waitSemaphoreCount = 1, .pWaitSemaphores = &r->commands.imageAvailableSemaphores[r->commands.currentFrame], .pWaitDstStageMask = &waitStages, .commandBufferCount = 1, .pCommandBuffers = &r->commands.commandBuffers[r->commands.currentFrame], .signalSemaphoreCount = 1, .pSignalSemaphores = &r->commands.renderFinishedSemaphores[imageIndex]};
 	pthread_mutex_lock(&r->core.graphicsQueueMutex);
 	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, r->commands.inFlightFences[r->commands.currentFrame]), "Failed to submit draw command buffer");
-	pthread_mutex_unlock(&r->core.graphicsQueueMutex);
 
 	VkPresentInfoKHR presentInfo = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 1, .pWaitSemaphores = &r->commands.renderFinishedSemaphores[imageIndex], .swapchainCount = 1, .pSwapchains = &r->swapchain.swapchain, .pImageIndices = &imageIndex};
 	VK_CHECK(vkQueuePresentKHR(r->core.presentQueue, &presentInfo), "Failed to present swapchain image");
+	pthread_mutex_unlock(&r->core.graphicsQueueMutex);
 	r->commands.currentFrame = (r->commands.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
