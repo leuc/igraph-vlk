@@ -12,14 +12,8 @@ layout(std430, binding = 0) readonly buffer NodeBuffer {
 };
 
 layout(std430, binding = 5) buffer InstanceBuffer {
-	float m[12];
-	uint customIndex;
-	uint mask;
-	uint sbtRecordOffset;
-	uint flags;
-	uint accelRefLo;
-	uint accelRefHi;
-} instances[];
+	vec4 instance_data[];
+};
 
 layout(push_constant) uniform PC {
 	float KP;
@@ -40,18 +34,7 @@ void main()
 
 	vec3 pos = nodes[i].pos.xyz;
 
-	instances[i].m[0] = 1.0;
-	instances[i].m[1] = 0.0;
-	instances[i].m[2] = 0.0;
-	instances[i].m[3] = pos.x;
-
-	instances[i].m[4] = 0.0;
-	instances[i].m[5] = 1.0;
-	instances[i].m[6] = 0.0;
-	instances[i].m[7] = pos.y;
-
-	instances[i].m[8] = 0.0;
-	instances[i].m[9] = 0.0;
-	instances[i].m[10] = 1.0;
-	instances[i].m[11] = pos.z;
+	instance_data[i * 4 + 0] = vec4(1.0, 0.0, 0.0, pos.x);
+	instance_data[i * 4 + 1] = vec4(0.0, 1.0, 0.0, pos.y);
+	instance_data[i * 4 + 2] = vec4(0.0, 0.0, 1.0, pos.z);
 }

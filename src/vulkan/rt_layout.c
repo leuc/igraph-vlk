@@ -415,7 +415,7 @@ void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, i
 	}
 
 	// ---- FnormBuffer (single float, zeroed) ----
-	yhrt_create_device_buffer(r, sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &r->yhrt_fnorm_buf, &r->yhrt_fnorm_mem);
+	yhrt_create_device_buffer(r, sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_fnorm_buf, &r->yhrt_fnorm_mem);
 	// ---- Fnorm staging (host visible for readback) ----
 	yhrt_create_buffer(r, sizeof(float), VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_staging_buf, &r->yhrt_staging_mem);
 	// Zero fnorm
@@ -706,18 +706,8 @@ bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd)
 		r->yhrt_Fnorm0 = fnorm;
 	}
 
-	// ---- Reset Fnorm ----
-	{
-		float zero = 0.0f;
-		void *mapped;
-		VK_CHECK(vkMapMemory(r->core.device, r->yhrt_staging_mem, 0, sizeof(float), 0, &mapped), "Failed to map fnorm staging for reset");
-		memcpy(mapped, &zero, sizeof(float));
-		vkUnmapMemory(r->core.device, r->yhrt_staging_mem);
-	}
-
-	// ---- Barrier: clear old Fnorm ----
-	VkBufferCopy zeroCopy = {.size = sizeof(float)};
-	vkCmdCopyBuffer(cmd, r->yhrt_staging_buf, r->yhrt_fnorm_buf, 1, &zeroCopy);
+	// ---- Reset Fnorm via GPU fill (avoids CPU/GPU race on staging buffer) ----
+	vkCmdFillBuffer(cmd, r->yhrt_fnorm_buf, 0, sizeof(float), 0);
 	VkMemoryBarrier clrBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT};
 	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &clrBarrier, 0, NULL, 0, NULL);
 
