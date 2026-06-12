@@ -10,7 +10,7 @@
 #include "vulkan/utils.h"
 
 #define YHRT_WORKGROUP_SIZE 256
-#define YHRT_FNORM_READBACK_INTERVAL 10
+#define YHRT_FNORM_READBACK_INTERVAL 1
 #define IGRAPH_YHU_C 0.2
 #define IGRAPH_YHU_COOL 0.90
 
@@ -299,7 +299,7 @@ void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, i
 
 	r->yhrt_KP = powf(r->yhrt_K, 1.0f - r->yhrt_p);
 	r->yhrt_CRK = powf(IGRAPH_YHU_C, (2.0f - r->yhrt_p) / 3.0f) / r->yhrt_K;
-	r->yhrt_R = 5.0f * r->yhrt_K;
+	r->yhrt_R = 2.0f * r->yhrt_K;
 
 	printf("[YHRT] Starting: vcount=%u ecount=%u K=%.4f R=%.4f KP=%.4f CRK=%.4f\n", r->yhrt_vcount, r->yhrt_ecount, r->yhrt_K, r->yhrt_R, r->yhrt_KP, r->yhrt_CRK);
 
@@ -682,6 +682,30 @@ bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd)
 	if (r->yhrt_current_iter >= r->yhrt_maxiter)
 		return false;
 
+	// ---- Read back previous iteration's Fnorm from staging (GPU already wrote it) ----
+	if (r->yhrt_current_iter > 0) {
+		float fnorm = 0.0f;
+		void *mapped;
+		if (vkMapMemory(r->core.device, r->yhrt_staging_mem, 0, sizeof(float), 0, &mapped) == VK_SUCCESS) {
+			fnorm = *(float *)mapped;
+			vkUnmapMemory(r->core.device, r->yhrt_staging_mem);
+		}
+
+		printf("[YHRT] iter=%d, step=%g, Fnorm=%g, Fnorm0=%g, repulsive_exp=%g, natlen=%g\n", r->yhrt_current_iter - 1, r->yhrt_step, fnorm, r->yhrt_Fnorm0, r->yhrt_p, r->yhrt_K);
+
+		// Adaptive cooling (matches igraph: cooling starts from iter > 0)
+		if (fnorm < r->yhrt_Fnorm0) {
+			if (fnorm > 0.95f * r->yhrt_Fnorm0) {
+				// step unchanged
+			} else {
+				r->yhrt_step *= 0.99f / IGRAPH_YHU_COOL;
+			}
+		} else {
+			r->yhrt_step *= IGRAPH_YHU_COOL;
+		}
+		r->yhrt_Fnorm0 = fnorm;
+	}
+
 	// ---- Reset Fnorm ----
 	{
 		float zero = 0.0f;
@@ -797,24 +821,14 @@ void yhrt_finish(Renderer *r, GraphData *graph)
 
 	vkQueueWaitIdle(r->core.graphicsQueue);
 
-	// Read back Fnorm if pending
+	// Read back final Fnorm if pending (last iteration's value)
 	if (r->yhrt_fnorm_readback_pending) {
 		void *mapped;
 		if (vkMapMemory(r->core.device, r->yhrt_staging_mem, 0, sizeof(float), 0, &mapped) == VK_SUCCESS) {
 			float fnorm = *(float *)mapped;
 			vkUnmapMemory(r->core.device, r->yhrt_staging_mem);
 
-			// Adaptive cooling
-			if (r->yhrt_current_iter > 1 && fnorm < r->yhrt_Fnorm0) {
-				if (fnorm > 0.95f * r->yhrt_Fnorm0) {
-					// step unchanged
-				} else {
-					r->yhrt_step *= 0.99f / IGRAPH_YHU_COOL;
-				}
-			} else if (r->yhrt_current_iter > 1) {
-				r->yhrt_step *= IGRAPH_YHU_COOL;
-			}
-			r->yhrt_Fnorm0 = fnorm;
+			printf("[YHRT] iter=%d (final), step=%g, Fnorm=%g, Fnorm0=%g, repulsive_exp=%g, natlen=%g\n", r->yhrt_current_iter - 1, r->yhrt_step, fnorm, r->yhrt_Fnorm0, r->yhrt_p, r->yhrt_K);
 		}
 		r->yhrt_fnorm_readback_pending = false;
 	}
