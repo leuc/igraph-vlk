@@ -323,7 +323,7 @@ void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, i
 		nodeData[i * 4 + 2] = (igraph_matrix_ncol(init_positions) > 2) ? (float)MATRIX(*init_positions, i, 2) : 0.0f;
 		igraph_int_t deg;
 		igraph_degree_1(graph, &deg, i, IGRAPH_ALL, IGRAPH_LOOPS);
-		nodeData[i * 4 + 3] = (float)deg;
+		nodeData[i * 4 + 3] = (float)(deg > 0 ? deg : 1);
 	}
 
 	// Upload via staging
