@@ -377,3 +377,8 @@ void worker_thread_cleanup(WorkerThreadContext *context)
 
 // Check if worker thread is busy
 // Get current job if any
+
+WorkerJob *worker_thread_get_current_job(void)
+{
+	return tls_current_job;
+}

@@ -6,6 +6,7 @@
 #include <cglm/cglm.h>
 #include <igraph.h>
 #include <igraph_barnes_hut.h>
+#include <pthread.h>
 #include <vulkan/vulkan.h>
 
 #include <stdbool.h>
@@ -165,6 +166,7 @@ typedef struct
 	int graphicsQueueFamily;
 	int presentQueueFamily;
 	VkPhysicalDeviceProperties deviceProperties;
+	pthread_mutex_t graphicsQueueMutex;
 	bool fp64_atomics_supported;
 } VulkanCore;
 
@@ -382,6 +384,14 @@ typedef struct Renderer
 	VkPipeline yhrt_update_fp64_pipeline;
 	VkPipeline yhrt_update_instances_pipeline;
 	VkFence yhrt_dispatch_fence;
+
+	// YHRT worker-thread resources (for background GPU iterations)
+	VkCommandPool yhrt_cmd_pool;
+	VkCommandBuffer yhrt_cmd_buf;
+	VkBuffer yhrt_node_staging_buf;
+	VkDeviceMemory yhrt_node_staging_mem;
+	VkBuffer yhrt_readback_buf;
+	VkDeviceMemory yhrt_readback_mem;
 
 	// Ring-buffered sync for graph updates
 	VkFence graphUpdateFences[GRAPH_UPDATE_RING_SIZE];

@@ -72,4 +72,7 @@ void worker_thread_cleanup(WorkerThreadContext *context);
 // Free a completed/failed worker job and its resources
 void worker_job_free(WorkerThreadContext *context, WorkerJob *job);
 
+// Get current worker job from TLS (for snapshot pushing from worker functions)
+WorkerJob *worker_thread_get_current_job(void);
+
 #endif // WORKER_THREAD_H

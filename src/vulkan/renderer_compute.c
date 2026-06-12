@@ -121,7 +121,9 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 
 	// Submit with fence (no vkQueueWaitIdle)
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &ctx->cmdBuf};
+	pthread_mutex_lock(&r->core.graphicsQueueMutex);
 	VkResult result = vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, ctx->fence);
+	pthread_mutex_unlock(&r->core.graphicsQueueMutex);
 	if (result != VK_SUCCESS) {
 		free(cNodes);
 		free(cEdges);

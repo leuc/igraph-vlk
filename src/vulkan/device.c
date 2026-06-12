@@ -1,5 +1,6 @@
 #include "vulkan/device.h"
 
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +8,7 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
+#include "vulkan/commands.h"
 #include "vulkan/utils.h"
 
 #ifdef USE_OPENXR
@@ -377,6 +379,8 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 		free(deviceExtensionStrdup[i]);
 
 	vkGetDeviceQueue(core->device, queueFamilyInfo.graphicsFamily, 0, &core->graphicsQueue);
+	pthread_mutex_init(&core->graphicsQueueMutex, NULL);
+	commands_set_queue_mutex(&core->graphicsQueueMutex);
 	vkGetDeviceQueue(core->device, queueFamilyInfo.presentFamily, 0, &core->presentQueue);
 
 	vkGetPhysicalDeviceProperties(core->physicalDevice, &core->deviceProperties);
@@ -384,6 +388,7 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 
 void vulkan_device_destroy(VulkanCore *core)
 {
+	pthread_mutex_destroy(&core->graphicsQueueMutex);
 	if (core->device != VK_NULL_HANDLE) {
 		vkDestroyDevice(core->device, NULL);
 	}

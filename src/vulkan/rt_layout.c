@@ -1,6 +1,7 @@
 #include "vulkan/rt_layout.h"
 
 #include <math.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -186,11 +187,24 @@ static void yhrt_cleanup_session_buffers(Renderer *r)
 	if (r->yhrt_desc_pool != VK_NULL_HANDLE) {
 		vkDestroyDescriptorPool(r->core.device, r->yhrt_desc_pool, NULL);
 		r->yhrt_desc_pool = VK_NULL_HANDLE;
+		r->yhrt_cmd_pool = VK_NULL_HANDLE;
+		r->yhrt_cmd_buf = VK_NULL_HANDLE;
+		r->yhrt_node_staging_buf = VK_NULL_HANDLE;
+		r->yhrt_node_staging_mem = VK_NULL_HANDLE;
+		r->yhrt_readback_buf = VK_NULL_HANDLE;
+		r->yhrt_readback_mem = VK_NULL_HANDLE;
 	}
 	if (r->yhrt_dispatch_fence != VK_NULL_HANDLE) {
 		vkDestroyFence(r->core.device, r->yhrt_dispatch_fence, NULL);
 		r->yhrt_dispatch_fence = VK_NULL_HANDLE;
 	}
+	if (r->yhrt_cmd_pool != VK_NULL_HANDLE) {
+		vkDestroyCommandPool(r->core.device, r->yhrt_cmd_pool, NULL);
+		r->yhrt_cmd_pool = VK_NULL_HANDLE;
+		r->yhrt_cmd_buf = VK_NULL_HANDLE;
+	}
+	VK_DESTROY_BUFFER(r->core.device, r->yhrt_node_staging_buf, r->yhrt_node_staging_mem);
+	VK_DESTROY_BUFFER(r->core.device, r->yhrt_readback_buf, r->yhrt_readback_mem);
 }
 
 // ============================================================================
@@ -924,6 +938,545 @@ void yhrt_finish(Renderer *r, GraphData *graph)
 	yhrt_cleanup_session_buffers(r);
 	r->yhrt_active = false;
 	printf("[YHRT] Layout completed after %d iterations, final step=%.6f\n", r->yhrt_current_iter, r->yhrt_step);
+}
+
+// ============================================================================
+// Worker-Thread API: Blocking GPU iterations with igraph_progress
+// ============================================================================
+
+bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, igraph_int_t maxiter)
+{
+	if (!r->yhrt_supported) {
+		fprintf(stderr, "[YHRT] Cannot start: ray tracing not supported\n");
+		return false;
+	}
+
+	yhrt_load_rt_functions(r);
+	yhrt_cleanup_session_buffers(r);
+
+	r->yhrt_fp64_supported = r->core.fp64_atomics_supported && (r->yhrt_update_fp64_pipeline != VK_NULL_HANDLE);
+
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_integer_t ecount = igraph_ecount(graph);
+	r->yhrt_vcount = (uint32_t)vcount;
+	r->yhrt_ecount = (uint32_t)ecount;
+	r->yhrt_maxiter = (int)maxiter;
+	r->yhrt_current_iter = 0;
+	r->yhrt_step = 0.1f;
+	r->yhrt_Fnorm0 = INFINITY;
+	r->yhrt_tolerance = 0.001f;
+	r->yhrt_p = 1.0f;
+	r->yhrt_fnorm_readback_pending = false;
+
+	float total_len = 0.0f;
+	for (igraph_integer_t e = 0; e < ecount; e++) {
+		igraph_integer_t from = IGRAPH_FROM(graph, e);
+		igraph_integer_t to = IGRAPH_TO(graph, e);
+		float dx = (float)(MATRIX(*init_positions, from, 0) - MATRIX(*init_positions, to, 0));
+		float dy = (float)(MATRIX(*init_positions, from, 1) - MATRIX(*init_positions, to, 1));
+		float dz = (igraph_matrix_ncol(init_positions) > 2) ? (float)(MATRIX(*init_positions, from, 2) - MATRIX(*init_positions, to, 2)) : 0.0f;
+		total_len += sqrtf(dx * dx + dy * dy + dz * dz);
+	}
+	r->yhrt_K = (ecount > 0) ? (total_len / ecount) : 1.0f;
+	if (r->yhrt_K < 1e-6f)
+		r->yhrt_K = 1.0f;
+	r->yhrt_KP = powf(r->yhrt_K, 1.0f - r->yhrt_p);
+	r->yhrt_CRK = powf(IGRAPH_YHU_C, (2.0f - r->yhrt_p) / 3.0f) / r->yhrt_K;
+	r->yhrt_R = 5.0f * r->yhrt_K;
+
+	printf("[YHRT] Starting: vcount=%u ecount=%u K=%.4f R=%.4f KP=%.4f CRK=%.4f\n", r->yhrt_vcount, r->yhrt_ecount, r->yhrt_K, r->yhrt_R, r->yhrt_KP, r->yhrt_CRK);
+
+	// ---- Upload NodeBuffer ----
+	VkDeviceSize nodeSize = sizeof(vec4) * vcount;
+	yhrt_create_device_buffer(r, nodeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_node_buf, &r->yhrt_node_mem);
+
+	VkBuffer nodeStaging;
+	VkDeviceMemory nodeStagingMem;
+	yhrt_create_buffer(r, nodeSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &nodeStaging, &nodeStagingMem);
+
+	float *nodeData = malloc(sizeof(float) * 4 * vcount);
+	for (igraph_integer_t i = 0; i < vcount; i++) {
+		nodeData[i * 4 + 0] = (float)MATRIX(*init_positions, i, 0);
+		nodeData[i * 4 + 1] = (float)MATRIX(*init_positions, i, 1);
+		nodeData[i * 4 + 2] = (igraph_matrix_ncol(init_positions) > 2) ? (float)MATRIX(*init_positions, i, 2) : 0.0f;
+		igraph_int_t deg;
+		igraph_degree_1(graph, &deg, i, IGRAPH_ALL, IGRAPH_LOOPS);
+		nodeData[i * 4 + 3] = (float)(deg > 0 ? deg : 1);
+	}
+
+	{
+		void *mapped;
+		VK_CHECK(vkMapMemory(r->core.device, nodeStagingMem, 0, nodeSize, 0, &mapped), "Failed to map node staging");
+		memcpy(mapped, nodeData, nodeSize);
+		vkUnmapMemory(r->core.device, nodeStagingMem);
+
+		VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = (uint32_t)r->core.graphicsQueueFamily};
+		VkCommandPool uploadPool;
+		VK_CHECK(vkCreateCommandPool(r->core.device, &poolInfo, NULL, &uploadPool), "Failed to create YHRT upload pool");
+		VkCommandBufferAllocateInfo cmdInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = uploadPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
+		VkCommandBuffer uploadCmd;
+		VK_CHECK(vkAllocateCommandBuffers(r->core.device, &cmdInfo, &uploadCmd), "Failed to allocate YHRT upload cmd");
+		VK_CHECK(vkBeginCommandBuffer(uploadCmd, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin YHRT upload cmd");
+		VkBufferCopy copyRegion = {.size = nodeSize};
+		vkCmdCopyBuffer(uploadCmd, nodeStaging, r->yhrt_node_buf, 1, &copyRegion);
+		VK_CHECK(vkEndCommandBuffer(uploadCmd), "Failed to end YHRT upload cmd");
+		VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &uploadCmd};
+		pthread_mutex_lock(&r->core.graphicsQueueMutex);
+		VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit YHRT upload");
+		vkQueueWaitIdle(r->core.graphicsQueue);
+		pthread_mutex_unlock(&r->core.graphicsQueueMutex);
+		vkDestroyCommandPool(r->core.device, uploadPool, NULL);
+	}
+	VK_DESTROY_BUFFER(r->core.device, nodeStaging, nodeStagingMem);
+	free(nodeData);
+
+	// ---- Create worker-thread command pool + buffer ----
+	{
+		VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, .queueFamilyIndex = (uint32_t)r->core.graphicsQueueFamily};
+		VK_CHECK(vkCreateCommandPool(r->core.device, &poolInfo, NULL, &r->yhrt_cmd_pool), "Failed to create YHRT worker cmd pool");
+		VkCommandBufferAllocateInfo cmdInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = r->yhrt_cmd_pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
+		VK_CHECK(vkAllocateCommandBuffers(r->core.device, &cmdInfo, &r->yhrt_cmd_buf), "Failed to allocate YHRT worker cmd");
+	}
+
+	// ---- Staging buffer for periodic position readback ----
+	yhrt_create_buffer(r, nodeSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_node_staging_buf, &r->yhrt_node_staging_mem);
+
+	// ---- Fnorm + dispatch fence ----
+	yhrt_create_device_buffer(r, sizeof(double), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_fnorm_buf, &r->yhrt_fnorm_mem);
+	yhrt_create_buffer(r, sizeof(double), VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_staging_buf, &r->yhrt_staging_mem);
+	{
+		VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
+		VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &r->yhrt_dispatch_fence), "Failed to create YHRT dispatch fence");
+	}
+
+	// ---- Force buffer ----
+	yhrt_create_device_buffer(r, sizeof(vec4) * vcount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->yhrt_force_buf, &r->yhrt_force_mem);
+
+	// ---- Edge buffer ----
+	{
+		struct EdgeData
+		{
+			uint32_t from;
+			uint32_t to;
+			float weight;
+		};
+		VkDeviceSize edgeSize = sizeof(struct EdgeData) * ecount;
+		yhrt_create_device_buffer(r, edgeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->yhrt_edge_buf, &r->yhrt_edge_mem);
+
+		struct EdgeData *edgeData = malloc(edgeSize);
+		for (igraph_integer_t e = 0; e < ecount; e++) {
+			edgeData[e].from = (uint32_t)IGRAPH_FROM(graph, e);
+			edgeData[e].to = (uint32_t)IGRAPH_TO(graph, e);
+			edgeData[e].weight = 1.0f;
+		}
+		VkBuffer edgeStaging;
+		VkDeviceMemory edgeStagingMem;
+		yhrt_create_buffer(r, edgeSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &edgeStaging, &edgeStagingMem);
+		void *mapped;
+		VK_CHECK(vkMapMemory(r->core.device, edgeStagingMem, 0, edgeSize, 0, &mapped), "Failed to map edge staging");
+		memcpy(mapped, edgeData, edgeSize);
+		vkUnmapMemory(r->core.device, edgeStagingMem);
+		free(edgeData);
+
+		VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = (uint32_t)r->core.graphicsQueueFamily};
+		VkCommandPool edgePool;
+		VK_CHECK(vkCreateCommandPool(r->core.device, &poolInfo, NULL, &edgePool), "Failed to create YHRT edge pool");
+		VkCommandBufferAllocateInfo cmdInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = edgePool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
+		VkCommandBuffer edgeCmd;
+		VK_CHECK(vkAllocateCommandBuffers(r->core.device, &cmdInfo, &edgeCmd), "Failed to allocate YHRT edge cmd");
+		VK_CHECK(vkBeginCommandBuffer(edgeCmd, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin YHRT edge cmd");
+		VkBufferCopy copyRegion = {.size = edgeSize};
+		vkCmdCopyBuffer(edgeCmd, edgeStaging, r->yhrt_edge_buf, 1, &copyRegion);
+		VK_CHECK(vkEndCommandBuffer(edgeCmd), "Failed to end YHRT edge cmd");
+		VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &edgeCmd};
+		pthread_mutex_lock(&r->core.graphicsQueueMutex);
+		VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit YHRT edge upload");
+		vkQueueWaitIdle(r->core.graphicsQueue);
+		pthread_mutex_unlock(&r->core.graphicsQueueMutex);
+		vkDestroyCommandPool(r->core.device, edgePool, NULL);
+		VK_DESTROY_BUFFER(r->core.device, edgeStaging, edgeStagingMem);
+	}
+
+	// ---- Build BLAS + TLAS (compute both scratch sizes, use the larger) ----
+	VkDeviceSize blasScratchSize = 0;
+	VkDeviceSize tlasScratchSize = 0;
+	VkBuffer aabbBuf = VK_NULL_HANDLE;
+	VkDeviceMemory aabbMem = VK_NULL_HANDLE;
+	VkAccelerationStructureGeometryKHR blasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_AABBS_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR};
+	VkAccelerationStructureBuildGeometryInfoKHR blasBuildInfo = {0};
+	VkAccelerationStructureGeometryKHR tlasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR, .geometry.instances = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR}};
+	VkAccelerationStructureBuildRangeInfoKHR blasRangeInfo = {.primitiveCount = 1};
+	VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = {.primitiveCount = vcount};
+
+	// BLAS sizing
+	{
+		VkAabbPositionsKHR aabb = {.minX = -r->yhrt_R, .minY = -r->yhrt_R, .minZ = -r->yhrt_R, .maxX = r->yhrt_R, .maxY = r->yhrt_R, .maxZ = r->yhrt_R};
+		yhrt_create_buffer(r, sizeof(VkAabbPositionsKHR), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, &aabbBuf, &aabbMem);
+		void *mapped;
+		vkMapMemory(r->core.device, aabbMem, 0, sizeof(VkAabbPositionsKHR), 0, &mapped);
+		memcpy(mapped, &aabb, sizeof(VkAabbPositionsKHR));
+		vkUnmapMemory(r->core.device, aabbMem);
+		blasGeometry.geometry.aabbs.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
+		blasGeometry.geometry.aabbs.data.deviceAddress = yhrt_get_buffer_address(r, aabbBuf);
+		blasGeometry.geometry.aabbs.stride = sizeof(VkAabbPositionsKHR);
+		blasBuildInfo = (VkAccelerationStructureBuildGeometryInfoKHR){.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &blasGeometry};
+		uint32_t maxPrims = 1;
+		VkAccelerationStructureBuildSizesInfoKHR blasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+		rt_funcs.GetAccelerationStructureBuildSizesKHR(r->core.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &blasBuildInfo, &maxPrims, &blasSizeInfo);
+
+		yhrt_create_device_buffer(r, blasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &r->yhrt_blas_buf, &r->yhrt_blas_mem);
+		blasScratchSize = blasSizeInfo.buildScratchSize;
+
+		VkAccelerationStructureCreateInfoKHR blasCreateInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR, .buffer = r->yhrt_blas_buf, .offset = 0, .size = blasSizeInfo.accelerationStructureSize, .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR};
+		VK_CHECK(rt_funcs.CreateAccelerationStructureKHR(r->core.device, &blasCreateInfo, NULL, &r->yhrt_blas), "Failed to create BLAS");
+	}
+
+	// TLAS sizing
+	{
+		tlasGeometry.geometry.instances.data.deviceAddress = 0;
+		VkAccelerationStructureBuildGeometryInfoKHR tlasBuildInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &tlasGeometry};
+		uint32_t maxInstances = vcount;
+		VkAccelerationStructureBuildSizesInfoKHR tlasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+		rt_funcs.GetAccelerationStructureBuildSizesKHR(r->core.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tlasBuildInfo, &maxInstances, &tlasSizeInfo);
+
+		tlasScratchSize = tlasSizeInfo.buildScratchSize;
+	}
+
+	// Shared scratch buffer: max of BLAS and TLAS
+	VkDeviceSize scratchSize = blasScratchSize > tlasScratchSize ? blasScratchSize : tlasScratchSize;
+	yhrt_create_device_buffer(r, scratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &r->yhrt_as_scratch_buf, &r->yhrt_as_scratch_mem);
+
+	// Build BLAS
+	{
+		blasBuildInfo.dstAccelerationStructure = r->yhrt_blas;
+		blasBuildInfo.scratchData.deviceAddress = yhrt_get_buffer_address(r, r->yhrt_as_scratch_buf);
+		const VkAccelerationStructureBuildRangeInfoKHR *pBlasRange = &blasRangeInfo;
+
+		VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = (uint32_t)r->core.graphicsQueueFamily};
+		VkCommandPool blasPool;
+		vkCreateCommandPool(r->core.device, &poolInfo, NULL, &blasPool);
+		VkCommandBufferAllocateInfo cmdInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = blasPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
+		VkCommandBuffer blasCmd;
+		vkAllocateCommandBuffers(r->core.device, &cmdInfo, &blasCmd);
+		vkBeginCommandBuffer(blasCmd, &VK_CMD_BEGIN_INFO_ONETIME);
+		rt_funcs.CmdBuildAccelerationStructuresKHR(blasCmd, 1, &blasBuildInfo, &pBlasRange);
+		vkEndCommandBuffer(blasCmd);
+		VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &blasCmd};
+		pthread_mutex_lock(&r->core.graphicsQueueMutex);
+		vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+		vkQueueWaitIdle(r->core.graphicsQueue);
+		pthread_mutex_unlock(&r->core.graphicsQueueMutex);
+		vkDestroyCommandPool(r->core.device, blasPool, NULL);
+		VK_DESTROY_BUFFER(r->core.device, aabbBuf, aabbMem);
+	}
+	{
+		VkDeviceSize instSize = sizeof(VkAccelerationStructureInstanceKHR) * vcount;
+		yhrt_create_device_buffer(r, instSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->yhrt_instance_buf, &r->yhrt_instance_mem);
+
+		VkAccelerationStructureInstanceKHR *instances = calloc(vcount, sizeof(VkAccelerationStructureInstanceKHR));
+		uint64_t blasAddr = yhrt_get_as_address(r, r->yhrt_blas);
+		for (uint32_t i = 0; i < vcount; i++) {
+			memset(&instances[i], 0, sizeof(VkAccelerationStructureInstanceKHR));
+			instances[i].instanceCustomIndex = i;
+			instances[i].mask = 0xFF;
+			instances[i].instanceShaderBindingTableRecordOffset = 0;
+			instances[i].flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
+			instances[i].accelerationStructureReference = blasAddr;
+			float *m = (float *)instances[i].transform.matrix[0];
+			m[0] = 1.0f;
+			m[1] = 0.0f;
+			m[2] = 0.0f;
+			m[3] = (float)i;
+			m[4] = 0.0f;
+			m[5] = 1.0f;
+			m[6] = 0.0f;
+			m[7] = (float)i;
+			m[8] = 0.0f;
+			m[9] = 0.0f;
+			m[10] = 1.0f;
+			m[11] = (float)i;
+		}
+
+		VkBuffer instStaging;
+		VkDeviceMemory instStagingMem;
+		yhrt_create_buffer(r, instSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &instStaging, &instStagingMem);
+		void *mapped;
+		vkMapMemory(r->core.device, instStagingMem, 0, instSize, 0, &mapped);
+		memcpy(mapped, instances, instSize);
+		vkUnmapMemory(r->core.device, instStagingMem);
+		free(instances);
+
+		VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = (uint32_t)r->core.graphicsQueueFamily};
+		VkCommandPool instPool;
+		vkCreateCommandPool(r->core.device, &poolInfo, NULL, &instPool);
+		VkCommandBufferAllocateInfo cmdInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = instPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
+		VkCommandBuffer instCmd;
+		vkAllocateCommandBuffers(r->core.device, &cmdInfo, &instCmd);
+		vkBeginCommandBuffer(instCmd, &VK_CMD_BEGIN_INFO_ONETIME);
+		VkBufferCopy copyRegion = {.size = instSize};
+		vkCmdCopyBuffer(instCmd, instStaging, r->yhrt_instance_buf, 1, &copyRegion);
+		vkEndCommandBuffer(instCmd);
+		VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &instCmd};
+		pthread_mutex_lock(&r->core.graphicsQueueMutex);
+		vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+		vkQueueWaitIdle(r->core.graphicsQueue);
+		pthread_mutex_unlock(&r->core.graphicsQueueMutex);
+		vkDestroyCommandPool(r->core.device, instPool, NULL);
+		VK_DESTROY_BUFFER(r->core.device, instStaging, instStagingMem);
+
+		uint64_t instAddr = yhrt_get_buffer_address(r, r->yhrt_instance_buf);
+		tlasGeometry.geometry.instances.data.deviceAddress = instAddr;
+
+		// Create TLAS buffer + handle using the size from the sizing block
+		VkAccelerationStructureBuildSizesInfoKHR tlasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+		{
+			VkAccelerationStructureBuildGeometryInfoKHR tmpInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &tlasGeometry};
+			uint32_t maxInstances = r->yhrt_vcount;
+			rt_funcs.GetAccelerationStructureBuildSizesKHR(r->core.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tmpInfo, &maxInstances, &tlasSizeInfo);
+		}
+		yhrt_create_device_buffer(r, tlasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, &r->yhrt_tlas_buf, &r->yhrt_tlas_mem);
+		VkAccelerationStructureCreateInfoKHR tlasCreate = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR, .buffer = r->yhrt_tlas_buf, .size = tlasSizeInfo.accelerationStructureSize, .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR};
+		VK_CHECK(rt_funcs.CreateAccelerationStructureKHR(r->core.device, &tlasCreate, NULL, &r->yhrt_tlas), "Failed to create TLAS");
+
+		VkAccelerationStructureBuildGeometryInfoKHR tlasBuildInfo = {
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+			.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+			.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
+			.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+			.dstAccelerationStructure = r->yhrt_tlas,
+			.geometryCount = 1,
+			.pGeometries = &tlasGeometry,
+			.scratchData.deviceAddress = yhrt_get_buffer_address(r, r->yhrt_as_scratch_buf),
+		};
+		const VkAccelerationStructureBuildRangeInfoKHR *pTlasRange = &tlasRangeInfo;
+
+		VkCommandPoolCreateInfo poolInfo2 = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = (uint32_t)r->core.graphicsQueueFamily};
+		VkCommandPool tlasPool;
+		vkCreateCommandPool(r->core.device, &poolInfo2, NULL, &tlasPool);
+		VkCommandBufferAllocateInfo cmdInfo2 = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = tlasPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
+		VkCommandBuffer tlasCmd;
+		vkAllocateCommandBuffers(r->core.device, &cmdInfo2, &tlasCmd);
+		vkBeginCommandBuffer(tlasCmd, &VK_CMD_BEGIN_INFO_ONETIME);
+		rt_funcs.CmdBuildAccelerationStructuresKHR(tlasCmd, 1, &tlasBuildInfo, &pTlasRange);
+		vkEndCommandBuffer(tlasCmd);
+		VkSubmitInfo submitInfo2 = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &tlasCmd};
+		pthread_mutex_lock(&r->core.graphicsQueueMutex);
+		vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo2, VK_NULL_HANDLE);
+		vkQueueWaitIdle(r->core.graphicsQueue);
+		pthread_mutex_unlock(&r->core.graphicsQueueMutex);
+		vkDestroyCommandPool(r->core.device, tlasPool, NULL);
+	}
+
+	// ---- Descriptor pool + sets ----
+	{
+		VkDescriptorPoolSize poolSizes[] = {
+			{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 5},
+			{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1},
+		};
+		VkDescriptorPoolCreateInfo dpInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 2, .pPoolSizes = poolSizes};
+		VK_CHECK(vkCreateDescriptorPool(r->core.device, &dpInfo, NULL, &r->yhrt_desc_pool), "Failed to create YHRT descriptor pool");
+		VkDescriptorSetAllocateInfo setInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->yhrt_desc_pool, .descriptorSetCount = 1, .pSetLayouts = &r->yhrt_desc_set_layout};
+		VK_CHECK(vkAllocateDescriptorSets(r->core.device, &setInfo, &r->yhrt_desc_set), "Failed to allocate YHRT descriptor set");
+
+		VkDescriptorBufferInfo nodeInfo = {r->yhrt_node_buf, 0, VK_WHOLE_SIZE};
+		VkDescriptorBufferInfo forceInfo = {r->yhrt_force_buf, 0, VK_WHOLE_SIZE};
+		VkDescriptorBufferInfo edgeInfo = {r->yhrt_edge_buf, 0, VK_WHOLE_SIZE};
+		VkDescriptorBufferInfo fnormInfo = {r->yhrt_fnorm_buf, 0, VK_WHOLE_SIZE};
+		VkDescriptorBufferInfo instInfo = {r->yhrt_instance_buf, 0, VK_WHOLE_SIZE};
+
+		VkWriteDescriptorSet writes[5] = {
+			{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = r->yhrt_desc_set, .dstBinding = 0, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &nodeInfo}, {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = r->yhrt_desc_set, .dstBinding = 1, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &forceInfo}, {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = r->yhrt_desc_set, .dstBinding = 2, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &edgeInfo}, {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = r->yhrt_desc_set, .dstBinding = 4, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &fnormInfo}, {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = r->yhrt_desc_set, .dstBinding = 5, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &instInfo},
+		};
+		vkUpdateDescriptorSets(r->core.device, 5, writes, 0, NULL);
+
+		VkWriteDescriptorSetAccelerationStructureKHR asDescInfo = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+			.accelerationStructureCount = 1,
+			.pAccelerationStructures = &r->yhrt_tlas,
+		};
+		VkWriteDescriptorSet tlasWrite = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.pNext = &asDescInfo,
+			.dstSet = r->yhrt_desc_set,
+			.dstBinding = 3,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+		};
+		vkUpdateDescriptorSets(r->core.device, 1, &tlasWrite, 0, NULL);
+	}
+
+	r->yhrt_active = true;
+	printf("[YHRT] Worker session started, %d iterations planned\n", r->yhrt_maxiter);
+	return true;
+}
+
+bool yhrt_worker_step(Renderer *r)
+{
+	if (!r->yhrt_active || !r->yhrt_supported)
+		return false;
+	if (r->yhrt_current_iter >= r->yhrt_maxiter)
+		return false;
+
+	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->yhrt_dispatch_fence, VK_TRUE, UINT64_MAX), "Failed to wait for YHRT dispatch fence");
+	VK_CHECK(vkResetFences(r->core.device, 1, &r->yhrt_dispatch_fence), "Failed to reset YHRT dispatch fence");
+
+	if (r->yhrt_current_iter > 0) {
+		float fnorm = 0.0f;
+		void *mapped;
+		if (vkMapMemory(r->core.device, r->yhrt_staging_mem, 0, sizeof(double), 0, &mapped) == VK_SUCCESS) {
+			if (r->yhrt_fp64_supported)
+				fnorm = (float)(*(double *)mapped);
+			else
+				fnorm = (*(float *)mapped) * (float)r->yhrt_vcount;
+			vkUnmapMemory(r->core.device, r->yhrt_staging_mem);
+		}
+
+		if (fnorm < r->yhrt_Fnorm0) {
+			if (fnorm > 0.95f * r->yhrt_Fnorm0) {
+			} else {
+				r->yhrt_step *= 0.99f / IGRAPH_YHU_COOL;
+			}
+		} else {
+			r->yhrt_step *= IGRAPH_YHU_COOL;
+		}
+		r->yhrt_Fnorm0 = fnorm;
+	}
+
+	VkCommandBuffer cmd = r->yhrt_cmd_buf;
+	VK_CHECK(vkResetCommandBuffer(cmd, 0), "Failed to reset YHRT worker cmd");
+	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+	VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo), "Failed to begin YHRT worker cmd");
+
+	// Fnorm reset
+	vkCmdFillBuffer(cmd, r->yhrt_fnorm_buf, 0, sizeof(double), 0);
+	VkMemoryBarrier clrBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT};
+	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &clrBarrier, 0, NULL, 0, NULL);
+
+	struct
+	{
+		float KP, CRK, p, step_size;
+		uint32_t vertex_count, edge_count;
+		float R;
+	} pc = {r->yhrt_KP, r->yhrt_CRK, r->yhrt_p, r->yhrt_step, r->yhrt_vcount, r->yhrt_ecount, r->yhrt_R};
+
+	// Repulsion
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->yhrt_repulsion_pipeline);
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->yhrt_pipeline_layout, 0, 1, &r->yhrt_desc_set, 0, NULL);
+	vkCmdPushConstants(cmd, r->yhrt_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, 28, &pc);
+	vkCmdDispatch(cmd, (r->yhrt_vcount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE, 1, 1);
+
+	VkMemoryBarrier repBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT};
+	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &repBarrier, 0, NULL, 0, NULL);
+
+	// Attraction
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->yhrt_attraction_pipeline);
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->yhrt_pipeline_layout, 0, 1, &r->yhrt_desc_set, 0, NULL);
+	vkCmdPushConstants(cmd, r->yhrt_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, 28, &pc);
+	vkCmdDispatch(cmd, (r->yhrt_ecount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE, 1, 1);
+
+	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &repBarrier, 0, NULL, 0, NULL);
+
+	// Update
+	VkPipeline updatePipeline = r->yhrt_fp64_supported ? r->yhrt_update_fp64_pipeline : r->yhrt_update_pipeline;
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, updatePipeline);
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->yhrt_pipeline_layout, 0, 1, &r->yhrt_desc_set, 0, NULL);
+	vkCmdPushConstants(cmd, r->yhrt_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, 28, &pc);
+	vkCmdDispatch(cmd, (r->yhrt_vcount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE, 1, 1);
+
+	VkMemoryBarrier updBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT};
+	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &updBarrier, 0, NULL, 0, NULL);
+
+	// Instance update
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->yhrt_update_instances_pipeline);
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->yhrt_pipeline_layout, 0, 1, &r->yhrt_desc_set, 0, NULL);
+	vkCmdPushConstants(cmd, r->yhrt_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, 28, &pc);
+	vkCmdDispatch(cmd, (r->yhrt_vcount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE, 1, 1);
+
+	// Instance -> TLAS barrier
+	VkMemoryBarrier instBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_SHADER_READ_BIT};
+	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &instBarrier, 0, NULL, 0, NULL);
+
+	// TLAS update
+	{
+		VkAccelerationStructureGeometryKHR tlasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR, .geometry.instances = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR, .data.deviceAddress = yhrt_get_buffer_address(r, r->yhrt_instance_buf)}};
+		VkAccelerationStructureBuildGeometryInfoKHR tlasBuildInfo = {
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+			.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+			.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
+			.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR,
+			.srcAccelerationStructure = r->yhrt_tlas,
+			.dstAccelerationStructure = r->yhrt_tlas,
+			.geometryCount = 1,
+			.pGeometries = &tlasGeometry,
+			.scratchData.deviceAddress = yhrt_get_buffer_address(r, r->yhrt_as_scratch_buf),
+		};
+		VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = {.primitiveCount = r->yhrt_vcount};
+		const VkAccelerationStructureBuildRangeInfoKHR *pTlasRange = &tlasRangeInfo;
+		rt_funcs.CmdBuildAccelerationStructuresKHR(cmd, 1, &tlasBuildInfo, &pTlasRange);
+	}
+
+	// TLAS -> compute barrier
+	VkMemoryBarrier tlasBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, .dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_SHADER_READ_BIT};
+	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &tlasBarrier, 0, NULL, 0, NULL);
+
+	// Fnorm readback copy
+	VkMemoryBarrier readBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT};
+	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &readBarrier, 0, NULL, 0, NULL);
+	VkBufferCopy fnormCopy = {.size = sizeof(double)};
+	vkCmdCopyBuffer(cmd, r->yhrt_fnorm_buf, r->yhrt_staging_buf, 1, &fnormCopy);
+	r->yhrt_fnorm_readback_pending = true;
+
+	// Periodic position readback (every 5 iterations)
+	if ((r->yhrt_current_iter + 1) % 5 == 0 || r->yhrt_current_iter + 1 >= r->yhrt_maxiter) {
+		VkMemoryBarrier posReadBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT};
+		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &posReadBarrier, 0, NULL, 0, NULL);
+		VkBufferCopy posCopy = {.size = sizeof(vec4) * r->yhrt_vcount};
+		vkCmdCopyBuffer(cmd, r->yhrt_node_buf, r->yhrt_node_staging_buf, 1, &posCopy);
+	}
+
+	VK_CHECK(vkEndCommandBuffer(cmd), "Failed to end YHRT worker cmd");
+
+	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cmd};
+	pthread_mutex_lock(&r->core.graphicsQueueMutex);
+	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, r->yhrt_dispatch_fence), "Failed to submit YHRT worker");
+	pthread_mutex_unlock(&r->core.graphicsQueueMutex);
+
+	r->yhrt_current_iter++;
+	return true;
+}
+
+bool yhrt_worker_readback(Renderer *r, igraph_matrix_t *out_positions)
+{
+	if (!out_positions)
+		return false;
+
+	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->yhrt_dispatch_fence, VK_TRUE, UINT64_MAX), "Failed to wait for YHRT readback fence");
+	VK_CHECK(vkResetFences(r->core.device, 1, &r->yhrt_dispatch_fence), "Failed to reset YHRT readback fence");
+
+	VkDeviceSize nodeSize = sizeof(vec4) * r->yhrt_vcount;
+	void *mapped;
+	VK_CHECK(vkMapMemory(r->core.device, r->yhrt_node_staging_mem, 0, nodeSize, 0, &mapped), "Failed to map YHRT readback");
+
+	float *positions = (float *)mapped;
+	igraph_integer_t vcount = (igraph_integer_t)r->yhrt_vcount;
+	igraph_integer_t ncols = igraph_matrix_ncol(out_positions);
+
+	for (igraph_integer_t i = 0; i < vcount; i++) {
+		MATRIX(*out_positions, i, 0) = positions[i * 4 + 0];
+		MATRIX(*out_positions, i, 1) = positions[i * 4 + 1];
+		if (ncols > 2)
+			MATRIX(*out_positions, i, 2) = positions[i * 4 + 2];
+	}
+	vkUnmapMemory(r->core.device, r->yhrt_node_staging_mem);
+	return true;
+}
+
+void yhrt_worker_cleanup(Renderer *r)
+{
+	vkQueueWaitIdle(r->core.graphicsQueue);
+	yhrt_cleanup_session_buffers(r);
+	r->yhrt_active = false;
+	printf("[YHRT] Worker session completed after %d iterations, final step=%.6f\n", r->yhrt_current_iter, r->yhrt_step);
 }
 
 // ============================================================================

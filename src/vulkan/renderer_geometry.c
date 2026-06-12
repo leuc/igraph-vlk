@@ -182,7 +182,9 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	r->labelTreeNeedsRebuild = true;
 
 	// Signal the ring fence for this slot so the next update can proceed
+	pthread_mutex_lock(&r->core.graphicsQueueMutex);
 	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 0, NULL, r->graphUpdateFences[ringIdx]), "Failed to signal graph update fence");
+	pthread_mutex_unlock(&r->core.graphicsQueueMutex);
 }
 
 void renderer_render_ray(Renderer *r, VkCommandBuffer cmd, vec3 origin, vec3 dir, mat4 view, mat4 proj)

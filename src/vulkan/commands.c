@@ -1,11 +1,17 @@
 #include "vulkan/commands.h"
 
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <vulkan/vulkan.h>
-
 #include "vulkan/utils.h"
+
+static pthread_mutex_t *s_queueMutexPtr = NULL;
+
+void commands_set_queue_mutex(pthread_mutex_t *mutex)
+{
+	s_queueMutexPtr = mutex;
+}
 
 void vulkan_commands_create(VulkanCommands *cmds, VulkanCore *core, uint32_t imageCount)
 {
@@ -86,7 +92,11 @@ void end_single_time_commands(VkDevice device, VkCommandPool commandPool, VkQueu
 {
 	VK_CHECK(vkEndCommandBuffer(commandBuffer), "Failed to end one-time command buffer");
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &commandBuffer};
+	if (s_queueMutexPtr)
+		pthread_mutex_lock(s_queueMutexPtr);
 	VK_CHECK(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit one-time command buffer");
 	VK_CHECK(vkQueueWaitIdle(queue), "Failed to wait for one-time command queue idle");
+	if (s_queueMutexPtr)
+		pthread_mutex_unlock(s_queueMutexPtr);
 	vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }

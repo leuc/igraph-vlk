@@ -148,25 +148,14 @@ void renderer_draw_frame(Renderer *r, GraphData *graph)
 		}
 	}
 
-	// Yifan Hu RT layout: dispatch one GPU iteration
-	if (r->yhrt_active) {
-		if (!yhrt_dispatch_step(r, r->commands.commandBuffers[r->commands.currentFrame])) {
-			yhrt_finish(r, graph);
-		}
-	}
-
 	renderer_render_scene(r, r->commands.commandBuffers[r->commands.currentFrame], r->renderPass.renderPass, r->renderPass.framebuffers[imageIndex], r->swapchain.extent, r->ubo.view, r->ubo.proj, 0, false, (vec3){0}, (vec3){0});
 	VK_CHECK(vkEndCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame]), "Failed to end command buffer");
 
 	VkPipelineStageFlags waitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .waitSemaphoreCount = 1, .pWaitSemaphores = &r->commands.imageAvailableSemaphores[r->commands.currentFrame], .pWaitDstStageMask = &waitStages, .commandBufferCount = 1, .pCommandBuffers = &r->commands.commandBuffers[r->commands.currentFrame], .signalSemaphoreCount = 1, .pSignalSemaphores = &r->commands.renderFinishedSemaphores[imageIndex]};
+	pthread_mutex_lock(&r->core.graphicsQueueMutex);
 	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, r->commands.inFlightFences[r->commands.currentFrame]), "Failed to submit draw command buffer");
-
-	// Signa yhrt dispatch fence after this frame's work completes
-	if (r->yhrt_active) {
-		VkSubmitInfo yhrtSubmit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
-		VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &yhrtSubmit, r->yhrt_dispatch_fence), "Failed to submit YHRT dispatch fence");
-	}
+	pthread_mutex_unlock(&r->core.graphicsQueueMutex);
 
 	VkPresentInfoKHR presentInfo = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 1, .pWaitSemaphores = &r->commands.renderFinishedSemaphores[imageIndex], .swapchainCount = 1, .pSwapchains = &r->swapchain.swapchain, .pImageIndices = &imageIndex};
 	VK_CHECK(vkQueuePresentKHR(r->core.presentQueue, &presentInfo), "Failed to present swapchain image");
