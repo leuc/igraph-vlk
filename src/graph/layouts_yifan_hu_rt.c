@@ -16,24 +16,18 @@ void *compute_igraph_layout_yifan_hu_rt_3d(igraph_t *graph)
 {
 	igraph_integer_t vcount = igraph_vcount(graph);
 
-	// Create initial positions (3D grid)
+	// Create initial positions (random in [-1,1]^3 matching igraph_layout_i_yifan_hu_sfdp_3d)
 	igraph_matrix_t *init = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(init, vcount, 3) != IGRAPH_SUCCESS) {
 		IGRAPH_FREE(init);
 		return NULL;
 	}
 
-	igraph_real_t spacing = 2.0;
-	igraph_integer_t side = (igraph_integer_t)ceil(pow(vcount, 1.0 / 3.0));
-	igraph_real_t offset = (side * spacing) / 2.0;
-
+	igraph_rng_seed(igraph_rng_default(), 42);
 	for (igraph_integer_t i = 0; i < vcount; i++) {
-		igraph_integer_t z = i / (side * side);
-		igraph_integer_t y = (i % (side * side)) / side;
-		igraph_integer_t x = i % side;
-		MATRIX(*init, i, 0) = (x * spacing) - offset;
-		MATRIX(*init, i, 1) = (y * spacing) - offset;
-		MATRIX(*init, i, 2) = (z * spacing) - offset;
+		MATRIX(*init, i, 0) = RNG_UNIF(-1.0, 1.0);
+		MATRIX(*init, i, 1) = RNG_UNIF(-1.0, 1.0);
+		MATRIX(*init, i, 2) = RNG_UNIF(-1.0, 1.0);
 	}
 
 	// Access renderer via worker job context

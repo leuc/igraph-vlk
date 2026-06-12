@@ -9,12 +9,6 @@ bool yhrt_check_support(VkPhysicalDevice device);
 
 void yhrt_init_pipelines(Renderer *r);
 
-void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, igraph_int_t maxiter);
-
-bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd);
-
-void yhrt_finish(Renderer *r, GraphData *graph);
-
 void yhrt_destroy(Renderer *r);
 
 // Worker-thread API: blocking GPU iterations with igraph_progress
