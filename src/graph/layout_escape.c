@@ -16,64 +16,6 @@
 #include <string.h>
 
 // ============================================================================
-// Internal structs for topology-aware sorting
-// ============================================================================
-
-typedef struct
-{
-	igraph_integer_t id;
-	igraph_integer_t degree;
-	igraph_integer_t topo_pos;
-} NodeTopology;
-
-static int compare_topology(const void *a, const void *b)
-{
-	const NodeTopology *nodeA = (const NodeTopology *)a;
-	const NodeTopology *nodeB = (const NodeTopology *)b;
-	if (nodeA->topo_pos != nodeB->topo_pos)
-		return (int)(nodeA->topo_pos - nodeB->topo_pos);
-	return (int)(nodeB->degree - nodeA->degree);
-}
-
-// ============================================================================
-// Proper 3D Hilbert space-filling curve
-// Based on John Skilling's algorithm (AIP Conf. Proc. 707, 381, 2004)
-// ============================================================================
-
-// State transition table: next[state][octant] -> next state
-static const int hilbert_next[8][8] = {
-	{0, 3, 4, 7, 6, 1, 2, 5}, {7, 0, 5, 2, 1, 6, 3, 4}, {6, 7, 2, 5, 4, 3, 0, 1}, {1, 6, 3, 0, 7, 4, 5, 2}, {2, 5, 6, 1, 0, 7, 4, 3}, {3, 4, 7, 6, 5, 2, 1, 0}, {4, 1, 0, 3, 2, 5, 6, 7}, {5, 2, 1, 4, 3, 0, 7, 6},
-};
-
-// Coordinate transform table: trans[state][octant] -> transformed octant bits
-static const int hilbert_trans[8][8] = {
-	{0, 1, 3, 2, 6, 7, 5, 4}, {2, 3, 1, 0, 4, 5, 7, 6}, {4, 5, 7, 6, 0, 1, 3, 2}, {6, 7, 5, 4, 2, 3, 1, 0}, {1, 0, 2, 3, 7, 6, 4, 5}, {3, 2, 0, 1, 5, 4, 6, 7}, {5, 4, 6, 7, 1, 0, 2, 3}, {7, 6, 4, 5, 3, 2, 0, 1},
-};
-
-// Maps a Hilbert index to 3D coordinates in a 2^order cube
-// order = number of bits per dimension (e.g., 5 gives a 32^3 grid)
-static void get_hilbert_3d_position(int rank, int order, float *x, float *y, float *z, float spacing)
-{
-	int cx = 0, cy = 0, cz = 0;
-	int state = 0;
-
-	for (int i = order - 1; i >= 0; i--) {
-		int octant = (rank >> (3 * i)) & 7;
-		int t = hilbert_trans[state][octant];
-		cx = (cx << 1) | (t & 1);
-		cy = (cy << 1) | ((t >> 1) & 1);
-		cz = (cz << 1) | ((t >> 2) & 1);
-		state = hilbert_next[state][octant];
-	}
-
-	// Center the grid around 0 and apply spacing
-	float half = (float)(1 << (order - 1));
-	*x = ((float)cx - half) * spacing;
-	*y = ((float)cy - half) * spacing;
-	*z = ((float)cz - half) * spacing;
-}
-
-// ============================================================================
 // GPU-side physics buffer types (must match shader layout)
 // ============================================================================
 
@@ -102,7 +44,7 @@ static uint32_t escape_readback_positions(Renderer *r, GraphData *data);
 static void escape_record_iteration(VkCommandBuffer cmd, Renderer *r, EscapeSimParams *params, uint32_t node_count, uint32_t edge_count, uint32_t frame_index);
 
 // ============================================================================
-// CPU worker: topology analysis + space-filling curve placement
+// CPU worker: random initial placement in a cube
 // ============================================================================
 
 void *compute_escape_layout(igraph_t *graph)
@@ -112,94 +54,21 @@ void *compute_escape_layout(igraph_t *graph)
 	if (vcount == 0)
 		return NULL;
 
-	NodeTopology *sorted = (NodeTopology *)malloc(vcount * sizeof(NodeTopology));
-	if (!sorted)
-		return NULL;
-
-	igraph_vector_int_t degrees;
-	igraph_vector_int_init(&degrees, vcount);
-	igraph_degree(graph, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS_ONCE);
-
-	igraph_vector_int_t topo_order;
-	igraph_vector_int_init(&topo_order, 0);
-	igraph_error_t topo_ret = igraph_topological_sorting(graph, &topo_order, IGRAPH_OUT);
-	if (topo_ret != IGRAPH_SUCCESS) {
-		fprintf(stderr, "[Escape] Topological sorting failed (graph likely cyclic), using degree-only ordering\n");
-		igraph_vector_int_destroy(&degrees);
-		igraph_vector_int_destroy(&topo_order);
-		free(sorted);
-		return NULL;
-	}
-
-	igraph_vector_int_t rank;
-	igraph_vector_int_init(&rank, vcount);
-	for (igraph_integer_t i = 0; i < (igraph_integer_t)igraph_vector_int_size(&topo_order); i++)
-		VECTOR(rank)[VECTOR(topo_order)[i]] = i;
-
-	igraph_integer_t max_deg = 0;
-	for (igraph_integer_t i = 0; i < vcount; i++) {
-		sorted[i].id = i;
-		sorted[i].degree = VECTOR(degrees)[i];
-		sorted[i].topo_pos = VECTOR(rank)[i];
-		if (sorted[i].degree > max_deg)
-			max_deg = sorted[i].degree;
-	}
-
-	igraph_vector_int_destroy(&degrees);
-	igraph_vector_int_destroy(&topo_order);
-	igraph_vector_int_destroy(&rank);
-
-	qsort(sorted, vcount, sizeof(NodeTopology), compare_topology);
-
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
 		IGRAPH_FREE(result);
-		free(sorted);
 		return NULL;
 	}
 
-	int *sorted_rank = (int *)malloc(vcount * sizeof(int));
-	if (!sorted_rank) {
-		igraph_matrix_destroy(result);
-		IGRAPH_FREE(result);
-		free(sorted);
-		return NULL;
-	}
-	for (igraph_integer_t i = 0; i < vcount; i++)
-		sorted_rank[sorted[i].id] = i;
-
-	int hilbert_order = (int)(ceil(log2((double)vcount) / 3.0));
-	if (hilbert_order < 1)
-		hilbert_order = 1;
-	if (hilbert_order > 10)
-		hilbert_order = 10;
-
-	float min_x = INFINITY, max_x = -INFINITY, min_y = INFINITY, max_y = -INFINITY, min_z = INFINITY, max_z = -INFINITY;
+	float half_side = 5.0f * powf((float)vcount / 0.05f, 1.0f / 3.0f);
+	srand(42);
 	for (igraph_integer_t i = 0; i < vcount; i++) {
-		float px, py, pz;
-		get_hilbert_3d_position(sorted_rank[i], hilbert_order, &px, &py, &pz, 4.0f);
-		float core_scale = 1.0f + log2f((float)sorted[i].degree + 2.0f) * 0.5f;
-		MATRIX(*result, i, 0) = (igraph_real_t)(px * core_scale);
-		MATRIX(*result, i, 1) = (igraph_real_t)(py * core_scale);
-		MATRIX(*result, i, 2) = (igraph_real_t)(pz * core_scale);
-		float x = (float)MATRIX(*result, i, 0), y = (float)MATRIX(*result, i, 1), z = (float)MATRIX(*result, i, 2);
-		if (x < min_x)
-			min_x = x;
-		if (x > max_x)
-			max_x = x;
-		if (y < min_y)
-			min_y = y;
-		if (y > max_y)
-			max_y = y;
-		if (z < min_z)
-			min_z = z;
-		if (z > max_z)
-			max_z = z;
+		MATRIX(*result, i, 0) = (igraph_real_t)((float)rand() / (float)RAND_MAX * 2.0f * half_side - half_side);
+		MATRIX(*result, i, 1) = (igraph_real_t)((float)rand() / (float)RAND_MAX * 2.0f * half_side - half_side);
+		MATRIX(*result, i, 2) = (igraph_real_t)((float)rand() / (float)RAND_MAX * 2.0f * half_side - half_side);
 	}
-	fprintf(stderr, "[Escape] Worker: %ld nodes max_deg=%ld bounds X=[%.0f,%.0f] Y=[%.0f,%.0f] Z=[%.0f,%.0f]\n", (long)vcount, (long)max_deg, min_x, max_x, min_y, max_y, min_z, max_z);
 
-	free(sorted_rank);
-	free(sorted);
+	fprintf(stderr, "[Escape] Worker: %ld nodes randomly placed in cube [-%.0f,%.0f]\n", (long)vcount, half_side, half_side);
 	return result;
 }
 
@@ -623,7 +492,7 @@ static uint32_t escape_readback_positions(Renderer *r, GraphData *data)
 			float px = phys[idx].position[0], py = phys[idx].position[1], pz = phys[idx].position[2];
 			float ex = phys[idx].escape_vector[0], ey = phys[idx].escape_vector[1], ez = phys[idx].escape_vector[2];
 			float elen = sqrtf(ex * ex + ey * ey + ez * ez);
-			float aabb_scale = 2.0f * log2f((float)data->nodes[idx].degree + 2.0f) * 0.5f;
+			float aabb_scale = 5.0f;
 			printf("[Escape DBG iter %4u] node[%u] deg=%u pos=(%.1f,%.1f,%.1f) |e|=%f f=%.3f esc=%u aabb=%.2f coh=%.0f\n", r->escape_current_iter, idx, data->nodes[idx].degree, px, py, pz, elen, phys[idx].freedom[0], (uint32_t)(phys[idx].freedom[2] + 0.5f), aabb_scale, phys[idx].freedom[1]);
 			// Print neighbor positions and distances
 			if (data->nodes[idx].degree > 0) {
@@ -639,7 +508,7 @@ static uint32_t escape_readback_positions(Renderer *r, GraphData *data)
 						uint32_t nid = (uint32_t)VECTOR(neis)[j];
 						float nx = phys[nid].position[0], ny = phys[nid].position[1], nz = phys[nid].position[2];
 						float dist = sqrtf((px - nx) * (px - nx) + (py - ny) * (py - ny) + (pz - nz) * (pz - nz));
-						float nscale = 2.0f * log2f((float)data->nodes[nid].degree + 2.0f) * 0.5f;
+						float nscale = 5.0f;
 						printf(" [%u]->%.1f(aabb=%.1f+%.1f=%.1f)", nid, dist, aabb_scale, nscale, aabb_scale + nscale);
 					}
 					printf("\n");

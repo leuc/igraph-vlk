@@ -43,7 +43,7 @@ void main() {
 	uint count = edge_counts[id];
 
 	if (count > 0) {
-		float degree_weight = (1.0 + params.avg_degree) / (1.0 + float(count));
+		float degree_weight = log2(1.0 + params.avg_degree) / log2(1.0 + float(count));
 		escape_force *= degree_weight;
 	}
 

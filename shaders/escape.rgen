@@ -76,14 +76,9 @@ void main() {
 	vec3 final_escape = vec3(0.0);
 
 	if (escaped_count > 0) {
-		if (freedom >= 1.0) {
-			// Fully open — no direction is more open than others, don't drift
-			final_escape = vec3(0.0);
-		} else {
-			vec3 avg = escape_sum / float(escaped_count);
-			vec3 escape_dir = (length(avg) > 0.01) ? normalize(avg) : first_escaped_dir;
-			final_escape = escape_dir * freedom;
-		}
+		vec3 avg = escape_sum / float(escaped_count);
+		vec3 escape_dir = (length(avg) > 0.01) ? normalize(avg) : first_escaped_dir;
+		final_escape = escape_dir * freedom;
 
 		// Cohesion: pull toward neighbor centroid if neighbors drifted
 		uint deg = edge_counts[nodeId];
