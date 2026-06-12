@@ -26,11 +26,18 @@ void *compute_igraph_layout_yifan_hu_rt_3d(igraph_t *graph)
 		return NULL;
 	}
 
-	igraph_rng_seed(igraph_rng_default(), 42);
+	igraph_real_t spacing = 2.0;
+	igraph_integer_t side = (igraph_integer_t)ceil(pow(vcount, 1.0 / 3.0));
+	igraph_real_t offset = (side * spacing) / 2.0;
+
 	for (igraph_integer_t i = 0; i < vcount; i++) {
-		MATRIX(*result, i, 0) = RNG_UNIF(-1.0, 1.0);
-		MATRIX(*result, i, 1) = RNG_UNIF(-1.0, 1.0);
-		MATRIX(*result, i, 2) = RNG_UNIF(-1.0, 1.0);
+		igraph_integer_t z = i / (side * side);
+		igraph_integer_t y = (i % (side * side)) / side;
+		igraph_integer_t x = i % side;
+
+		MATRIX(*result, i, 0) = (x * spacing) - offset;
+		MATRIX(*result, i, 1) = (y * spacing) - offset;
+		MATRIX(*result, i, 2) = (z * spacing) - offset;
 	}
 
 	YHRTData *data = IGRAPH_MALLOC(sizeof(YHRTData));

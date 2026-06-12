@@ -802,10 +802,10 @@ bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd)
 	// Periodic Fnorm readback
 	r->yhrt_current_iter++;
 	if (r->yhrt_current_iter % YHRT_FNORM_READBACK_INTERVAL == 0 || r->yhrt_current_iter >= r->yhrt_maxiter) {
-		VkBufferCopy fnormCopy = {.size = sizeof(float)};
-		vkCmdCopyBuffer(cmd, r->yhrt_fnorm_buf, r->yhrt_staging_buf, 1, &fnormCopy);
 		VkMemoryBarrier readBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT};
 		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &readBarrier, 0, NULL, 0, NULL);
+		VkBufferCopy fnormCopy = {.size = sizeof(float)};
+		vkCmdCopyBuffer(cmd, r->yhrt_fnorm_buf, r->yhrt_staging_buf, 1, &fnormCopy);
 		r->yhrt_fnorm_readback_pending = true;
 	}
 
