@@ -77,6 +77,12 @@ static const VkPipelineDepthStencilStateCreateInfo VK_DEPTH_STENCIL_STATE_DISABL
 
 #define VK_CMD_BEGIN_INFO_ONETIME ((VkCommandBufferBeginInfo){.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT})
 
+#define VK_PIPELINE_BARRIER(cmd, srcStage, dstStage, srcAccess, dstAccess) \
+	do { \
+		VkMemoryBarrier __barrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = (srcAccess), .dstAccessMask = (dstAccess)}; \
+		vkCmdPipelineBarrier((cmd), (srcStage), (dstStage), 0, 1, &__barrier, 0, NULL, 0, NULL); \
+	} while (0)
+
 // ============================================================================
 // Function Declarations
 // ============================================================================
