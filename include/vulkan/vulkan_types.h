@@ -378,6 +378,7 @@ typedef struct Renderer
 	VkPipeline yhrt_attraction_pipeline;
 	VkPipeline yhrt_update_pipeline;
 	VkPipeline yhrt_update_instances_pipeline;
+	VkFence yhrt_dispatch_fence;
 
 	// Ring-buffered sync for graph updates
 	VkFence graphUpdateFences[GRAPH_UPDATE_RING_SIZE];

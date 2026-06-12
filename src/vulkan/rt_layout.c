@@ -255,6 +255,10 @@ static void yhrt_cleanup_session_buffers(Renderer *r)
 		vkDestroyDescriptorPool(r->core.device, r->yhrt_desc_pool, NULL);
 		r->yhrt_desc_pool = VK_NULL_HANDLE;
 	}
+	if (r->yhrt_dispatch_fence != VK_NULL_HANDLE) {
+		vkDestroyFence(r->core.device, r->yhrt_dispatch_fence, NULL);
+		r->yhrt_dispatch_fence = VK_NULL_HANDLE;
+	}
 }
 
 // ============================================================================
@@ -440,6 +444,12 @@ void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, i
 		VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit YHRT fnorm zero");
 		vkQueueWaitIdle(r->core.graphicsQueue);
 		vkDestroyCommandPool(r->core.device, cmdPool, NULL);
+	}
+
+	// ---- Dispatch fence (serializes GPU execution for safe staging readback) ----
+	{
+		VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
+		VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &r->yhrt_dispatch_fence), "Failed to create YHRT dispatch fence");
 	}
 
 	// ---- Build BLAS (single AABB geometry) ----
@@ -682,7 +692,10 @@ bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd)
 	if (r->yhrt_current_iter >= r->yhrt_maxiter)
 		return false;
 
-	// ---- Read back previous iteration's Fnorm from staging (GPU already wrote it) ----
+	// ---- Wait for previous dispatch, then read back Fnorm for adaptive cooling ----
+	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->yhrt_dispatch_fence, VK_TRUE, UINT64_MAX), "Failed to wait for YHRT dispatch fence");
+	VK_CHECK(vkResetFences(r->core.device, 1, &r->yhrt_dispatch_fence), "Failed to reset YHRT dispatch fence");
+
 	if (r->yhrt_current_iter > 0) {
 		float fnorm = 0.0f;
 		void *mapped;
@@ -693,7 +706,6 @@ bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd)
 
 		printf("[YHRT] iter=%d, step=%g, Fnorm=%g, Fnorm0=%g, repulsive_exp=%g, natlen=%g\n", r->yhrt_current_iter - 1, r->yhrt_step, fnorm, r->yhrt_Fnorm0, r->yhrt_p, r->yhrt_K);
 
-		// Adaptive cooling (matches igraph: cooling starts from iter > 0)
 		if (fnorm < r->yhrt_Fnorm0) {
 			if (fnorm > 0.95f * r->yhrt_Fnorm0) {
 				// step unchanged
@@ -810,6 +822,10 @@ void yhrt_finish(Renderer *r, GraphData *graph)
 		return;
 
 	vkQueueWaitIdle(r->core.graphicsQueue);
+
+	// Wait for yhrt dispatch fence if a dispatch was in-flight
+	if (r->yhrt_dispatch_fence != VK_NULL_HANDLE)
+		vkWaitForFences(r->core.device, 1, &r->yhrt_dispatch_fence, VK_TRUE, UINT64_MAX);
 
 	// Read back final Fnorm if pending (last iteration's value)
 	if (r->yhrt_fnorm_readback_pending) {
