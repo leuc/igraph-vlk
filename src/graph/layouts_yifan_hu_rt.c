@@ -45,7 +45,7 @@ void *compute_igraph_layout_yifan_hu_rt_3d(igraph_t *graph)
 	}
 	Renderer *r = &job->ctx->app_state->renderer;
 
-	igraph_int_t maxiter = 500;
+	igraph_int_t maxiter = 500 + vcount / 10;
 
 	// Initialize GPU resources and start the layout
 	if (!yhrt_worker_init(r, graph, init, maxiter)) {

@@ -684,7 +684,6 @@ bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd)
 
 	// ---- Wait for previous dispatch, then read back Fnorm for adaptive cooling ----
 	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->yhrt_dispatch_fence, VK_TRUE, UINT64_MAX), "Failed to wait for YHRT dispatch fence");
-	VK_CHECK(vkResetFences(r->core.device, 1, &r->yhrt_dispatch_fence), "Failed to reset YHRT dispatch fence");
 
 	if (r->yhrt_current_iter > 0) {
 		float fnorm = 0.0f;
@@ -714,6 +713,8 @@ bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd)
 
 	if (r->yhrt_step < r->yhrt_tolerance)
 		return false;
+
+	VK_CHECK(vkResetFences(r->core.device, 1, &r->yhrt_dispatch_fence), "Failed to reset YHRT dispatch fence");
 
 	// ---- Reset Fnorm via GPU fill (avoids CPU/GPU race on staging buffer) ----
 	vkCmdFillBuffer(cmd, r->yhrt_fnorm_buf, 0, sizeof(double), 0);
@@ -1171,9 +1172,10 @@ bool yhrt_worker_step(Renderer *r)
 	if (r->yhrt_current_iter >= r->yhrt_maxiter)
 		return false;
 
+	// Wait for previous GPU work — fence stays SIGNALED after this
 	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->yhrt_dispatch_fence, VK_TRUE, UINT64_MAX), "Failed to wait for YHRT dispatch fence");
-	VK_CHECK(vkResetFences(r->core.device, 1, &r->yhrt_dispatch_fence), "Failed to reset YHRT dispatch fence");
 
+	// Read back Fnorm from previous iteration (valid because fence was just waited on)
 	if (r->yhrt_current_iter > 0) {
 		float fnorm = 0.0f;
 		void *mapped;
@@ -1196,10 +1198,14 @@ bool yhrt_worker_step(Renderer *r)
 			r->yhrt_step *= IGRAPH_YHU_COOL;
 		}
 		r->yhrt_Fnorm0 = fnorm;
+
+		// Check tolerance — fence is still SIGNALED so yhrt_worker_readback won't deadlock
+		if (r->yhrt_step < r->yhrt_tolerance)
+			return false;
 	}
 
-	if (r->yhrt_step < r->yhrt_tolerance)
-		return false;
+	// Only reset fence when we're about to submit new work
+	VK_CHECK(vkResetFences(r->core.device, 1, &r->yhrt_dispatch_fence), "Failed to reset YHRT dispatch fence");
 
 	VkCommandBuffer cmd = r->yhrt_cmd_buf;
 	VK_CHECK(vkResetCommandBuffer(cmd, 0), "Failed to reset YHRT worker cmd");
