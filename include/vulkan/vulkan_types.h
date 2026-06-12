@@ -390,8 +390,6 @@ typedef struct Renderer
 	VkCommandBuffer yhrt_cmd_buf;
 	VkBuffer yhrt_node_staging_buf;
 	VkDeviceMemory yhrt_node_staging_mem;
-	VkBuffer yhrt_readback_buf;
-	VkDeviceMemory yhrt_readback_mem;
 
 	// Ring-buffered sync for graph updates
 	VkFence graphUpdateFences[GRAPH_UPDATE_RING_SIZE];

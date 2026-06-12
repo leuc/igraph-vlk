@@ -191,8 +191,6 @@ static void yhrt_cleanup_session_buffers(Renderer *r)
 		r->yhrt_cmd_buf = VK_NULL_HANDLE;
 		r->yhrt_node_staging_buf = VK_NULL_HANDLE;
 		r->yhrt_node_staging_mem = VK_NULL_HANDLE;
-		r->yhrt_readback_buf = VK_NULL_HANDLE;
-		r->yhrt_readback_mem = VK_NULL_HANDLE;
 	}
 	if (r->yhrt_dispatch_fence != VK_NULL_HANDLE) {
 		vkDestroyFence(r->core.device, r->yhrt_dispatch_fence, NULL);
@@ -204,7 +202,6 @@ static void yhrt_cleanup_session_buffers(Renderer *r)
 		r->yhrt_cmd_buf = VK_NULL_HANDLE;
 	}
 	VK_DESTROY_BUFFER(r->core.device, r->yhrt_node_staging_buf, r->yhrt_node_staging_mem);
-	VK_DESTROY_BUFFER(r->core.device, r->yhrt_readback_buf, r->yhrt_readback_mem);
 }
 
 // ============================================================================
@@ -1451,7 +1448,7 @@ bool yhrt_worker_readback(Renderer *r, igraph_matrix_t *out_positions)
 		return false;
 
 	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->yhrt_dispatch_fence, VK_TRUE, UINT64_MAX), "Failed to wait for YHRT readback fence");
-	VK_CHECK(vkResetFences(r->core.device, 1, &r->yhrt_dispatch_fence), "Failed to reset YHRT readback fence");
+	// NOTE: do NOT reset the fence here — the next yhrt_worker_step call resets it
 
 	VkDeviceSize nodeSize = sizeof(vec4) * r->yhrt_vcount;
 	void *mapped;
@@ -1473,7 +1470,9 @@ bool yhrt_worker_readback(Renderer *r, igraph_matrix_t *out_positions)
 
 void yhrt_worker_cleanup(Renderer *r)
 {
+	pthread_mutex_lock(&r->core.graphicsQueueMutex);
 	vkQueueWaitIdle(r->core.graphicsQueue);
+	pthread_mutex_unlock(&r->core.graphicsQueueMutex);
 	yhrt_cleanup_session_buffers(r);
 	r->yhrt_active = false;
 	printf("[YHRT] Worker session completed after %d iterations, final step=%.6f\n", r->yhrt_current_iter, r->yhrt_step);
