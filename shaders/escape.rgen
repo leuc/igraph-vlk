@@ -4,6 +4,7 @@
 struct RayPayload {
 	uint originNodeId;
 	uint escaped;
+	uint isCohesionRay;
 };
 layout(location = 0) rayPayloadEXT RayPayload payload;
 
@@ -18,6 +19,10 @@ struct NodePhysics {
 layout(std430, binding = 1, set = 0) buffer PhysicsBuffer {
 	NodePhysics nodes[];
 };
+
+layout(std430, binding = 2, set = 0) readonly buffer AdjacencyList { uint neighbors[]; };
+layout(std430, binding = 3, set = 0) readonly buffer AdjOffsets  { uint offsets[]; };
+layout(std430, binding = 4, set = 0) readonly buffer AdjCounts   { uint edge_counts[]; };
 
 layout(push_constant) uniform PushConstants {
 	uint frame_index;
@@ -40,8 +45,7 @@ void main() {
 
 	vec3 origin = nodes[nodeId].position.xyz;
 
-	bool is_awake = (nodes[nodeId].freedom.w > 0.5);
-	int active_ray_count = is_awake ? RAY_COUNT : 4;
+	int active_ray_count = RAY_COUNT;
 
 	uint escaped_count = 0;
 	vec3 escape_sum = vec3(0.0);
@@ -69,13 +73,51 @@ void main() {
 	nodes[nodeId].freedom.x = clamp(freedom, 0.0, 1.0);
 	nodes[nodeId].freedom.z = float(escaped_count);
 
-	if (escaped_count == 0) {
-		nodes[nodeId].escape_vector.xyz = vec3(0.0);
-	} else if (freedom >= 1.0) {
-		nodes[nodeId].escape_vector.xyz = vec3(0.0);
-	} else {
-		vec3 avg = escape_sum / float(escaped_count);
-		vec3 escape_dir = (length(avg) > 0.01) ? normalize(avg) : first_escaped_dir;
-		nodes[nodeId].escape_vector.xyz = escape_dir * freedom;
+	vec3 final_escape = vec3(0.0);
+
+	if (escaped_count > 0) {
+		if (freedom >= 1.0) {
+			// Fully open — no direction is more open than others, don't drift
+			final_escape = vec3(0.0);
+		} else {
+			vec3 avg = escape_sum / float(escaped_count);
+			vec3 escape_dir = (length(avg) > 0.01) ? normalize(avg) : first_escaped_dir;
+			final_escape = escape_dir * freedom;
+		}
+
+		// Cohesion: pull toward neighbor centroid if neighbors drifted
+		uint deg = edge_counts[nodeId];
+		nodes[nodeId].freedom.y = 0.0;
+		if (deg > 0) {
+			vec3 cent = vec3(0.0);
+			uint start = offsets[nodeId];
+			for (uint i = 0; i < deg; i++)
+				cent += nodes[neighbors[start + i]].position.xyz;
+			cent /= float(deg);
+			vec3 cohesion_dir = cent - origin;
+			float cohesion_len = length(cohesion_dir);
+			if (cohesion_len > 0.001) {
+				cohesion_dir /= cohesion_len;
+
+				payload.originNodeId = nodeId;
+				payload.escaped = 0;
+				payload.isCohesionRay = 1;
+				traceRayEXT(topLevelAS,
+					gl_RayFlagsNoOpaqueEXT,
+					0xFF, 0, 0, 0,
+					origin, 0.01, cohesion_dir, pc.ray_max_distance, 0);
+
+				if (payload.escaped == 1) {
+					// Neighbors drifted — pull toward centroid
+					float pull = 0.3 * (1.0 - freedom);
+					final_escape += cohesion_dir * pull;
+					nodes[nodeId].freedom.y = 2.0; // debug: cohesion ray escaped
+				} else {
+					nodes[nodeId].freedom.y = 1.0; // debug: cohesion ray hit a neighbor
+				}
+			}
+		}
 	}
+
+	nodes[nodeId].escape_vector.xyz = final_escape;
 }

@@ -379,6 +379,8 @@ typedef struct Renderer
 	float escape_avg_degree;
 	uint32_t escape_node_count;
 	uint32_t escape_edge_count;
+	float escape_prev_displacement;
+	uint32_t escape_convergence_count;
 	GraphData *escape_graph_data;
 
 	// Ray Tracing (Hybrid Escape Layout)

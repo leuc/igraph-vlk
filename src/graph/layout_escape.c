@@ -228,16 +228,22 @@ bool igraph_vlk_layout_escape_tick(Renderer *r)
 
 		// Summary every 10 iters
 		if (r->escape_current_iter % 10 == 0)
-			printf("[Escape] iter %4u | sleeping=%u/%u\n", r->escape_current_iter, sleeping, n);
+			printf("[Escape] iter %4u | sleeping=%u/%u disp_rel=%.6f conv_count=%u\n", r->escape_current_iter, sleeping, n, r->escape_prev_displacement, r->escape_convergence_count);
 
 		// CPU-side TLAS update for next frame's RT pass
 		if (r->escape_rt_supported) {
 			renderer_escape_update_tlas_cpu(r, n);
 		}
 
-		// Freedom-based convergence: all nodes asleep = done
-		if (sleeping == n) {
-			printf("[Escape] All nodes asleep at iteration %u\n", r->escape_current_iter);
+		// Motion-based convergence: stable displacement for 5 consecutive frames
+		if (r->escape_prev_displacement < 1e-3f) {
+			r->escape_convergence_count++;
+		} else {
+			r->escape_convergence_count = 0;
+		}
+
+		if (r->escape_convergence_count >= 5) {
+			printf("[Escape] Converged (displacement < 0.1%% bb_diag for 5 frames) at iteration %u, sleeping=%u/%u\n", r->escape_current_iter, sleeping, n);
 			r->escape_sim_active = false;
 			return false;
 		}
@@ -553,6 +559,34 @@ static uint32_t escape_readback_positions(Renderer *r, GraphData *data)
 		}
 	}
 
+	// Per-frame displacement tracking for motion-based convergence
+	static float *prev_pos = NULL;
+	static uint32_t prev_n = 0;
+	double total_displacement = 0.0;
+	if (!prev_pos || prev_n != (uint32_t)data->node_count) {
+		free(prev_pos);
+		prev_n = data->node_count;
+		prev_pos = (float *)malloc(prev_n * 3 * sizeof(float));
+		for (uint32_t i = 0; i < prev_n; i++) {
+			prev_pos[i * 3 + 0] = phys[i].position[0];
+			prev_pos[i * 3 + 1] = phys[i].position[1];
+			prev_pos[i * 3 + 2] = phys[i].position[2];
+		}
+		r->escape_prev_displacement = 1.0f;
+	} else {
+		for (uint32_t i = 0; i < (uint32_t)data->node_count; i++) {
+			float dx = phys[i].position[0] - prev_pos[i * 3 + 0];
+			float dy = phys[i].position[1] - prev_pos[i * 3 + 1];
+			float dz = phys[i].position[2] - prev_pos[i * 3 + 2];
+			total_displacement += sqrtf(dx * dx + dy * dy + dz * dz);
+			prev_pos[i * 3 + 0] = phys[i].position[0];
+			prev_pos[i * 3 + 1] = phys[i].position[1];
+			prev_pos[i * 3 + 2] = phys[i].position[2];
+		}
+		float avg_displacement = (float)(total_displacement / (double)data->node_count);
+		r->escape_prev_displacement = (r->escape_bb_diag > 0.001f) ? avg_displacement / r->escape_bb_diag : 1.0f;
+	}
+
 	uint32_t sleeping = 0;
 	for (uint32_t i = 0; i < (uint32_t)data->node_count; i++) {
 		data->nodes[i].position[0] = phys[i].position[0];
@@ -565,6 +599,56 @@ static uint32_t escape_readback_positions(Renderer *r, GraphData *data)
 			sleeping++;
 	}
 
+	// Per-iteration debug for first 10 iters
+	if (r->escape_current_iter <= 10) {
+		uint32_t n = data->node_count;
+		// Find max-degree node and a low-degree node
+		uint32_t deg_max_idx = 0, deg_max_val = 0, deg1_idx = UINT32_MAX;
+		for (uint32_t i = 0; i < n && i < 10000; i++) {
+			if (data->nodes[i].degree > deg_max_val) {
+				deg_max_val = data->nodes[i].degree;
+				deg_max_idx = i;
+			}
+			if (data->nodes[i].degree == 1 && deg1_idx == UINT32_MAX)
+				deg1_idx = i;
+		}
+		uint32_t samples[3] = {deg_max_idx, deg1_idx, (deg1_idx == 0) ? 1u : 0u};
+		// Deduplicate
+		if (samples[1] == samples[0])
+			samples[1] = (samples[0] == 0) ? 1 : 0;
+		for (int si = 0; si < 3; si++) {
+			uint32_t idx = samples[si];
+			if (idx >= n)
+				continue;
+			float px = phys[idx].position[0], py = phys[idx].position[1], pz = phys[idx].position[2];
+			float ex = phys[idx].escape_vector[0], ey = phys[idx].escape_vector[1], ez = phys[idx].escape_vector[2];
+			float elen = sqrtf(ex * ex + ey * ey + ez * ez);
+			float aabb_scale = 2.0f * log2f((float)data->nodes[idx].degree + 2.0f) * 0.5f;
+			printf("[Escape DBG iter %4u] node[%u] deg=%u pos=(%.1f,%.1f,%.1f) |e|=%f f=%.3f esc=%u aabb=%.2f coh=%.0f\n", r->escape_current_iter, idx, data->nodes[idx].degree, px, py, pz, elen, phys[idx].freedom[0], (uint32_t)(phys[idx].freedom[2] + 0.5f), aabb_scale, phys[idx].freedom[1]);
+			// Print neighbor positions and distances
+			if (data->nodes[idx].degree > 0) {
+				uint32_t start = 0, count = 0;
+				// Recompute adjacency inline (same as escape_create_gpu_buffers)
+				igraph_vector_int_t neis;
+				igraph_vector_int_init(&neis, 0);
+				igraph_neighbors(&data->g, &neis, (igraph_integer_t)idx, IGRAPH_ALL, IGRAPH_LOOPS, IGRAPH_NO_MULTIPLE);
+				count = (uint32_t)igraph_vector_int_size(&neis);
+				if (count > 0 && count <= 10) {
+					printf("[Escape DBG iter %4u] node[%u] neighbors(%u):", r->escape_current_iter, idx, count);
+					for (uint32_t j = 0; j < count; j++) {
+						uint32_t nid = (uint32_t)VECTOR(neis)[j];
+						float nx = phys[nid].position[0], ny = phys[nid].position[1], nz = phys[nid].position[2];
+						float dist = sqrtf((px - nx) * (px - nx) + (py - ny) * (py - ny) + (pz - nz) * (pz - nz));
+						float nscale = 2.0f * log2f((float)data->nodes[nid].degree + 2.0f) * 0.5f;
+						printf(" [%u]->%.1f(aabb=%.1f+%.1f=%.1f)", nid, dist, aabb_scale, nscale, aabb_scale + nscale);
+					}
+					printf("\n");
+				}
+				igraph_vector_int_destroy(&neis);
+			}
+		}
+	}
+
 	// Comprehensive stats every 50 iters
 	if (r->escape_current_iter % 50 == 0 || r->escape_current_iter == 1) {
 		uint32_t n = data->node_count;
@@ -575,6 +659,7 @@ static uint32_t escape_readback_positions(Renderer *r, GraphData *data)
 		int e_hist[5] = {0};   // 0, (0,0.01], (0.01,0.1], (0.1,0.5], >0.5
 		int f_hist[5] = {0};   // 0, (0,0.25], (0.25,0.5], (0.5,0.75], >0.75
 		int esc_hist[5] = {0}; // escaped_count buckets: 0, 1-4, 5-8, 9-12, 13-16
+		int cohesion_hit = 0, cohesion_escaped = 0, cohesion_none = 0;
 		uint32_t stuck = 0;
 		uint32_t deg0_idx = UINT32_MAX, deg_max_idx = UINT32_MAX, deg_avg_idx = UINT32_MAX;
 		uint32_t deg_max_val = 0;
@@ -636,6 +721,14 @@ static uint32_t escape_readback_positions(Renderer *r, GraphData *data)
 			else
 				esc_hist[4]++;
 
+			float cohesion_val = phys[i].freedom[1];
+			if (cohesion_val < 0.5f)
+				cohesion_none++;
+			else if (cohesion_val < 1.5f)
+				cohesion_hit++;
+			else
+				cohesion_escaped++;
+
 			float dx = px - initial_pos[i * 3 + 0], dy = py - initial_pos[i * 3 + 1], dz = pz - initial_pos[i * 3 + 2];
 			if (sqrtf(dx * dx + dy * dy + dz * dz) < 0.001f)
 				stuck++;
@@ -664,7 +757,8 @@ static uint32_t escape_readback_positions(Renderer *r, GraphData *data)
 		printf("[Escape STATS iter %4u] pos: |p|=[%.1f..%.1f] avg=%.1f  bounds X=[%.1f,%.1f] Y=[%.1f,%.1f] Z=[%.1f,%.1f]\n", r->escape_current_iter, min_pl, max_pl, avg_pl, min_x, max_x, min_y, max_y, min_z, max_z);
 		printf("[Escape STATS iter %4u] |e|: zero=%d tiny=%d small=%d mid=%d large=%d  freedom: zero=%d low=%d mid=%d high=%d full=%d\n", r->escape_current_iter, e_hist[0], e_hist[1], e_hist[2], e_hist[3], e_hist[4], f_hist[0], f_hist[1], f_hist[2], f_hist[3], f_hist[4]);
 		printf("[Escape STATS iter %4u] escaped: 0=%d 1-4=%d 5-8=%d 9-12=%d 13-16=%d\n", r->escape_current_iter, esc_hist[0], esc_hist[1], esc_hist[2], esc_hist[3], esc_hist[4]);
-		printf("[Escape STATS iter %4u] stuck=%u/%u sleeping=%u\n", r->escape_current_iter, stuck, n, sleeping);
+		printf("[Escape STATS iter %4u] cohesion: hit=%d escaped=%d none=%d\n", r->escape_current_iter, cohesion_hit, cohesion_escaped, cohesion_none);
+		printf("[Escape STATS iter %4u] stuck=%u/%u sleeping=%u disp_rel=%.6f conv_count=%u\n", r->escape_current_iter, stuck, n, sleeping, r->escape_prev_displacement, r->escape_convergence_count);
 
 		// Sample nodes: degree=0, degree=max, degree≈avg
 		uint32_t sample_ids[] = {deg0_idx, deg_max_idx, deg_avg_idx};
@@ -678,7 +772,9 @@ static uint32_t escape_readback_positions(Renderer *r, GraphData *data)
 			float ex = phys[idx].escape_vector[0], ey = phys[idx].escape_vector[1], ez = phys[idx].escape_vector[2];
 			float el = sqrtf(ex * ex + ey * ey + ez * ez);
 			uint32_t ec = (uint32_t)(phys[idx].freedom[2] + 0.5f);
-			printf("[Escape SAMPLE iter %4u] node[%u] %s deg=%u pos=(%.1f,%.1f,%.1f) |p|=%.1f  |e|=%.4f  f=%.3f escaped=%u/%u awake=%d\n", r->escape_current_iter, idx, sample_labels[si], data->nodes[idx].degree, px, py, pz, pl, el, phys[idx].freedom[0], ec, 16, phys[idx].freedom[3] >= 0.5f ? 1 : 0);
+			float coh = phys[idx].freedom[1];
+			const char *coh_str = (coh < 0.5f) ? "none" : ((coh < 1.5f) ? "hit" : "escaped");
+			printf("[Escape SAMPLE iter %4u] node[%u] %s deg=%u pos=(%.1f,%.1f,%.1f) |p|=%.1f  |e|=%.4f  f=%.3f escaped=%u/%u coh=%s awake=%d\n", r->escape_current_iter, idx, sample_labels[si], data->nodes[idx].degree, px, py, pz, pl, el, phys[idx].freedom[0], ec, 16, coh_str, phys[idx].freedom[3] >= 0.5f ? 1 : 0);
 		}
 	}
 
@@ -749,9 +845,11 @@ void apply_escape_layout(ExecutionContext *ctx, void *result_data)
 	r->escape_sim_active = true;
 	r->escape_needs_wait = false;
 	r->escape_current_iter = 0;
-	r->escape_max_iters = 2000;
+	r->escape_max_iters = 20000;
 	r->escape_alpha = alpha0;
 	r->escape_avg_degree = avg_degree;
+	r->escape_prev_displacement = 1.0f;
+	r->escape_convergence_count = 0;
 	r->escape_node_count = n;
 	r->escape_edge_count = m;
 	r->escape_graph_data = data;

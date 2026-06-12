@@ -3,7 +3,8 @@
 
 struct RayPayload {
 	uint originNodeId;
-	uint escaped; // 1 if ray reached open space (miss shader fired), 0 if blocked
+	uint escaped; // 1 if miss fired (open space), 0 if hit committed (blocked)
+	uint isCohesionRay; // 0 = escape ray, 1 = cohesion ray toward neighbor centroid
 };
 layout(location = 0) rayPayloadInEXT RayPayload payload;
 
@@ -15,14 +16,32 @@ void main() {
 	uint hitNodeId = gl_InstanceCustomIndexEXT;
 	uint originId = payload.originNodeId;
 
-	if (hitNodeId == originId) {
+	if (payload.isCohesionRay == 1) {
+		// Cohesion ray: only commit if we hit a specific neighbor
+		if (hitNodeId == originId) {
+			ignoreIntersectionEXT; // skip self
+			return;
+		}
+		// Check if hitNodeId is a neighbor
+		uint start = offsets[originId];
+		uint count = edge_counts[originId];
+		for (uint i = 0; i < count; i++) {
+			if (neighbors[start + i] == hitNodeId) {
+				return; // hit a neighbor — commit, closest-hit fires, escaped=0
+			}
+		}
+		// Non-neighbor: ignore (we only care about whether our specific neighbors are nearby)
 		ignoreIntersectionEXT;
 		return;
 	}
 
+	// Escape ray: ignore self and neighbors
+	if (hitNodeId == originId) {
+		ignoreIntersectionEXT;
+		return;
+	}
 	uint start_idx = offsets[originId];
 	uint count = edge_counts[originId];
-
 	for (uint i = 0; i < count; i++) {
 		if (neighbors[start_idx + i] == hitNodeId) {
 			ignoreIntersectionEXT;
@@ -31,5 +50,4 @@ void main() {
 	}
 
 	// Non-neighbor object in the way — block the ray (commit the hit)
-	// closest-hit shader will fire with escaped=0 instead of miss shader
 }

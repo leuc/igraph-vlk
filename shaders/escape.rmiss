@@ -4,6 +4,7 @@
 struct RayPayload {
 	uint originNodeId;
 	uint escaped;
+	uint isCohesionRay;
 };
 layout(location = 0) rayPayloadInEXT RayPayload payload;
 

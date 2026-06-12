@@ -83,18 +83,6 @@ static void load_rt_function_pointers(VkDevice device)
 }
 
 // ============================================================================
-// Tetrahedron geometry (4 vertices, 4 triangles)
-// ============================================================================
-
-static const float TETRA_VERTICES[4][3] = {
-	{0.0f, 1.0f, 0.0f},
-	{0.0f, -0.333333f, 0.942809f},
-	{-0.816497f, -0.333333f, -0.471405f},
-	{0.816497f, -0.333333f, -0.471405f},
-};
-static const uint32_t TETRA_INDICES[12] = {0, 1, 2, 0, 2, 3, 0, 3, 1, 1, 3, 2};
-
-// ============================================================================
 // Helpers
 // ============================================================================
 
@@ -115,7 +103,7 @@ static VkDeviceAddress get_buffer_device_address(VkDevice device, VkBuffer buffe
 }
 
 // ============================================================================
-// BLAS — Bottom-Level Acceleration Structure (single tetrahedron)
+// BLAS — Bottom-Level Acceleration Structure (single unit AABB)
 // ============================================================================
 
 void renderer_escape_build_blas(Renderer *r)
@@ -124,42 +112,32 @@ void renderer_escape_build_blas(Renderer *r)
 	VkPhysicalDevice phys = r->core.physicalDevice;
 	load_rt_function_pointers(dev);
 
-	// Vertex buffer (local — destroyed after BLAS build, geometry data baked in)
-	VkDeviceSize vertSize = sizeof(TETRA_VERTICES);
-	VkBuffer vertBuf;
-	VkDeviceMemory vertMem;
-	create_buffer(dev, phys, vertSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vertBuf, &vertMem);
-	update_buffer(dev, vertMem, vertSize, TETRA_VERTICES);
+	// AABB data: unit cube [-1,-1,-1] to [1,1,1]
+	float unit_aabb[6] = {-1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f};
 
-	// Index buffer (local — destroyed after BLAS build)
-	VkDeviceSize idxSize = sizeof(TETRA_INDICES);
-	VkBuffer idxBuffer;
-	VkDeviceMemory idxMemory;
-	create_buffer(dev, phys, idxSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &idxBuffer, &idxMemory);
-	update_buffer(dev, idxMemory, idxSize, TETRA_INDICES);
+	// AABB buffer (local — destroyed after BLAS build)
+	VkDeviceSize aabbSize = sizeof(unit_aabb);
+	VkBuffer aabbBuf;
+	VkDeviceMemory aabbMem;
+	create_buffer(dev, phys, aabbSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &aabbBuf, &aabbMem);
+	update_buffer(dev, aabbMem, aabbSize, unit_aabb);
 
-	// Get device addresses
-	VkBufferDeviceAddressInfoKHR vertAddrInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = vertBuf};
-	VkDeviceAddress vertAddr = pfnGetBufferDeviceAddressKHR(dev, &vertAddrInfo);
-	VkBufferDeviceAddressInfoKHR idxAddrInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = idxBuffer};
-	VkDeviceAddress idxAddr = pfnGetBufferDeviceAddressKHR(dev, &idxAddrInfo);
+	// Device address
+	VkBufferDeviceAddressInfoKHR aabbAddrInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = aabbBuf};
+	VkDeviceAddress aabbAddr = pfnGetBufferDeviceAddressKHR(dev, &aabbAddrInfo);
 
-	// Geometry definition
-	VkAccelerationStructureGeometryTrianglesDataKHR triData = {
-		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
-		.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
-		.vertexData.deviceAddress = vertAddr,
-		.vertexStride = sizeof(float) * 3,
-		.maxVertex = 3,
-		.indexType = VK_INDEX_TYPE_UINT32,
-		.indexData.deviceAddress = idxAddr,
+	// Geometry definition (AABBs)
+	VkAccelerationStructureGeometryAabbsDataKHR aabbData = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR,
+		.data.deviceAddress = aabbAddr,
+		.stride = sizeof(float) * 6,
 	};
 
 	VkAccelerationStructureGeometryKHR geometry = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-		.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
+		.geometryType = VK_GEOMETRY_TYPE_AABBS_KHR,
 		.flags = 0,
-		.geometry.triangles = triData,
+		.geometry.aabbs = aabbData,
 	};
 
 	// Build size query
@@ -171,7 +149,7 @@ void renderer_escape_build_blas(Renderer *r)
 		.pGeometries = &geometry,
 	};
 
-	uint32_t primCount = 4;
+	uint32_t primCount = 1;
 	VkAccelerationStructureBuildSizesInfoKHR sizeInfo = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
 	};
@@ -198,7 +176,7 @@ void renderer_escape_build_blas(Renderer *r)
 	buildInfo.dstAccelerationStructure = r->escape_blas;
 	buildInfo.scratchData.deviceAddress = scratchAddr;
 
-	VkAccelerationStructureBuildRangeInfoKHR rangeInfo = {.primitiveCount = 4};
+	VkAccelerationStructureBuildRangeInfoKHR rangeInfo = {.primitiveCount = 1};
 	const VkAccelerationStructureBuildRangeInfoKHR *pRangeInfo = &rangeInfo;
 
 	// Build BLAS
@@ -228,12 +206,11 @@ void renderer_escape_build_blas(Renderer *r)
 	};
 	r->escape_blas_device_address = pfnGetAccelerationStructureDeviceAddressKHR(dev, &addrInfo);
 
-	// Clean up scratch + index + vertex buffers (no longer needed)
+	// Clean up scratch + AABB buffer (no longer needed)
 	VK_DESTROY_BUFFER(dev, r->escape_tlas_scratch_buffer, r->escape_tlas_scratch_memory);
-	VK_DESTROY_BUFFER(dev, idxBuffer, idxMemory);
-	VK_DESTROY_BUFFER(dev, vertBuf, vertMem);
+	VK_DESTROY_BUFFER(dev, aabbBuf, aabbMem);
 
-	fprintf(stderr, "[Escape RT] BLAS built: handle=%lu\n", (unsigned long)r->escape_blas);
+	fprintf(stderr, "[Escape RT] BLAS built (AABB): handle=%lu\n", (unsigned long)r->escape_blas);
 }
 
 // ============================================================================
@@ -259,7 +236,7 @@ void renderer_escape_build_tlas(Renderer *r, GraphData *data, uint32_t node_coun
 		float px = data->nodes[i].position[0];
 		float py = data->nodes[i].position[1];
 		float pz = data->nodes[i].position[2];
-		float scale = 4.0f * log2f((float)data->nodes[i].degree + 2.0f) * 0.5f;
+		float scale = 2.0f * log2f((float)data->nodes[i].degree + 2.0f) * 0.5f;
 
 		VkTransformMatrixKHR transform = {{
 			{scale, 0.0f, 0.0f, px},
@@ -368,7 +345,7 @@ void renderer_escape_create_rt_pipeline(Renderer *r, VkBuffer physics_buffer)
 
 	// --- Descriptor set layout ---
 	VkDescriptorSetLayoutBinding bindings[] = {
-		{0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, NULL}, {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ANY_HIT_BIT_KHR, NULL}, {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ANY_HIT_BIT_KHR, NULL}, {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ANY_HIT_BIT_KHR, NULL},
+		{0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, NULL}, {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR, NULL}, {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR, NULL}, {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR, NULL},
 	};
 	VkDescriptorSetLayoutCreateInfo layoutInfo = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,

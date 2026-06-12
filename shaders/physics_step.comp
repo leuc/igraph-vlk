@@ -34,24 +34,7 @@ void main() {
 	uint id = gl_GlobalInvocationID.x;
 	if (id >= params.node_count) return;
 
-	float freedom = nodes[id].freedom.x;
-	bool is_awake = (nodes[id].freedom.w > 0.5);
-
-	if (is_awake) {
-		if (freedom < 0.01 || freedom > 0.99) {
-			is_awake = false;
-		}
-	} else {
-		if (freedom > 0.01 && freedom < 0.99) {
-			is_awake = true;
-		}
-	}
-
-	nodes[id].freedom.w = is_awake ? 1.0 : 0.0;
-
-	if (!is_awake) {
-		return;
-	}
+	nodes[id].freedom.w = 1.0;
 
 	vec3 pos = nodes[id].position.xyz;
 	vec3 escape_force = nodes[id].escape_vector.xyz;
