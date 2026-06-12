@@ -322,7 +322,7 @@ void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, i
 
 	r->yhrt_KP = powf(r->yhrt_K, 1.0f - r->yhrt_p);
 	r->yhrt_CRK = powf(IGRAPH_YHU_C, (2.0f - r->yhrt_p) / 3.0f) / r->yhrt_K;
-	r->yhrt_R = fminf(2.0f * r->yhrt_K, 5.0f);
+	r->yhrt_R = 5.0f * r->yhrt_K;
 
 	printf("[YHRT] Starting: vcount=%u ecount=%u K=%.4f R=%.4f KP=%.4f CRK=%.4f\n", r->yhrt_vcount, r->yhrt_ecount, r->yhrt_K, r->yhrt_R, r->yhrt_KP, r->yhrt_CRK);
 
