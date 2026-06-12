@@ -26,6 +26,8 @@ layout(push_constant) uniform PC {
 }
 pc;
 
+shared float reduction[gl_WorkGroupSize.x];
+
 void main()
 {
 	uint i = gl_GlobalInvocationID.x;
@@ -39,7 +41,20 @@ void main()
 		f = f / fmag;
 	}
 
-	atomicAdd(global_fnorm, fmag);
+	uint localIdx = gl_LocalInvocationID.x;
+	reduction[localIdx] = fmag;
+	barrier();
+
+	for (uint s = gl_WorkGroupSize.x / 2; s > 0; s >>= 1) {
+		if (localIdx < s) {
+			reduction[localIdx] += reduction[localIdx + s];
+		}
+		barrier();
+	}
+
+	if (localIdx == 0) {
+		atomicAdd(global_fnorm, reduction[0]);
+	}
 
 	nodes[i].xyz += pc.step_size * f;
 	forces[i] = vec4(0.0);
