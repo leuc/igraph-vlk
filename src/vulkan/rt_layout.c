@@ -37,7 +37,10 @@ static void yhrt_load_rt_functions(Renderer *r)
 	rt_funcs.GetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(r->core.device, "vkGetAccelerationStructureBuildSizesKHR");
 	rt_funcs.CmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(r->core.device, "vkCmdBuildAccelerationStructuresKHR");
 	rt_funcs.GetAccelerationStructureDeviceAddressKHR = (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetDeviceProcAddr(r->core.device, "vkGetAccelerationStructureDeviceAddressKHR");
-	rt_funcs.GetBufferDeviceAddressKHR = (PFN_vkGetBufferDeviceAddressKHR)vkGetDeviceProcAddr(r->core.device, "vkGetBufferDeviceAddressKHR");
+	// vkGetBufferDeviceAddress: KHR promoted to core in 1.2; loaders only register core name
+	rt_funcs.GetBufferDeviceAddressKHR = (PFN_vkGetBufferDeviceAddressKHR)vkGetDeviceProcAddr(r->core.device, "vkGetBufferDeviceAddress");
+	if (!rt_funcs.GetBufferDeviceAddressKHR)
+		rt_funcs.GetBufferDeviceAddressKHR = (PFN_vkGetBufferDeviceAddressKHR)vkGetDeviceProcAddr(r->core.device, "vkGetBufferDeviceAddressKHR");
 }
 
 // ============================================================================
@@ -206,6 +209,69 @@ void yhrt_init_pipelines(Renderer *r)
 	r->yhrt_update_fp64_pipeline = VK_NULL_HANDLE;
 	r->yhrt_update_instances_pipeline = VK_NULL_HANDLE;
 	r->yhrt_desc_pool = VK_NULL_HANDLE;
+
+	if (!r->yhrt_supported) {
+		printf("[YHRT] Ray tracing not supported, layout disabled\n");
+		return;
+	}
+
+	yhrt_load_rt_functions(r);
+
+	// Descriptor set layout: 6 bindings
+	VkDescriptorSetLayoutBinding bindings[6] = {
+		{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {3, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+	};
+	VkDescriptorSetLayoutCreateInfo layoutInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 6, .pBindings = bindings};
+	VK_CHECK(vkCreateDescriptorSetLayout(r->core.device, &layoutInfo, NULL, &r->yhrt_desc_set_layout), "Failed to create YHRT descriptor set layout");
+
+	VkPushConstantRange pcRange = {.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = 28};
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->yhrt_desc_set_layout, .pushConstantRangeCount = 1, .pPushConstantRanges = &pcRange};
+	VK_CHECK(vkCreatePipelineLayout(r->core.device, &pipelineLayoutInfo, NULL, &r->yhrt_pipeline_layout), "Failed to create YHRT pipeline layout");
+
+	VkShaderModule repModule = VK_NULL_HANDLE;
+	VK_CHECK(create_shader_module(r->core.device, YHRT_REPULSION_COMP_SHADER_PATH, &repModule), "Failed to create YHRT repulsion shader module");
+	VkPipelineShaderStageCreateInfo repStage = VK_SHADER_STAGE_COMP(repModule);
+	VkComputePipelineCreateInfo repPipeInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = repStage, .layout = r->yhrt_pipeline_layout};
+	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &repPipeInfo, NULL, &r->yhrt_repulsion_pipeline), "Failed to create YHRT repulsion pipeline");
+	vkDestroyShaderModule(r->core.device, repModule, NULL);
+
+	VkShaderModule attModule = VK_NULL_HANDLE;
+	VK_CHECK(create_shader_module(r->core.device, YHRT_ATTRACTION_COMP_SHADER_PATH, &attModule), "Failed to create YHRT attraction shader module");
+	VkPipelineShaderStageCreateInfo attStage = VK_SHADER_STAGE_COMP(attModule);
+	VkComputePipelineCreateInfo attPipeInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = attStage, .layout = r->yhrt_pipeline_layout};
+	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &attPipeInfo, NULL, &r->yhrt_attraction_pipeline), "Failed to create YHRT attraction pipeline");
+	vkDestroyShaderModule(r->core.device, attModule, NULL);
+
+	VkShaderModule updModule = VK_NULL_HANDLE;
+	VK_CHECK(create_shader_module(r->core.device, YHRT_UPDATE_COMP_SHADER_PATH, &updModule), "Failed to create YHRT update shader module");
+	VkPipelineShaderStageCreateInfo updStage = VK_SHADER_STAGE_COMP(updModule);
+	VkComputePipelineCreateInfo updPipeInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = updStage, .layout = r->yhrt_pipeline_layout};
+	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &updPipeInfo, NULL, &r->yhrt_update_pipeline), "Failed to create YHRT update pipeline");
+	vkDestroyShaderModule(r->core.device, updModule, NULL);
+
+	if (r->core.fp64_atomics_supported) {
+		VkShaderModule updFp64Module = VK_NULL_HANDLE;
+		if (create_shader_module(r->core.device, YHRT_UPDATE_FP64_COMP_SHADER_PATH, &updFp64Module) == VK_SUCCESS) {
+			VkPipelineShaderStageCreateInfo updFp64Stage = VK_SHADER_STAGE_COMP(updFp64Module);
+			VkComputePipelineCreateInfo updFp64PipeInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = updFp64Stage, .layout = r->yhrt_pipeline_layout};
+			VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &updFp64PipeInfo, NULL, &r->yhrt_update_fp64_pipeline), "Failed to create YHRT FP64 update pipeline");
+			vkDestroyShaderModule(r->core.device, updFp64Module, NULL);
+		} else {
+			r->yhrt_update_fp64_pipeline = VK_NULL_HANDLE;
+			fprintf(stderr, "[YHRT] Warning: FP64 shader compilation failed\n");
+		}
+	} else {
+		r->yhrt_update_fp64_pipeline = VK_NULL_HANDLE;
+	}
+
+	VkShaderModule uiModule = VK_NULL_HANDLE;
+	VK_CHECK(create_shader_module(r->core.device, YHRT_UPDATE_INSTANCES_COMP_SHADER_PATH, &uiModule), "Failed to create YHRT update instances shader module");
+	VkPipelineShaderStageCreateInfo uiStage = VK_SHADER_STAGE_COMP(uiModule);
+	VkComputePipelineCreateInfo uiPipeInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = uiStage, .layout = r->yhrt_pipeline_layout};
+	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &uiPipeInfo, NULL, &r->yhrt_update_instances_pipeline), "Failed to create YHRT update instances pipeline");
+	vkDestroyShaderModule(r->core.device, uiModule, NULL);
+
+	printf("[YHRT] Pipelines initialized successfully\n");
 }
 
 // ============================================================================
@@ -218,6 +284,9 @@ void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, i
 		fprintf(stderr, "[YHRT] Cannot start: ray tracing not supported\n");
 		return;
 	}
+
+	// Load RT function pointers (needed for buffer/AS operations)
+	yhrt_load_rt_functions(r);
 
 	// Clean up any previous session
 	yhrt_cleanup_session_buffers(r);

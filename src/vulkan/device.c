@@ -315,14 +315,19 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 		free(devExts);
 	}
 
-	// Check for FP64 atomic add support in VK_EXT_shader_atomic_float
+	// Check for FP64 support (shaderFloat64 base feature + atomic add extension)
 	core->fp64_atomics_supported = false;
 	{
+		VkPhysicalDeviceFeatures baseFeatures;
+		vkGetPhysicalDeviceFeatures(core->physicalDevice, &baseFeatures);
+
 		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT queriedFloatFeatures = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT};
 		VkPhysicalDeviceFeatures2 queryFeatures = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &queriedFloatFeatures};
 		vkGetPhysicalDeviceFeatures2(core->physicalDevice, &queryFeatures);
-		if (queriedFloatFeatures.shaderBufferFloat64AtomicAdd) {
+		printf("[Vulkan] FP64 query: shaderFloat64=%d shaderBufferFloat64Atomics=%d shaderBufferFloat64AtomicAdd=%d\n", baseFeatures.shaderFloat64, queriedFloatFeatures.shaderBufferFloat64Atomics, queriedFloatFeatures.shaderBufferFloat64AtomicAdd);
+		if (baseFeatures.shaderFloat64 && queriedFloatFeatures.shaderBufferFloat64Atomics && queriedFloatFeatures.shaderBufferFloat64AtomicAdd) {
 			printf("[Vulkan] FP64 atomicAdd supported, enabling for YHRT layout\n");
+			deviceFeatures.shaderFloat64 = VK_TRUE;
 			atomicFloatFeatures.shaderBufferFloat64Atomics = VK_TRUE;
 			atomicFloatFeatures.shaderBufferFloat64AtomicAdd = VK_TRUE;
 			core->fp64_atomics_supported = true;
