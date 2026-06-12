@@ -444,11 +444,25 @@ void renderer_escape_create_rt_pipeline(Renderer *r, VkBuffer physics_buffer)
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR rtProps = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR,
 	};
+	VkPhysicalDeviceAccelerationStructurePropertiesKHR asProps = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR,
+	};
 	VkPhysicalDeviceProperties2 props2 = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
 		.pNext = &rtProps,
 	};
+	rtProps.pNext = &asProps;
 	vkGetPhysicalDeviceProperties2(r->core.physicalDevice, &props2);
+
+	fprintf(stderr, "[Escape RT] AccelerationStructureProperties:\n");
+	fprintf(stderr, "  maxGeometryCount                                         = %lu\n", (unsigned long)asProps.maxGeometryCount);
+	fprintf(stderr, "  maxInstanceCount                                         = %lu\n", (unsigned long)asProps.maxInstanceCount);
+	fprintf(stderr, "  maxPrimitiveCount                                        = %lu\n", (unsigned long)asProps.maxPrimitiveCount);
+	fprintf(stderr, "  maxPerStageDescriptorAccelerationStructures              = %u\n", asProps.maxPerStageDescriptorAccelerationStructures);
+	fprintf(stderr, "  maxPerStageDescriptorUpdateAfterBindAccelerationStructures = %u\n", asProps.maxPerStageDescriptorUpdateAfterBindAccelerationStructures);
+	fprintf(stderr, "  maxDescriptorSetAccelerationStructures                   = %u\n", asProps.maxDescriptorSetAccelerationStructures);
+	fprintf(stderr, "  maxDescriptorSetUpdateAfterBindAccelerationStructures    = %u\n", asProps.maxDescriptorSetUpdateAfterBindAccelerationStructures);
+	fprintf(stderr, "  minAccelerationStructureScratchOffsetAlignment           = %u\n", asProps.minAccelerationStructureScratchOffsetAlignment);
 
 	r->escape_rt_handle_size = rtProps.shaderGroupHandleSize;
 	r->escape_rt_handle_alignment = rtProps.shaderGroupHandleAlignment;
@@ -702,9 +716,6 @@ void renderer_escape_update_tlas_cpu(Renderer *r, uint32_t node_count)
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
 	};
 	pfnGetAccelerationStructureBuildSizesKHR(dev, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primCount, &sizeInfo);
-
-	fprintf(stderr, "[Escape RT] TLAS update buildInfo: type=%u flags=0x%x geometryCount=%u primCount=%u\n", buildInfo.type, buildInfo.flags, buildInfo.geometryCount, primCount);
-	fprintf(stderr, "[Escape RT] TLAS update sizeInfo: accelStructSize=%zu scratchSize=%zu updateScratchSize=%zu\n", sizeInfo.accelerationStructureSize, sizeInfo.buildScratchSize, sizeInfo.updateScratchSize);
 
 	// Recreate TLAS buffer
 	VK_DESTROY_BUFFER(dev, r->escape_tlas_buffer, r->escape_tlas_memory);
