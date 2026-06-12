@@ -161,6 +161,38 @@ static uint64_t yhrt_get_as_address(Renderer *r, VkAccelerationStructureKHR as)
 }
 
 // ============================================================================
+// K Computation (matches igraph's auto-computed natural length)
+// ============================================================================
+
+static float yhrt_compute_igraph_K(igraph_integer_t vcount, igraph_integer_t ecount, igraph_t *graph)
+{
+	igraph_matrix_t coords;
+	igraph_matrix_init(&coords, vcount, 3);
+	igraph_rng_seed(igraph_rng_default(), 42);
+	for (igraph_integer_t i = 0; i < vcount; i++) {
+		MATRIX(coords, i, 0) = RNG_UNIF(-1.0, 1.0);
+		MATRIX(coords, i, 1) = RNG_UNIF(-1.0, 1.0);
+		MATRIX(coords, i, 2) = RNG_UNIF(-1.0, 1.0);
+	}
+
+	float total_len = 0.0f;
+	for (igraph_integer_t e = 0; e < ecount; e++) {
+		igraph_integer_t from = IGRAPH_FROM(graph, e);
+		igraph_integer_t to = IGRAPH_TO(graph, e);
+		float dx = (float)(MATRIX(coords, from, 0) - MATRIX(coords, to, 0));
+		float dy = (float)(MATRIX(coords, from, 1) - MATRIX(coords, to, 1));
+		float dz = (float)(MATRIX(coords, from, 2) - MATRIX(coords, to, 2));
+		total_len += sqrtf(dx * dx + dy * dy + dz * dz);
+	}
+	igraph_matrix_destroy(&coords);
+
+	float K = (ecount > 0) ? (total_len / ecount) : 1.0f;
+	if (K < 1e-6f)
+		K = 1.0f;
+	return K;
+}
+
+// ============================================================================
 // One-Shot Helpers
 // ============================================================================
 
@@ -377,20 +409,7 @@ void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, i
 	r->yhrt_p = 1.0f;
 	r->yhrt_fnorm_readback_pending = false;
 
-	// Compute average edge length K
-	float total_len = 0.0f;
-	for (igraph_integer_t e = 0; e < ecount; e++) {
-		igraph_integer_t from = IGRAPH_FROM(graph, e);
-		igraph_integer_t to = IGRAPH_TO(graph, e);
-		float dx = (float)(MATRIX(*init_positions, from, 0) - MATRIX(*init_positions, to, 0));
-		float dy = (float)(MATRIX(*init_positions, from, 1) - MATRIX(*init_positions, to, 1));
-		float dz = (ecount > 0 && igraph_matrix_ncol(init_positions) > 2) ? (float)(MATRIX(*init_positions, from, 2) - MATRIX(*init_positions, to, 2)) : 0.0f;
-		total_len += sqrtf(dx * dx + dy * dy + dz * dz);
-	}
-	r->yhrt_K = (ecount > 0) ? (total_len / ecount) : 1.0f;
-	if (r->yhrt_K < 1e-6f)
-		r->yhrt_K = 1.0f;
-
+	r->yhrt_K = yhrt_compute_igraph_K(vcount, ecount, graph);
 	r->yhrt_KP = powf(r->yhrt_K, 1.0f - r->yhrt_p);
 	r->yhrt_CRK = powf(IGRAPH_YHU_C, (2.0f - r->yhrt_p) / 3.0f) / r->yhrt_K;
 	r->yhrt_R = 5.0f * r->yhrt_K;
@@ -693,6 +712,9 @@ bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd)
 		r->yhrt_Fnorm0 = fnorm;
 	}
 
+	if (r->yhrt_step < r->yhrt_tolerance)
+		return false;
+
 	// ---- Reset Fnorm via GPU fill (avoids CPU/GPU race on staging buffer) ----
 	vkCmdFillBuffer(cmd, r->yhrt_fnorm_buf, 0, sizeof(double), 0);
 	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
@@ -888,18 +910,7 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 	r->yhrt_p = 1.0f;
 	r->yhrt_fnorm_readback_pending = false;
 
-	float total_len = 0.0f;
-	for (igraph_integer_t e = 0; e < ecount; e++) {
-		igraph_integer_t from = IGRAPH_FROM(graph, e);
-		igraph_integer_t to = IGRAPH_TO(graph, e);
-		float dx = (float)(MATRIX(*init_positions, from, 0) - MATRIX(*init_positions, to, 0));
-		float dy = (float)(MATRIX(*init_positions, from, 1) - MATRIX(*init_positions, to, 1));
-		float dz = (igraph_matrix_ncol(init_positions) > 2) ? (float)(MATRIX(*init_positions, from, 2) - MATRIX(*init_positions, to, 2)) : 0.0f;
-		total_len += sqrtf(dx * dx + dy * dy + dz * dz);
-	}
-	r->yhrt_K = (ecount > 0) ? (total_len / ecount) : 1.0f;
-	if (r->yhrt_K < 1e-6f)
-		r->yhrt_K = 1.0f;
+	r->yhrt_K = yhrt_compute_igraph_K(vcount, ecount, graph);
 	r->yhrt_KP = powf(r->yhrt_K, 1.0f - r->yhrt_p);
 	r->yhrt_CRK = powf(IGRAPH_YHU_C, (2.0f - r->yhrt_p) / 3.0f) / r->yhrt_K;
 	r->yhrt_R = 5.0f * r->yhrt_K;
@@ -1186,6 +1197,9 @@ bool yhrt_worker_step(Renderer *r)
 		}
 		r->yhrt_Fnorm0 = fnorm;
 	}
+
+	if (r->yhrt_step < r->yhrt_tolerance)
+		return false;
 
 	VkCommandBuffer cmd = r->yhrt_cmd_buf;
 	VK_CHECK(vkResetCommandBuffer(cmd, 0), "Failed to reset YHRT worker cmd");

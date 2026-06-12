@@ -53,8 +53,7 @@ void main()
 					d2 = dot(diff, diff);
 				}
 				float dist = sqrt(d2);
-				float mass = nodes[j].pos.w;
-				float scale = (pc.KP / pow(dist, pc.p + 1.0)) * mass;
+				float scale = pc.KP / pow(dist, pc.p + 1.0);
 				if (isinf(scale) || isnan(scale))
 					scale = 1e10;
 				force += scale * diff;
