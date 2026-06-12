@@ -144,7 +144,7 @@ void renderer_escape_build_blas(Renderer *r)
 	VkAccelerationStructureBuildGeometryInfoKHR buildInfo = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 		.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR,
 		.geometryCount = 1,
 		.pGeometries = &geometry,
 	};
@@ -154,6 +154,9 @@ void renderer_escape_build_blas(Renderer *r)
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
 	};
 	pfnGetAccelerationStructureBuildSizesKHR(dev, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primCount, &sizeInfo);
+
+	fprintf(stderr, "[Escape RT] BLAS buildInfo: type=%u flags=0x%x geometryCount=%u primCount=%u\n", buildInfo.type, buildInfo.flags, buildInfo.geometryCount, primCount);
+	fprintf(stderr, "[Escape RT] BLAS sizeInfo: accelStructSize=%zu scratchSize=%zu updateScratchSize=%zu\n", sizeInfo.accelerationStructureSize, sizeInfo.buildScratchSize, sizeInfo.updateScratchSize);
 
 	// AS storage buffer
 	create_buffer(dev, phys, sizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->escape_blas_buffer, &r->escape_blas_memory);
@@ -273,7 +276,7 @@ void renderer_escape_build_tlas(Renderer *r, GraphData *data, uint32_t node_coun
 	VkAccelerationStructureBuildGeometryInfoKHR buildInfo = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 		.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
+		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
 		.geometryCount = 1,
 		.pGeometries = &geometry,
 	};
@@ -283,6 +286,9 @@ void renderer_escape_build_tlas(Renderer *r, GraphData *data, uint32_t node_coun
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
 	};
 	pfnGetAccelerationStructureBuildSizesKHR(dev, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primCount, &sizeInfo);
+
+	fprintf(stderr, "[Escape RT] TLAS buildInfo: type=%u flags=0x%x geometryCount=%u primCount=%u\n", buildInfo.type, buildInfo.flags, buildInfo.geometryCount, primCount);
+	fprintf(stderr, "[Escape RT] TLAS sizeInfo: accelStructSize=%zu scratchSize=%zu updateScratchSize=%zu\n", sizeInfo.accelerationStructureSize, sizeInfo.buildScratchSize, sizeInfo.updateScratchSize);
 
 	// AS storage buffer
 	create_buffer(dev, phys, sizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->escape_tlas_buffer, &r->escape_tlas_memory);
@@ -686,7 +692,7 @@ void renderer_escape_update_tlas_cpu(Renderer *r, uint32_t node_count)
 	VkAccelerationStructureBuildGeometryInfoKHR buildInfo = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 		.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR,
 		.geometryCount = 1,
 		.pGeometries = &geometry,
 	};
@@ -696,6 +702,9 @@ void renderer_escape_update_tlas_cpu(Renderer *r, uint32_t node_count)
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
 	};
 	pfnGetAccelerationStructureBuildSizesKHR(dev, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primCount, &sizeInfo);
+
+	fprintf(stderr, "[Escape RT] TLAS update buildInfo: type=%u flags=0x%x geometryCount=%u primCount=%u\n", buildInfo.type, buildInfo.flags, buildInfo.geometryCount, primCount);
+	fprintf(stderr, "[Escape RT] TLAS update sizeInfo: accelStructSize=%zu scratchSize=%zu updateScratchSize=%zu\n", sizeInfo.accelerationStructureSize, sizeInfo.buildScratchSize, sizeInfo.updateScratchSize);
 
 	// Recreate TLAS buffer
 	VK_DESTROY_BUFFER(dev, r->escape_tlas_buffer, r->escape_tlas_memory);
