@@ -165,6 +165,7 @@ typedef struct
 	int graphicsQueueFamily;
 	int presentQueueFamily;
 	VkPhysicalDeviceProperties deviceProperties;
+	bool fp64_atomics_supported;
 } VulkanCore;
 
 typedef struct
@@ -337,6 +338,7 @@ typedef struct Renderer
 	// Yifan Hu RT Layout
 	bool yhrt_active;
 	bool yhrt_supported;
+	bool yhrt_fp64_supported;
 	bool yhrt_fnorm_readback_pending;
 	int yhrt_current_iter;
 	int yhrt_maxiter;
@@ -377,6 +379,7 @@ typedef struct Renderer
 	VkPipeline yhrt_repulsion_pipeline;
 	VkPipeline yhrt_attraction_pipeline;
 	VkPipeline yhrt_update_pipeline;
+	VkPipeline yhrt_update_fp64_pipeline;
 	VkPipeline yhrt_update_instances_pipeline;
 	VkFence yhrt_dispatch_fence;
 

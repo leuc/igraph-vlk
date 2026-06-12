@@ -12,7 +12,7 @@ layout(std430, binding = 1) buffer ForceBuffer {
 };
 
 layout(std430, binding = 4) buffer FnormBuffer {
-	float global_fnorm;
+	double global_fnorm;
 };
 
 layout(push_constant) uniform PC {
@@ -26,7 +26,7 @@ layout(push_constant) uniform PC {
 }
 pc;
 
-shared float reduction[gl_WorkGroupSize.x];
+shared double reduction[gl_WorkGroupSize.x];
 
 void main()
 {
@@ -44,8 +44,7 @@ void main()
 		}
 	}
 
-	// Divide by vertex_count to keep accumulator within float32 precision
-	reduction[localIdx] = fmag / float(pc.vertex_count);
+	reduction[localIdx] = double(fmag);
 	barrier();
 
 	for (uint s = gl_WorkGroupSize.x / 2; s > 0; s >>= 1) {

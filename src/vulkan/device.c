@@ -315,6 +315,22 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 		free(devExts);
 	}
 
+	// Check for FP64 atomic add support in VK_EXT_shader_atomic_float
+	core->fp64_atomics_supported = false;
+	{
+		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT queriedFloatFeatures = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT};
+		VkPhysicalDeviceFeatures2 queryFeatures = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &queriedFloatFeatures};
+		vkGetPhysicalDeviceFeatures2(core->physicalDevice, &queryFeatures);
+		if (queriedFloatFeatures.shaderBufferFloat64AtomicAdd) {
+			printf("[Vulkan] FP64 atomicAdd supported, enabling for YHRT layout\n");
+			atomicFloatFeatures.shaderBufferFloat64Atomics = VK_TRUE;
+			atomicFloatFeatures.shaderBufferFloat64AtomicAdd = VK_TRUE;
+			core->fp64_atomics_supported = true;
+		} else {
+			printf("[Vulkan] FP64 atomicAdd NOT supported, using 32-bit fallback for YHRT\n");
+		}
+	}
+
 	// Chain RT feature structs if supported
 	VkPhysicalDeviceBufferDeviceAddressFeaturesKHR bufAddrFeatures = {0};
 	VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {0};

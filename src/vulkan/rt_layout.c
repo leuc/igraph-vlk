@@ -157,78 +157,7 @@ static uint64_t yhrt_get_as_address(Renderer *r, VkAccelerationStructureKHR as)
 }
 
 // ============================================================================
-// Pipeline Initialization (called once)
-// ============================================================================
-
-void yhrt_init_pipelines(Renderer *r)
-{
-	r->yhrt_supported = yhrt_check_support(r->core.physicalDevice);
-	r->yhrt_active = false;
-	r->yhrt_desc_set_layout = VK_NULL_HANDLE;
-	r->yhrt_pipeline_layout = VK_NULL_HANDLE;
-	r->yhrt_repulsion_pipeline = VK_NULL_HANDLE;
-	r->yhrt_attraction_pipeline = VK_NULL_HANDLE;
-	r->yhrt_update_pipeline = VK_NULL_HANDLE;
-	r->yhrt_update_instances_pipeline = VK_NULL_HANDLE;
-
-	if (!r->yhrt_supported) {
-		printf("[YHRT] Ray tracing not supported, layout disabled\n");
-		return;
-	}
-
-	yhrt_load_rt_functions(r);
-
-	// Descriptor set layout: 6 bindings
-	VkDescriptorSetLayoutBinding bindings[6] = {
-		{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},			  // node
-		{1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},			  // force
-		{2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},			  // edge
-		{3, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, // tlas
-		{4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},			  // fnorm
-		{5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},			  // instance
-	};
-	VkDescriptorSetLayoutCreateInfo layoutInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 6, .pBindings = bindings};
-	VK_CHECK(vkCreateDescriptorSetLayout(r->core.device, &layoutInfo, NULL, &r->yhrt_desc_set_layout), "Failed to create YHRT descriptor set layout");
-
-	// Pipeline layout with push constants (28 bytes: 6 floats + 2 uint32s + 1 float)
-	VkPushConstantRange pcRange = {.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = 28};
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->yhrt_desc_set_layout, .pushConstantRangeCount = 1, .pPushConstantRanges = &pcRange};
-	VK_CHECK(vkCreatePipelineLayout(r->core.device, &pipelineLayoutInfo, NULL, &r->yhrt_pipeline_layout), "Failed to create YHRT pipeline layout");
-
-	// Create 3 compute pipelines
-	VkShaderModule repModule = VK_NULL_HANDLE;
-	VK_CHECK(create_shader_module(r->core.device, YHRT_REPULSION_COMP_SHADER_PATH, &repModule), "Failed to create YHRT repulsion shader module");
-	VkPipelineShaderStageCreateInfo repStage = VK_SHADER_STAGE_COMP(repModule);
-	VkComputePipelineCreateInfo repPipeInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = repStage, .layout = r->yhrt_pipeline_layout};
-	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &repPipeInfo, NULL, &r->yhrt_repulsion_pipeline), "Failed to create YHRT repulsion pipeline");
-	vkDestroyShaderModule(r->core.device, repModule, NULL);
-
-	VkShaderModule attModule = VK_NULL_HANDLE;
-	VK_CHECK(create_shader_module(r->core.device, YHRT_ATTRACTION_COMP_SHADER_PATH, &attModule), "Failed to create YHRT attraction shader module");
-	VkPipelineShaderStageCreateInfo attStage = VK_SHADER_STAGE_COMP(attModule);
-	VkComputePipelineCreateInfo attPipeInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = attStage, .layout = r->yhrt_pipeline_layout};
-	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &attPipeInfo, NULL, &r->yhrt_attraction_pipeline), "Failed to create YHRT attraction pipeline");
-	vkDestroyShaderModule(r->core.device, attModule, NULL);
-
-	VkShaderModule updModule = VK_NULL_HANDLE;
-	VK_CHECK(create_shader_module(r->core.device, YHRT_UPDATE_COMP_SHADER_PATH, &updModule), "Failed to create YHRT update shader module");
-	VkPipelineShaderStageCreateInfo updStage = VK_SHADER_STAGE_COMP(updModule);
-	VkComputePipelineCreateInfo updPipeInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = updStage, .layout = r->yhrt_pipeline_layout};
-	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &updPipeInfo, NULL, &r->yhrt_update_pipeline), "Failed to create YHRT update pipeline");
-	vkDestroyShaderModule(r->core.device, updModule, NULL);
-
-	VkShaderModule uiModule = VK_NULL_HANDLE;
-	VK_CHECK(create_shader_module(r->core.device, YHRT_UPDATE_INSTANCES_COMP_SHADER_PATH, &uiModule), "Failed to create YHRT update instances shader module");
-	VkPipelineShaderStageCreateInfo uiStage = VK_SHADER_STAGE_COMP(uiModule);
-	VkComputePipelineCreateInfo uiPipeInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = uiStage, .layout = r->yhrt_pipeline_layout};
-	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &uiPipeInfo, NULL, &r->yhrt_update_instances_pipeline), "Failed to create YHRT update instances pipeline");
-	vkDestroyShaderModule(r->core.device, uiModule, NULL);
-
-	printf("[YHRT] Pipelines initialized successfully\n");
-}
-
-// ============================================================================
-// Cleanup Helper
+// Session Cleanup
 // ============================================================================
 
 static void yhrt_cleanup_session_buffers(Renderer *r)
@@ -262,6 +191,24 @@ static void yhrt_cleanup_session_buffers(Renderer *r)
 }
 
 // ============================================================================
+// Pipeline Initialization (called once)
+// ============================================================================
+
+void yhrt_init_pipelines(Renderer *r)
+{
+	r->yhrt_supported = yhrt_check_support(r->core.physicalDevice);
+	r->yhrt_active = false;
+	r->yhrt_desc_set_layout = VK_NULL_HANDLE;
+	r->yhrt_pipeline_layout = VK_NULL_HANDLE;
+	r->yhrt_repulsion_pipeline = VK_NULL_HANDLE;
+	r->yhrt_attraction_pipeline = VK_NULL_HANDLE;
+	r->yhrt_update_pipeline = VK_NULL_HANDLE;
+	r->yhrt_update_fp64_pipeline = VK_NULL_HANDLE;
+	r->yhrt_update_instances_pipeline = VK_NULL_HANDLE;
+	r->yhrt_desc_pool = VK_NULL_HANDLE;
+}
+
+// ============================================================================
 // Start a New Layout Session
 // ============================================================================
 
@@ -274,6 +221,9 @@ void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, i
 
 	// Clean up any previous session
 	yhrt_cleanup_session_buffers(r);
+
+	// Check FP64 atomic support (from device query)
+	r->yhrt_fp64_supported = r->core.fp64_atomics_supported && (r->yhrt_update_fp64_pipeline != VK_NULL_HANDLE);
 
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_integer_t ecount = igraph_ecount(graph);
@@ -419,15 +369,15 @@ void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, i
 	}
 
 	// ---- FnormBuffer (single float, zeroed) ----
-	yhrt_create_device_buffer(r, sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_fnorm_buf, &r->yhrt_fnorm_mem);
+	yhrt_create_device_buffer(r, sizeof(double), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_fnorm_buf, &r->yhrt_fnorm_mem);
 	// ---- Fnorm staging (host visible for readback) ----
-	yhrt_create_buffer(r, sizeof(float), VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_staging_buf, &r->yhrt_staging_mem);
+	yhrt_create_buffer(r, sizeof(double), VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_staging_buf, &r->yhrt_staging_mem);
 	// Zero fnorm
 	{
-		float zero = 0.0f;
+		double zero = 0.0;
 		void *mapped;
-		VK_CHECK(vkMapMemory(r->core.device, r->yhrt_staging_mem, 0, sizeof(float), 0, &mapped), "Failed to map fnorm staging");
-		memcpy(mapped, &zero, sizeof(float));
+		VK_CHECK(vkMapMemory(r->core.device, r->yhrt_staging_mem, 0, sizeof(double), 0, &mapped), "Failed to map fnorm staging");
+		memcpy(mapped, &zero, sizeof(double));
 		vkUnmapMemory(r->core.device, r->yhrt_staging_mem);
 
 		VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = (uint32_t)r->core.graphicsQueueFamily};
@@ -437,7 +387,7 @@ void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, i
 		VkCommandBuffer cmd;
 		VK_CHECK(vkAllocateCommandBuffers(r->core.device, &cmdInfo, &cmd), "Failed to allocate YHRT fnorm cmd");
 		VK_CHECK(vkBeginCommandBuffer(cmd, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin YHRT fnorm cmd");
-		VkBufferCopy copyRegion = {.size = sizeof(float)};
+		VkBufferCopy copyRegion = {.size = sizeof(double)};
 		vkCmdCopyBuffer(cmd, r->yhrt_staging_buf, r->yhrt_fnorm_buf, 1, &copyRegion);
 		VK_CHECK(vkEndCommandBuffer(cmd), "Failed to end YHRT fnorm cmd");
 		VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cmd};
@@ -699,8 +649,12 @@ bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd)
 	if (r->yhrt_current_iter > 0) {
 		float fnorm = 0.0f;
 		void *mapped;
-		if (vkMapMemory(r->core.device, r->yhrt_staging_mem, 0, sizeof(float), 0, &mapped) == VK_SUCCESS) {
-			fnorm = *(float *)mapped;
+		if (vkMapMemory(r->core.device, r->yhrt_staging_mem, 0, sizeof(double), 0, &mapped) == VK_SUCCESS) {
+			if (r->yhrt_fp64_supported) {
+				fnorm = (float)(*(double *)mapped);
+			} else {
+				fnorm = (*(float *)mapped) * (float)r->yhrt_vcount;
+			}
 			vkUnmapMemory(r->core.device, r->yhrt_staging_mem);
 		}
 
@@ -719,7 +673,7 @@ bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd)
 	}
 
 	// ---- Reset Fnorm via GPU fill (avoids CPU/GPU race on staging buffer) ----
-	vkCmdFillBuffer(cmd, r->yhrt_fnorm_buf, 0, sizeof(float), 0);
+	vkCmdFillBuffer(cmd, r->yhrt_fnorm_buf, 0, sizeof(double), 0);
 	VkMemoryBarrier clrBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT};
 	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &clrBarrier, 0, NULL, 0, NULL);
 
@@ -749,7 +703,8 @@ bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd)
 	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &repBarrier, 0, NULL, 0, NULL);
 
 	// ---- Dispatch update ----
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->yhrt_update_pipeline);
+	VkPipeline updatePipeline = r->yhrt_fp64_supported ? r->yhrt_update_fp64_pipeline : r->yhrt_update_pipeline;
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, updatePipeline);
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->yhrt_pipeline_layout, 0, 1, &r->yhrt_desc_set, 0, NULL);
 	vkCmdPushConstants(cmd, r->yhrt_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, 28, &pc);
 	vkCmdDispatch(cmd, (r->yhrt_vcount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE, 1, 1);
@@ -804,7 +759,7 @@ bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd)
 	if (r->yhrt_current_iter % YHRT_FNORM_READBACK_INTERVAL == 0 || r->yhrt_current_iter >= r->yhrt_maxiter) {
 		VkMemoryBarrier readBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT};
 		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &readBarrier, 0, NULL, 0, NULL);
-		VkBufferCopy fnormCopy = {.size = sizeof(float)};
+		VkBufferCopy fnormCopy = {.size = sizeof(double)};
 		vkCmdCopyBuffer(cmd, r->yhrt_fnorm_buf, r->yhrt_staging_buf, 1, &fnormCopy);
 		r->yhrt_fnorm_readback_pending = true;
 	}
@@ -830,8 +785,13 @@ void yhrt_finish(Renderer *r, GraphData *graph)
 	// Read back final Fnorm if pending (last iteration's value)
 	if (r->yhrt_fnorm_readback_pending) {
 		void *mapped;
-		if (vkMapMemory(r->core.device, r->yhrt_staging_mem, 0, sizeof(float), 0, &mapped) == VK_SUCCESS) {
-			float fnorm = *(float *)mapped;
+		if (vkMapMemory(r->core.device, r->yhrt_staging_mem, 0, sizeof(double), 0, &mapped) == VK_SUCCESS) {
+			float fnorm;
+			if (r->yhrt_fp64_supported) {
+				fnorm = (float)(*(double *)mapped);
+			} else {
+				fnorm = (*(float *)mapped) * (float)r->yhrt_vcount;
+			}
 			vkUnmapMemory(r->core.device, r->yhrt_staging_mem);
 
 			printf("[YHRT] iter=%d (final), step=%g, Fnorm=%g, Fnorm0=%g, repulsive_exp=%g, natlen=%g\n", r->yhrt_current_iter - 1, r->yhrt_step, fnorm, r->yhrt_Fnorm0, r->yhrt_p, r->yhrt_K);
@@ -907,6 +867,8 @@ void yhrt_destroy(Renderer *r)
 
 	if (r->yhrt_update_pipeline != VK_NULL_HANDLE)
 		vkDestroyPipeline(r->core.device, r->yhrt_update_pipeline, NULL);
+	if (r->yhrt_update_fp64_pipeline != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->yhrt_update_fp64_pipeline, NULL);
 	if (r->yhrt_update_instances_pipeline != VK_NULL_HANDLE)
 		vkDestroyPipeline(r->core.device, r->yhrt_update_instances_pipeline, NULL);
 	if (r->yhrt_attraction_pipeline != VK_NULL_HANDLE)

@@ -52,6 +52,7 @@ find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
 	    shaders/yh_repulsion.comp
 	    shaders/yh_attraction.comp
 	    shaders/yh_update.comp
+	    shaders/yh_update_fp64.comp
 	    shaders/yh_update_instances.comp
 	    shaders/ray.vert
 	    shaders/ray.frag
@@ -193,7 +194,8 @@ target_compile_definitions(igraph-vlk PRIVATE
     YHRT_REPULSION_COMP_SHADER_PATH="shaders/yh_repulsion.comp.spv"
     YHRT_ATTRACTION_COMP_SHADER_PATH="shaders/yh_attraction.comp.spv"
     YHRT_UPDATE_COMP_SHADER_PATH="shaders/yh_update.comp.spv"
-    YHRT_UPDATE_INSTANCES_COMP_SHADER_PATH="shaders/yh_update_instances.comp.spv"
+    YHRT_UPDATE_FP64_COMP_SHADER_PATH="shaders/yh_update_fp64.comp.spv"
+	    YHRT_UPDATE_INSTANCES_COMP_SHADER_PATH="shaders/yh_update_instances.comp.spv"
     RAY_VERT_SHADER_PATH="shaders/ray.vert.spv"
     RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv"
 )
