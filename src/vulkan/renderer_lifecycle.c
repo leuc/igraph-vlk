@@ -161,9 +161,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->splc_level_interval = 0.5f;
 	r->splc_active = false;
 
-	// YHRT initialization
-	r->yhrt_active = false;
-	r->yhrt_supported = false;
+	// YHRT initialization handled by yhrt_init_pipelines()
 
 	renderer_update_graph(r, graph);
 	r->labelTreeNeedsRebuild = true;

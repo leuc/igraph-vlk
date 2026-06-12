@@ -51,12 +51,14 @@ bool yhrt_check_support(VkPhysicalDevice device)
 	VkExtensionProperties *devExts = malloc(sizeof(VkExtensionProperties) * devExtCount);
 	vkEnumerateDeviceExtensionProperties(device, NULL, &devExtCount, devExts);
 
+	printf("[YHRT] Checking %u device extensions for RT support...\n", devExtCount);
+
 	const char *required[] = {
-		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, VK_KHR_RAY_QUERY_EXTENSION_NAME, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, VK_KHR_SPIRV_1_4_EXTENSION_NAME,
+		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, VK_KHR_RAY_QUERY_EXTENSION_NAME, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, VK_KHR_SPIRV_1_4_EXTENSION_NAME, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
 	};
 
 	bool supported = true;
-	for (int i = 0; i < 5; i++) {
+	for (int i = 0; i < 6; i++) {
 		bool found = false;
 		for (uint32_t j = 0; j < devExtCount; j++) {
 			if (strcmp(required[i], devExts[j].extensionName) == 0) {
@@ -65,8 +67,10 @@ bool yhrt_check_support(VkPhysicalDevice device)
 			}
 		}
 		if (!found) {
+			fprintf(stderr, "[YHRT] MISSING extension: %s\n", required[i]);
 			supported = false;
-			break;
+		} else {
+			printf("[YHRT]   found: %s\n", required[i]);
 		}
 	}
 	free(devExts);
@@ -301,7 +305,7 @@ void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, i
 
 	// ---- Upload NodeBuffer (vec4: xyz=pos, w=degree) ----
 	VkDeviceSize nodeSize = sizeof(vec4) * vcount;
-	yhrt_create_device_buffer(r, nodeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->yhrt_node_buf, &r->yhrt_node_mem);
+	yhrt_create_device_buffer(r, nodeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &r->yhrt_node_buf, &r->yhrt_node_mem);
 
 	// Staging buffer for initial upload
 	VkBuffer nodeStaging;
@@ -413,7 +417,7 @@ void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, i
 	// ---- FnormBuffer (single float, zeroed) ----
 	yhrt_create_device_buffer(r, sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &r->yhrt_fnorm_buf, &r->yhrt_fnorm_mem);
 	// ---- Fnorm staging (host visible for readback) ----
-	yhrt_create_buffer(r, sizeof(float), VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_staging_buf, &r->yhrt_staging_mem);
+	yhrt_create_buffer(r, sizeof(float), VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_staging_buf, &r->yhrt_staging_mem);
 	// Zero fnorm
 	{
 		float zero = 0.0f;
@@ -503,7 +507,7 @@ void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, i
 
 		barrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
 		barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
-		vkCmdPipelineBarrier(blasCmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 1, &barrier, 0, NULL, 0, NULL);
+		vkCmdPipelineBarrier(blasCmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &barrier, 0, NULL, 0, NULL);
 
 		VK_CHECK(vkEndCommandBuffer(blasCmd), "Failed to end BLAS cmd");
 		VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &blasCmd};
@@ -612,7 +616,7 @@ void yhrt_start(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positions, i
 
 		barrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
 		barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_SHADER_READ_BIT;
-		vkCmdPipelineBarrier(tlasCmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &barrier, 0, NULL, 0, NULL);
+		vkCmdPipelineBarrier(tlasCmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &barrier, 0, NULL, 0, NULL);
 
 		VK_CHECK(vkEndCommandBuffer(tlasCmd), "Failed to end TLAS cmd");
 		VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &tlasCmd};
@@ -736,7 +740,7 @@ bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd)
 
 	// ---- Barrier instance update -> TLAS build ----
 	VkMemoryBarrier instBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_SHADER_READ_BIT};
-	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 1, &instBarrier, 0, NULL, 0, NULL);
+	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &instBarrier, 0, NULL, 0, NULL);
 
 	// ---- Update TLAS with new instance transforms ----
 	{
@@ -767,7 +771,7 @@ bool yhrt_dispatch_step(Renderer *r, VkCommandBuffer cmd)
 
 	// ---- Barrier TLAS build -> compute ----
 	VkMemoryBarrier tlasBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, .dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_SHADER_READ_BIT};
-	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 1, &tlasBarrier, 0, NULL, 0, NULL);
+	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &tlasBarrier, 0, NULL, 0, NULL);
 
 	// Periodic Fnorm readback
 	r->yhrt_current_iter++;

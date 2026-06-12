@@ -28,9 +28,9 @@ static const int BASE_DEVICE_EXTENSION_COUNT = 3;
 
 // Optional ray tracing extensions (checked at runtime before enabling)
 static const char *RT_DEVICE_EXTENSIONS[] = {
-	VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, VK_KHR_SPIRV_1_4_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, VK_KHR_RAY_QUERY_EXTENSION_NAME,
+	VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, VK_KHR_SPIRV_1_4_EXTENSION_NAME, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, VK_KHR_RAY_QUERY_EXTENSION_NAME,
 };
-static const int RT_DEVICE_EXTENSION_COUNT = 5;
+static const int RT_DEVICE_EXTENSION_COUNT = 6;
 
 static int rate_device_suitability(VkPhysicalDevice device)
 {
@@ -285,8 +285,9 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 	};
 	VkPhysicalDeviceDescriptorIndexingFeaturesEXT descIndexingFeatures = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
-		.pNext = &atomicFloatFeatures,
+		.pNext = NULL,
 		.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE,
+		.runtimeDescriptorArray = VK_TRUE,
 	};
 
 	// Check for optional RT extension support by enumerating device extensions
@@ -334,13 +335,17 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 		accelFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
 		accelFeatures.accelerationStructure = VK_TRUE;
 		rayQueryFeatures.pNext = &accelFeatures;
-		pNextTail = &accelFeatures;
+		accelFeatures.pNext = &atomicFloatFeatures;
+		pNextTail = &atomicFloatFeatures;
 
 		// Add RT extensions to device extension list
 		for (int i = 0; i < RT_DEVICE_EXTENSION_COUNT; i++) {
 			deviceExtensions[deviceExtensionCount++] = RT_DEVICE_EXTENSIONS[i];
 		}
 		printf("[Vulkan] Enabling %d ray tracing extensions\n", RT_DEVICE_EXTENSION_COUNT);
+	} else {
+		// Chain atomic float features for non-RT path
+		descIndexingFeatures.pNext = &atomicFloatFeatures;
 	}
 
 	VkDeviceCreateInfo deviceInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .queueCreateInfoCount = queueCreateInfoCount, .pQueueCreateInfos = queueCreateInfos, .enabledExtensionCount = deviceExtensionCount, .ppEnabledExtensionNames = deviceExtensions, .pEnabledFeatures = &deviceFeatures, .pNext = &descIndexingFeatures, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
