@@ -3,10 +3,9 @@
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 struct NodePhysics {
-	vec4 position;         // xyz=pos, w=nodeRadius
-	vec4 escape_vector;    // xyz=escape_dir, w=openness
-	vec4 freedom;          // x=local_freedom [0..1], w=is_awake (1.0 awake, 0.0 asleep)
-	vec4 ideal_target_pos; // xyz=consensus target, w=unused
+	vec4 position;      // xyz=pos, w=nodeRadius
+	vec4 escape_vector; // xyz=escape_dir, w=openness
+	vec4 freedom;       // x=local_freedom [0..1], w=is_awake (1.0 awake, 0.0 asleep)
 };
 
 layout(std430, binding = 0, set = 0) buffer PhysicsBuffer {
@@ -38,58 +37,35 @@ void main() {
 	float freedom = nodes[id].freedom.x;
 	bool is_awake = (nodes[id].freedom.w > 0.5);
 
-	if (!is_awake) {
-		if (freedom < 0.70) {
-			nodes[id].freedom.w = 1.0;
-			is_awake = true;
-		} else {
-			return;
+	const float SLEEP_THRESHOLD = 0.95;
+	const float WAKE_THRESHOLD = 0.70;
+
+	if (is_awake) {
+		if (freedom > SLEEP_THRESHOLD && length(nodes[id].escape_vector.xyz) < 0.01) {
+			is_awake = false;
 		}
+	} else {
+		if (freedom < WAKE_THRESHOLD) {
+			is_awake = true;
+		}
+	}
+
+	nodes[id].freedom.w = is_awake ? 1.0 : 0.0;
+
+	if (!is_awake) {
+		return;
 	}
 
 	vec3 pos = nodes[id].position.xyz;
-	float confidence = length(nodes[id].escape_vector.xyz);
+	vec3 escape_force = nodes[id].escape_vector.xyz;
 
-	vec3 movement = vec3(0.0);
+	uint start_idx = offsets[id];
+	uint count = edge_counts[id];
 
-	if (confidence < 0.01) {
-		// Escape vector is near-zero — node is in open space or still stabilizing
-		// Don't move, let convergence happen
-	} else {
-		uint start_idx = offsets[id];
-		uint count = edge_counts[id];
-
-		vec3 consensus = vec3(0.0);
-		uint consensus_count = 0;
-		for (uint i = 0; i < count; i++) {
-			uint nid = neighbors[start_idx + i];
-			if (nodes[nid].freedom.w < 0.5) continue;
-			vec3 n_dir = nodes[nid].escape_vector.xyz;
-			if (length(n_dir) > 0.01) {
-				consensus += n_dir;
-				consensus_count++;
-			}
-		}
-
-		if (consensus_count > 0) {
-			consensus /= float(consensus_count);
-			float consensus_len = length(consensus);
-			if (consensus_len > 0.3) {
-				movement = (consensus / consensus_len) * params.alpha * confidence;
-			}
-		} else {
-			vec3 escape_force = nodes[id].escape_vector.xyz;
-			if (count > 0) {
-				float degree_weight = (1.0 + params.avg_degree) / (1.0 + float(count));
-				escape_force *= degree_weight;
-			}
-			movement = escape_force * params.alpha;
-		}
+	if (count > 0) {
+		float degree_weight = (1.0 + params.avg_degree) / (1.0 + float(count));
+		escape_force *= degree_weight;
 	}
 
-	nodes[id].position.xyz = pos + movement;
-
-	if (freedom > 0.95 && confidence < 0.05) {
-		nodes[id].freedom.w = 0.0;
-	}
+	nodes[id].position.xyz = pos + escape_force * params.alpha;
 }

@@ -103,7 +103,6 @@ typedef struct
 	float position[4];
 	float escape_vector[4];
 	float freedom[4];
-	float ideal_target_pos[4];
 } NodePhysicsGPU;
 
 static VkDeviceAddress get_buffer_device_address(VkDevice device, VkBuffer buffer)
@@ -254,17 +253,13 @@ void renderer_escape_build_tlas(Renderer *r, GraphData *data, uint32_t node_coun
 	VkAccelerationStructureInstanceKHR *instances;
 	vkMapMemory(dev, r->escape_tlas_instance_memory, 0, instSize, 0, (void **)&instances);
 
-	float avg_spacing = r->escape_bb_diag / cbrtf((float)node_count);
-	float base_scale = avg_spacing * 0.25f;
-
 	for (uint32_t i = 0; i < node_count; i++) {
 		memset(&instances[i], 0, sizeof(VkAccelerationStructureInstanceKHR));
 
 		float px = data->nodes[i].position[0];
 		float py = data->nodes[i].position[1];
 		float pz = data->nodes[i].position[2];
-		float degree_factor = 0.5f + log2f((float)data->nodes[i].degree + 2.0f) * 0.5f;
-		float scale = base_scale * degree_factor;
+		float scale = log2f((float)data->nodes[i].degree + 2.0f) * 0.5f;
 
 		VkTransformMatrixKHR transform = {{
 			{scale, 0.0f, 0.0f, px},

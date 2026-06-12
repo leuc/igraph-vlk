@@ -4,8 +4,7 @@
 struct RayPayload {
 	uint hitCount;
 	uint originNodeId;
-	uint escaped;
-	float lastHitT;
+	uint escaped; // 1 if ray reached open space (miss shader fired)
 };
 layout(location = 0) rayPayloadInEXT RayPayload payload;
 
@@ -32,8 +31,7 @@ void main() {
 		}
 	}
 
-	// Non-neighbor obstacle — count it and record its T (path boundary)
+	// Non-neighbor object in the way — count it and continue traversal
 	payload.hitCount++;
-	payload.lastHitT = gl_HitTEXT;
 	ignoreIntersectionEXT;
 }
