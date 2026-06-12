@@ -71,6 +71,8 @@ void main() {
 
 	if (escaped_count == 0) {
 		nodes[nodeId].escape_vector.xyz = vec3(0.0);
+	} else if (freedom >= 1.0) {
+		nodes[nodeId].escape_vector.xyz = vec3(0.0);
 	} else {
 		vec3 avg = escape_sum / float(escaped_count);
 		vec3 escape_dir = (length(avg) > 0.01) ? normalize(avg) : first_escaped_dir;

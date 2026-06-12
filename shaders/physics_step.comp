@@ -37,17 +37,12 @@ void main() {
 	float freedom = nodes[id].freedom.x;
 	bool is_awake = (nodes[id].freedom.w > 0.5);
 
-	const float SLEEP_THRESHOLD = 0.95;
-	const float WAKE_THRESHOLD = 0.70;
-
 	if (is_awake) {
-		if (freedom > SLEEP_THRESHOLD && length(nodes[id].escape_vector.xyz) < 0.01) {
+		if (freedom < 0.01 || freedom > 0.99) {
 			is_awake = false;
 		}
 	} else {
-		// Wake if freedom dropped (node is no longer wide-open)
-		// or a strong escape direction appeared (e.g. neighbor moved away)
-		if (freedom < WAKE_THRESHOLD || length(nodes[id].escape_vector.xyz) > 0.5) {
+		if (freedom > 0.01 && freedom < 0.99) {
 			is_awake = true;
 		}
 	}
