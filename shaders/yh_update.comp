@@ -1,31 +1,74 @@
+// =============================================================================
+// YHRT Update Compute Shader — Position Integration + Force Norm (float32)
+// =============================================================================
+//
+// Final stage of each YHRT layout iteration. This shader performs two tasks:
+//
+//   1. POSITION UPDATE: Each node's position is advanced along its normalized
+//      net force vector by an adaptive step size:
+//
+//        pos_new = pos_old + step_size * normalize(force)
+//
+//      The force is normalized so that only the direction matters; the step
+//      size controls convergence speed and is adjusted by the cooling schedule
+//      on the host (rt_layout.c). After updating, forces[] is zeroed.
+//
+//   2. FORCE NORM REDUCTION: The magnitudes of all force vectors are summed
+//      via a workgroup-level parallel reduction, then atomically accumulated
+//      into global_fnorm. This global sum (the Frobenius norm of the force
+//      vector) is read back to the CPU to drive the adaptive step size:
+//
+//        - If Fnorm decreased toward Fnorm0: step may increase (cooling slows)
+//        - If Fnorm increased: step decreases (damping)
+//        - If step < tolerance: layout has converged, iteration stops
+//
+//      To maintain float32 precision on large graphs (>10k nodes), each
+//      thread's contribution is divided by vertex_count before the reduction.
+//      The host multiplies back when reading (rt_layout.c:660).
+//
+// Dispatched AFTER yh_attraction.comp. Must be followed by
+// yh_update_instances.comp and a TLAS rebuild before the next repulsion pass.
+//
+// Binding layout:
+//   binding 0: NodeBuffer   — vec4[pos.xyz, degree] per node (read-write)
+//   binding 1: ForceBuffer  — vec4[force.xyz, 0] per node (read, then cleared)
+//   binding 4: FnormBuffer  — float global_fnorm accumulator (atomic, initially 0)
+//
+// Push constants (28 bytes):
+//   KP, CRK, p, step_size, vertex_count, edge_count, R
+// =============================================================================
+
 #version 460
 #extension GL_EXT_shader_atomic_float : require
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 layout(std430, binding = 0) buffer NodeBuffer {
-	vec4 nodes[];
+	vec4 nodes[]; // xyz = position (updated in-place), w = degree
 };
 
 layout(std430, binding = 1) buffer ForceBuffer {
-	vec4 forces[];
+	vec4 forces[]; // xyz = net force (read then zeroed)
 };
 
+// Global force norm accumulator. Zeroed by vkCmdFillBuffer before dispatch.
+// Atomic float add avoids read-modify-write races across workgroups.
 layout(std430, binding = 4) buffer FnormBuffer {
 	float global_fnorm;
 };
 
 layout(push_constant) uniform PC {
-	float KP;
-	float CRK;
-	float p;
-	float step_size;
-	uint vertex_count;
-	uint edge_count;
-	float R;
+	float KP;          // K^(1-p) (not used here)
+	float CRK;         // C^((2-p)/3) / K (not used here)
+	float p;           // repulsion exponent (not used here)
+	float step_size;   // adaptive step size for position update
+	uint vertex_count; // total number of nodes (used for precision scaling)
+	uint edge_count;   // total number of edges (not used here)
+	float R;           // BVH radius (not used here)
 }
 pc;
 
+// Workgroup-local reduction buffer. Size = workgroup size (256).
 shared float reduction[gl_WorkGroupSize.x];
 
 void main()
@@ -39,15 +82,21 @@ void main()
 	if (i < pc.vertex_count) {
 		f = forces[i].xyz;
 		fmag = length(f);
+
+		// Normalize force direction; keep magnitude in fmag for reduction.
+		// Only normalize if force is non-negligible to avoid NaN.
 		if (fmag > 1e-12) {
 			f = f / fmag;
 		}
 	}
 
-	// Divide by vertex_count to keep accumulator within float32 precision
+	// Divide by vertex_count to keep the running sum within float32 range.
+	// For graphs with N nodes, the true Fnorm = this sum * N (see rt_layout.c:660).
 	reduction[localIdx] = fmag / float(pc.vertex_count);
 	barrier();
 
+	// Workgroup-level parallel reduction (sum). After this loop, reduction[0]
+	// contains the sum of all force magnitudes in this workgroup.
 	for (uint s = gl_WorkGroupSize.x / 2; s > 0; s >>= 1) {
 		if (localIdx < s) {
 			reduction[localIdx] += reduction[localIdx + s];
@@ -55,10 +104,13 @@ void main()
 		barrier();
 	}
 
+	// Thread 0 of each workgroup atomically adds the partial sum to the
+	// global accumulator. Multiple workgroups contribute sequentially.
 	if (localIdx == 0) {
 		atomicAdd(global_fnorm, reduction[0]);
 	}
 
+	// Apply normalized force to position and clear the force buffer
 	if (i < pc.vertex_count) {
 		nodes[i].xyz += pc.step_size * f;
 		forces[i] = vec4(0.0);

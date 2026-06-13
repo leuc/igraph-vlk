@@ -1,31 +1,67 @@
+// =============================================================================
+// YHRT Update FP64 Compute Shader — Position Integration + Force Norm (float64)
+// =============================================================================
+//
+// Identical to yh_update.comp but uses double-precision (float64) for the
+// force norm accumulator. This avoids the precision loss that occurs with
+// float32 when summing force magnitudes over very large graphs (>50k nodes),
+// where the per-thread division by vertex_count in the float32 variant would
+// underflow or lose significant digits.
+//
+// Key differences from yh_update.comp:
+//   - FnormBuffer (binding 4) stores a double, not a float
+//   - The workgroup reduction uses double precision (shared double reduction[])
+//   - NO division by vertex_count is needed — double has ~15 decimal digits of
+//     precision, sufficient for direct summation across millions of nodes
+//   - The host reads the value as a double (rt_layout.c:658)
+//
+// This shader is only compiled if the device supports VK_EXT_shader_atomic_float64
+// (checked via fp64_atomics_supported in rt_layout.c:362). The host falls back
+// to yh_update.comp if fp64 atomics are unavailable.
+//
+// Position update logic is unchanged:
+//   pos_new = pos_old + step_size * normalize(force)
+//
+// Binding layout:
+//   binding 0: NodeBuffer   — vec4[pos.xyz, degree] per node (read-write)
+//   binding 1: ForceBuffer  — vec4[force.xyz, 0] per node (read, then cleared)
+//   binding 4: FnormBuffer  — double global_fnorm accumulator (atomic, initially 0)
+//
+// Push constants (28 bytes):
+//   KP, CRK, p, step_size, vertex_count, edge_count, R
+// =============================================================================
+
 #version 460
 #extension GL_EXT_shader_atomic_float : require
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 layout(std430, binding = 0) buffer NodeBuffer {
-	vec4 nodes[];
+	vec4 nodes[]; // xyz = position (updated in-place), w = degree
 };
 
 layout(std430, binding = 1) buffer ForceBuffer {
-	vec4 forces[];
+	vec4 forces[]; // xyz = net force (read then zeroed)
 };
 
+// Double-precision accumulator for the global force norm. Requires
+// VK_EXT_shader_atomic_float64 on the device.
 layout(std430, binding = 4) buffer FnormBuffer {
 	double global_fnorm;
 };
 
 layout(push_constant) uniform PC {
-	float KP;
-	float CRK;
-	float p;
-	float step_size;
-	uint vertex_count;
-	uint edge_count;
-	float R;
+	float KP;          // K^(1-p) (not used here)
+	float CRK;         // C^((2-p)/3) / K (not used here)
+	float p;           // repulsion exponent (not used here)
+	float step_size;   // adaptive step size for position update
+	uint vertex_count; // total number of nodes (used for bounds check only)
+	uint edge_count;   // total number of edges (not used here)
+	float R;           // BVH radius (not used here)
 }
 pc;
 
+// Double-precision workgroup reduction buffer.
 shared double reduction[gl_WorkGroupSize.x];
 
 void main()
@@ -39,14 +75,19 @@ void main()
 	if (i < pc.vertex_count) {
 		f = forces[i].xyz;
 		fmag = length(f);
+
+		// Normalize force direction; keep magnitude in fmag for reduction.
 		if (fmag > 1e-12) {
 			f = f / fmag;
 		}
 	}
 
+	// Store as double directly — no division by vertex_count needed because
+	// double precision can handle the full dynamic range without underflow.
 	reduction[localIdx] = double(fmag);
 	barrier();
 
+	// Workgroup-level parallel reduction (sum) in double precision.
 	for (uint s = gl_WorkGroupSize.x / 2; s > 0; s >>= 1) {
 		if (localIdx < s) {
 			reduction[localIdx] += reduction[localIdx + s];
@@ -54,10 +95,12 @@ void main()
 		barrier();
 	}
 
+	// Atomic double add to global accumulator.
 	if (localIdx == 0) {
 		atomicAdd(global_fnorm, reduction[0]);
 	}
 
+	// Apply normalized force to position and clear the force buffer
 	if (i < pc.vertex_count) {
 		nodes[i].xyz += pc.step_size * f;
 		forces[i] = vec4(0.0);

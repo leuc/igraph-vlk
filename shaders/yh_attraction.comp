@@ -1,20 +1,54 @@
+// =============================================================================
+// YHRT Attraction Compute Shader — Edge-Based Spring Forces
+// =============================================================================
+//
+// Implements the attractive force component of the Yu Hu (YHu) force-directed
+// graph layout algorithm. Each workgroup processes one graph edge, computing
+// a spring-like force that pulls connected nodes toward each other.
+//
+// Algorithm overview:
+//   For each edge e = (from, to) with weight w, the attractive force is:
+//
+//     F_attract(e) = -CRK * dist(from, to) * w * (pos_from - pos_to)
+//
+//   This is a linear spring model: force magnitude is proportional to edge
+//   length. The negative sign makes it attractive (pulls endpoints together).
+//   CRK = C^((2-p)/3) / K is the precomputed attraction constant where
+//   C = 0.2 (YHu constant) and K = average edge length.
+//
+//   Forces are accumulated atomically into the shared forces[] buffer (which
+//   already contains repulsive forces from yh_repulsion.comp). Newton's third
+//   law is respected: equal and opposite forces are added to both endpoints.
+//
+// Dispatched once per iteration, once per edge (edge_count workgroups of 256).
+// Must be dispatched AFTER yh_repulsion.comp with a compute-to-compute barrier.
+//
+// Binding layout (shared across all YHRT shaders):
+//   binding 0: NodeBuffer  — vec4[pos.xyz, degree] per node (readonly)
+//   binding 1: ForceBuffer — vec4[force.xyz, 0] per node (read-write, atomic)
+//   binding 2: EdgeBuffer  — EdgeData[from, to, weight] per edge (readonly)
+//
+// Push constants (28 bytes):
+//   KP, CRK, p, step_size, vertex_count, edge_count, R
+// =============================================================================
+
 #version 460
 #extension GL_EXT_shader_atomic_float : require
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 layout(std430, binding = 0) readonly buffer NodeBuffer {
-	vec4 nodes[];
+	vec4 nodes[]; // xyz = position, w = degree
 };
 
 layout(std430, binding = 1) buffer ForceBuffer {
-	vec4 forces[];
+	vec4 forces[]; // Accumulated forces (repulsion + attraction), atomically updated
 };
 
 struct EdgeData {
-	uint from;
-	uint to;
-	float weight;
+	uint from;   // Source node index
+	uint to;     // Target node index
+	float weight; // Edge weight (currently always 1.0)
 };
 
 layout(std430, binding = 2) readonly buffer EdgeBuffer {
@@ -22,13 +56,13 @@ layout(std430, binding = 2) readonly buffer EdgeBuffer {
 };
 
 layout(push_constant) uniform PC {
-	float KP;
-	float CRK;
-	float p;
-	float step_size;
-	uint vertex_count;
-	uint edge_count;
-	float R;
+	float KP;          // K^(1-p): repulsion scaling (not used here)
+	float CRK;         // C^((2-p)/3) / K: attraction scaling factor
+	float p;           // repulsion power-law exponent (not used here)
+	float step_size;   // adaptive step size (not used here)
+	uint vertex_count; // total number of nodes (not used here)
+	uint edge_count;   // total number of graph edges
+	float R;           // BVH search radius (not used here)
 }
 pc;
 
@@ -42,14 +76,24 @@ void main()
 	uint to = edges[e].to;
 	float weight = edges[e].weight;
 
+	// Direction vector from 'to' toward 'from' (attractive direction)
 	vec3 diff = nodes[from].xyz - nodes[to].xyz;
 	float dist = length(diff);
+
+	// Skip degenerate edges where both endpoints coincide
 	if (dist < 1e-12)
 		return;
 
+	// Linear spring force: magnitude = CRK * dist * weight
+	// Negative scale makes it attractive (opposes diff direction for 'from',
+	// but since diff = pos_from - pos_to, the sign convention works out:
+	// force on 'from' = -scale * diff pulls it toward 'to')
 	float scale = -pc.CRK * dist * weight;
 	vec3 f = scale * diff;
 
+	// Newton's third law: apply equal and opposite forces to both endpoints.
+	// Atomic adds are safe since other edges or the repulsion pass may be
+	// writing to the same force entries concurrently.
 	atomicAdd(forces[from].x, f.x);
 	atomicAdd(forces[from].y, f.y);
 	atomicAdd(forces[from].z, f.z);

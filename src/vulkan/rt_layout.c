@@ -1,3 +1,100 @@
+// =============================================================================
+// YHRT — Yu Hu Ray-Traced Force-Directed Graph Layout (GPU)
+// =============================================================================
+//
+// Implements a GPU-accelerated force-directed graph layout using Vulkan compute
+// shaders and ray-tracing acceleration structures. The algorithm follows the
+// Yu Hu (YHu) model (igraph's layout_yhu_3d), where each iteration consists of
+// four compute passes plus a TLAS rebuild:
+//
+//   1. REPULSION   (yh_repulsion.comp)  — all-pairs via BVH ray queries
+//   2. ATTRACTION  (yh_attraction.comp) — edge-based spring forces
+//   3. UPDATE      (yh_update.comp)     — position integration + Fnorm reduction
+//   4. INSTANCES   (yh_update_instances.comp) — sync transforms for BVH rebuild
+//   5. TLAS REBUILD (Vulkan API)        — update acceleration structure in-place
+//
+// Acceleration Structure Hierarchy (the key trick):
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Instead of using ray tracing for rendering, we repurpose the Vulkan
+// acceleration structures (BLAS + TLAS) as a spatial index for the repulsion
+// pass. Internally, both BLAS and TLAS are organized as BVHs (Bounding Volume
+// Hierarchies). Each ray query traverses the TLAS BVH in O(log N + k) time
+// where k is the number of nodes within radius R, reducing the total repulsion
+// work from O(N²) brute-force to O(N · k_avg).
+//
+//   TLAS (Top-Level Acceleration Structure)
+//   ========================================
+//   Contains N instances, one per graph node. Each instance references the same
+//   BLAS but with a unique 3x4 transform matrix that translates it to the
+//   node's current 3D position. The BLAS itself is a single AABB of half-extent R
+//   centered at the origin — so after instancing, each node occupies an
+//   axis-aligned cube of side 2R in world space.
+//
+//   BLAS (Bottom-Level Acceleration Structure)
+//   ==========================================
+//   Contains a single AABB primitive: [-R, -R, -R] to [+R, +R, +R].
+//   This is a cube (axis-aligned bounding box) shared by ALL instances.
+//   The BLAS is built ONCE at session init and never rebuilt — only the TLAS
+//   instance transforms change per iteration.
+//
+//   Why this works for force-directed layout:
+//   The repulsion shader (yh_repulsion.comp) fires a ray from each node and
+//   traverses the TLAS. The BVH traversal prunes nodes whose AABBs
+//   don't intersect the ray, so only nodes within distance ~R are considered.
+//   This reduces the O(N^2) all-pairs problem to ~O(N * avg_neighbors_in_R),
+//   where R = 5*K (5x average edge length).
+//
+//   Per-iteration data flow:
+//
+//     ┌─────────────┐     ┌──────────────┐     ┌───────────────┐
+//     │ NodeBuffer   │────>│ Repulsion    │────>│ ForceBuffer   │
+//     │ [pos, deg]   │     │ (ray query   │     │ [force.xyz,0] │
+//     └─────────────┘     │  via TLAS)   │     └───────┬───────┘
+//                         └──────────────┘             │
+//                                                      v
+//     ┌─────────────┐     ┌──────────────┐     ┌───────────────┐
+//     │ EdgeBuffer   │────>│ Attraction   │────>│ ForceBuffer   │
+//     │ [from,to,w]  │     │ (spring)     │     │ (accumulated) │
+//     └─────────────┘     └──────────────┘     └───────┬───────┘
+//                                                      │
+//                                                      v
+//     ┌─────────────┐     ┌──────────────┐     ┌───────────────┐
+//     │ NodeBuffer   │<───>│ Update       │<───>│ FnormBuffer   │
+//     │ (positions   │     │ (integrate + │     │ (global sum)  │
+//     │  updated)    │     │  reduce)     │     └───────────────┘
+//     └──────┬──────┘     └──────────────┘
+//            │
+//            v
+//     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+//     │ InstanceBuffer│────>│ Update       │────>│ TLAS Rebuild │
+//     │ (transforms)  │     │ Instances    │     │ (in-place)   │
+//     └──────────────┘     └──────────────┘     └──────┬───────┘
+//                                                      │
+//                                                      v
+//                                                ┌──────────────┐
+//                                                │ Next iter:   │
+//                                                │ Repulsion    │
+//                                                │ reads new TLAS│
+//                                                └──────────────┘
+//
+// Descriptor Set Layout (shared across all 5 pipelines):
+//   binding 0: STORAGE_BUFFER  — NodeBuffer   (vec4[pos.xyz, degree])
+//   binding 1: STORAGE_BUFFER  — ForceBuffer   (vec4[force.xyz, 0])
+//   binding 2: STORAGE_BUFFER  — EdgeBuffer    (EdgeData[from, to, weight])
+//   binding 3: TLAS            — Acceleration structure for ray queries
+//   binding 4: STORAGE_BUFFER  — FnormBuffer   (float/double accumulator)
+//   binding 5: STORAGE_BUFFER  — InstanceBuffer (vec4[4] per node, TLAS transforms)
+//
+// Push Constants (28 bytes):
+//   [0..3]   float KP          — K^(1-p), repulsion scaling
+//   [4..7]   float CRK         — C^((2-p)/3) / K, attraction scaling
+//   [8..11]  float p           — repulsion power-law exponent (default 1.0)
+//   [12..15] float step_size   — adaptive step size (cooling schedule)
+//   [16..19] uint  vertex_count — number of graph nodes
+//   [20..23] uint  edge_count   — number of graph edges
+//   [24..27] float R           — BVH search radius = 5 * K
+// =============================================================================
+
 #include "vulkan/rt_layout.h"
 
 #include <math.h>
@@ -12,6 +109,11 @@
 
 #define YHRT_WORKGROUP_SIZE 256
 #define YHRT_FNORM_READBACK_INTERVAL 1
+
+// YHu constants matching igraph's layout_yhu_3d implementation.
+// IGRAPH_YHU_C controls attraction/repulsion balance; IGRAPH_YHU_COOL is the
+// cooling factor applied when Fnorm increases (step *= COOL) or decreases
+// slowly (step *= 0.99/COOL to allow slight growth).
 #define IGRAPH_YHU_C 0.2
 #define IGRAPH_YHU_COOL 0.90
 
@@ -288,7 +390,21 @@ void yhrt_init_pipelines(Renderer *r)
 
 	yhrt_load_rt_functions(r);
 
-	// Descriptor set layout: 6 bindings
+	// =====================================================================
+	// Descriptor Set Layout — shared by all 5 compute pipelines
+	// =====================================================================
+	//
+	// Binding  Type                          Count  Stage
+	// ------  ----------------------------  -----  ------
+	//   0     STORAGE_BUFFER (NodeBuffer)     1    COMPUTE
+	//   1     STORAGE_BUFFER (ForceBuffer)    1    COMPUTE
+	//   2     STORAGE_BUFFER (EdgeBuffer)     1    COMPUTE
+	//   3     ACCELERATION_STRUCTURE (TLAS)   1    COMPUTE
+	//   4     STORAGE_BUFFER (FnormBuffer)    1    COMPUTE
+	//   5     STORAGE_BUFFER (InstanceBuffer) 1    COMPUTE
+	//
+	// Push constants: 28 bytes = 5 floats + 2 uints + 1 float
+	//   [KP, CRK, p, step_size, vertex_count, edge_count, R]
 	VkDescriptorSetLayoutBinding bindings[6] = {
 		{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {3, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
 	};
@@ -451,33 +567,104 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 		free(edgeData);
 	}
 
-	// ---- Build BLAS + TLAS (compute both scratch sizes, use the larger) ----
+	// =====================================================================
+	// BLAS + TLAS Build — Spatial acceleration structure for repulsion queries
+	// =====================================================================
+	//
+	// Architecture overview (all nodes share ONE BLAS, instanced N times):
+	//
+	//   TLAS (Top-Level Acceleration Structure)
+	//   +-----------+-----------+-----+-----------+
+	//   | Instance0 | Instance1 | ... | InstanceN |   N instances total
+	//   +-----------+-----------+-----+-----------+
+	//        |           |               |
+	//        v           v               v
+	//   +------+     +------+         +------+
+	//   | BLAS |     | BLAS |   ...   | BLAS |       SAME BLAS, different
+	//   +------+     +------+         +------+       3x4 transform matrices
+	//      |            |                |
+	//      v            v                v
+	//   [-R,R]³      [-R,R]³          [-R,R]³       Single AABB primitive
+	//   (origin)     (at pos_1)       (at pos_N)    per instance, translated
+	//
+	//   BLAS detail:
+	//   ┌─────────────────────────────────────────────┐
+	//   │  VkAabbPositionsKHR  (single primitive)     │
+	//   │                                             │
+	//   │   minX = -R    minY = -R    minZ = -R       │
+	//   │   maxX = +R    maxY = +R    maxZ = +R       │
+	//   │                                             │
+	//   │   R = 5 * K  (K = average edge length)      │
+	//   │                                             │
+	//   │   This defines a cube centered at the origin.│
+	//   │   Each TLAS instance translates it to the   │
+	//   │   node's world position via its transform.   │
+	//   └─────────────────────────────────────────────┘
+	//
+	//   Instance transform (3x4 column-major matrix):
+	//   ┌                  ┐   ┌        ┐
+	//   │ 1  0  0  pos.x   │   │ node i │
+	//   │ 0  1  0  pos.y   │ = | pos    │
+	//   │ 0  0  1  pos.z   │   │        │
+	//   └                  ┘   └        ┘
+	//   (identity rotation + translation only — no scaling needed)
+	//
+	//   Ray query in yh_repulsion.comp:
+	//     origin = node[i].pos
+	//     dir    = (1,0,0)  — arbitrary, only AABB intersection matters
+	//     tmax   = R         — only consider nearby nodes
+	//     → BVH traversal prunes nodes whose AABBs don't intersect the ray
+	//     → Returns instanceCustomIndex = node index for force computation
+	//
+	// The BLAS is built ONCE and shared by all instances. Only the TLAS
+	// instance transforms are updated per iteration (via yh_update_instances
+	// comp + CmdBuildAccelerationStructuresKHR in UPDATE mode).
+	// =====================================================================
+
 	VkDeviceSize blasScratchSize = 0;
 	VkDeviceSize tlasScratchSize = 0;
 	VkBuffer aabbBuf = VK_NULL_HANDLE;
 	VkDeviceMemory aabbMem = VK_NULL_HANDLE;
+
+	// BLAS geometry: single AABB primitive (the bounding cube for one node)
 	VkAccelerationStructureGeometryKHR blasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_AABBS_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR};
 	VkAccelerationStructureBuildGeometryInfoKHR blasBuildInfo = {0};
+
+	// TLAS geometry: N instances referencing the same BLAS
 	VkAccelerationStructureGeometryKHR tlasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR, .geometry.instances = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR}};
+
+	// BLAS: 1 primitive (the single AABB). TLAS: vcount primitives (one per node)
 	VkAccelerationStructureBuildRangeInfoKHR blasRangeInfo = {.primitiveCount = 1};
 	VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = {.primitiveCount = vcount};
 
-	// BLAS sizing
+	// =================================================================
+	// Step 1: Size the BLAS — single AABB of radius R centered at origin
+	// =================================================================
 	{
+		// The AABB defines a cube [-R,R]³ at the origin. Each TLAS instance
+		// translates this cube to its node's position via the instance transform.
 		VkAabbPositionsKHR aabb = {.minX = -r->yhrt_R, .minY = -r->yhrt_R, .minZ = -r->yhrt_R, .maxX = r->yhrt_R, .maxY = r->yhrt_R, .maxZ = r->yhrt_R};
+
+		// Upload the AABB to a GPU buffer (must have SHADER_DEVICE_ADDRESS_BIT
+		// for the BLAS build input, and ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY)
 		yhrt_create_buffer(r, sizeof(VkAabbPositionsKHR), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, &aabbBuf, &aabbMem);
 		void *mapped;
 		vkMapMemory(r->core.device, aabbMem, 0, sizeof(VkAabbPositionsKHR), 0, &mapped);
 		memcpy(mapped, &aabb, sizeof(VkAabbPositionsKHR));
 		vkUnmapMemory(r->core.device, aabbMem);
+
 		blasGeometry.geometry.aabbs.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
 		blasGeometry.geometry.aabbs.data.deviceAddress = yhrt_get_buffer_address(r, aabbBuf);
 		blasGeometry.geometry.aabbs.stride = sizeof(VkAabbPositionsKHR);
+
 		blasBuildInfo = (VkAccelerationStructureBuildGeometryInfoKHR){.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &blasGeometry};
+
+		// Query how much memory the BLAS needs (storage + scratch)
 		uint32_t maxPrims = 1;
 		VkAccelerationStructureBuildSizesInfoKHR blasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
 		rt_funcs.GetAccelerationStructureBuildSizesKHR(r->core.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &blasBuildInfo, &maxPrims, &blasSizeInfo);
 
+		// Allocate the BLAS storage buffer and create the BLAS handle
 		yhrt_create_device_buffer(r, blasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &r->yhrt_blas_buf, &r->yhrt_blas_mem);
 		blasScratchSize = blasSizeInfo.buildScratchSize;
 
@@ -485,8 +672,12 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 		VK_CHECK(rt_funcs.CreateAccelerationStructureKHR(r->core.device, &blasCreateInfo, NULL, &r->yhrt_blas), "Failed to create BLAS");
 	}
 
-	// TLAS sizing
+	// =================================================================
+	// Step 2: Size the TLAS — will contain vcount instances of the BLAS
+	// =================================================================
 	{
+		// Device address is set to 0 here for sizing only; the real address
+		// is provided later when we build after uploading instance data.
 		tlasGeometry.geometry.instances.data.deviceAddress = 0;
 		VkAccelerationStructureBuildGeometryInfoKHR tlasBuildInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &tlasGeometry};
 		uint32_t maxInstances = vcount;
@@ -496,11 +687,17 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 		tlasScratchSize = tlasSizeInfo.buildScratchSize;
 	}
 
-	// Shared scratch buffer: max of BLAS and TLAS
+	// Shared scratch buffer: allocate once with the larger of BLAS/TLAS requirements.
+	// BLAS scratch is used only during init; TLAS scratch is reused for per-iteration
+	// updates. They never overlap in time.
 	VkDeviceSize scratchSize = blasScratchSize > tlasScratchSize ? blasScratchSize : tlasScratchSize;
 	yhrt_create_device_buffer(r, scratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &r->yhrt_as_scratch_buf, &r->yhrt_as_scratch_mem);
 
-	// Build BLAS
+	// =================================================================
+	// Step 3: Build the BLAS (one-time, synchronous)
+	// =================================================================
+	// The BLAS is immutable after this — it's just the AABB template.
+	// All per-node positioning happens via TLAS instance transforms.
 	{
 		blasBuildInfo.dstAccelerationStructure = r->yhrt_blas;
 		blasBuildInfo.scratchData.deviceAddress = yhrt_get_buffer_address(r, r->yhrt_as_scratch_buf);
@@ -521,8 +718,29 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 		vkQueueWaitIdle(r->core.graphicsQueue);
 		pthread_mutex_unlock(&r->core.graphicsQueueMutex);
 		vkDestroyCommandPool(r->core.device, blasPool, NULL);
+
+		// The AABB input buffer is no longer needed after the BLAS is built
 		VK_DESTROY_BUFFER(r->core.device, aabbBuf, aabbMem);
 	}
+
+	// =================================================================
+	// Step 4: Create TLAS instances and build the TLAS
+	// =================================================================
+	// Each VkAccelerationStructureInstanceKHR positions the shared BLAS at
+	// a node's location via a 3x4 column-major transform matrix.
+	//
+	// Instance layout in memory (instance_data[] buffer):
+	//
+	//   Instance 0:  [m00, m10, m20, m30,  m01, m11, m21, m31,  m02, m12, m22, m32]
+	//   Instance 1:  [m00, m10, m20, m30,  m01, m11, m21, m31,  m02, m12, m22, m32]
+	//   ...
+	//   Instance N:  [m00, m10, m20, m30,  m01, m11, m21, m31,  m02, m12, m22, m32]
+	//
+	//   Where each matrix is:
+	//     col0: [1, 0, 0]     col1: [0, 1, 0]     col2: [0, 0, 1]     col3: [pos.x, pos.y, pos.z]
+	//
+	// After yh_update_instances.comp writes new positions, the TLAS is rebuilt
+	// in UPDATE mode (in-place, no full restructure) in yhrt_worker_step().
 	{
 		VkDeviceSize instSize = sizeof(VkAccelerationStructureInstanceKHR) * vcount;
 		yhrt_create_device_buffer(r, instSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->yhrt_instance_buf, &r->yhrt_instance_mem);
@@ -531,42 +749,51 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 		uint64_t blasAddr = yhrt_get_as_address(r, r->yhrt_blas);
 		for (uint32_t i = 0; i < vcount; i++) {
 			memset(&instances[i], 0, sizeof(VkAccelerationStructureInstanceKHR));
-			instances[i].instanceCustomIndex = i;
-			instances[i].mask = 0xFF;
+			instances[i].instanceCustomIndex = i; // Returned by rayQueryGetIntersectionInstanceIdEXT in shader
+			instances[i].mask = 0xFF;			  // All bits set: always intersect
 			instances[i].instanceShaderBindingTableRecordOffset = 0;
-			instances[i].flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
-			instances[i].accelerationStructureReference = blasAddr;
+			instances[i].flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR; // Skip any-hit (not used)
+			instances[i].accelerationStructureReference = blasAddr;			// All instances point to same BLAS
+
+			// 3x4 column-major transform: identity rotation + translation to node i's position.
+			// The shader writes this same layout via instance_data[i*4+0..2].
 			float *m = (float *)instances[i].transform.matrix[0];
-			m[0] = 1.0f;
-			m[1] = 0.0f;
-			m[2] = 0.0f;
-			m[3] = (float)i;
-			m[4] = 0.0f;
-			m[5] = 1.0f;
-			m[6] = 0.0f;
-			m[7] = (float)i;
-			m[8] = 0.0f;
-			m[9] = 0.0f;
-			m[10] = 1.0f;
-			m[11] = (float)i;
+			m[0] = 1.0f;	  // col0.x (scale X)
+			m[1] = 0.0f;	  // col0.y
+			m[2] = 0.0f;	  // col0.z
+			m[3] = (float)i;  // col3.x (pos.x, initially just index for placeholder)
+			m[4] = 0.0f;	  // col1.x
+			m[5] = 1.0f;	  // col1.y (scale Y)
+			m[6] = 0.0f;	  // col1.z
+			m[7] = (float)i;  // col3.y (pos.y)
+			m[8] = 0.0f;	  // col2.x
+			m[9] = 0.0f;	  // col2.y
+			m[10] = 1.0f;	  // col2.z (scale Z)
+			m[11] = (float)i; // col3.z (pos.z)
 		}
 		yhrt_staging_upload(r, r->yhrt_instance_buf, instances, instSize, true);
 		free(instances);
 
+		// Now that instance data is uploaded, provide the real device address to the TLAS geometry
 		uint64_t instAddr = yhrt_get_buffer_address(r, r->yhrt_instance_buf);
 		tlasGeometry.geometry.instances.data.deviceAddress = instAddr;
 
-		// Create TLAS buffer + handle using the size from the sizing block
+		// Re-query TLAS size with the real instance address (required by spec)
 		VkAccelerationStructureBuildSizesInfoKHR tlasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
 		{
 			VkAccelerationStructureBuildGeometryInfoKHR tmpInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &tlasGeometry};
 			uint32_t maxInstances = r->yhrt_vcount;
 			rt_funcs.GetAccelerationStructureBuildSizesKHR(r->core.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tmpInfo, &maxInstances, &tlasSizeInfo);
 		}
+
+		// Allocate TLAS storage and create the handle.
+		// ALLOW_UPDATE_BIT is critical: per-iteration updates use MODE_UPDATE_KHR
+		// which patches the BVH in-place (much faster than full rebuild).
 		yhrt_create_device_buffer(r, tlasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, &r->yhrt_tlas_buf, &r->yhrt_tlas_mem);
 		VkAccelerationStructureCreateInfoKHR tlasCreate = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR, .buffer = r->yhrt_tlas_buf, .size = tlasSizeInfo.accelerationStructureSize, .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR};
 		VK_CHECK(rt_funcs.CreateAccelerationStructureKHR(r->core.device, &tlasCreate, NULL, &r->yhrt_tlas), "Failed to create TLAS");
 
+		// Initial build (full build, not update — subsequent iterations use UPDATE mode)
 		VkAccelerationStructureBuildGeometryInfoKHR tlasBuildInfo = {
 			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 			.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
@@ -596,17 +823,35 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 		vkDestroyCommandPool(r->core.device, tlasPool, NULL);
 	}
 
-	// ---- Descriptor pool + sets ----
+	// =================================================================
+	// Step 5: Create descriptor pool and bind all resources
+	// =================================================================
+	//
+	// Descriptor set binding map (matches shader bindings):
+	//
+	//   Binding | Type                    | Buffer / Resource       | Used By
+	//   --------|------------------------|------------------------|------------------
+	//     0     | STORAGE_BUFFER          | NodeBuffer (vec4[])     | All shaders
+	//     1     | STORAGE_BUFFER          | ForceBuffer (vec4[])    | All shaders
+	//     2     | STORAGE_BUFFER          | EdgeBuffer (EdgeData[]) | Attraction only
+	//     3     | ACCELERATION_STRUCTURE  | TLAS                    | Repulsion only
+	//     4     | STORAGE_BUFFER          | FnormBuffer (double)    | Update only
+	//     5     | STORAGE_BUFFER          | InstanceBuffer (vec4[]) | UpdateInstances only
+	//
+	// Note: binding 3 (TLAS) uses a separate write type (VkWriteDescriptorSet
+	// with pNext = VkWriteDescriptorSetAccelerationStructureKHR) because
+	// acceleration structures cannot be written via VkDescriptorBufferInfo.
 	{
 		VkDescriptorPoolSize poolSizes[] = {
-			{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 5},
-			{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1},
+			{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 5},				// bindings 0,1,2,4,5
+			{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1}, // binding 3
 		};
 		VkDescriptorPoolCreateInfo dpInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 2, .pPoolSizes = poolSizes};
 		VK_CHECK(vkCreateDescriptorPool(r->core.device, &dpInfo, NULL, &r->yhrt_desc_pool), "Failed to create YHRT descriptor pool");
 		VkDescriptorSetAllocateInfo setInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->yhrt_desc_pool, .descriptorSetCount = 1, .pSetLayouts = &r->yhrt_desc_set_layout};
 		VK_CHECK(vkAllocateDescriptorSets(r->core.device, &setInfo, &r->yhrt_desc_set), "Failed to allocate YHRT descriptor set");
 
+		// Buffer descriptors (bindings 0,1,2,4,5)
 		VkDescriptorBufferInfo nodeInfo = {r->yhrt_node_buf, 0, VK_WHOLE_SIZE};
 		VkDescriptorBufferInfo forceInfo = {r->yhrt_force_buf, 0, VK_WHOLE_SIZE};
 		VkDescriptorBufferInfo edgeInfo = {r->yhrt_edge_buf, 0, VK_WHOLE_SIZE};
@@ -614,10 +859,15 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 		VkDescriptorBufferInfo instInfo = {r->yhrt_instance_buf, 0, VK_WHOLE_SIZE};
 
 		VkWriteDescriptorSet writes[5] = {
-			VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 0, &nodeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 1, &forceInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 2, &edgeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 4, &fnormInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 5, &instInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+			VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 0, &nodeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),  // NodeBuffer
+			VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 1, &forceInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), // ForceBuffer
+			VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 2, &edgeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),  // EdgeBuffer
+			VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 4, &fnormInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), // FnormBuffer
+			VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 5, &instInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),  // InstanceBuffer
 		};
 		vkUpdateDescriptorSets(r->core.device, 5, writes, 0, NULL);
 
+		// TLAS descriptor (binding 3) — written via the acceleration structure path
 		VkWriteDescriptorSetAccelerationStructureKHR asDescInfo = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
 			.accelerationStructureCount = 1,
@@ -681,6 +931,66 @@ bool yhrt_worker_step(Renderer *r)
 	// Only reset fence when we're about to submit new work
 	VK_CHECK(vkResetFences(r->core.device, 1, &r->yhrt_dispatch_fence), "Failed to reset YHRT dispatch fence");
 
+	// =====================================================================
+	// Per-Iteration Compute Pipeline
+	// =====================================================================
+	//
+	// Each iteration executes 4 compute dispatches + 1 TLAS update, with
+	// pipeline barriers between them to ensure correct data dependencies:
+	//
+	//   ┌─────────────────────────────────────────────────────────────────┐
+	//   │  Fnorm Reset (vkCmdFillBuffer → zeros the accumulator)        │
+	//   │  TRANSFER → COMPUTE barrier                                   │
+	//   └───────────────────────────────┬───────────────────────────────┘
+	//                                   v
+	//   ┌─────────────────────────────────────────────────────────────────┐
+	//   │  Dispatch 1: REPULSION  (vertex_count / 256 workgroups)       │
+	//   │  - Each node fires ray query against TLAS                     │
+	//   │  - Reads NodeBuffer (binding 0), writes ForceBuffer (binding 1)│
+	//   │  - Uses TLAS (binding 3) for spatial acceleration             │
+	//   │  COMPUTE → COMPUTE barrier (force buffer dependency)           │
+	//   └───────────────────────────────┬───────────────────────────────┘
+	//                                   v
+	//   ┌─────────────────────────────────────────────────────────────────┐
+	//   │  Dispatch 2: ATTRACTION  (edge_count / 256 workgroups)        │
+	//   │  - Each edge computes spring force on both endpoints           │
+	//   │  - Reads NodeBuffer + EdgeBuffer (bindings 0,2)               │
+	//   │  - Atomic adds into ForceBuffer (binding 1)                   │
+	//   │  COMPUTE → COMPUTE barrier (force buffer dependency)           │
+	//   └───────────────────────────────┬───────────────────────────────┘
+	//                                   v
+	//   ┌─────────────────────────────────────────────────────────────────┐
+	//   │  Dispatch 3: UPDATE  (vertex_count / 256 workgroups)          │
+	//   │  - Integrates positions: pos += step * normalize(force)        │
+	//   │  - Reduces force magnitudes → FnormBuffer (binding 4)          │
+	//   │  - Zeros ForceBuffer for next iteration                       │
+	//   │  COMPUTE → COMPUTE barrier (instance buffer dependency)        │
+	//   └───────────────────────────────┬───────────────────────────────┘
+	//                                   v
+	//   ┌─────────────────────────────────────────────────────────────────┐
+	//   │  Dispatch 4: UPDATE INSTANCES  (vertex_count / 256 workgroups)│
+	//   │  - Copies node positions → InstanceBuffer transforms           │
+	//   │  - Reads NodeBuffer (binding 0), writes InstanceBuffer (b.5)  │
+	//   │  COMPUTE → ACCELERATION_STRUCTURE_BUILD barrier                │
+	//   └───────────────────────────────┬───────────────────────────────┘
+	//                                   v
+	//   ┌─────────────────────────────────────────────────────────────────┐
+	//   │  TLAS Update (vkCmdBuildAccelerationStructuresKHR)            │
+	//   │  - MODE_UPDATE_KHR: patches BVH in-place using new transforms │
+	//   │  - src = dst = same TLAS (in-place update, not full rebuild)   │
+	//   │  ACCELERATION_STRUCTURE_BUILD → COMPUTE barrier                │
+	//   └───────────────────────────────┬───────────────────────────────┘
+	//                                   v
+	//   ┌─────────────────────────────────────────────────────────────────┐
+	//   │  Fnorm Readback Copy  (fnorm_buf → staging_buf)               │
+	//   │  + Optional position readback every 5 iterations              │
+	//   │  CPU reads staging next iteration → adjusts step_size          │
+	//   └─────────────────────────────────────────────────────────────────┘
+	//
+	// The TLAS is now updated, so the next iteration's repulsion pass will
+	// query node positions at their new locations.
+	// =====================================================================
+
 	VkCommandBuffer cmd = r->yhrt_cmd_buf;
 	VK_CHECK(vkResetCommandBuffer(cmd, 0), "Failed to reset YHRT worker cmd");
 	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
@@ -719,7 +1029,18 @@ bool yhrt_worker_step(Renderer *r)
 	// Instance -> TLAS barrier
 	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_SHADER_READ_BIT);
 
-	// TLAS update
+	// =====================================================================
+	// TLAS Update (in-place BVH patch, not full rebuild)
+	// =====================================================================
+	// After yh_update_instances.comp writes the new transforms into the
+	// instance buffer, we rebuild the TLAS in UPDATE mode. This patches
+	// the existing BVH nodes to reflect the new instance positions without
+	// discarding the previous structure — significantly faster than a full
+	// rebuild, and sufficient because only translations change (no topology).
+	//
+	// Key difference from the initial build:
+	//   mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR
+	//   srcAccelerationStructure = dstAccelerationStructure = same TLAS
 	{
 		VkAccelerationStructureGeometryKHR tlasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR, .geometry.instances = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR, .data.deviceAddress = yhrt_get_buffer_address(r, r->yhrt_instance_buf)}};
 		VkAccelerationStructureBuildGeometryInfoKHR tlasBuildInfo = {
@@ -727,8 +1048,8 @@ bool yhrt_worker_step(Renderer *r)
 			.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
 			.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
 			.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR,
-			.srcAccelerationStructure = r->yhrt_tlas,
-			.dstAccelerationStructure = r->yhrt_tlas,
+			.srcAccelerationStructure = r->yhrt_tlas, // Patch in-place from current state
+			.dstAccelerationStructure = r->yhrt_tlas, // Write back to same TLAS
 			.geometryCount = 1,
 			.pGeometries = &tlasGeometry,
 			.scratchData.deviceAddress = yhrt_get_buffer_address(r, r->yhrt_as_scratch_buf),

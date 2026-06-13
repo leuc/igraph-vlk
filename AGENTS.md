@@ -1,6 +1,6 @@
 # Agents Build & Code Documentation
 
-DO NOT EXECUTE GIT
+VERY IMPORTANT! DO NOT EXECUTE git UNDER ABSOLUTLY NO CONDITION!
 
 This document serves as the primary guide for AI coding agents and developers working on the `igraph-vlk` project. It outlines the build process, linting/formatting/testing, and provides a comprehensive map of the codebase with style guidelines.
 
@@ -50,10 +50,7 @@ No typechecker (C). Check for igraph/Vulkan errors at runtime.
 ## Testing
 
 No unit/integration tests (no `test/` dir, no CTest targets).
-
-- **Manual Testing**: Run `./build/igraph-vlk`, load graphs (GraphML), test layouts (OpenOrd, Layered Sphere), interactions (pan/zoom/select), menus.
-- **Single Test**: N/A; add via CMake `add_test` if implementing.
-- **Visual/Perf**: FPS in HUD; stress large graphs (>10k nodes).
+IMPORTANT! Do NOT execute the binary, the user will do testing.
 
 ## Adding Menu Items
 
@@ -123,7 +120,7 @@ Mimic existing patterns strictly. Run `clang-format` after edits.
 - Vulkan: `VK_CHECK`.
 - igraph: `!= IGRAPH_SUCCESS`.
 - IGRAPH_MALLOC / IGRAPH_FREE for igraph objects
-= IGRAPH_CHECK
+- IGRAPH_CHECK
 
 ### When Editing
 - Mimic neighbors; lint/format/build; no regressions.
@@ -134,3 +131,4 @@ Mimic existing patterns strictly. Run `clang-format` after edits.
 - **Graph**: igraph core + layouts (openord, sphere).
 - **Render**: Vulkan modular (renderer_*).
 - **UI**: HUD/menu; ray-picking.
+- Use existing vulkan macros
