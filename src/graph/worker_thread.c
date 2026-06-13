@@ -111,12 +111,25 @@ static void *worker_thread_func(void *arg)
 
 		// Execute the job
 		if (job->worker_func) {
+			clock_gettime(CLOCK_MONOTONIC, &job->start_time);
 			job->result_data = job->worker_func(job->ctx->current_graph);
+			struct timespec end_time;
+			clock_gettime(CLOCK_MONOTONIC, &end_time);
+			double elapsed = (end_time.tv_sec - job->start_time.tv_sec) * 1000.0 + (end_time.tv_nsec - job->start_time.tv_nsec) / 1e6;
+			atomic_store_explicit(&job->elapsed_ms, elapsed, memory_order_release);
 			if (job->result_data) {
 				atomic_store_explicit(&job->progress, 1.0f, memory_order_release);
 				atomic_store_explicit(&job->status, JOB_STATUS_COMPLETED, memory_order_release);
+				if (elapsed < 1000.0)
+					fprintf(stderr, "[Worker] Job completed in %.0fms\n", elapsed);
+				else
+					fprintf(stderr, "[Worker] Job completed in %.1fs\n", elapsed / 1000.0);
 			} else {
 				atomic_store_explicit(&job->status, JOB_STATUS_FAILED, memory_order_release);
+				if (elapsed < 1000.0)
+					fprintf(stderr, "[Worker] Job failed after %.0fms\n", elapsed);
+				else
+					fprintf(stderr, "[Worker] Job failed after %.1fs\n", elapsed / 1000.0);
 			}
 		} else {
 			atomic_store_explicit(&job->status, JOB_STATUS_FAILED, memory_order_release);
@@ -221,6 +234,7 @@ WorkerJob *worker_thread_submit_job(WorkerThreadContext *context, CommandDef *cm
 	atomic_init(&job->status, JOB_STATUS_PENDING);
 	job->ctx = ctx_copy;
 	atomic_init(&job->progress, 0.0f);
+	atomic_init(&job->elapsed_ms, 0.0);
 	job->result_data = NULL;
 
 	// Store dynamic function pointers from CommandDef
@@ -280,6 +294,14 @@ const char *worker_thread_get_job_status_message(WorkerJob *job)
 	snprintf(msg, sizeof(msg), "%s", job->status_message);
 	pthread_mutex_unlock(&job->mutex);
 	return msg;
+}
+
+// Get elapsed job time in milliseconds
+double worker_thread_get_job_elapsed_ms(WorkerJob *job)
+{
+	if (!job)
+		return 0.0;
+	return atomic_load_explicit(&job->elapsed_ms, memory_order_acquire);
 }
 
 // Poll a real-time layout snapshot from the worker thread (non-blocking)
