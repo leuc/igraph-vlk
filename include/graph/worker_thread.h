@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>
+#include <time.h>
 
 // Job status
 typedef enum { JOB_STATUS_PENDING, JOB_STATUS_RUNNING, JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, JOB_STATUS_CANCELLED, JOB_STATUS_NONE } WorkerJobStatus;
@@ -30,6 +31,10 @@ typedef struct
 	IgraphWorkerFunc worker_func;
 	IgraphApplyFunc apply_func;
 	IgraphFreeFunc free_func;
+
+	// Timing
+	struct timespec start_time; // set when job begins executing
+	_Atomic double elapsed_ms;	// wall-clock duration in milliseconds (written on completion)
 } WorkerJob;
 
 // Worker thread context
@@ -61,6 +66,9 @@ WorkerJobStatus worker_thread_get_job_status(WorkerJob *job, float *progress);
 
 // Get job status message
 const char *worker_thread_get_job_status_message(WorkerJob *job);
+
+// Get elapsed job time in milliseconds (0 if not yet started)
+double worker_thread_get_job_elapsed_ms(WorkerJob *job);
 
 // Poll a new real-time snapshot from the worker thread (non-blocking)
 // Returns true if a new snapshot was available and copied into out_matrix
