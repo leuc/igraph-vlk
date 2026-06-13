@@ -1,11 +1,12 @@
 #ifndef RT_LAYOUT_H
 #define RT_LAYOUT_H
 
+#include "vulkan/rt_base.h"
 #include "vulkan/vulkan_types.h"
 #include <igraph.h>
 #include <stdbool.h>
 
-bool yhrt_check_support(VkPhysicalDevice device);
+void yhrt_init_pipelines(Renderer *r);
 
 void yhrt_init_pipelines(Renderer *r);
 

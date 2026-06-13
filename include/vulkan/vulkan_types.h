@@ -337,9 +337,11 @@ typedef struct Renderer
 	VkDeviceMemory rayVertexBufferMemory;
 	uint32_t rayVertexCount;
 
-	// Yifan Hu RT Layout
+	// RT base infrastructure (BLAS/TLAS, instance buffer, command buffer)
+	struct RTBase *rt_base;
+
+	// Yifan Hu RT Layout state
 	bool yhrt_active;
-	bool yhrt_supported;
 	bool yhrt_fp64_supported;
 	bool yhrt_fnorm_readback_pending;
 	int yhrt_current_iter;
@@ -355,6 +357,8 @@ typedef struct Renderer
 	uint32_t yhrt_vcount;
 	uint32_t yhrt_active_vcount; // nodes participating in current iteration (progressive insertion)
 	uint32_t yhrt_ecount;
+
+	// Yifan Hu RT Layout Vulkan resources (algorithm-owned)
 	VkBuffer yhrt_node_buf;
 	VkDeviceMemory yhrt_node_mem;
 	VkBuffer yhrt_force_buf;
@@ -365,16 +369,6 @@ typedef struct Renderer
 	VkDeviceMemory yhrt_fnorm_mem;
 	VkBuffer yhrt_staging_buf;
 	VkDeviceMemory yhrt_staging_mem;
-	VkBuffer yhrt_as_scratch_buf;
-	VkDeviceMemory yhrt_as_scratch_mem;
-	VkBuffer yhrt_blas_buf;
-	VkDeviceMemory yhrt_blas_mem;
-	VkBuffer yhrt_tlas_buf;
-	VkDeviceMemory yhrt_tlas_mem;
-	VkBuffer yhrt_instance_buf;
-	VkDeviceMemory yhrt_instance_mem;
-	VkAccelerationStructureKHR yhrt_blas;
-	VkAccelerationStructureKHR yhrt_tlas;
 	VkDescriptorPool yhrt_desc_pool;
 	VkDescriptorSet yhrt_desc_set;
 	VkDescriptorSetLayout yhrt_desc_set_layout;
@@ -385,12 +379,6 @@ typedef struct Renderer
 	VkPipeline yhrt_update_fp64_pipeline;
 	VkPipeline yhrt_update_instances_pipeline;
 	VkFence yhrt_dispatch_fence;
-
-	// YHRT worker-thread resources (for background GPU iterations)
-	VkCommandPool yhrt_cmd_pool;
-	VkCommandBuffer yhrt_cmd_buf;
-	VkBuffer yhrt_node_staging_buf;
-	VkDeviceMemory yhrt_node_staging_mem;
 
 	// Ring-buffered sync for graph updates
 	VkFence graphUpdateFences[GRAPH_UPDATE_RING_SIZE];
