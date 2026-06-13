@@ -489,6 +489,10 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 	r->yhrt_p = 1.0f;
 	r->yhrt_fnorm_readback_pending = false;
 
+	// Progressive insertion: start with one workgroup worth of nodes, ramp up each iteration
+	uint32_t batch = r->core.deviceProperties.limits.maxComputeWorkGroupInvocations;
+	r->yhrt_active_vcount = (batch < r->yhrt_vcount) ? batch : r->yhrt_vcount;
+
 	// Compute K from initial positions (matches igraph's compute_average_edge_length_3d)
 	float total_len = 0.0f;
 	for (igraph_integer_t e = 0; e < ecount; e++) {
@@ -899,6 +903,23 @@ bool yhrt_worker_step(Renderer *r)
 	// Wait for previous GPU work — fence stays SIGNALED after this
 	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->yhrt_dispatch_fence, VK_TRUE, UINT64_MAX), "Failed to wait for YHRT dispatch fence");
 
+	// Progressive insertion: add a batch of nodes every 5 iterations
+	// Save previous active count for Fnorm scaling (forces were computed with it)
+	uint32_t prev_active_vcount = r->yhrt_active_vcount;
+	{
+		uint32_t batch = r->core.deviceProperties.limits.maxComputeWorkGroupInvocations;
+		uint32_t new_active = (r->yhrt_current_iter / 5 + 1) * batch;
+		if (new_active > r->yhrt_vcount)
+			new_active = r->yhrt_vcount;
+
+		if (new_active != prev_active_vcount) {
+			printf("[YHRT] progressive: %u -> %u nodes (batch=%u)\n", prev_active_vcount, new_active, batch);
+			r->yhrt_Fnorm0 = INFINITY;
+			r->yhrt_step = 0.1f;
+		}
+		r->yhrt_active_vcount = new_active;
+	}
+
 	// Read back Fnorm from previous iteration (valid because fence was just waited on)
 	if (r->yhrt_current_iter > 0) {
 		float fnorm = 0.0f;
@@ -907,11 +928,12 @@ bool yhrt_worker_step(Renderer *r)
 			if (r->yhrt_fp64_supported)
 				fnorm = (float)(*(double *)mapped);
 			else
-				fnorm = (*(float *)mapped) * (float)r->yhrt_vcount;
+				// Scale by prev_active_vcount — that's what the shader used for reduction
+				fnorm = (*(float *)mapped) * (float)prev_active_vcount;
 			vkUnmapMemory(r->core.device, r->yhrt_staging_mem);
 		}
 
-		printf("[YHRT] iter=%d, step=%g, Fnorm=%g, Fnorm0=%g, repulsive_exp=%g, natlen=%g\n", r->yhrt_current_iter - 1, r->yhrt_step, fnorm, r->yhrt_Fnorm0, r->yhrt_p, r->yhrt_K);
+		printf("[YHRT] iter=%d, step=%g, Fnorm=%g, Fnorm0=%g, active=%u/%u, repulsive_exp=%g, natlen=%g\n", r->yhrt_current_iter - 1, r->yhrt_step, fnorm, r->yhrt_Fnorm0, r->yhrt_active_vcount, r->yhrt_vcount, r->yhrt_p, r->yhrt_K);
 
 		if (fnorm < r->yhrt_Fnorm0) {
 			if (fnorm > 0.95f * r->yhrt_Fnorm0) {
@@ -923,9 +945,13 @@ bool yhrt_worker_step(Renderer *r)
 		}
 		r->yhrt_Fnorm0 = fnorm;
 
-		// Check tolerance — fence is still SIGNALED so yhrt_worker_readback won't deadlock
-		if (r->yhrt_step < r->yhrt_tolerance)
-			return false;
+		// Check tolerance — only real convergence when all nodes are active
+		if (r->yhrt_step < r->yhrt_tolerance) {
+			if (r->yhrt_active_vcount >= r->yhrt_vcount)
+				return false;
+			// Still inserting nodes — ignore premature convergence
+			r->yhrt_step = r->yhrt_tolerance;
+		}
 	}
 
 	// Only reset fence when we're about to submit new work
@@ -1005,26 +1031,26 @@ bool yhrt_worker_step(Renderer *r)
 		float KP, CRK, p, step_size;
 		uint32_t vertex_count, edge_count;
 		float R;
-	} pc = {r->yhrt_KP, r->yhrt_CRK, r->yhrt_p, r->yhrt_step, r->yhrt_vcount, r->yhrt_ecount, r->yhrt_R};
+	} pc = {r->yhrt_KP, r->yhrt_CRK, r->yhrt_p, r->yhrt_step, r->yhrt_active_vcount, r->yhrt_ecount, r->yhrt_R};
 
-	// Repulsion
-	YHRT_DISPATCH_COMPUTE(cmd, r->yhrt_repulsion_pipeline, r->yhrt_pipeline_layout, r->yhrt_desc_set, pc, (r->yhrt_vcount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE);
+	// Repulsion — only active nodes
+	YHRT_DISPATCH_COMPUTE(cmd, r->yhrt_repulsion_pipeline, r->yhrt_pipeline_layout, r->yhrt_desc_set, pc, (r->yhrt_active_vcount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE);
 
 	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 
-	// Attraction
+	// Attraction — all edges (shader skips edges where pc.vertex_count bounds active nodes)
 	YHRT_DISPATCH_COMPUTE(cmd, r->yhrt_attraction_pipeline, r->yhrt_pipeline_layout, r->yhrt_desc_set, pc, (r->yhrt_ecount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE);
 
 	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 
-	// Update
+	// Update — only active nodes
 	VkPipeline updatePipeline = r->yhrt_fp64_supported ? r->yhrt_update_fp64_pipeline : r->yhrt_update_pipeline;
-	YHRT_DISPATCH_COMPUTE(cmd, updatePipeline, r->yhrt_pipeline_layout, r->yhrt_desc_set, pc, (r->yhrt_vcount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE);
+	YHRT_DISPATCH_COMPUTE(cmd, updatePipeline, r->yhrt_pipeline_layout, r->yhrt_desc_set, pc, (r->yhrt_active_vcount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE);
 
 	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
 
-	// Instance update
-	YHRT_DISPATCH_COMPUTE(cmd, r->yhrt_update_instances_pipeline, r->yhrt_pipeline_layout, r->yhrt_desc_set, pc, (r->yhrt_vcount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE);
+	// Instance update — only active nodes
+	YHRT_DISPATCH_COMPUTE(cmd, r->yhrt_update_instances_pipeline, r->yhrt_pipeline_layout, r->yhrt_desc_set, pc, (r->yhrt_active_vcount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE);
 
 	// Instance -> TLAS barrier
 	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_SHADER_READ_BIT);
@@ -1054,7 +1080,7 @@ bool yhrt_worker_step(Renderer *r)
 			.pGeometries = &tlasGeometry,
 			.scratchData.deviceAddress = yhrt_get_buffer_address(r, r->yhrt_as_scratch_buf),
 		};
-		VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = {.primitiveCount = r->yhrt_vcount};
+		VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = {.primitiveCount = r->yhrt_active_vcount};
 		const VkAccelerationStructureBuildRangeInfoKHR *pTlasRange = &tlasRangeInfo;
 		rt_funcs.CmdBuildAccelerationStructuresKHR(cmd, 1, &tlasBuildInfo, &pTlasRange);
 	}
@@ -1071,7 +1097,7 @@ bool yhrt_worker_step(Renderer *r)
 	// Periodic position readback (every 5 iterations)
 	if ((r->yhrt_current_iter + 1) % 5 == 0 || r->yhrt_current_iter + 1 >= r->yhrt_maxiter) {
 		VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-		VkBufferCopy posCopy = {.size = sizeof(vec4) * r->yhrt_vcount};
+		VkBufferCopy posCopy = {.size = sizeof(vec4) * r->yhrt_active_vcount};
 		vkCmdCopyBuffer(cmd, r->yhrt_node_buf, r->yhrt_node_staging_buf, 1, &posCopy);
 	}
 

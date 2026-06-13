@@ -353,6 +353,7 @@ typedef struct Renderer
 	float yhrt_p;
 	float yhrt_R;
 	uint32_t yhrt_vcount;
+	uint32_t yhrt_active_vcount; // nodes participating in current iteration (progressive insertion)
 	uint32_t yhrt_ecount;
 	VkBuffer yhrt_node_buf;
 	VkDeviceMemory yhrt_node_mem;
