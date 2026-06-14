@@ -387,6 +387,9 @@ typedef struct Renderer
 	// Persistent compute context
 	ComputeContext computeCtx;
 
+	// Barnes-Hut RT force computation (octree-based)
+	struct BarnesHutRT *bhrt;
+
 	// SPLC (Search Path Link Count) animation
 	VkBuffer splc_nodes_buffer;
 	VkDeviceMemory splc_nodes_memory;

@@ -1,6 +1,7 @@
 #include "vulkan/renderer_cleanup.h"
 #include "vulkan/buffers.h"
 #include "vulkan/renderer.h"
+#include "vulkan/rt_barnes_hut.h"
 #include "vulkan/rt_base.h"
 #include "vulkan/rt_layout.h"
 #include "vulkan/swapchain.h"
@@ -136,6 +137,8 @@ void cleanup_splc_pipelines_core(Renderer *r)
 void renderer_cleanup(Renderer *r)
 {
 	VK_CHECK(vkDeviceWaitIdle(r->core.device), "Failed to wait for device idle on cleanup");
+	bhrt_destroy(r->bhrt);
+	r->bhrt = NULL;
 	yhrt_destroy(r);
 	rt_base_destroy(r->rt_base);
 	r->rt_base = NULL;

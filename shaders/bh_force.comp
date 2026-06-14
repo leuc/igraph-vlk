@@ -1,0 +1,194 @@
+// =============================================================================
+// BH Force Compute Shader — OWL Barnes-Hut Traversal via Ray Query
+// =============================================================================
+//
+// Implements the exact OWL Barnes-Hut algorithm from deviceCode.cu, but
+// using Vulkan ray queries (rayQueryEXT) in a compute shader instead of
+// OptiX trace/invoke.
+//
+// Each workgroup processes one particle. The shader walks the octree by
+// tracing rays through a triangle-mesh BLAS. The BVH spatially organizes
+// octree nodes so that the hardware accelerates traversal.
+//
+// Closest-hit (triangle intersection)  = BH criterion NOT met (approximate)
+// Miss (no triangle in range)          = BH criterion met or end (descend)
+//
+// Binding layout:
+//   binding 0: NodeBuffer    — vec4[xyz=pos, w=unused] per particle (readonly)
+//   binding 1: ForceBuffer   — vec4[x=force_magnitude, ...] per particle (writeonly)
+//   binding 2: PointBuffer   — vec4[xyz=pos, w=mass] per particle (readonly)
+//   binding 3: BhNodeBuffer  — BhNode[] octree device nodes (readonly)
+//   binding 4: TLAS          — accelerationStructureEXT over triangle mesh
+//
+// Push constants (16 bytes):
+//   uint   particle_count
+//   uint   num_prims
+//   float  threshold   (theta)
+//   float  G           (gravitational constant)
+// =============================================================================
+
+#version 460
+#extension GL_EXT_ray_query : require
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+// ---------------------------------------------------------------------------
+// Device BH node — must match bh_device_node_t in C code
+// ---------------------------------------------------------------------------
+struct BhNode {
+	float mass;
+	float center_of_mass_x;
+	float center_of_mass_y;
+	float center_of_mass_z;
+	float next_ray_location_x;
+	float next_ray_location_y;
+	int next_prim_id;
+	float auto_rope_ray_location_x;
+	float auto_rope_ray_location_y;
+	int auto_rope_prim_id;
+	int particles[32];
+	int num_particles;
+	uint is_leaf;
+};
+
+// ---------------------------------------------------------------------------
+// Bindings
+// ---------------------------------------------------------------------------
+layout(std430, binding = 0) readonly buffer NodeBuffer {
+	vec4 nodes[];
+};
+
+layout(std430, binding = 1) buffer ForceBuffer {
+	vec4 forces[];
+};
+
+layout(std430, binding = 2) readonly buffer PointBuffer {
+	vec4 points[];
+};
+
+layout(std430, binding = 3) readonly buffer BhNodeBuffer {
+	BhNode bh_nodes[];
+};
+
+layout(binding = 4) uniform accelerationStructureEXT tlas;
+
+// ---------------------------------------------------------------------------
+// Push constants
+// ---------------------------------------------------------------------------
+layout(push_constant) uniform PC {
+	uint particle_count;
+	uint num_prims;
+	float threshold;
+	float G;
+}
+pc;
+
+// ---------------------------------------------------------------------------
+// Main: OWL Barnes-Hut traversal
+// ---------------------------------------------------------------------------
+void main()
+{
+	uint i = gl_GlobalInvocationID.x;
+	if (i >= pc.particle_count)
+		return;
+
+	vec3 pos = points[i].xyz;
+	float my_mass = points[i].w;
+	float force = 0.0;
+
+	// Start at root (primID = 0), origin = (0, 0) in DFS space
+	// Matching OWL rayGen: primaryLaunchRays[i] = { origin=(0,0,0), primID=0, pointID=i }
+	int prim_id = 0;
+	vec2 ray_origin = vec2(0.0);
+	uint ray_self = 0u;
+
+	// While loop matching OWL deviceCode.cu rayGen
+	while (prim_id >= 0 && uint(prim_id) < pc.num_prims) {
+		BhNode node = bh_nodes[prim_id];
+
+		// Compute distance from particle to this node's center of mass
+		// (OWL: dx = fabs(point.pos.x - node.centerOfMassX), etc.)
+		float dx = pos.x - node.center_of_mass_x;
+		float dy = pos.y - node.center_of_mass_y;
+		float dz = pos.z - node.center_of_mass_z;
+		float r2 = dx * dx + dy * dy + dz * dz;
+		float ray_length = sqrt(r2) * pc.threshold;
+
+		// Initialize ray query:
+	//   origin = (ray_origin.x, ray_origin.y, 0.0)  — 2D DFS space
+	//   direction = (1, 0, 0)                       — along X axis (OWL: vec3f(1,0,0))
+	//   tmax = ray_length                           — distance * theta (OWL: sqrtf(r_2) * THRESHOLD)
+	//   Flags: TERMINATE_ON_FIRST_HIT | OPAQUE      — matches OWL: OPTIX_RAY_FLAG_DISABLE_ANYHIT | TERMINATE_ON_FIRST_HIT
+		rayQueryEXT rq;
+		rayQueryInitializeEXT(rq, tlas,
+		                      gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT,
+		                      0xFF,
+		                      vec3(ray_origin, 0.0),
+		                      0.0,
+		                      vec3(1.0, 0.0, 0.0),
+		                      ray_length);
+
+		// Traverse BVH — replaces OWL's optixTraverse + optixInvoke
+		while (rayQueryProceedEXT(rq)) {}
+
+		// Check intersection type — replaces OWL closest-hit / miss programs
+		if (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCandidateIntersectionTriangleEXT) {
+			// ======== CLOSEST HIT (OWL: OPTIX_CLOSEST_HIT_PROGRAM(TriangleMesh)) ========
+			int hit_prim = int(rayQueryGetIntersectionPrimitiveIndexEXT(rq, true));
+			BhNode hit_node = bh_nodes[hit_prim];
+
+			if (hit_node.is_leaf == 1u) {
+				// Leaf: compute pairwise forces with all particles in bucket
+				for (int p = 0; p < hit_node.num_particles; p++) {
+					int pid = hit_node.particles[p];
+					if (pid != int(i)) {
+						vec3 pd = pos - points[pid].xyz;
+						float pr2 = dot(pd, pd);
+						if (pr2 > 1e-12) {
+							force += (my_mass * points[pid].w) / pr2 * pc.G;
+						}
+					}
+				}
+			} else {
+				// Internal: approximate with total mass at CoM
+				float dist = sqrt(r2);
+				if (dist > 1e-12) {
+					force += (my_mass * hit_node.mass) / r2 * pc.G;
+				}
+			}
+
+			// Follow auto-rope (skip subtree) — OWL: optixSetPayload_4(bhNode.autoRopePrimId)
+			prim_id = hit_node.auto_rope_prim_id;
+			ray_origin = vec2(hit_node.auto_rope_ray_location_x, hit_node.auto_rope_ray_location_y);
+			ray_self = 0u;
+		} else {
+			// ======== MISS (OWL: OPTIX_MISS_PROGRAM(miss)) ========
+			if (node.is_leaf == 1u && ray_self == 0u) {
+				// Leaf that was bypassed: compute pairwise forces
+				// (OWL: bhNode.isLeaf == 1 && optixGetPayload_0() == 0)
+				for (int p = 0; p < node.num_particles; p++) {
+					int pid = node.particles[p];
+					if (pid != int(i)) {
+						vec3 pd = pos - points[pid].xyz;
+						float pr2 = dot(pd, pd);
+						if (pr2 > 1e-12) {
+							force += (my_mass * points[pid].w) / pr2 * pc.G;
+						}
+					}
+				}
+			}
+
+			// Follow DFS successor — OWL: optixSetPayload_4(bhNode.nextPrimId)
+			prim_id = node.next_prim_id;
+			ray_origin = vec2(node.next_ray_location_x, node.next_ray_location_y);
+			if (ray_length == 0.0) {
+				ray_self = 1u;
+			} else {
+				ray_self = 0u;
+			}
+		}
+	}
+
+	// Write output — OWL: optixLaunchParams.computedForces[pointID] = __uint_as_float(p1)
+	forces[i] = vec4(force, 0.0, 0.0, 0.0);
+}
