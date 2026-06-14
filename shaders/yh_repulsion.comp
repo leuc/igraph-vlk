@@ -68,14 +68,6 @@ layout(std430, binding = 7) readonly buffer CenterBuffer
 {
 	vec4 centers[];
 };
-layout(std430, binding = 8) readonly buffer NodeMapBuffer
-{
-	uint node_map[];
-};
-layout(std430, binding = 9) readonly buffer LevelOffsetsBuffer
-{
-	uint level_offsets[];
-};
 
 layout(push_constant) uniform PC
 {
@@ -104,10 +96,7 @@ void main()
 
 	while (rayQueryProceedEXT(rq)) {
 		if (rayQueryGetIntersectionTypeEXT(rq, false) == gl_RayQueryCandidateIntersectionAABBEXT) {
-			int geom_id = rayQueryGetIntersectionGeometryIndexEXT(rq, false);
-			int prim_id = rayQueryGetIntersectionPrimitiveIndexEXT(rq, false);
-			uint flat_idx = level_offsets[geom_id] + prim_id;
-			uint j = node_map[flat_idx];
+			uint j = rayQueryGetIntersectionInstanceIdEXT(rq, false);
 			if (i == j)
 				continue;
 
