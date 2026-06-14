@@ -658,17 +658,9 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 			posData[i * 4 + 2] = positions[i * 3 + 2];
 			posData[i * 4 + 3] = 1.0f;
 		}
-		// Use a command to upload to device-local
-		VkBuffer staging;
-		VkDeviceMemory stagingMem;
-		bhrt_create_buffer(bh, sizeof(float) * 4 * pc, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &staging, &stagingMem);
-		void *mapped;
-		vkMapMemory(bh->core->device, stagingMem, 0, sizeof(float) * 4 * pc, 0, &mapped);
-		memcpy(mapped, posData, sizeof(float) * 4 * pc);
-		vkUnmapMemory(bh->core->device, stagingMem);
-		VkBufferCopy copyRegion = {.size = sizeof(float) * 4 * pc};
-		vkCmdCopyBuffer(cmd, staging, bh->pos_buf, 1, &copyRegion);
-		VK_DESTROY_BUFFER(bh->core->device, staging, stagingMem);
+		// Upload via bhrt_staging_upload (separate submit+wait, avoids use-after-free
+		// of staging buffer that would occur if we recorded into the caller's cmd).
+		bhrt_staging_upload(bh, bh->pos_buf, posData, sizeof(float) * 4 * pc);
 		free(posData);
 	}
 
