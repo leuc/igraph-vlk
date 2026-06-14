@@ -49,7 +49,7 @@ void main()
 	if (max_w > 0.0) {
 		uint edge_index = gl_VertexIndex / (splcPC.segmentsPerEdge * 2);
 		float w = splc_edges[edge_index].weight;
-		float intensity = clamp(log(w + 1.0) / log(max_w + 1.0), 0.0, 1.0);
+		float intensity = clamp(pow(log(w + 1.0) / log(max_w + 1.0), 0.3), 0.0, 1.0);
 		fragColor = inColor * (0.2 + 0.8 * intensity);
 	}
 	fragSelected = inSelected;
