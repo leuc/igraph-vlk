@@ -273,10 +273,14 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 	vkCmdCopyBuffer(tmpCmd, stagingBuf, r->yhrt_node_buf, 1, &copyRegion);
 	VK_CHECK(vkEndCommandBuffer(tmpCmd), "Failed to end YHRT tmp cmd");
 	VkSubmitInfo tmpSubmit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &tmpCmd};
+	VkFence fence;
+	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+	VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &fence), "Failed to create YHRT init fence");
 	pthread_mutex_lock(&r->core.graphicsQueueMutex);
-	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &tmpSubmit, VK_NULL_HANDLE), "Failed to submit YHRT tmp upload");
-	vkQueueWaitIdle(r->core.graphicsQueue);
+	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &tmpSubmit, fence), "Failed to submit YHRT tmp upload");
 	pthread_mutex_unlock(&r->core.graphicsQueueMutex);
+	VK_CHECK(vkWaitForFences(r->core.device, 1, &fence, VK_TRUE, UINT64_MAX), "Failed to wait for YHRT init fence");
+	vkDestroyFence(r->core.device, fence, NULL);
 	vkDestroyCommandPool(r->core.device, tmpPool, NULL);
 	VK_DESTROY_BUFFER(r->core.device, stagingBuf, stagingMem);
 	free(nodeData);
@@ -428,10 +432,14 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 		vkCmdCopyBuffer(edgeCmd, edgeStageBuf, r->yhrt_edge_buf, 1, &edgeCopy);
 		VK_CHECK(vkEndCommandBuffer(edgeCmd), "Failed to end edge upload cmd");
 		VkSubmitInfo edgeSubmit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &edgeCmd};
+		VkFence fence;
+		VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+		VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &fence), "Failed to create edge upload fence");
 		pthread_mutex_lock(&r->core.graphicsQueueMutex);
-		VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &edgeSubmit, VK_NULL_HANDLE), "Failed to submit edge upload");
-		vkQueueWaitIdle(r->core.graphicsQueue);
+		VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &edgeSubmit, fence), "Failed to submit edge upload");
 		pthread_mutex_unlock(&r->core.graphicsQueueMutex);
+		VK_CHECK(vkWaitForFences(r->core.device, 1, &fence, VK_TRUE, UINT64_MAX), "Failed to wait for edge upload fence");
+		vkDestroyFence(r->core.device, fence, NULL);
 		VK_DESTROY_BUFFER(r->core.device, edgeStageBuf, edgeStageMem);
 		vkDestroyCommandPool(r->core.device, edgePool, NULL);
 		free(edgeData);
@@ -485,10 +493,14 @@ static void yhrt_readback_positions_to_cpu(Renderer *r)
 
 	VK_CHECK(vkEndCommandBuffer(cmd), "Failed to end YHRT readback cmd");
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cmd};
+	VkFence fence;
+	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+	VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &fence), "Failed to create readback fence");
 	pthread_mutex_lock(&r->core.graphicsQueueMutex);
-	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit YHRT readback");
-	vkQueueWaitIdle(r->core.graphicsQueue);
+	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, fence), "Failed to submit YHRT readback");
 	pthread_mutex_unlock(&r->core.graphicsQueueMutex);
+	VK_CHECK(vkWaitForFences(r->core.device, 1, &fence, VK_TRUE, UINT64_MAX), "Failed to wait for readback fence");
+	vkDestroyFence(r->core.device, fence, NULL);
 	vkDestroyCommandPool(r->core.device, pool, NULL);
 
 	// Map and extract xyz → yhrt_cpu_positions (stride conversion: vec4 → xyz)
@@ -582,7 +594,7 @@ bool yhrt_worker_step(Renderer *r)
 	// ---- BH repulsion dispatch ----
 	bhrt_record_dispatch(r->bhrt, cmd);
 
-	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
 
 	// ---- Fnorm reset (before attraction/update accumulate) ----
 	vkCmdFillBuffer(cmd, r->yhrt_fnorm_buf, 0, sizeof(double), 0);
@@ -652,9 +664,7 @@ bool yhrt_worker_readback(Renderer *r, igraph_matrix_t *out_positions)
 
 void yhrt_worker_cleanup(Renderer *r)
 {
-	pthread_mutex_lock(&r->core.graphicsQueueMutex);
-	vkQueueWaitIdle(r->core.graphicsQueue);
-	pthread_mutex_unlock(&r->core.graphicsQueueMutex);
+	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->yhrt_dispatch_fence, VK_TRUE, UINT64_MAX), "Failed to wait for YHRT cleanup");
 	yhrt_cleanup_algo_buffers(r);
 	bhrt_session_cleanup(r->bhrt);
 	r->yhrt_active = false;

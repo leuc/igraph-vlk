@@ -92,11 +92,15 @@ void end_single_time_commands(VkDevice device, VkCommandPool commandPool, VkQueu
 {
 	VK_CHECK(vkEndCommandBuffer(commandBuffer), "Failed to end one-time command buffer");
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &commandBuffer};
+	VkFence fence;
+	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+	VK_CHECK(vkCreateFence(device, &fenceInfo, NULL, &fence), "Failed to create one-time fence");
 	if (s_queueMutexPtr)
 		pthread_mutex_lock(s_queueMutexPtr);
-	VK_CHECK(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit one-time command buffer");
-	VK_CHECK(vkQueueWaitIdle(queue), "Failed to wait for one-time command queue idle");
+	VK_CHECK(vkQueueSubmit(queue, 1, &submitInfo, fence), "Failed to submit one-time command buffer");
 	if (s_queueMutexPtr)
 		pthread_mutex_unlock(s_queueMutexPtr);
+	VK_CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX), "Failed to wait for one-time fence");
+	vkDestroyFence(device, fence, NULL);
 	vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }

@@ -66,7 +66,7 @@ typedef struct
 	int auto_rope_prim_id;
 	int particles[BH_BUCKET_SIZE];
 	int num_particles;
-	uint8_t is_leaf;
+	uint32_t is_leaf;
 } bh_device_node_t;
 
 // ---------------------------------------------------------------------------

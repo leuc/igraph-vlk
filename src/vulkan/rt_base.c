@@ -244,12 +244,16 @@ void rt_base_staging_upload(RTBase *base, VkBuffer dst, const void *data, VkDevi
 	vkCmdCopyBuffer(cmd, staging, dst, 1, &copyRegion);
 	VK_CHECK(vkEndCommandBuffer(cmd), "Failed to end staging upload cmd");
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cmd};
+	VkFence fence;
+	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+	VK_CHECK(vkCreateFence(base->core->device, &fenceInfo, NULL, &fence), "Failed to create staging upload fence");
 	if (thread_safe)
 		pthread_mutex_lock(&base->core->graphicsQueueMutex);
-	VK_CHECK(vkQueueSubmit(base->core->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit staging upload");
-	vkQueueWaitIdle(base->core->graphicsQueue);
+	VK_CHECK(vkQueueSubmit(base->core->graphicsQueue, 1, &submitInfo, fence), "Failed to submit staging upload");
 	if (thread_safe)
 		pthread_mutex_unlock(&base->core->graphicsQueueMutex);
+	VK_CHECK(vkWaitForFences(base->core->device, 1, &fence, VK_TRUE, UINT64_MAX), "Failed to wait for staging upload fence");
+	vkDestroyFence(base->core->device, fence, NULL);
 	vkDestroyCommandPool(base->core->device, cmdPool, NULL);
 	VK_DESTROY_BUFFER(base->core->device, staging, stagingMem);
 }
@@ -413,10 +417,14 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 		rt_funcs.CmdBuildAccelerationStructuresKHR(blasCmd, 1, &blasBuildInfo, &pBlasRange);
 		vkEndCommandBuffer(blasCmd);
 		VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &blasCmd};
+		VkFence fence;
+		VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+		VK_CHECK(vkCreateFence(base->core->device, &fenceInfo, NULL, &fence), "Failed to create BLAS fence");
 		pthread_mutex_lock(&base->core->graphicsQueueMutex);
-		vkQueueSubmit(base->core->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-		vkQueueWaitIdle(base->core->graphicsQueue);
+		vkQueueSubmit(base->core->graphicsQueue, 1, &submitInfo, fence);
 		pthread_mutex_unlock(&base->core->graphicsQueueMutex);
+		VK_CHECK(vkWaitForFences(base->core->device, 1, &fence, VK_TRUE, UINT64_MAX), "Failed to wait for BLAS fence");
+		vkDestroyFence(base->core->device, fence, NULL);
 		vkDestroyCommandPool(base->core->device, blasPool, NULL);
 
 		VK_DESTROY_BUFFER(base->core->device, aabbBuf, aabbMem);
@@ -492,10 +500,14 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 		rt_funcs.CmdBuildAccelerationStructuresKHR(tlasCmd, 1, &tlasBuildInfo, &pTlasRange);
 		vkEndCommandBuffer(tlasCmd);
 		VkSubmitInfo submitInfo2 = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &tlasCmd};
+		VkFence fence;
+		VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+		VK_CHECK(vkCreateFence(base->core->device, &fenceInfo, NULL, &fence), "Failed to create TLAS fence");
 		pthread_mutex_lock(&base->core->graphicsQueueMutex);
-		vkQueueSubmit(base->core->graphicsQueue, 1, &submitInfo2, VK_NULL_HANDLE);
-		vkQueueWaitIdle(base->core->graphicsQueue);
+		vkQueueSubmit(base->core->graphicsQueue, 1, &submitInfo2, fence);
 		pthread_mutex_unlock(&base->core->graphicsQueueMutex);
+		VK_CHECK(vkWaitForFences(base->core->device, 1, &fence, VK_TRUE, UINT64_MAX), "Failed to wait for TLAS fence");
+		vkDestroyFence(base->core->device, fence, NULL);
 		vkDestroyCommandPool(base->core->device, tlasPool, NULL);
 	}
 
