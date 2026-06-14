@@ -546,7 +546,7 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 				.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
 				.vertexData.deviceAddress = vertAddr,
 				.vertexStride = sizeof(float) * 3,
-				.maxVertex = (uint32_t)(dfs.num_nodes * 3 - 1),
+				.maxVertex = (uint32_t)(bh->num_prims * 3 - 1),
 				.indexType = VK_INDEX_TYPE_UINT32,
 				.indexData.deviceAddress = idxAddr,
 			},

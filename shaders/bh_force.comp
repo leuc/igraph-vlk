@@ -134,13 +134,13 @@ void main()
 		// Check intersection type — replaces OWL closest-hit / miss programs
 		if (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCandidateIntersectionTriangleEXT) {
 			// ======== CLOSEST HIT (OWL: OPTIX_CLOSEST_HIT_PROGRAM(TriangleMesh)) ========
-			int hit_prim = int(rayQueryGetIntersectionPrimitiveIndexEXT(rq, true));
-			BhNode hit_node = bh_nodes[hit_prim];
-
-			if (hit_node.is_leaf == 1u) {
+			// OWL: closest-hit processes the NODE IN THE PAYLOAD (current prim_id),
+			// NOT the BVH-hit node. The ray hit is just a signal that the BH
+			// criterion is NOT met (node is close enough to need processing).
+			if (node.is_leaf == 1u) {
 				// Leaf: compute pairwise 3D forces with all particles in bucket
-				for (int p = 0; p < hit_node.num_particles; p++) {
-					int pid = hit_node.particles[p];
+				for (int p = 0; p < node.num_particles; p++) {
+					int pid = node.particles[p];
 					if (pid != int(i)) {
 						vec3 pd = pos - points[pid].xyz;
 						float pr2 = dot(pd, pd);
@@ -154,13 +154,13 @@ void main()
 				// Internal: approximate with total mass at CoM
 				float dist = sqrt(r2);
 				if (dist > 1e-12) {
-						force_vec += vec3(dx, dy, dz) * (my_mass * hit_node.mass) / r2 * pc.G;
+						force_vec += vec3(dx, dy, dz) * (my_mass * node.mass) / r2 * pc.G;
 				}
 			}
 
 			// Follow auto-rope (skip subtree) — OWL: optixSetPayload_4(bhNode.autoRopePrimId)
-			prim_id = hit_node.auto_rope_prim_id;
-			ray_origin = vec2(hit_node.auto_rope_ray_location_x, hit_node.auto_rope_ray_location_y);
+			prim_id = node.auto_rope_prim_id;
+			ray_origin = vec2(node.auto_rope_ray_location_x, node.auto_rope_ray_location_y);
 			ray_self = 0u;
 		} else {
 			// ======== MISS (OWL: OPTIX_MISS_PROGRAM(miss)) ========
@@ -193,8 +193,4 @@ void main()
 
 	// Write output — 3D force vector matching YHRT force buffer format
 	forces[i] = vec4(force_vec, 0.0);
-
-	// DIAGNOSTIC: particle 0 overwritten with push constants (verify shader executes)
-	if (i == 0u)
-		forces[0] = vec4(float(pc.particle_count), float(pc.num_prims), pc.threshold, pc.G);
 }

@@ -652,7 +652,6 @@ bool yhrt_worker_step(Renderer *r)
 				printf("[DEBUG] GPU Force[%u] = (%.6f, %.6f, %.6f) |F|=%.6f\n", dbi, fx, fy, fz, fmag);
 		}
 		printf("[DEBUG] GPU Repulsion Fnorm (sum|F|) = %.6f  (avg=%.6f)\n", totalFmag, totalFmag / (float)r->yhrt_vcount);
-		printf("[DEBUG] GPU Force[0] (push constants = pc, np, theta, G) = (%.0f, %.0f, %.6f, %.6f)\n", forceDbg[0], forceDbg[1], forceDbg[2], forceDbg[3]);
 
 		free(forceDbg);
 		printf("[DEBUG] ===== End iteration 0 debug =====\n");

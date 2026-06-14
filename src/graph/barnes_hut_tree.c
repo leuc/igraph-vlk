@@ -396,9 +396,6 @@ bh_dfs_output_t bh_tree_to_dfs_array(bh_tree_t *tree)
 	stack_entry_t *node_stack = (stack_entry_t *)malloc(sizeof(stack_entry_t) * capacity);
 	int sp = 0;
 
-	float triangle_x_offset = 0.0f;
-	int dfs_index = 0;
-
 	node_stack[sp].node = tree->root;
 	node_stack[sp].level = 0;
 	sp++;
@@ -417,11 +414,12 @@ bh_dfs_output_t bh_tree_to_dfs_array(bh_tree_t *tree)
 			node_stack = (stack_entry_t *)realloc(node_stack, sizeof(stack_entry_t) * capacity);
 		}
 
-		float triangle_x_loc = cur->s + triangle_x_offset;
+		// Shadow triangle X at node's center of mass (spatially meaningful, always reachable)
+		float triangle_x_loc = cur->cofm.x;
 		if (cur->s < out.min_s)
 			out.min_s = cur->s;
 
-		// Triangle vertices (matching OWL: X = s + offset, Y = depth, Z = ±0.5)
+		// Triangle vertices: X = cofm.x (reachable by ray), Y = level (DFS depth), Z = ±0.5
 		int vi = out.num_nodes * 9;
 		out.vertices[vi + 0] = triangle_x_loc;
 		out.vertices[vi + 1] = (float)level;
@@ -447,20 +445,17 @@ bh_dfs_output_t bh_tree_to_dfs_array(bh_tree_t *tree)
 		dn->center_of_mass_y = cur->cofm.y;
 		dn->center_of_mass_z = cur->cofm.z;
 		dn->is_leaf = (cur->type == BH_LEAF) ? 1 : 0;
-		dn->next_ray_location_x = 0.0f; // set by install_auto_ropes
-		dn->next_ray_location_y = 0.0f;
+		dn->next_ray_location_x = triangle_x_loc;
+		dn->next_ray_location_y = (float)level;
 		dn->next_prim_id = (int)(out.num_nodes + 1); // DFS successor
-		dn->auto_rope_ray_location_x = 0.0f;
-		dn->auto_rope_ray_location_y = 0.0f;
+		dn->auto_rope_ray_location_x = triangle_x_loc;
+		dn->auto_rope_ray_location_y = (float)level;
 		dn->auto_rope_prim_id = -1; // sentinel = terminate
 		dn->num_particles = cur->num_particles;
 		for (int p = 0; p < cur->num_particles && p < BH_BUCKET_SIZE; p++)
 			dn->particles[p] = cur->particles[p];
 
 		cur->dfs_index = (uint32_t)out.num_nodes;
-
-		// Update triangle_x_offset for next node
-		triangle_x_offset = triangle_x_loc;
 		out.num_nodes++;
 
 		// Push children in reverse order (matching OWL: for i = 7..0)
