@@ -342,6 +342,7 @@ typedef struct Renderer
 
 	// Yifan Hu RT Layout state
 	bool yhrt_active;
+	float *yhrt_cpu_positions;
 	bool yhrt_fp64_supported;
 	bool yhrt_fnorm_readback_pending;
 	int yhrt_current_iter;
@@ -379,6 +380,10 @@ typedef struct Renderer
 	VkPipeline yhrt_update_fp64_pipeline;
 	VkPipeline yhrt_update_instances_pipeline;
 	VkFence yhrt_dispatch_fence;
+	VkCommandPool yhrt_cmd_pool;
+	VkCommandBuffer yhrt_cmd_buf;
+	VkBuffer yhrt_pos_staging_buf;
+	VkDeviceMemory yhrt_pos_staging_mem;
 
 	// Ring-buffered sync for graph updates
 	VkFence graphUpdateFences[GRAPH_UPDATE_RING_SIZE];

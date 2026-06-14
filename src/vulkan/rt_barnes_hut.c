@@ -757,6 +757,11 @@ VkBuffer bhrt_force_buffer(BarnesHutRT *bh)
 	return bh ? bh->force_buf : VK_NULL_HANDLE;
 }
 
+VkBuffer bhrt_pos_buffer(BarnesHutRT *bh)
+{
+	return bh ? bh->pos_buf : VK_NULL_HANDLE;
+}
+
 void bhrt_readback_forces(BarnesHutRT *bh, float *out_forces)
 {
 	if (!bh || !bh->session_active || !out_forces)

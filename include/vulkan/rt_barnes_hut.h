@@ -54,6 +54,9 @@ void bhrt_record_dispatch(BarnesHutRT *bh, VkCommandBuffer cmd);
 // Access the force output buffer (for binding to caller's own descriptor sets)
 VkBuffer bhrt_force_buffer(BarnesHutRT *bh);
 
+// Access the position buffer (for binding to caller's own descriptor sets)
+VkBuffer bhrt_pos_buffer(BarnesHutRT *bh);
+
 // Read back forces to CPU (blocking, maps staging buffer)
 void bhrt_readback_forces(BarnesHutRT *bh, float *out_forces);
 
