@@ -101,6 +101,12 @@ struct RTBase
 
 	// Multi-geometry BLAS
 	uint32_t blas_num_levels;
+
+	// Inverse mapping: flat BLAS index → node index
+	VkBuffer node_map_buf;
+	VkDeviceMemory node_map_mem;
+	VkBuffer level_offsets_buf;
+	VkDeviceMemory level_offsets_mem;
 };
 
 // ============================================================================
@@ -267,6 +273,8 @@ static void rt_base_cleanup_session_buffers(RTBase *base)
 	VK_DESTROY_BUFFER(base->core->device, base->blas_buf, base->blas_mem);
 	VK_DESTROY_BUFFER(base->core->device, base->tlas_buf, base->tlas_mem);
 	VK_DESTROY_BUFFER(base->core->device, base->instance_buf, base->instance_mem);
+	VK_DESTROY_BUFFER(base->core->device, base->node_map_buf, base->node_map_mem);
+	VK_DESTROY_BUFFER(base->core->device, base->level_offsets_buf, base->level_offsets_mem);
 
 	if (base->blas != VK_NULL_HANDLE) {
 		rt_funcs.DestroyAccelerationStructureKHR(base->core->device, base->blas, NULL);
@@ -364,10 +372,11 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 
 	VkAccelerationStructureGeometryKHR tlasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR, .geometry.instances = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR}};
 
-	VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = {.primitiveCount = vcount};
+	VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = {.primitiveCount = 1};
 
-	// Step 1: Build the multi-geometry AABB buffer, compute offsets and geometry descriptors
+	// Step 1: Build the multi-geometry AABB buffer, node_map, level_offsets
 	uint32_t *level_offsets = malloc(sizeof(uint32_t) * num_levels);
+	uint32_t *node_map = malloc(sizeof(uint32_t) * vcount);
 	{
 		uint32_t offset = 0;
 		for (uint32_t k = 0; k < num_levels; k++) {
@@ -379,13 +388,18 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 		uint32_t *level_cursor = malloc(sizeof(uint32_t) * num_levels);
 		memcpy(level_cursor, level_offsets, sizeof(uint32_t) * num_levels);
 
+		uint32_t ncols = (uint32_t)igraph_matrix_ncol(init_positions);
 		for (uint32_t i = 0; i < vcount; i++) {
 			int k = node_levels[i];
 			if (k < 0 || k >= (int)num_levels)
 				k = 0;
 			float R = level_radii[k];
+			float px = (float)MATRIX(*init_positions, i, 0);
+			float py = (float)MATRIX(*init_positions, i, 1);
+			float pz = (ncols > 2) ? (float)MATRIX(*init_positions, i, 2) : 0.0f;
 			uint32_t idx = level_cursor[k]++;
-			aabbs[idx] = (VkAabbPositionsKHR){.minX = -R, .minY = -R, .minZ = -R, .maxX = R, .maxY = R, .maxZ = R};
+			aabbs[idx] = (VkAabbPositionsKHR){.minX = px - R, .minY = py - R, .minZ = pz - R, .maxX = px + R, .maxY = py + R, .maxZ = pz + R};
+			node_map[idx] = i;
 		}
 
 		VkDeviceSize aabbSize = sizeof(VkAabbPositionsKHR) * vcount;
@@ -393,6 +407,12 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 		rt_base_staging_upload(base, aabbBuf, aabbs, aabbSize, true);
 		free(aabbs);
 		free(level_cursor);
+
+		// Upload node_map and level_offsets as device SSBOs
+		rt_base_create_device_buffer(base, sizeof(uint32_t) * vcount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &base->node_map_buf, &base->node_map_mem);
+		rt_base_staging_upload(base, base->node_map_buf, node_map, sizeof(uint32_t) * vcount, true);
+		rt_base_create_device_buffer(base, sizeof(uint32_t) * num_levels, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &base->level_offsets_buf, &base->level_offsets_mem);
+		rt_base_staging_upload(base, base->level_offsets_buf, level_offsets, sizeof(uint32_t) * num_levels, true);
 
 		uint64_t aabbAddr = rt_base_get_buffer_address(base, aabbBuf);
 
@@ -458,9 +478,7 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 			.pGeometries = blasGeometries,
 			.scratchData.deviceAddress = rt_base_get_buffer_address(base, base->as_scratch_buf),
 		};
-		const VkAccelerationStructureBuildRangeInfoKHR **pBlasRanges = malloc(sizeof(VkAccelerationStructureBuildRangeInfoKHR *) * num_levels);
-		for (uint32_t k = 0; k < num_levels; k++)
-			pBlasRanges[k] = &blasRangeInfos[k];
+		const VkAccelerationStructureBuildRangeInfoKHR *pBlasRangeInfo = blasRangeInfos;
 
 		VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = (uint32_t)base->core->graphicsQueueFamily};
 		VkCommandPool blasPool;
@@ -469,7 +487,7 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 		VkCommandBuffer blasCmd;
 		vkAllocateCommandBuffers(base->core->device, &cmdInfo, &blasCmd);
 		vkBeginCommandBuffer(blasCmd, &VK_CMD_BEGIN_INFO_ONETIME);
-		rt_funcs.CmdBuildAccelerationStructuresKHR(blasCmd, 1, &blasBuildInfo, pBlasRanges);
+		rt_funcs.CmdBuildAccelerationStructuresKHR(blasCmd, 1, &blasBuildInfo, &pBlasRangeInfo);
 		vkEndCommandBuffer(blasCmd);
 		VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &blasCmd};
 		pthread_mutex_lock(&base->core->graphicsQueueMutex);
@@ -478,43 +496,36 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 		pthread_mutex_unlock(&base->core->graphicsQueueMutex);
 		vkDestroyCommandPool(base->core->device, blasPool, NULL);
 
-		free(pBlasRanges);
 		VK_DESTROY_BUFFER(base->core->device, aabbBuf, aabbMem);
 	}
 
-	// Step 4: Create TLAS instances and build the TLAS
+	// Step 4: Create TLAS (1 instance with identity transform) and build
 	{
-		VkDeviceSize instSize = sizeof(VkAccelerationStructureInstanceKHR) * vcount;
-		rt_base_create_device_buffer(base, instSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &base->instance_buf, &base->instance_mem);
+		VkDeviceSize instSize = sizeof(VkAccelerationStructureInstanceKHR) * 1;
+		rt_base_create_device_buffer(base, instSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &base->instance_buf, &base->instance_mem);
 
-		uint32_t ncols = (uint32_t)igraph_matrix_ncol(init_positions);
-
-		VkAccelerationStructureInstanceKHR *instances = calloc(vcount, sizeof(VkAccelerationStructureInstanceKHR));
-		uint64_t blasAddr = rt_base_get_as_address(base, base->blas);
-		for (uint32_t i = 0; i < vcount; i++) {
-			memset(&instances[i], 0, sizeof(VkAccelerationStructureInstanceKHR));
-			instances[i].instanceCustomIndex = i;
-			instances[i].mask = 0xFF;
-			instances[i].instanceShaderBindingTableRecordOffset = 0;
-			instances[i].flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
-			instances[i].accelerationStructureReference = blasAddr;
-
-			float *m = (float *)instances[i].transform.matrix[0];
-			m[0] = 1.0f;
-			m[1] = 0.0f;
-			m[2] = 0.0f;
-			m[3] = (float)MATRIX(*init_positions, i, 0);
-			m[4] = 0.0f;
-			m[5] = 1.0f;
-			m[6] = 0.0f;
-			m[7] = (float)MATRIX(*init_positions, i, 1);
-			m[8] = 0.0f;
-			m[9] = 0.0f;
-			m[10] = 1.0f;
-			m[11] = (ncols > 2) ? (float)MATRIX(*init_positions, i, 2) : 0.0f;
-		}
-		rt_base_staging_upload(base, base->instance_buf, instances, instSize, true);
-		free(instances);
+		VkAccelerationStructureInstanceKHR instance;
+		memset(&instance, 0, sizeof(VkAccelerationStructureInstanceKHR));
+		instance.instanceCustomIndex = 0;
+		instance.mask = 0xFF;
+		instance.instanceShaderBindingTableRecordOffset = 0;
+		instance.flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
+		instance.accelerationStructureReference = rt_base_get_as_address(base, base->blas);
+		// Identity transform: BLAS AABBs are already at world positions
+		float *m = (float *)instance.transform.matrix[0];
+		m[0] = 1.0f;
+		m[1] = 0.0f;
+		m[2] = 0.0f;
+		m[3] = 0.0f;
+		m[4] = 0.0f;
+		m[5] = 1.0f;
+		m[6] = 0.0f;
+		m[7] = 0.0f;
+		m[8] = 0.0f;
+		m[9] = 0.0f;
+		m[10] = 1.0f;
+		m[11] = 0.0f;
+		rt_base_staging_upload(base, base->instance_buf, &instance, instSize, true);
 
 		uint64_t instAddr = rt_base_get_buffer_address(base, base->instance_buf);
 		tlasGeometry.geometry.instances.data.deviceAddress = instAddr;
@@ -522,7 +533,7 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 		VkAccelerationStructureBuildSizesInfoKHR tlasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
 		{
 			VkAccelerationStructureBuildGeometryInfoKHR tmpInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &tlasGeometry};
-			uint32_t maxInstances = vcount;
+			uint32_t maxInstances = 1;
 			rt_funcs.GetAccelerationStructureBuildSizesKHR(base->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tmpInfo, &maxInstances, &tlasSizeInfo);
 		}
 
@@ -533,7 +544,7 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 		VkAccelerationStructureBuildGeometryInfoKHR tlasBuildInfo = {
 			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 			.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-			.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
+			.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR,
 			.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
 			.dstAccelerationStructure = base->tlas,
 			.geometryCount = 1,
@@ -560,6 +571,7 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 	}
 
 	free(level_offsets);
+	free(node_map);
 	free(blasGeometries);
 	free(blasPrimCounts);
 	free(blasRangeInfos);
@@ -611,6 +623,14 @@ bool rt_base_fp64_supported(RTBase *base)
 uint32_t rt_base_num_levels(RTBase *base)
 {
 	return base->blas_num_levels;
+}
+VkBuffer rt_base_node_map_buf(RTBase *base)
+{
+	return base->node_map_buf;
+}
+VkBuffer rt_base_level_offsets_buf(RTBase *base)
+{
+	return base->level_offsets_buf;
 }
 
 // ============================================================================

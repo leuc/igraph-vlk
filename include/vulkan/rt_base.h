@@ -26,6 +26,8 @@ uint32_t rt_base_vcount(RTBase *base);
 uint32_t rt_base_ecount(RTBase *base);
 bool rt_base_fp64_supported(RTBase *base);
 uint32_t rt_base_num_levels(RTBase *base);
+VkBuffer rt_base_node_map_buf(RTBase *base);
+VkBuffer rt_base_level_offsets_buf(RTBase *base);
 
 // Buffer creation helpers (for algorithm-owned buffers)
 void rt_base_create_buffer(RTBase *base, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *buf, VkDeviceMemory *mem);
