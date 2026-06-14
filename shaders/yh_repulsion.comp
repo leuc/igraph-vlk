@@ -8,7 +8,7 @@
 // Algorithm overview:
 //   Each node i emits a ray query against the TLAS (top-level acceleration
 //   structure). The TLAS encloses AABB bounding volumes centered on every node
-//   with radius R = 5*K (where K is the average edge length). The ray query
+//   with radius R = K * pow(N, 1/4) (where K is the average edge length). The ray query
 //   traverses all AABBs that overlap the ray, and for each nearby node j
 //   (j != i), a power-law repulsive force is accumulated:
 //
@@ -36,7 +36,7 @@
 //   step_size   — adaptive step size / cooling schedule (unused here)
 //   vertex_count — number of nodes in the graph
 //   edge_count   — number of edges (unused here)
-//   R           — BVH search radius = 5*K
+//   R           — BVH search radius = K * pow(N, 1/4)
 // =============================================================================
 
 #version 460
@@ -65,7 +65,7 @@ layout(push_constant) uniform PC {
 	float step_size;   // adaptive step size for position update (not used here)
 	uint vertex_count; // total number of graph nodes
 	uint edge_count;   // total number of graph edges (not used here)
-	float R;           // BVH AABB half-extent = 5*K
+	float R;           // BVH AABB half-extent = K * pow(N, 1/4)
 }
 pc;
 
