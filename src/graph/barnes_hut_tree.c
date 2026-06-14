@@ -26,6 +26,10 @@ static bh_node_t *bh_node_alloc(float x, float y, float z, float s, int point_id
 	n->dfs_index = 0;
 	for (int i = 0; i < 8; i++)
 		n->children[i] = NULL;
+	if (point_id >= 0) {
+		n->particles[0] = point_id;
+		n->num_particles = 1;
+	}
 	return n;
 }
 
@@ -223,6 +227,20 @@ void bh_tree_build(bh_tree_t *tree, bh_point_t *points, int count)
 				node->children[octant] = pn;
 				break;
 			} else if (child->type == BH_LEAF) {
+				// If leaf has room in its bucket, append instead of splitting
+				if (child->num_particles < BH_BUCKET_SIZE) {
+					child->particles[child->num_particles] = pn->point_id;
+					child->num_particles++;
+					float total_mass = child->mass + pn->mass;
+					if (total_mass > 0.0f) {
+						child->cofm.x = (child->cofm.x * child->mass + pn->cofm.x * pn->mass) / total_mass;
+						child->cofm.y = (child->cofm.y * child->mass + pn->cofm.y * pn->mass) / total_mass;
+						child->cofm.z = (child->cofm.z * child->mass + pn->cofm.z * pn->mass) / total_mass;
+					}
+					child->mass = total_mass;
+					free(pn);
+					break;
+				}
 				// Split: create new internal node, reinsert both
 				float half = 0.5f * s;
 				float cx = (node->cofm.x - half) + ox;
