@@ -28,7 +28,6 @@
 #include <string.h>
 
 #include "vulkan/buffers.h"
-#include "vulkan/octree.h"
 #include "vulkan/renderer.h"
 #include "vulkan/utils.h"
 
@@ -45,7 +44,7 @@
 	do { \
 		vkCmdBindPipeline((cmd), VK_PIPELINE_BIND_POINT_COMPUTE, (pipeline)); \
 		vkCmdBindDescriptorSets((cmd), VK_PIPELINE_BIND_POINT_COMPUTE, (layout), 0, 1, &(descSet), 0, NULL); \
-		vkCmdPushConstants((cmd), (layout), VK_SHADER_STAGE_COMPUTE_BIT, 0, 32, &(pc)); \
+		vkCmdPushConstants((cmd), (layout), VK_SHADER_STAGE_COMPUTE_BIT, 0, 28, &(pc)); \
 		vkCmdDispatch((cmd), (count), 1, 1); \
 	} while (0)
 
@@ -60,8 +59,6 @@ static void yhrt_cleanup_algo_buffers(Renderer *r)
 	VK_DESTROY_BUFFER(r->core.device, r->yhrt_edge_buf, r->yhrt_edge_mem);
 	VK_DESTROY_BUFFER(r->core.device, r->yhrt_fnorm_buf, r->yhrt_fnorm_mem);
 	VK_DESTROY_BUFFER(r->core.device, r->yhrt_staging_buf, r->yhrt_staging_mem);
-	VK_DESTROY_BUFFER(r->core.device, r->yhrt_mass_buf, r->yhrt_mass_mem);
-	VK_DESTROY_BUFFER(r->core.device, r->yhrt_center_buf, r->yhrt_center_mem);
 
 	if (r->yhrt_desc_pool != VK_NULL_HANDLE) {
 		vkDestroyDescriptorPool(r->core.device, r->yhrt_desc_pool, NULL);
@@ -106,15 +103,15 @@ void yhrt_init_pipelines(Renderer *r)
 	//   4     STORAGE_BUFFER (FnormBuffer)    1    COMPUTE
 	//   5     STORAGE_BUFFER (InstanceBuffer) 1    COMPUTE
 	//
-	// Push constants: 32 bytes = 5 floats + 3 uints
-	//   [KP, CRK, p, step_size, vertex_count, edge_count, R, num_levels]
-	VkDescriptorSetLayoutBinding bindings[8] = {
-		{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {3, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {7, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+	// Push constants: 28 bytes = 5 floats + 2 uints + 1 float
+	//   [KP, CRK, p, step_size, vertex_count, edge_count, R]
+	VkDescriptorSetLayoutBinding bindings[6] = {
+		{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {3, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
 	};
-	VkDescriptorSetLayoutCreateInfo layoutInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 8, .pBindings = bindings};
+	VkDescriptorSetLayoutCreateInfo layoutInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 6, .pBindings = bindings};
 	VK_CHECK(vkCreateDescriptorSetLayout(r->core.device, &layoutInfo, NULL, &r->yhrt_desc_set_layout), "Failed to create YHRT descriptor set layout");
 
-	VkPushConstantRange pcRange = {.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = 32};
+	VkPushConstantRange pcRange = {.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = 28};
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->yhrt_desc_set_layout, .pushConstantRangeCount = 1, .pPushConstantRanges = &pcRange};
 	VK_CHECK(vkCreatePipelineLayout(r->core.device, &pipelineLayoutInfo, NULL, &r->yhrt_pipeline_layout), "Failed to create YHRT pipeline layout");
 
@@ -230,61 +227,11 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 	rt_base_staging_upload(r->rt_base, r->yhrt_node_buf, nodeData, nodeSize, true);
 	free(nodeData);
 
-	// ---- Build octree for multi-geometry BLAS ----
-	Octree octree;
-	int L = octree_adaptive_levels((int)vcount);
-	r->yhrt_num_levels = L;
-
-	float *flat_pos = malloc(sizeof(float) * (size_t)vcount * 3);
-	for (igraph_integer_t i = 0; i < vcount; i++) {
-		flat_pos[i * 3 + 0] = (float)MATRIX(*init_positions, i, 0);
-		flat_pos[i * 3 + 1] = (float)MATRIX(*init_positions, i, 1);
-		flat_pos[i * 3 + 2] = (igraph_matrix_ncol(init_positions) > 2) ? (float)MATRIX(*init_positions, i, 2) : 0.0f;
-	}
-	octree_build(&octree, flat_pos, (int)vcount, 3);
-	free(flat_pos);
-
-	int *node_level = malloc(sizeof(int) * (size_t)vcount);
-	float *masses = malloc(sizeof(float) * (size_t)vcount);
-	float *centers = malloc(sizeof(float) * (size_t)vcount * 3);
-	octree_get_node_levels(&octree, node_level, masses, centers);
-
-	float *radii = malloc(sizeof(float) * (size_t)L);
-	octree_level_radii(&octree, L, radii);
-
-	// ---- Initialize RT session with multi-geometry BLAS ----
-	if (!rt_base_session_init(r->rt_base, graph, init_positions, radii, (uint32_t)L, node_level)) {
+	// ---- Initialize RT session (BLAS, TLAS, cmd pool, staging) ----
+	if (!rt_base_session_init(r->rt_base, graph, init_positions, r->yhrt_R)) {
 		fprintf(stderr, "[YHRT] RT base session init failed\n");
-		octree_destroy(&octree);
-		free(node_level);
-		free(masses);
-		free(centers);
-		free(radii);
 		return false;
 	}
-
-	// ---- Octree mass + center-of-mass buffers ----
-	rt_base_create_device_buffer(r->rt_base, sizeof(float) * (size_t)vcount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_mass_buf, &r->yhrt_mass_mem);
-	rt_base_staging_upload(r->rt_base, r->yhrt_mass_buf, masses, sizeof(float) * (size_t)vcount, true);
-
-	float *center_packed = malloc(sizeof(float) * 4 * (size_t)vcount);
-	for (igraph_integer_t i = 0; i < vcount; i++) {
-		center_packed[i * 4 + 0] = centers[i * 3 + 0];
-		center_packed[i * 4 + 1] = centers[i * 3 + 1];
-		center_packed[i * 4 + 2] = centers[i * 3 + 2];
-		center_packed[i * 4 + 3] = 0.0f;
-	}
-	rt_base_create_device_buffer(r->rt_base, sizeof(float) * 4 * (size_t)vcount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_center_buf, &r->yhrt_center_mem);
-	rt_base_staging_upload(r->rt_base, r->yhrt_center_buf, center_packed, sizeof(float) * 4 * (size_t)vcount, true);
-	free(center_packed);
-
-	octree_destroy(&octree);
-	free(node_level);
-	free(masses);
-	free(centers);
-	free(radii);
-
-	r->yhrt_octree_finalized = true;
 
 	// ---- Fnorm + dispatch fence ----
 	rt_base_create_device_buffer(r->rt_base, sizeof(double), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_fnorm_buf, &r->yhrt_fnorm_mem);
@@ -321,7 +268,7 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 	// ---- Create descriptor pool and bind all resources ----
 	{
 		VkDescriptorPoolSize poolSizes[] = {
-			{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 7},
+			{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 5},
 			{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1},
 		};
 		VkDescriptorPoolCreateInfo dpInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 2, .pPoolSizes = poolSizes};
@@ -334,13 +281,11 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 		VkDescriptorBufferInfo edgeInfo = {r->yhrt_edge_buf, 0, VK_WHOLE_SIZE};
 		VkDescriptorBufferInfo fnormInfo = {r->yhrt_fnorm_buf, 0, VK_WHOLE_SIZE};
 		VkDescriptorBufferInfo instInfo = {rt_base_instance_buf(r->rt_base), 0, VK_WHOLE_SIZE};
-		VkDescriptorBufferInfo massInfo = {r->yhrt_mass_buf, 0, VK_WHOLE_SIZE};
-		VkDescriptorBufferInfo centerInfo = {r->yhrt_center_buf, 0, VK_WHOLE_SIZE};
 
-		VkWriteDescriptorSet writes[7] = {
-			VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 0, &nodeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 1, &forceInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 2, &edgeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 4, &fnormInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 5, &instInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 6, &massInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 7, &centerInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+		VkWriteDescriptorSet writes[5] = {
+			VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 0, &nodeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 1, &forceInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 2, &edgeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 4, &fnormInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->yhrt_desc_set, 5, &instInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
 		};
-		vkUpdateDescriptorSets(r->core.device, 7, writes, 0, NULL);
+		vkUpdateDescriptorSets(r->core.device, 5, writes, 0, NULL);
 
 		VkAccelerationStructureKHR tlas = rt_base_tlas(r->rt_base);
 		VkWriteDescriptorSetAccelerationStructureKHR asDescInfo = {
@@ -437,8 +382,7 @@ bool yhrt_worker_step(Renderer *r)
 		float KP, CRK, p, step_size;
 		uint32_t vertex_count, edge_count;
 		float R;
-		uint32_t num_levels;
-	} pc = {r->yhrt_KP, r->yhrt_CRK, r->yhrt_p, r->yhrt_step, r->yhrt_active_vcount, r->yhrt_ecount, r->yhrt_R, r->yhrt_num_levels};
+	} pc = {r->yhrt_KP, r->yhrt_CRK, r->yhrt_p, r->yhrt_step, r->yhrt_active_vcount, r->yhrt_ecount, r->yhrt_R};
 
 	// Repulsion — only active nodes
 	YHRT_DISPATCH_COMPUTE(cmd, r->yhrt_repulsion_pipeline, r->yhrt_pipeline_layout, r->yhrt_desc_set, pc, (r->yhrt_active_vcount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE);

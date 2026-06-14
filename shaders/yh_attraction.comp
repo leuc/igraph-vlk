@@ -37,38 +37,32 @@
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
-layout(std430, binding = 0) readonly buffer NodeBuffer
-{
+layout(std430, binding = 0) readonly buffer NodeBuffer {
 	vec4 nodes[]; // xyz = position, w = degree
 };
 
-layout(std430, binding = 1) buffer ForceBuffer
-{
+layout(std430, binding = 1) buffer ForceBuffer {
 	vec4 forces[]; // Accumulated forces (repulsion + attraction), atomically updated
 };
 
-struct EdgeData
-{
-	uint from;	  // Source node index
-	uint to;	  // Target node index
+struct EdgeData {
+	uint from;   // Source node index
+	uint to;     // Target node index
 	float weight; // Edge weight (currently always 1.0)
 };
 
-layout(std430, binding = 2) readonly buffer EdgeBuffer
-{
+layout(std430, binding = 2) readonly buffer EdgeBuffer {
 	EdgeData edges[];
 };
 
-layout(push_constant) uniform PC
-{
-	float KP;		   // K^(1-p): repulsion scaling (not used here)
-	float CRK;		   // C^((2-p)/3) / K: attraction scaling factor
-	float p;		   // repulsion power-law exponent (not used here)
+layout(push_constant) uniform PC {
+	float KP;          // K^(1-p): repulsion scaling (not used here)
+	float CRK;         // C^((2-p)/3) / K: attraction scaling factor
+	float p;           // repulsion power-law exponent (not used here)
 	float step_size;   // adaptive step size (not used here)
 	uint vertex_count; // total number of nodes (not used here)
 	uint edge_count;   // total number of graph edges
-	float R;		   // BVH search radius (not used here)
-	uint num_levels;   // number of BLAS geometry levels (not used here)
+	float R;           // BVH search radius (not used here)
 }
 pc;
 

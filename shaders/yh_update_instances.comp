@@ -39,33 +39,28 @@
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
-struct NodeData
-{
+struct NodeData {
 	vec4 pos; // xyz = current position, w = degree
 };
 
-layout(std430, binding = 0) readonly buffer NodeBuffer
-{
+layout(std430, binding = 0) readonly buffer NodeBuffer {
 	NodeData nodes[];
 };
 
 // Packed instance transform data. Each node i occupies indices [i*4 .. i*4+3].
 // These 4 vec4s form the 3x4 column-major transform matrix for the TLAS.
-layout(std430, binding = 5) buffer InstanceBuffer
-{
+layout(std430, binding = 5) buffer InstanceBuffer {
 	vec4 instance_data[];
 };
 
-layout(push_constant) uniform PC
-{
-	float KP;		   // K^(1-p) (not used here)
-	float CRK;		   // C^((2-p)/3) / K (not used here)
-	float p;		   // repulsion exponent (not used here)
+layout(push_constant) uniform PC {
+	float KP;          // K^(1-p) (not used here)
+	float CRK;         // C^((2-p)/3) / K (not used here)
+	float p;           // repulsion exponent (not used here)
 	float step_size;   // adaptive step size (not used here)
 	uint vertex_count; // total number of nodes
 	uint edge_count;   // total number of edges (not used here)
-	float R;		   // BVH radius (not used here)
-	uint num_levels;   // number of BLAS geometry levels (not used here)
+	float R;           // BVH radius (not used here)
 }
 pc;
 
