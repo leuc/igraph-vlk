@@ -193,4 +193,8 @@ void main()
 
 	// Write output — 3D force vector matching YHRT force buffer format
 	forces[i] = vec4(force_vec, 0.0);
+
+	// DIAGNOSTIC: particle 0 overwritten with push constants (verify shader executes)
+	if (i == 0u)
+		forces[0] = vec4(float(pc.particle_count), float(pc.num_prims), pc.threshold, pc.G);
 }

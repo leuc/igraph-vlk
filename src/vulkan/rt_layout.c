@@ -205,8 +205,13 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 
 	printf("[YHRT] Starting: vcount=%u ecount=%u K=%.4f R=%.4f KP=%.4f CRK=%.4f\n", r->yhrt_vcount, r->yhrt_ecount, r->yhrt_K, r->yhrt_R, r->yhrt_KP, r->yhrt_CRK);
 
-	// ---- Allocate CPU positions array (for BH octree rebuild each iteration) ----
+	// ---- Allocate and initialize CPU positions array ----
 	r->yhrt_cpu_positions = (float *)malloc(sizeof(float) * 3 * vcount);
+	for (igraph_integer_t i = 0; i < vcount; i++) {
+		r->yhrt_cpu_positions[i * 3 + 0] = (float)MATRIX(*init_positions, i, 0);
+		r->yhrt_cpu_positions[i * 3 + 1] = (float)MATRIX(*init_positions, i, 1);
+		r->yhrt_cpu_positions[i * 3 + 2] = (igraph_matrix_ncol(init_positions) > 2) ? (float)MATRIX(*init_positions, i, 2) : 0.0f;
+	}
 
 	// ---- Upload NodeBuffer ----
 	VkDeviceSize nodeSize = sizeof(vec4) * vcount;
@@ -236,8 +241,16 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 		nodeData[i * 4 + 2] = (igraph_matrix_ncol(init_positions) > 2) ? (float)MATRIX(*init_positions, i, 2) : 0.0f;
 		igraph_int_t deg;
 		igraph_degree_1(graph, &deg, i, IGRAPH_ALL, IGRAPH_LOOPS);
-		nodeData[i * 4 + 3] = (float)(deg > 0 ? deg : 1);
+		nodeData[i * 4 + 3] = 1.0f;
 	}
+	printf("[YHRT] Node masses (first 10):");
+	for (igraph_integer_t i = 0; i < 10 && i < vcount; i++)
+		printf(" %.1f", nodeData[i * 4 + 3]);
+	printf("\n");
+	printf("[YHRT] Node positions + degree (first 3):\n");
+	for (igraph_integer_t i = 0; i < 3 && i < vcount; i++)
+		printf("  node[%ld] pos=(%.4f, %.4f, %.4f) deg=%.0f\n", (long)i, nodeData[i * 4 + 0], nodeData[i * 4 + 1], nodeData[i * 4 + 2], nodeData[i * 4 + 3]);
+
 	// Upload using staging buffer
 	VkBufferCreateInfo stagingBufInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = nodeSize, .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
 	VkBuffer stagingBuf;
@@ -576,6 +589,75 @@ bool yhrt_worker_step(Renderer *r)
 	// ---- Read back positions from GPU for BH octree rebuild ----
 	yhrt_readback_positions_to_cpu(r);
 
+	// ---- First-iteration debug: repulsion forces with correct positions ----
+	if (r->yhrt_current_iter == 0) {
+		printf("[DEBUG] ===== Iteration 0 debug: repulsion-only pass =====\n");
+
+		printf("[DEBUG] yhrt_cpu_positions[0..2] = (%.6f, %.6f, %.6f)\n", r->yhrt_cpu_positions[0], r->yhrt_cpu_positions[1], r->yhrt_cpu_positions[2]);
+		printf("[DEBUG] yhrt_cpu_positions[3..5] = (%.6f, %.6f, %.6f)\n", r->yhrt_cpu_positions[3], r->yhrt_cpu_positions[4], r->yhrt_cpu_positions[5]);
+		printf("[DEBUG] yhrt_cpu_positions[6..8] = (%.6f, %.6f, %.6f)\n", r->yhrt_cpu_positions[6], r->yhrt_cpu_positions[7], r->yhrt_cpu_positions[8]);
+
+		// CPU O(N^2) reference for particle 0 against all others
+		{
+			float fx0 = 0, fy0 = 0, fz0 = 0;
+			for (uint32_t dbj = 1; dbj < r->yhrt_vcount; dbj++) {
+				float dx = r->yhrt_cpu_positions[0] - r->yhrt_cpu_positions[dbj * 3];
+				float dy = r->yhrt_cpu_positions[1] - r->yhrt_cpu_positions[dbj * 3 + 1];
+				float dz = r->yhrt_cpu_positions[2] - r->yhrt_cpu_positions[dbj * 3 + 2];
+				float d2 = dx * dx + dy * dy + dz * dz;
+				if (d2 > 1e-12f) {
+					fx0 += dx / d2;
+					fy0 += dy / d2;
+					fz0 += dz / d2;
+				}
+			}
+			float fmag0 = sqrtf(fx0 * fx0 + fy0 * fy0 + fz0 * fz0);
+			printf("[DEBUG] CPU O(N^2) force[0] = (%.6f, %.6f, %.6f) |F|=%.6f\n", fx0, fy0, fz0, fmag0);
+		}
+
+		VkFence dbgFence;
+		VkFenceCreateInfo dbgFenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+		VK_CHECK(vkCreateFence(r->core.device, &dbgFenceInfo, NULL, &dbgFence), "debug fence");
+
+		VK_CHECK(vkResetCommandBuffer(r->yhrt_cmd_buf, 0), "debug reset cmd");
+		VkCommandBufferBeginInfo dbgBegin = VK_CMD_BEGIN_INFO_ONETIME;
+		VK_CHECK(vkBeginCommandBuffer(r->yhrt_cmd_buf, &dbgBegin), "debug begin cmd");
+
+		bhrt_build(r->bhrt, r->yhrt_cpu_positions, r->yhrt_cmd_buf);
+
+		vkCmdFillBuffer(r->yhrt_cmd_buf, bhrt_force_buffer(r->bhrt), 0, sizeof(float) * 4 * r->yhrt_vcount, 0);
+		VK_PIPELINE_BARRIER(r->yhrt_cmd_buf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+
+		VK_PIPELINE_BARRIER(r->yhrt_cmd_buf, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+		bhrt_record_dispatch(r->bhrt, r->yhrt_cmd_buf);
+
+		VK_CHECK(vkEndCommandBuffer(r->yhrt_cmd_buf), "debug end cmd");
+
+		VkSubmitInfo dbgSubmit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &r->yhrt_cmd_buf};
+		pthread_mutex_lock(&r->core.graphicsQueueMutex);
+		VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &dbgSubmit, dbgFence), "debug submit");
+		pthread_mutex_unlock(&r->core.graphicsQueueMutex);
+		VK_CHECK(vkWaitForFences(r->core.device, 1, &dbgFence, VK_TRUE, UINT64_MAX), "debug wait");
+		vkDestroyFence(r->core.device, dbgFence, NULL);
+
+		float *forceDbg = (float *)malloc(sizeof(float) * 4 * r->yhrt_vcount);
+		bhrt_readback_forces(r->bhrt, forceDbg);
+
+		float totalFmag = 0.0f;
+		for (uint32_t dbi = 0; dbi < r->yhrt_vcount; dbi++) {
+			float fx = forceDbg[dbi * 4], fy = forceDbg[dbi * 4 + 1], fz = forceDbg[dbi * 4 + 2];
+			float fmag = sqrtf(fx * fx + fy * fy + fz * fz);
+			totalFmag += fmag;
+			if (dbi < 5)
+				printf("[DEBUG] GPU Force[%u] = (%.6f, %.6f, %.6f) |F|=%.6f\n", dbi, fx, fy, fz, fmag);
+		}
+		printf("[DEBUG] GPU Repulsion Fnorm (sum|F|) = %.6f  (avg=%.6f)\n", totalFmag, totalFmag / (float)r->yhrt_vcount);
+		printf("[DEBUG] GPU Force[0] (push constants = pc, np, theta, G) = (%.0f, %.0f, %.6f, %.6f)\n", forceDbg[0], forceDbg[1], forceDbg[2], forceDbg[3]);
+
+		free(forceDbg);
+		printf("[DEBUG] ===== End iteration 0 debug =====\n");
+	}
+
 	// Only reset fence when we're about to submit new work
 	VK_CHECK(vkResetFences(r->core.device, 1, &r->yhrt_dispatch_fence), "Failed to reset YHRT dispatch fence");
 
@@ -590,6 +672,10 @@ bool yhrt_worker_step(Renderer *r)
 
 	// Barrier: AS build → compute
 	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+
+	// Zero force buffer before repulsion dispatch (ensures defined initial state)
+	vkCmdFillBuffer(cmd, bhrt_force_buffer(r->bhrt), 0, sizeof(float) * 4 * r->yhrt_vcount, 0);
+	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
 
 	// ---- BH repulsion dispatch ----
 	bhrt_record_dispatch(r->bhrt, cmd);
