@@ -293,7 +293,7 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 			bh_positions[i * 3 + 1] = (float)MATRIX(*init_positions, i, 1);
 			bh_positions[i * 3 + 2] = (igraph_matrix_ncol(init_positions) > 2) ? (float)MATRIX(*init_positions, i, 2) : 0.0f;
 		}
-		if (!bhrt_session_init(r->bhrt, bh_positions, NULL, (uint32_t)vcount, 0.5f, 0.1f)) {
+		if (!bhrt_session_init(r->bhrt, bh_positions, NULL, (uint32_t)vcount, 0.5f, 1.0f)) {
 			fprintf(stderr, "[YHRT] BH session init failed\n");
 			free(bh_positions);
 			return false;

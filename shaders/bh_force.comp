@@ -146,7 +146,7 @@ void main()
 						float pr2 = dot(pd, pd);
 						float dist = sqrt(pr2);
 						if (dist > 1e-12) {
-							force_vec += pd * (my_mass * points[pid].w) / (pr2 * dist) * pc.G;
+							force_vec += pd * (my_mass * points[pid].w) / pr2 * pc.G;
 						}
 					}
 				}
@@ -154,8 +154,7 @@ void main()
 				// Internal: approximate with total mass at CoM
 				float dist = sqrt(r2);
 				if (dist > 1e-12) {
-					vec3 dir = vec3(dx, dy, dz) / dist;
-					force_vec += dir * (my_mass * hit_node.mass) / r2 * pc.G;
+						force_vec += vec3(dx, dy, dz) * (my_mass * hit_node.mass) / r2 * pc.G;
 				}
 			}
 
@@ -175,7 +174,7 @@ void main()
 						float pr2 = dot(pd, pd);
 						float dist = sqrt(pr2);
 						if (dist > 1e-12) {
-							force_vec += pd * (my_mass * points[pid].w) / (pr2 * dist) * pc.G;
+							force_vec += pd * (my_mass * points[pid].w) / pr2 * pc.G;
 						}
 					}
 				}
