@@ -373,6 +373,12 @@ typedef struct Renderer
 	VkDescriptorSet yhrt_desc_set;
 	VkDescriptorSetLayout yhrt_desc_set_layout;
 	VkPipelineLayout yhrt_pipeline_layout;
+	uint32_t yhrt_num_levels;
+	VkBuffer yhrt_mass_buf;
+	VkDeviceMemory yhrt_mass_mem;
+	VkBuffer yhrt_center_buf;
+	VkDeviceMemory yhrt_center_mem;
+	bool yhrt_octree_finalized;
 	VkPipeline yhrt_repulsion_pipeline;
 	VkPipeline yhrt_attraction_pipeline;
 	VkPipeline yhrt_update_pipeline;

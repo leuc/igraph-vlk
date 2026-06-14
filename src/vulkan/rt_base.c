@@ -98,6 +98,9 @@ struct RTBase
 	// Staging for position readback
 	VkBuffer node_staging_buf;
 	VkDeviceMemory node_staging_mem;
+
+	// Multi-geometry BLAS
+	uint32_t blas_num_levels;
 };
 
 // ============================================================================
@@ -311,7 +314,7 @@ void rt_base_destroy(RTBase *base)
 // Public API — Per-Session
 // ============================================================================
 
-bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_positions, float search_radius)
+bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_positions, float *level_radii, uint32_t num_levels, int *node_levels)
 {
 	if (!base->supported) {
 		fprintf(stderr, "[RTBase] Cannot start session: ray tracing not supported\n");
@@ -322,9 +325,17 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 	uint32_t ecount = (uint32_t)igraph_ecount(graph);
 	base->vcount = vcount;
 	base->ecount = ecount;
-	base->search_radius = search_radius;
 	base->fp64_supported = base->core->fp64_atomics_supported;
 	base->session_active = true;
+	base->blas_num_levels = num_levels;
+
+	// ---- Count primitives per level ----
+	uint32_t *level_counts = calloc(num_levels, sizeof(uint32_t));
+	for (uint32_t i = 0; i < vcount; i++) {
+		int k = node_levels[i];
+		if (k >= 0 && k < (int)num_levels)
+			level_counts[k]++;
+	}
 
 	// ---- Create worker-thread command pool + buffer ----
 	{
@@ -347,33 +358,72 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 	VkBuffer aabbBuf = VK_NULL_HANDLE;
 	VkDeviceMemory aabbMem = VK_NULL_HANDLE;
 
-	VkAccelerationStructureGeometryKHR blasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_AABBS_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR};
-	VkAccelerationStructureBuildGeometryInfoKHR blasBuildInfo = {0};
+	VkAccelerationStructureGeometryKHR *blasGeometries = malloc(sizeof(VkAccelerationStructureGeometryKHR) * num_levels);
+	uint32_t *blasPrimCounts = malloc(sizeof(uint32_t) * num_levels);
+	VkAccelerationStructureBuildRangeInfoKHR *blasRangeInfos = malloc(sizeof(VkAccelerationStructureBuildRangeInfoKHR) * num_levels);
 
 	VkAccelerationStructureGeometryKHR tlasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR, .geometry.instances = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR}};
 
-	VkAccelerationStructureBuildRangeInfoKHR blasRangeInfo = {.primitiveCount = 1};
 	VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = {.primitiveCount = vcount};
 
-	// Step 1: Size the BLAS
+	// Step 1: Build the multi-geometry AABB buffer, compute offsets and geometry descriptors
+	uint32_t *level_offsets = malloc(sizeof(uint32_t) * num_levels);
 	{
-		VkAabbPositionsKHR aabb = {.minX = -search_radius, .minY = -search_radius, .minZ = -search_radius, .maxX = search_radius, .maxY = search_radius, .maxZ = search_radius};
+		uint32_t offset = 0;
+		for (uint32_t k = 0; k < num_levels; k++) {
+			level_offsets[k] = offset;
+			offset += level_counts[k];
+		}
 
-		rt_base_create_buffer(base, sizeof(VkAabbPositionsKHR), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, &aabbBuf, &aabbMem);
-		void *mapped;
-		vkMapMemory(base->core->device, aabbMem, 0, sizeof(VkAabbPositionsKHR), 0, &mapped);
-		memcpy(mapped, &aabb, sizeof(VkAabbPositionsKHR));
-		vkUnmapMemory(base->core->device, aabbMem);
+		VkAabbPositionsKHR *aabbs = malloc(sizeof(VkAabbPositionsKHR) * vcount);
+		uint32_t *level_cursor = malloc(sizeof(uint32_t) * num_levels);
+		memcpy(level_cursor, level_offsets, sizeof(uint32_t) * num_levels);
 
-		blasGeometry.geometry.aabbs.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
-		blasGeometry.geometry.aabbs.data.deviceAddress = rt_base_get_buffer_address(base, aabbBuf);
-		blasGeometry.geometry.aabbs.stride = sizeof(VkAabbPositionsKHR);
+		for (uint32_t i = 0; i < vcount; i++) {
+			int k = node_levels[i];
+			if (k < 0 || k >= (int)num_levels)
+				k = 0;
+			float R = level_radii[k];
+			uint32_t idx = level_cursor[k]++;
+			aabbs[idx] = (VkAabbPositionsKHR){.minX = -R, .minY = -R, .minZ = -R, .maxX = R, .maxY = R, .maxZ = R};
+		}
 
-		blasBuildInfo = (VkAccelerationStructureBuildGeometryInfoKHR){.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &blasGeometry};
+		VkDeviceSize aabbSize = sizeof(VkAabbPositionsKHR) * vcount;
+		rt_base_create_device_buffer(base, aabbSize, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &aabbBuf, &aabbMem);
+		rt_base_staging_upload(base, aabbBuf, aabbs, aabbSize, true);
+		free(aabbs);
+		free(level_cursor);
 
-		uint32_t maxPrims = 1;
+		uint64_t aabbAddr = rt_base_get_buffer_address(base, aabbBuf);
+
+		for (uint32_t k = 0; k < num_levels; k++) {
+			blasGeometries[k] = (VkAccelerationStructureGeometryKHR){
+				.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+				.geometryType = VK_GEOMETRY_TYPE_AABBS_KHR,
+				.flags = VK_GEOMETRY_OPAQUE_BIT_KHR,
+				.geometry.aabbs =
+					{
+						.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR,
+						.data = {.deviceAddress = aabbAddr + level_offsets[k] * sizeof(VkAabbPositionsKHR)},
+						.stride = sizeof(VkAabbPositionsKHR),
+					},
+			};
+			blasPrimCounts[k] = level_counts[k];
+			blasRangeInfos[k] = (VkAccelerationStructureBuildRangeInfoKHR){.primitiveCount = level_counts[k]};
+		}
+
+		// Size the BLAS
+		VkAccelerationStructureBuildGeometryInfoKHR blasBuildInfo = {
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+			.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+			.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+			.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+			.geometryCount = num_levels,
+			.pGeometries = blasGeometries,
+		};
+
 		VkAccelerationStructureBuildSizesInfoKHR blasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
-		rt_funcs.GetAccelerationStructureBuildSizesKHR(base->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &blasBuildInfo, &maxPrims, &blasSizeInfo);
+		rt_funcs.GetAccelerationStructureBuildSizesKHR(base->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &blasBuildInfo, blasPrimCounts, &blasSizeInfo);
 
 		rt_base_create_device_buffer(base, blasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &base->blas_buf, &base->blas_mem);
 		blasScratchSize = blasSizeInfo.buildScratchSize;
@@ -389,19 +439,28 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 		uint32_t maxInstances = vcount;
 		VkAccelerationStructureBuildSizesInfoKHR tlasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
 		rt_funcs.GetAccelerationStructureBuildSizesKHR(base->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tlasBuildInfo, &maxInstances, &tlasSizeInfo);
-
 		tlasScratchSize = tlasSizeInfo.buildScratchSize;
 	}
 
-	// Shared scratch buffer
+	// Shared scratch buffer (must exist before any build commands)
 	VkDeviceSize scratchSize = blasScratchSize > tlasScratchSize ? blasScratchSize : tlasScratchSize;
 	rt_base_create_device_buffer(base, scratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &base->as_scratch_buf, &base->as_scratch_mem);
 
-	// Step 3: Build the BLAS (one-time, synchronous)
+	// Step 3: Build the BLAS (synchronous, with scratch)
 	{
-		blasBuildInfo.dstAccelerationStructure = base->blas;
-		blasBuildInfo.scratchData.deviceAddress = rt_base_get_buffer_address(base, base->as_scratch_buf);
-		const VkAccelerationStructureBuildRangeInfoKHR *pBlasRange = &blasRangeInfo;
+		VkAccelerationStructureBuildGeometryInfoKHR blasBuildInfo = {
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+			.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+			.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+			.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+			.dstAccelerationStructure = base->blas,
+			.geometryCount = num_levels,
+			.pGeometries = blasGeometries,
+			.scratchData.deviceAddress = rt_base_get_buffer_address(base, base->as_scratch_buf),
+		};
+		const VkAccelerationStructureBuildRangeInfoKHR **pBlasRanges = malloc(sizeof(VkAccelerationStructureBuildRangeInfoKHR *) * num_levels);
+		for (uint32_t k = 0; k < num_levels; k++)
+			pBlasRanges[k] = &blasRangeInfos[k];
 
 		VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = (uint32_t)base->core->graphicsQueueFamily};
 		VkCommandPool blasPool;
@@ -410,7 +469,7 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 		VkCommandBuffer blasCmd;
 		vkAllocateCommandBuffers(base->core->device, &cmdInfo, &blasCmd);
 		vkBeginCommandBuffer(blasCmd, &VK_CMD_BEGIN_INFO_ONETIME);
-		rt_funcs.CmdBuildAccelerationStructuresKHR(blasCmd, 1, &blasBuildInfo, &pBlasRange);
+		rt_funcs.CmdBuildAccelerationStructuresKHR(blasCmd, 1, &blasBuildInfo, pBlasRanges);
 		vkEndCommandBuffer(blasCmd);
 		VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &blasCmd};
 		pthread_mutex_lock(&base->core->graphicsQueueMutex);
@@ -419,6 +478,7 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 		pthread_mutex_unlock(&base->core->graphicsQueueMutex);
 		vkDestroyCommandPool(base->core->device, blasPool, NULL);
 
+		free(pBlasRanges);
 		VK_DESTROY_BUFFER(base->core->device, aabbBuf, aabbMem);
 	}
 
@@ -499,6 +559,12 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 		vkDestroyCommandPool(base->core->device, tlasPool, NULL);
 	}
 
+	free(level_offsets);
+	free(blasGeometries);
+	free(blasPrimCounts);
+	free(blasRangeInfos);
+	free(level_counts);
+
 	return true;
 }
 
@@ -541,6 +607,10 @@ uint32_t rt_base_ecount(RTBase *base)
 bool rt_base_fp64_supported(RTBase *base)
 {
 	return base->fp64_supported;
+}
+uint32_t rt_base_num_levels(RTBase *base)
+{
+	return base->blas_num_levels;
 }
 
 // ============================================================================

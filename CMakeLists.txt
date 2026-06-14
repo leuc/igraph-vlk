@@ -84,6 +84,7 @@ add_executable(igraph-vlk
     src/vulkan/renderer_compute.c
     src/vulkan/rt_base.c
     src/vulkan/rt_layout.c
+    src/vulkan/octree.c
     src/vulkan/renderer_ui.c
     src/vulkan/renderer_pipelines.c
     src/vulkan/pipeline_graphics.c

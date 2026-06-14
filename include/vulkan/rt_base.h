@@ -14,7 +14,7 @@ RTBase *rt_base_create(VulkanCore *core);
 void rt_base_destroy(RTBase *base);
 
 // Per-session setup / teardown (creates BLAS, TLAS, instance buffer, cmd pool, staging)
-bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_positions, float search_radius);
+bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_positions, float *level_radii, uint32_t num_levels, int *node_levels);
 void rt_base_session_cleanup(RTBase *base);
 
 // Accessors
@@ -25,6 +25,7 @@ VkBuffer rt_base_node_staging_buf(RTBase *base);
 uint32_t rt_base_vcount(RTBase *base);
 uint32_t rt_base_ecount(RTBase *base);
 bool rt_base_fp64_supported(RTBase *base);
+uint32_t rt_base_num_levels(RTBase *base);
 
 // Buffer creation helpers (for algorithm-owned buffers)
 void rt_base_create_buffer(RTBase *base, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *buf, VkDeviceMemory *mem);
