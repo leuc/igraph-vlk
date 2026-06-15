@@ -307,15 +307,13 @@ void bh_tree_build(bh_tree_t *tree, bh_point_t *points, int count)
 
 void bh_tree_compute_com(bh_tree_t *tree)
 {
-	// Iterative post-order traversal using a stack
+	// Iterative post-order traversal using a dynamically grown stack
 	if (!tree || !tree->root)
 		return;
 
-// We'll use a simple recursive approach since the tree depth is limited
-// (max depth ~ log2(grid / min_dist))
-#define MAX_STACK 1024
-	bh_node_t *stack[MAX_STACK];
-	int visit_count[MAX_STACK]; // 0 = not visited, 1 = visited once
+	int capacity = 256;
+	bh_node_t **stack = (bh_node_t **)malloc(sizeof(bh_node_t *) * capacity);
+	int *visit_count = (int *)malloc(sizeof(int) * capacity);
 	int sp = 0;
 
 	stack[sp] = tree->root;
@@ -352,9 +350,19 @@ void bh_tree_compute_com(bh_tree_t *tree)
 			for (int i = 0; i < 8; i++) {
 				bh_node_t *c = n->children[i];
 				if (c) {
-					if (sp >= MAX_STACK) {
-						fprintf(stderr, "[BH] Stack overflow in compute_com\n");
-						return;
+					if (sp >= capacity) {
+						capacity *= 2;
+						bh_node_t **new_stack = (bh_node_t **)realloc(stack, sizeof(bh_node_t *) * capacity);
+						int *new_vc = (int *)realloc(visit_count, sizeof(int) * capacity);
+						if (!new_stack || !new_vc) {
+							free(new_stack);
+							free(new_vc);
+							free(stack);
+							free(visit_count);
+							return;
+						}
+						stack = new_stack;
+						visit_count = new_vc;
 					}
 					stack[sp] = c;
 					visit_count[sp] = 0;
@@ -363,6 +371,9 @@ void bh_tree_compute_com(bh_tree_t *tree)
 			}
 		}
 	}
+
+	free(stack);
+	free(visit_count);
 }
 
 // ============================================================================
@@ -577,13 +588,14 @@ void bh_tree_print(bh_tree_t *tree)
 	if (!tree || !tree->root)
 		return;
 
-	// BFS print
 	typedef struct
 	{
 		bh_node_t *node;
 		int depth;
 	} print_entry_t;
-	print_entry_t *queue = (print_entry_t *)malloc(sizeof(print_entry_t) * 4096);
+
+	int capacity = 4096;
+	print_entry_t *queue = (print_entry_t *)malloc(sizeof(print_entry_t) * capacity);
 	int head = 0, tail = 0;
 
 	queue[tail].node = tree->root;
@@ -605,9 +617,14 @@ void bh_tree_print(bh_tree_t *tree)
 		if (n->type == BH_INTERNAL) {
 			for (int i = 0; i < 8; i++) {
 				if (n->children[i]) {
-					if (tail >= 4096) {
-						fprintf(stderr, "[BH] Print queue overflow\n");
-						goto done;
+					if (tail >= capacity) {
+						capacity *= 2;
+						print_entry_t *new_queue = (print_entry_t *)realloc(queue, sizeof(print_entry_t) * capacity);
+						if (!new_queue) {
+							free(queue);
+							return;
+						}
+						queue = new_queue;
 					}
 					queue[tail].node = n->children[i];
 					queue[tail].depth = d + 1;
@@ -616,6 +633,5 @@ void bh_tree_print(bh_tree_t *tree)
 			}
 		}
 	}
-done:
 	free(queue);
 }
