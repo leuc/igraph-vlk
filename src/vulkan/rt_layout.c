@@ -546,8 +546,7 @@ bool yhrt_worker_step(Renderer *r)
 			vkUnmapMemory(r->core.device, r->yhrt_staging_mem);
 		}
 
-		if ((r->yhrt_current_iter - 1) % 50 == 0)
-			printf("[YHRT] iter=%d, step=%g, Fnorm=%g, Fnorm0=%g, repulsive_exp=%g, natlen=%g\n", r->yhrt_current_iter - 1, r->yhrt_step, fnorm, r->yhrt_Fnorm0, r->yhrt_p, r->yhrt_K);
+		printf("[YHRT] iter=%d, step=%g, Fnorm=%g, Fnorm0=%g, repulsive_exp=%g, natlen=%g\n", r->yhrt_current_iter - 1, r->yhrt_step, fnorm, r->yhrt_Fnorm0, r->yhrt_p, r->yhrt_K);
 
 		if (fnorm < r->yhrt_Fnorm0) {
 			if (fnorm > 0.95f * r->yhrt_Fnorm0) {

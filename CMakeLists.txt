@@ -82,6 +82,7 @@ add_executable(igraph-vlk
     src/vulkan/renderer_geometry.c
     src/vulkan/renderer_compute.c
     src/vulkan/rt_barnes_hut.c
+    src/vulkan/rt_helpers.c
     src/vulkan/rt_base.c
     src/vulkan/rt_layout.c
     src/vulkan/renderer_ui.c

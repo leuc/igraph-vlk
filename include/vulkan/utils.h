@@ -84,6 +84,69 @@ static const VkPipelineDepthStencilStateCreateInfo VK_DEPTH_STENCIL_STATE_DISABL
 	} while (0)
 
 // ============================================================================
+// One-Shot Command Buffer Macros
+// ============================================================================
+//
+// VK_ONE_SHOT_BEGIN: Creates a transient command pool, allocates a primary
+// command buffer, and begins recording with ONE_TIME_SUBMIT.
+//
+// VK_ONE_SHOT_END: Ends recording, submits with a fence, waits, then destroys
+// the fence and command pool. Caller responsible for mutex lock/unlock if needed.
+
+#define VK_ONE_SHOT_BEGIN(device, queueFamilyIdx, pool_out, cmd_out) \
+	do { \
+		VkCommandPoolCreateInfo _pci = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = (queueFamilyIdx)}; \
+		VK_CHECK(vkCreateCommandPool((device), &_pci, NULL, &(pool_out)), "Failed to create one-shot command pool"); \
+		VkCommandBufferAllocateInfo _cai = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = (pool_out), .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1}; \
+		VK_CHECK(vkAllocateCommandBuffers((device), &_cai, &(cmd_out)), "Failed to allocate one-shot command buffer"); \
+		VK_CHECK(vkBeginCommandBuffer((cmd_out), &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin one-shot command buffer"); \
+	} while (0)
+
+#define VK_ONE_SHOT_END(device, queue, pool, cmd) \
+	do { \
+		VK_CHECK(vkEndCommandBuffer((cmd)), "Failed to end one-shot command buffer"); \
+		VkSubmitInfo _si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &(cmd)}; \
+		VkFence _fence; \
+		VkFenceCreateInfo _fi = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO}; \
+		VK_CHECK(vkCreateFence((device), &_fi, NULL, &_fence), "Failed to create one-shot fence"); \
+		VK_CHECK(vkQueueSubmit((queue), 1, &_si, _fence), "Failed to submit one-shot command buffer"); \
+		VK_CHECK(vkWaitForFences((device), 1, &_fence, VK_TRUE, UINT64_MAX), "Failed to wait for one-shot fence"); \
+		vkDestroyFence((device), (_fence), NULL); \
+		vkDestroyCommandPool((device), (pool), NULL); \
+	} while (0)
+
+// ============================================================================
+// RT Buffer Macro
+// ============================================================================
+//
+// Creates a buffer with SHADER_DEVICE_ADDRESS_BIT, finds a suitable memory type,
+// allocates with MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT, and binds. Calls
+// exit_with_error if no suitable memory type is found.
+
+#define VK_CREATE_DEVICE_ADDRESS_BUFFER(device, physDev, size, usage, memProperties, pBuf, pMem) \
+	do { \
+		VkBufferCreateInfo _bci = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = (size), .usage = (usage) | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE}; \
+		VK_CHECK(vkCreateBuffer((device), &_bci, NULL, (pBuf)), "Failed to create device-address buffer"); \
+		VkMemoryRequirements _mr; \
+		vkGetBufferMemoryRequirements((device), *(pBuf), &_mr); \
+		VkPhysicalDeviceMemoryProperties _mp; \
+		vkGetPhysicalDeviceMemoryProperties((physDev), &_mp); \
+		uint32_t _mti = UINT32_MAX; \
+		for (uint32_t _i = 0; _i < _mp.memoryTypeCount; _i++) { \
+			if ((_mr.memoryTypeBits & (1 << _i)) && (_mp.memoryTypes[_i].propertyFlags & (memProperties)) == (memProperties)) { \
+				_mti = _i; \
+				break; \
+			} \
+		} \
+		if (_mti == UINT32_MAX) \
+			exit_with_error("No suitable memory type for device-address buffer"); \
+		VkMemoryAllocateFlagsInfo _afi = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO, .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT}; \
+		VkMemoryAllocateInfo _ai = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .pNext = &_afi, .allocationSize = _mr.size, .memoryTypeIndex = _mti}; \
+		VK_CHECK(vkAllocateMemory((device), &_ai, NULL, (pMem)), "Failed to allocate device-address buffer memory"); \
+		VK_CHECK(vkBindBufferMemory((device), *(pBuf), *(pMem), 0), "Failed to bind device-address buffer memory"); \
+	} while (0)
+
+// ============================================================================
 // Function Declarations
 // ============================================================================
 

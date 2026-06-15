@@ -9,7 +9,6 @@
 typedef struct RTBase RTBase;
 
 // One-time init / destroy
-bool rt_base_check_support(VkPhysicalDevice device);
 RTBase *rt_base_create(VulkanCore *core);
 void rt_base_destroy(RTBase *base);
 
@@ -25,11 +24,6 @@ VkBuffer rt_base_node_staging_buf(RTBase *base);
 uint32_t rt_base_vcount(RTBase *base);
 uint32_t rt_base_ecount(RTBase *base);
 bool rt_base_fp64_supported(RTBase *base);
-
-// Buffer creation helpers (for algorithm-owned buffers)
-void rt_base_create_buffer(RTBase *base, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *buf, VkDeviceMemory *mem);
-void rt_base_create_device_buffer(RTBase *base, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *buf, VkDeviceMemory *mem);
-void rt_base_staging_upload(RTBase *base, VkBuffer dst, const void *data, VkDeviceSize size, bool thread_safe);
 
 // Command buffer lifecycle: begin, record dispatches, submit
 VkCommandBuffer rt_base_begin_commands(RTBase *base);

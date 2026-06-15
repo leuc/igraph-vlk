@@ -8,8 +8,8 @@
 //
 // Design:
 //   1. CPU: Build octree from particle positions (barnes_hut_tree.h)
-//   2. CPU: DFS-linearize octree → triangle per node + device-node array
-//   3. GPU: Upload vertices/indices → build triangle-mesh BLAS
+//   2. CPU: DFS-linearize octree -> triangle per node + device-node array
+//   3. GPU: Upload vertices/indices -> build triangle-mesh BLAS
 //   4. GPU: Build TLAS (single instance over BLAS)
 //   5. GPU: Dispatch bh_force.comp — ray queries walk the octree via BVH
 //
@@ -25,38 +25,10 @@
 #include <string.h>
 
 #include "graph/barnes_hut_tree.h"
-#include "vulkan/buffers.h"
+#include "vulkan/rt_helpers.h"
 #include "vulkan/utils.h"
 
 #define BHRT_WORKGROUP_SIZE 256
-
-// ============================================================================
-// RT Function Pointers (loaded once)
-// ============================================================================
-
-static struct
-{
-	PFN_vkCreateAccelerationStructureKHR CreateAccelerationStructureKHR;
-	PFN_vkDestroyAccelerationStructureKHR DestroyAccelerationStructureKHR;
-	PFN_vkGetAccelerationStructureBuildSizesKHR GetAccelerationStructureBuildSizesKHR;
-	PFN_vkCmdBuildAccelerationStructuresKHR CmdBuildAccelerationStructuresKHR;
-	PFN_vkGetAccelerationStructureDeviceAddressKHR GetAccelerationStructureDeviceAddressKHR;
-	PFN_vkGetBufferDeviceAddressKHR GetBufferDeviceAddressKHR;
-} bhrt_funcs;
-
-static void bhrt_load_rt_functions(VulkanCore *core)
-{
-	if (bhrt_funcs.CreateAccelerationStructureKHR)
-		return;
-	bhrt_funcs.CreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(core->device, "vkCreateAccelerationStructureKHR");
-	bhrt_funcs.DestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(core->device, "vkDestroyAccelerationStructureKHR");
-	bhrt_funcs.GetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(core->device, "vkGetAccelerationStructureBuildSizesKHR");
-	bhrt_funcs.CmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(core->device, "vkCmdBuildAccelerationStructuresKHR");
-	bhrt_funcs.GetAccelerationStructureDeviceAddressKHR = (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetDeviceProcAddr(core->device, "vkGetAccelerationStructureDeviceAddressKHR");
-	bhrt_funcs.GetBufferDeviceAddressKHR = (PFN_vkGetBufferDeviceAddressKHR)vkGetDeviceProcAddr(core->device, "vkGetBufferDeviceAddress");
-	if (!bhrt_funcs.GetBufferDeviceAddressKHR)
-		bhrt_funcs.GetBufferDeviceAddressKHR = (PFN_vkGetBufferDeviceAddressKHR)vkGetDeviceProcAddr(core->device, "vkGetBufferDeviceAddressKHR");
-}
 
 // ============================================================================
 // Opaque Struct (must be defined before helpers that use it)
@@ -124,115 +96,8 @@ struct BarnesHutRT
 };
 
 // ============================================================================
-// Internal Helpers
+// Session Cleanup
 // ============================================================================
-
-static uint64_t bhrt_get_buffer_address(BarnesHutRT *bh, VkBuffer buf)
-{
-	VkBufferDeviceAddressInfo addrInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = buf};
-	return bhrt_funcs.GetBufferDeviceAddressKHR(bh->core->device, &addrInfo);
-}
-
-static uint64_t bhrt_get_as_address(BarnesHutRT *bh, VkAccelerationStructureKHR as)
-{
-	VkAccelerationStructureDeviceAddressInfoKHR addrInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR, .accelerationStructure = as};
-	return bhrt_funcs.GetAccelerationStructureDeviceAddressKHR(bh->core->device, &addrInfo);
-}
-
-// ============================================================================
-// Buffer helpers (local — don't depend on RTBase)
-// ============================================================================
-
-static void bhrt_create_buffer(BarnesHutRT *bh, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *buf, VkDeviceMemory *mem)
-{
-	VkBufferCreateInfo bufInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size, .usage = usage | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-	VK_CHECK(vkCreateBuffer(bh->core->device, &bufInfo, NULL, buf), "Failed to create BHRT buffer");
-
-	VkMemoryRequirements memReqs;
-	vkGetBufferMemoryRequirements(bh->core->device, *buf, &memReqs);
-
-	VkPhysicalDeviceMemoryProperties memProps;
-	vkGetPhysicalDeviceMemoryProperties(bh->core->physicalDevice, &memProps);
-
-	uint32_t memTypeIndex = UINT32_MAX;
-	for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
-		if ((memReqs.memoryTypeBits & (1 << i)) && (memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) && (memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
-			memTypeIndex = i;
-			break;
-		}
-	}
-	if (memTypeIndex == UINT32_MAX) {
-		for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
-			if ((memReqs.memoryTypeBits & (1 << i)) && (memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-				memTypeIndex = i;
-				break;
-			}
-		}
-	}
-	if (memTypeIndex == UINT32_MAX)
-		exit_with_error("BHRT: failed to find suitable memory type");
-
-	VkMemoryAllocateFlagsInfo allocFlags = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO, .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT};
-	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .pNext = &allocFlags, .allocationSize = memReqs.size, .memoryTypeIndex = memTypeIndex};
-	VK_CHECK(vkAllocateMemory(bh->core->device, &allocInfo, NULL, mem), "Failed to allocate BHRT buffer memory");
-	VK_CHECK(vkBindBufferMemory(bh->core->device, *buf, *mem, 0), "Failed to bind BHRT buffer memory");
-}
-
-static void bhrt_create_device_buffer(BarnesHutRT *bh, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *buf, VkDeviceMemory *mem)
-{
-	VkBufferCreateInfo bufInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size, .usage = usage | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-	VK_CHECK(vkCreateBuffer(bh->core->device, &bufInfo, NULL, buf), "Failed to create BHRT device buffer");
-
-	VkMemoryRequirements memReqs;
-	vkGetBufferMemoryRequirements(bh->core->device, *buf, &memReqs);
-
-	VkPhysicalDeviceMemoryProperties memProps;
-	vkGetPhysicalDeviceMemoryProperties(bh->core->physicalDevice, &memProps);
-
-	uint32_t memTypeIndex = UINT32_MAX;
-	for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
-		if ((memReqs.memoryTypeBits & (1 << i)) && (memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-			memTypeIndex = i;
-			break;
-		}
-	}
-	if (memTypeIndex == UINT32_MAX)
-		exit_with_error("BHRT: failed to find device-local memory type");
-
-	VkMemoryAllocateFlagsInfo allocFlags = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO, .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT};
-	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .pNext = &allocFlags, .allocationSize = memReqs.size, .memoryTypeIndex = memTypeIndex};
-	VK_CHECK(vkAllocateMemory(bh->core->device, &allocInfo, NULL, mem), "Failed to allocate BHRT device buffer memory");
-	VK_CHECK(vkBindBufferMemory(bh->core->device, *buf, *mem, 0), "Failed to bind BHRT device buffer memory");
-}
-
-static void bhrt_staging_upload(BarnesHutRT *bh, VkBuffer dst, const void *data, VkDeviceSize size)
-{
-	VkBuffer staging;
-	VkDeviceMemory stagingMem;
-	bhrt_create_buffer(bh, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &staging, &stagingMem);
-	void *mapped;
-	VK_CHECK(vkMapMemory(bh->core->device, stagingMem, 0, size, 0, &mapped), "Failed to map BHRT staging upload");
-	memcpy(mapped, data, size);
-	vkUnmapMemory(bh->core->device, stagingMem);
-
-	VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = (uint32_t)bh->core->graphicsQueueFamily};
-	VkCommandPool cmdPool;
-	VK_CHECK(vkCreateCommandPool(bh->core->device, &poolInfo, NULL, &cmdPool), "Failed to create BHRT staging upload pool");
-	VkCommandBufferAllocateInfo cmdInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = cmdPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
-	VkCommandBuffer cmd;
-	VK_CHECK(vkAllocateCommandBuffers(bh->core->device, &cmdInfo, &cmd), "Failed to allocate BHRT staging upload cmd");
-	VK_CHECK(vkBeginCommandBuffer(cmd, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin BHRT staging upload cmd");
-	VkBufferCopy copyRegion = {.size = size};
-	vkCmdCopyBuffer(cmd, staging, dst, 1, &copyRegion);
-	VK_CHECK(vkEndCommandBuffer(cmd), "Failed to end BHRT staging upload cmd");
-	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cmd};
-	pthread_mutex_lock(&bh->core->graphicsQueueMutex);
-	VK_CHECK(vkQueueSubmit(bh->core->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit BHRT staging upload");
-	vkQueueWaitIdle(bh->core->graphicsQueue);
-	pthread_mutex_unlock(&bh->core->graphicsQueueMutex);
-	vkDestroyCommandPool(bh->core->device, cmdPool, NULL);
-	VK_DESTROY_BUFFER(bh->core->device, staging, stagingMem);
-}
 
 static void bhrt_destroy_as_resources(BarnesHutRT *bh)
 {
@@ -242,14 +107,10 @@ static void bhrt_destroy_as_resources(BarnesHutRT *bh)
 	VK_DESTROY_BUFFER(bh->core->device, bh->scratch_buf, bh->scratch_mem);
 	bh->scratch_capacity = 0;
 
-	if (bh->blas != VK_NULL_HANDLE) {
-		bhrt_funcs.DestroyAccelerationStructureKHR(bh->core->device, bh->blas, NULL);
-		bh->blas = VK_NULL_HANDLE;
-	}
-	if (bh->tlas != VK_NULL_HANDLE) {
-		bhrt_funcs.DestroyAccelerationStructureKHR(bh->core->device, bh->tlas, NULL);
-		bh->tlas = VK_NULL_HANDLE;
-	}
+	rt_helpers_destroy_as(bh->core->device, bh->blas);
+	bh->blas = VK_NULL_HANDLE;
+	rt_helpers_destroy_as(bh->core->device, bh->tlas);
+	bh->tlas = VK_NULL_HANDLE;
 }
 
 // ============================================================================
@@ -264,7 +125,7 @@ BarnesHutRT *bhrt_create(VulkanCore *core)
 	bh->core = core;
 	bh->supported = true;
 
-	bhrt_load_rt_functions(core);
+	rt_helpers_load_functions(core);
 
 	// Descriptor Set Layout — matching bh_force.comp bindings
 	//
@@ -348,7 +209,7 @@ bool bhrt_session_init(BarnesHutRT *bh, const float *positions, const float *mas
 
 	// Positions + masses buffer (vec4 per particle)
 	VkDeviceSize posSize = sizeof(float) * 4 * particle_count;
-	bhrt_create_device_buffer(bh, posSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->pos_buf, &bh->pos_mem);
+	rt_helpers_create_device_buffer(bh->core, posSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->pos_buf, &bh->pos_mem);
 	bh->pos_capacity = posSize;
 
 	// Upload initial positions
@@ -360,16 +221,16 @@ bool bhrt_session_init(BarnesHutRT *bh, const float *positions, const float *mas
 			posData[i * 4 + 2] = (particle_count > 2) ? positions[i * 3 + 2] : 0.0f;
 			posData[i * 4 + 3] = masses ? masses[i] : 1.0f;
 		}
-		bhrt_staging_upload(bh, bh->pos_buf, posData, posSize);
+		rt_helpers_staging_upload(bh->core, bh->pos_buf, posData, posSize);
 		free(posData);
 	}
 
 	// Force output buffer (vec4 per particle)
 	VkDeviceSize forceSize = sizeof(float) * 4 * particle_count;
-	bhrt_create_device_buffer(bh, forceSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &bh->force_buf, &bh->force_mem);
+	rt_helpers_create_device_buffer(bh->core, forceSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &bh->force_buf, &bh->force_mem);
 
 	// Force staging buffer (for CPU readback)
-	bhrt_create_buffer(bh, forceSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->force_staging_buf, &bh->force_staging_mem);
+	rt_helpers_create_buffer(bh->core, forceSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->force_staging_buf, &bh->force_staging_mem);
 
 	// Create descriptor pool + set (shared across all dispatches)
 	{
@@ -504,26 +365,26 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 	// Vertex buffer
 	if (vertSize > bh->vertex_capacity) {
 		VK_DESTROY_BUFFER(bh->core->device, bh->vertex_buf, bh->vertex_mem);
-		bhrt_create_device_buffer(bh, vertSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->vertex_buf, &bh->vertex_mem);
+		rt_helpers_create_device_buffer(bh->core, vertSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->vertex_buf, &bh->vertex_mem);
 		bh->vertex_capacity = vertSize;
 	}
-	bhrt_staging_upload(bh, bh->vertex_buf, dfs.vertices, vertSize);
+	rt_helpers_staging_upload(bh->core, bh->vertex_buf, dfs.vertices, vertSize);
 
 	// Index buffer
 	if (idxSize > bh->index_capacity) {
 		VK_DESTROY_BUFFER(bh->core->device, bh->index_buf, bh->index_mem);
-		bhrt_create_device_buffer(bh, idxSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->index_buf, &bh->index_mem);
+		rt_helpers_create_device_buffer(bh->core, idxSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->index_buf, &bh->index_mem);
 		bh->index_capacity = idxSize;
 	}
-	bhrt_staging_upload(bh, bh->index_buf, dfs.indices, idxSize);
+	rt_helpers_staging_upload(bh->core, bh->index_buf, dfs.indices, idxSize);
 
 	// Node buffer (BhNode[])
 	if (nodeSize > bh->node_capacity) {
 		VK_DESTROY_BUFFER(bh->core->device, bh->node_buf, bh->node_mem);
-		bhrt_create_device_buffer(bh, nodeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->node_buf, &bh->node_mem);
+		rt_helpers_create_device_buffer(bh->core, nodeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->node_buf, &bh->node_mem);
 		bh->node_capacity = nodeSize;
 	}
-	bhrt_staging_upload(bh, bh->node_buf, dfs.device_nodes, nodeSize);
+	rt_helpers_staging_upload(bh->core, bh->node_buf, dfs.device_nodes, nodeSize);
 
 	bh_dfs_output_free(&dfs);
 	bh_tree_destroy(tree);
@@ -533,8 +394,8 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 	bhrt_destroy_as_resources(bh);
 
 	// ---- Step 5: Build triangle-mesh BLAS ----
-	uint64_t vertAddr = bhrt_get_buffer_address(bh, bh->vertex_buf);
-	uint64_t idxAddr = bhrt_get_buffer_address(bh, bh->index_buf);
+	uint64_t vertAddr = rt_helpers_get_buffer_device_address(bh->core->device, bh->vertex_buf);
+	uint64_t idxAddr = rt_helpers_get_buffer_device_address(bh->core->device, bh->index_buf);
 
 	VkAccelerationStructureGeometryKHR blasGeometry = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
@@ -563,9 +424,9 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 
 	uint32_t maxPrims = bh->num_prims;
 	VkAccelerationStructureBuildSizesInfoKHR blasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
-	bhrt_funcs.GetAccelerationStructureBuildSizesKHR(bh->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &blasBuildInfo, &maxPrims, &blasSizeInfo);
+	rt_helpers_get_GetAccelerationStructureBuildSizesKHR()(bh->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &blasBuildInfo, &maxPrims, &blasSizeInfo);
 
-	bhrt_create_device_buffer(bh, blasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &bh->blas_buf, &bh->blas_mem);
+	rt_helpers_create_device_buffer(bh->core, blasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &bh->blas_buf, &bh->blas_mem);
 
 	VkAccelerationStructureCreateInfoKHR blasCreateInfo = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
@@ -574,10 +435,10 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 		.size = blasSizeInfo.accelerationStructureSize,
 		.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
 	};
-	VK_CHECK(bhrt_funcs.CreateAccelerationStructureKHR(bh->core->device, &blasCreateInfo, NULL, &bh->blas), "Failed to create BHRT BLAS");
+	VK_CHECK(rt_helpers_get_CreateAccelerationStructureKHR()(bh->core->device, &blasCreateInfo, NULL, &bh->blas), "Failed to create BHRT BLAS");
 
 	// ---- Step 6: Build TLAS (single instance) ----
-	uint64_t blasAddr = bhrt_get_as_address(bh, bh->blas);
+	uint64_t blasAddr = rt_helpers_get_as_device_address(bh->core->device, bh->blas);
 	VkAccelerationStructureInstanceKHR instance;
 	memset(&instance, 0, sizeof(instance));
 	instance.instanceCustomIndex = 0;
@@ -601,8 +462,8 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 	m[11] = 0.0f;
 
 	VkDeviceSize instSize = sizeof(VkAccelerationStructureInstanceKHR);
-	bhrt_create_device_buffer(bh, instSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->instance_buf, &bh->instance_mem);
-	bhrt_staging_upload(bh, bh->instance_buf, &instance, instSize);
+	rt_helpers_create_device_buffer(bh->core, instSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->instance_buf, &bh->instance_mem);
+	rt_helpers_staging_upload(bh->core, bh->instance_buf, &instance, instSize);
 
 	VkAccelerationStructureGeometryKHR tlasGeometry = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
@@ -611,7 +472,7 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 		.geometry.instances =
 			{
 				.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
-				.data.deviceAddress = bhrt_get_buffer_address(bh, bh->instance_buf),
+				.data.deviceAddress = rt_helpers_get_buffer_device_address(bh->core->device, bh->instance_buf),
 			},
 	};
 
@@ -626,9 +487,9 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 
 	uint32_t maxInstances = 1;
 	VkAccelerationStructureBuildSizesInfoKHR tlasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
-	bhrt_funcs.GetAccelerationStructureBuildSizesKHR(bh->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tlasBuildInfo, &maxInstances, &tlasSizeInfo);
+	rt_helpers_get_GetAccelerationStructureBuildSizesKHR()(bh->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tlasBuildInfo, &maxInstances, &tlasSizeInfo);
 
-	bhrt_create_device_buffer(bh, tlasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &bh->tlas_buf, &bh->tlas_mem);
+	rt_helpers_create_device_buffer(bh->core, tlasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &bh->tlas_buf, &bh->tlas_mem);
 
 	VkAccelerationStructureCreateInfoKHR tlasCreateInfo = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
@@ -637,16 +498,16 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 		.size = tlasSizeInfo.accelerationStructureSize,
 		.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
 	};
-	VK_CHECK(bhrt_funcs.CreateAccelerationStructureKHR(bh->core->device, &tlasCreateInfo, NULL, &bh->tlas), "Failed to create BHRT TLAS");
+	VK_CHECK(rt_helpers_get_CreateAccelerationStructureKHR()(bh->core->device, &tlasCreateInfo, NULL, &bh->tlas), "Failed to create BHRT TLAS");
 
 	// ---- Step 7: Create/use scratch buffer (max size) ----
 	VkDeviceSize scratchSize = blasSizeInfo.buildScratchSize > tlasSizeInfo.buildScratchSize ? blasSizeInfo.buildScratchSize : tlasSizeInfo.buildScratchSize;
 	if (scratchSize > bh->scratch_capacity) {
 		VK_DESTROY_BUFFER(bh->core->device, bh->scratch_buf, bh->scratch_mem);
-		bhrt_create_device_buffer(bh, scratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &bh->scratch_buf, &bh->scratch_mem);
+		rt_helpers_create_device_buffer(bh->core, scratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &bh->scratch_buf, &bh->scratch_mem);
 		bh->scratch_capacity = scratchSize;
 	}
-	uint64_t scratchAddr = bhrt_get_buffer_address(bh, bh->scratch_buf);
+	uint64_t scratchAddr = rt_helpers_get_buffer_device_address(bh->core->device, bh->scratch_buf);
 
 	// ---- Step 8: Update positions on GPU ----
 	// Upload updated positions to pos_buf (w=mass stays from session init)
@@ -658,9 +519,9 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 			posData[i * 4 + 2] = positions[i * 3 + 2];
 			posData[i * 4 + 3] = 1.0f;
 		}
-		// Upload via bhrt_staging_upload (separate submit+wait, avoids use-after-free
+		// Upload via rt_helpers_staging_upload (separate submit+wait, avoids use-after-free
 		// of staging buffer that would occur if we recorded into the caller's cmd).
-		bhrt_staging_upload(bh, bh->pos_buf, posData, sizeof(float) * 4 * pc);
+		rt_helpers_staging_upload(bh->core, bh->pos_buf, posData, sizeof(float) * 4 * pc);
 		free(posData);
 	}
 
@@ -672,7 +533,7 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 	blasBuildInfo.scratchData.deviceAddress = scratchAddr;
 	VkAccelerationStructureBuildRangeInfoKHR blasRangeInfo = {.primitiveCount = bh->num_prims, .primitiveOffset = 0, .firstVertex = 0, .transformOffset = 0};
 	const VkAccelerationStructureBuildRangeInfoKHR *pBlasRange = &blasRangeInfo;
-	bhrt_funcs.CmdBuildAccelerationStructuresKHR(cmd, 1, &blasBuildInfo, &pBlasRange);
+	rt_helpers_get_CmdBuildAccelerationStructuresKHR()(cmd, 1, &blasBuildInfo, &pBlasRange);
 
 	// BLAS barrier
 	VkMemoryBarrier blasBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, .dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR};
@@ -683,11 +544,11 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 	tlasBuildInfo.scratchData.deviceAddress = scratchAddr;
 	{
 		// Re-fetch instance addr (buffer may have changed after upload)
-		tlasGeometry.geometry.instances.data.deviceAddress = bhrt_get_buffer_address(bh, bh->instance_buf);
+		tlasGeometry.geometry.instances.data.deviceAddress = rt_helpers_get_buffer_device_address(bh->core->device, bh->instance_buf);
 		tlasBuildInfo.pGeometries = &tlasGeometry;
 		VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = {.primitiveCount = 1, .primitiveOffset = 0, .firstVertex = 0, .transformOffset = 0};
 		const VkAccelerationStructureBuildRangeInfoKHR *pTlasRange = &tlasRangeInfo;
-		bhrt_funcs.CmdBuildAccelerationStructuresKHR(cmd, 1, &tlasBuildInfo, &pTlasRange);
+		rt_helpers_get_CmdBuildAccelerationStructuresKHR()(cmd, 1, &tlasBuildInfo, &pTlasRange);
 	}
 
 	// ---- Step 11: Update TLAS descriptor binding ----
@@ -761,14 +622,9 @@ void bhrt_readback_forces(BarnesHutRT *bh, float *out_forces)
 
 	VkDeviceSize forceSize = sizeof(float) * 4 * bh->particle_count;
 
-	// Use a one-time command buffer to copy force -> staging
-	VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = (uint32_t)bh->core->graphicsQueueFamily};
 	VkCommandPool cmdPool;
-	VK_CHECK(vkCreateCommandPool(bh->core->device, &poolInfo, NULL, &cmdPool), "Failed to create BHRT readback pool");
-	VkCommandBufferAllocateInfo cmdInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = cmdPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
 	VkCommandBuffer cmd;
-	VK_CHECK(vkAllocateCommandBuffers(bh->core->device, &cmdInfo, &cmd), "Failed to allocate BHRT readback cmd");
-	VK_CHECK(vkBeginCommandBuffer(cmd, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin BHRT readback cmd");
+	VK_ONE_SHOT_BEGIN(bh->core->device, (uint32_t)bh->core->graphicsQueueFamily, cmdPool, cmd);
 
 	VkMemoryBarrier forceBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT};
 	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &forceBarrier, 0, NULL, 0, NULL);
@@ -776,15 +632,9 @@ void bhrt_readback_forces(BarnesHutRT *bh, float *out_forces)
 	VkBufferCopy copyRegion = {.size = forceSize};
 	vkCmdCopyBuffer(cmd, bh->force_buf, bh->force_staging_buf, 1, &copyRegion);
 
-	VK_CHECK(vkEndCommandBuffer(cmd), "Failed to end BHRT readback cmd");
-
-	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cmd};
 	pthread_mutex_lock(&bh->core->graphicsQueueMutex);
-	VK_CHECK(vkQueueSubmit(bh->core->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE), "Failed to submit BHRT readback");
-	vkQueueWaitIdle(bh->core->graphicsQueue);
+	VK_ONE_SHOT_END(bh->core->device, bh->core->graphicsQueue, cmdPool, cmd);
 	pthread_mutex_unlock(&bh->core->graphicsQueueMutex);
-
-	vkDestroyCommandPool(bh->core->device, cmdPool, NULL);
 
 	void *mapped;
 	VK_CHECK(vkMapMemory(bh->core->device, bh->force_staging_mem, 0, forceSize, 0, &mapped), "Failed to map BHRT readback");
