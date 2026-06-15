@@ -1,5 +1,6 @@
 #include "graph/wrappers_layout.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -25,6 +26,54 @@ void *compute_layout_bcgl(igraph_t *graph)
 
 	igraph_layout_random_3d(graph, result);
 	return result;
+}
+
+// ============================================================================
+// Debug: Read mapped GPU memory for avg/max velocity and bounding box
+// ============================================================================
+static void debug_print_bcgl_stats(Renderer *r, uint32_t current_iter, uint32_t total_iters)
+{
+	BCGLComputeContext *ctx = &r->bcgl_ctx;
+	if (ctx->node_mem == VK_NULL_HANDLE)
+		return;
+
+	igraph_integer_t n = r->nodeCount;
+	void *mapped;
+	vkMapMemory(r->core.device, ctx->node_mem, 0, sizeof(BCGLNodeData) * n, 0, &mapped);
+	BCGLNodeData *gpu_nodes = (BCGLNodeData *)mapped;
+
+	float total_velocity = 0.0f;
+	float max_velocity = 0.0f;
+	float min_x = 999999.0f, max_x = -999999.0f;
+	float min_y = 999999.0f, max_y = -999999.0f;
+
+	for (igraph_integer_t i = 0; i < n; i++) {
+		float vx = gpu_nodes[i].velocity[0];
+		float vy = gpu_nodes[i].velocity[1];
+		float vz = gpu_nodes[i].velocity[2];
+		float speed = sqrtf(vx * vx + vy * vy + vz * vz);
+
+		total_velocity += speed;
+		if (speed > max_velocity)
+			max_velocity = speed;
+
+		if (gpu_nodes[i].pos[0] < min_x)
+			min_x = gpu_nodes[i].pos[0];
+		if (gpu_nodes[i].pos[0] > max_x)
+			max_x = gpu_nodes[i].pos[0];
+		if (gpu_nodes[i].pos[1] < min_y)
+			min_y = gpu_nodes[i].pos[1];
+		if (gpu_nodes[i].pos[1] > max_y)
+			max_y = gpu_nodes[i].pos[1];
+	}
+
+	vkUnmapMemory(r->core.device, ctx->node_mem);
+
+	float avg_velocity = total_velocity / (float)n;
+	float spread_x = max_x - min_x;
+	float spread_y = max_y - min_y;
+
+	printf("[BCGL Progress] Iter %3u/%3u | Avg Vel: %6.3f | Max Vel: %6.3f | Spread: %.1f x %.1f\n", current_iter, total_iters, avg_velocity, max_velocity, spread_x, spread_y);
 }
 
 // ============================================================================
@@ -56,15 +105,25 @@ void apply_layout_bcgl(ExecutionContext *ctx, void *result_data)
 	// Init BCGL GPU buffers and run the optimization
 	renderer_init_bcgl_buffers(renderer, data);
 
-	uint32_t iterations = 200;
-	if (data->node_count > 50000)
-		iterations = 5;
-	else if (data->node_count > 10000)
-		iterations = 20;
-	else if (data->node_count > 2000)
-		iterations = 50;
+	uint32_t total_iterations = 500;
+	//if (data->node_count > 50000)
+	//	total_iterations = 20;
+	//else if (data->node_count > 10000)
+	//	total_iterations = 50;
 
-	renderer_dispatch_bcgl_layout(renderer, data, iterations);
+	// Break the execution into 10 chunks for debugging
+	uint32_t chunks = 10;
+	uint32_t iter_per_chunk = total_iterations / chunks;
+
+	printf("--- Starting BCGL GPU Optimization ---\n");
+	for (uint32_t i = 0; i < chunks; i++) {
+		renderer_dispatch_bcgl_layout(renderer, data, iter_per_chunk);
+
+		uint32_t current_iter = (i + 1) * iter_per_chunk;
+		debug_print_bcgl_stats(renderer, current_iter, total_iterations);
+	}
+	printf("--- Optimization Complete ---\n");
+
 	renderer_readback_bcgl_positions(renderer, data);
 
 	// Sync positions to the layout matrix so standard apply path works
