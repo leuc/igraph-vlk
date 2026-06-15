@@ -118,11 +118,12 @@ void main()
 	//   origin = (ray_origin.x, ray_origin.y, 0.0)  — 2D DFS space
 	//   direction = (1, 0, 0)                       — along X axis (OWL: vec3f(1,0,0))
 	//   tmax = ray_length                           — distance * theta (OWL: sqrtf(r_2) * THRESHOLD)
-	//   Flags: OPAQUE                                — matches OWL: OPTIX_RAY_FLAG_DISABLE_ANYHIT
-	//   Note: no TERMINATE_ON_FIRST_HIT for AABBs (no intersection shader for auto-commit)
+	//   Flags: OPAQUE | TERMINATE_ON_FIRST_HIT      — matches OWL: OPTIX_RAY_FLAG_DISABLE_ANYHIT
+	//          TERMINATE_ON_FIRST_HIT stops BVH traversal immediately after the first
+	//          committed intersection, since the Y-coordinate uniquely selects one AABB per ray.
 		rayQueryEXT rq;
 		rayQueryInitializeEXT(rq, tlas,
-		                      gl_RayFlagsOpaqueEXT,
+		                      gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT,
 		                      0xFF,
 		                      vec3(ray_origin, 0.0),
 		                      0.0,
@@ -134,10 +135,11 @@ void main()
 		// (AABBs need explicit rayQueryConfirmIntersectionEXT without an intersection shader).
 		// BVH traversal returns candidates in front-to-back order, so the first
 		// confirmed candidate is the closest hit.
+		// With TerminateOnFirstHit, rayQueryProceedEXT returns false immediately after
+		// the first rayQueryConfirmIntersectionEXT — no break needed.
 		while (rayQueryProceedEXT(rq)) {
 			if (rayQueryGetIntersectionTypeEXT(rq, false) == gl_RayQueryCandidateIntersectionAABBEXT) {
 				rayQueryConfirmIntersectionEXT(rq);
-				break;
 			}
 		}
 
@@ -156,9 +158,10 @@ void main()
 					if (pid != int(i)) {
 						vec3 pd = pos - points[pid].xyz;
 						float pr2 = dot(pd, pd);
-						float dist = sqrt(pr2);
-						if (dist > 1e-12) {
-							force_vec += pd * (my_mass * points[pid].w) / pr2 * pc.G;
+						if (pr2 > 1e-24f) {
+							float inv_r = inversesqrt(pr2);
+							float inv_r2 = inv_r * inv_r;
+							force_vec += pd * (my_mass * points[pid].w * inv_r2 * inv_r) * pc.G;
 						}
 					}
 				}
@@ -168,9 +171,10 @@ void main()
 				float hdy = pos.y - hit_node.center_of_mass_y;
 				float hdz = pos.z - hit_node.center_of_mass_z;
 				float hr2 = hdx * hdx + hdy * hdy + hdz * hdz;
-				float dist = sqrt(hr2);
-				if (dist > 1e-12) {
-					force_vec += vec3(hdx, hdy, hdz) * (my_mass * hit_node.mass) / hr2 * pc.G;
+				if (hr2 > 1e-24f) {
+					float inv_r = inversesqrt(hr2);
+					float inv_r2 = inv_r * inv_r;
+					force_vec += vec3(hdx, hdy, hdz) * (my_mass * hit_node.mass * inv_r2 * inv_r) * pc.G;
 				}
 			}
 
@@ -188,9 +192,10 @@ void main()
 					if (pid != int(i)) {
 						vec3 pd = pos - points[pid].xyz;
 						float pr2 = dot(pd, pd);
-						float dist = sqrt(pr2);
-						if (dist > 1e-12) {
-							force_vec += pd * (my_mass * points[pid].w) / pr2 * pc.G;
+						if (pr2 > 1e-24f) {
+							float inv_r = inversesqrt(pr2);
+							float inv_r2 = inv_r * inv_r;
+							force_vec += pd * (my_mass * points[pid].w * inv_r2 * inv_r) * pc.G;
 						}
 					}
 				}
