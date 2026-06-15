@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "vulkan/rt_helpers.h"
 #include "vulkan/utils.h"
@@ -184,7 +185,7 @@ static VkDeviceSize rt_base_build_blas(RTBase *base, float search_radius)
 	blasGeometry.geometry.aabbs.data.deviceAddress = rt_helpers_get_buffer_device_address(base->core->device, aabbBuf);
 	blasGeometry.geometry.aabbs.stride = sizeof(VkAabbPositionsKHR);
 
-	VkAccelerationStructureBuildGeometryInfoKHR blasBuildInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &blasGeometry};
+	VkAccelerationStructureBuildGeometryInfoKHR blasBuildInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &blasGeometry};
 
 	uint32_t maxPrims = 1;
 	VkAccelerationStructureBuildSizesInfoKHR blasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
@@ -219,11 +220,17 @@ static VkDeviceSize rt_base_build_blas(RTBase *base, float search_radius)
 	VkCommandBuffer blasCmd;
 	VK_ONE_SHOT_BEGIN(base->core->device, (uint32_t)base->core->graphicsQueueFamily, blasPool, blasCmd);
 
+	struct timespec blas_t0, blas_t1;
+	clock_gettime(CLOCK_MONOTONIC, &blas_t0);
 	rt_helpers_get_CmdBuildAccelerationStructuresKHR()(blasCmd, 1, &blasBuildInfo, &pBlasRange);
+	clock_gettime(CLOCK_MONOTONIC, &blas_t1);
+	double blas_ms = (blas_t1.tv_sec - blas_t0.tv_sec) * 1000.0 + (blas_t1.tv_nsec - blas_t0.tv_nsec) / 1e6;
 
 	pthread_mutex_lock(&base->core->graphicsQueueMutex);
 	VK_ONE_SHOT_END(base->core->device, base->core->graphicsQueue, blasPool, blasCmd);
 	pthread_mutex_unlock(&base->core->graphicsQueueMutex);
+
+	printf("[RTBase] BLAS build record: %.3f ms\n", blas_ms);
 
 	VK_DESTROY_BUFFER(base->core->device, aabbBuf, aabbMem);
 
@@ -302,11 +309,17 @@ static bool rt_base_build_tlas(RTBase *base, igraph_matrix_t *init_positions)
 	VkCommandBuffer tlasCmd;
 	VK_ONE_SHOT_BEGIN(base->core->device, (uint32_t)base->core->graphicsQueueFamily, tlasPool, tlasCmd);
 
+	struct timespec tlas_t0, tlas_t1;
+	clock_gettime(CLOCK_MONOTONIC, &tlas_t0);
 	rt_helpers_get_CmdBuildAccelerationStructuresKHR()(tlasCmd, 1, &tlasBuildInfo, &pTlasRange);
+	clock_gettime(CLOCK_MONOTONIC, &tlas_t1);
+	double tlas_ms = (tlas_t1.tv_sec - tlas_t0.tv_sec) * 1000.0 + (tlas_t1.tv_nsec - tlas_t0.tv_nsec) / 1e6;
 
 	pthread_mutex_lock(&base->core->graphicsQueueMutex);
 	VK_ONE_SHOT_END(base->core->device, base->core->graphicsQueue, tlasPool, tlasCmd);
 	pthread_mutex_unlock(&base->core->graphicsQueueMutex);
+
+	printf("[RTBase] TLAS build record: %.3f ms (%u instances)\n", tlas_ms, vcount);
 
 	return true;
 }

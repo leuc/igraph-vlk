@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "graph/barnes_hut_tree.h"
 #include "vulkan/rt_helpers.h"
@@ -469,6 +470,9 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 	VkAccelerationStructureBuildSizesInfoKHR tlasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
 	rt_helpers_get_GetAccelerationStructureBuildSizesKHR()(bh->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tlasBuildInfo, &maxInstances, &tlasSizeInfo);
 
+	printf("[BHRT] Buffers: aabb=%.2f KB (%u nodes), node=%.2f KB, pos=%.2f KB\n", (double)aabbSize / 1024.0, bh->num_prims, (double)nodeSize / 1024.0, (double)(sizeof(float) * 4 * pc) / 1024.0);
+	printf("[BHRT] AS sizes: BLAS=%.2f KB, TLAS=%.2f KB, scratch=%.2f KB\n", (double)blasSizeInfo.accelerationStructureSize / 1024.0, (double)tlasSizeInfo.accelerationStructureSize / 1024.0, (double)(blasSizeInfo.buildScratchSize > tlasSizeInfo.buildScratchSize ? blasSizeInfo.buildScratchSize : tlasSizeInfo.buildScratchSize) / 1024.0);
+
 	rt_helpers_create_device_buffer(bh->core, tlasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &bh->tlas_buf, &bh->tlas_mem);
 
 	VkAccelerationStructureCreateInfoKHR tlasCreateInfo = {
@@ -512,7 +516,12 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 	blasBuildInfo.scratchData.deviceAddress = scratchAddr;
 	VkAccelerationStructureBuildRangeInfoKHR blasRangeInfo = {.primitiveCount = bh->num_prims, .primitiveOffset = 0, .firstVertex = 0, .transformOffset = 0};
 	const VkAccelerationStructureBuildRangeInfoKHR *pBlasRange = &blasRangeInfo;
+	struct timespec blas_t0, blas_t1;
+	clock_gettime(CLOCK_MONOTONIC, &blas_t0);
 	rt_helpers_get_CmdBuildAccelerationStructuresKHR()(cmd, 1, &blasBuildInfo, &pBlasRange);
+	clock_gettime(CLOCK_MONOTONIC, &blas_t1);
+	double blas_ms = (blas_t1.tv_sec - blas_t0.tv_sec) * 1000.0 + (blas_t1.tv_nsec - blas_t0.tv_nsec) / 1e6;
+	printf("[BHRT] BLAS build record: %.3f ms (%u prims)\n", blas_ms, bh->num_prims);
 
 	// BLAS barrier
 	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
@@ -526,7 +535,12 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 		tlasBuildInfo.pGeometries = &tlasGeometry;
 		VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = {.primitiveCount = 1, .primitiveOffset = 0, .firstVertex = 0, .transformOffset = 0};
 		const VkAccelerationStructureBuildRangeInfoKHR *pTlasRange = &tlasRangeInfo;
+		struct timespec tlas_t0, tlas_t1;
+		clock_gettime(CLOCK_MONOTONIC, &tlas_t0);
 		rt_helpers_get_CmdBuildAccelerationStructuresKHR()(cmd, 1, &tlasBuildInfo, &pTlasRange);
+		clock_gettime(CLOCK_MONOTONIC, &tlas_t1);
+		double tlas_ms = (tlas_t1.tv_sec - tlas_t0.tv_sec) * 1000.0 + (tlas_t1.tv_nsec - tlas_t0.tv_nsec) / 1e6;
+		printf("[BHRT] TLAS build record: %.3f ms\n", tlas_ms);
 	}
 
 	// ---- Step 11: Update TLAS descriptor binding ----

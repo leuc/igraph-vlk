@@ -423,30 +423,29 @@ bh_dfs_output_t bh_tree_to_dfs_array(bh_tree_t *tree)
 			node_stack = (stack_entry_t *)realloc(node_stack, sizeof(stack_entry_t) * capacity);
 		}
 
-		// Shadow triangle X at node's center of mass (reachable by rays with dynamic grid).
-		// The paper places triangles at X = s (half-side-length), but this assumes a fixed
-		// large grid size (e.g. OWL's GRID_SIZE=10). With igraph's dynamically computed grid,
-		// s can be much larger than the particle distances, making triangles unreachable.
-		// Using cofm.x positions triangles within particle space so the ray length θ·d can
-		// reach them, while still implementing the BH criterion: nodes close to the particle
-		// (cofm.x within θ·d) are hit and approximated; far nodes are missed and descended.
-		float triangle_x_loc = cur->cofm.x;
+		// AABB placed at X = s (half-side-length), matching the paper's RT-BarnesHut design.
+		// The ray from origin (0, ρ·dfs_idx, 0) along +X with tmax = θ·d hits the AABB
+		// at X = s iff s ≤ θ·d, which is exactly the BH criterion s/d ≤ θ.
+		// Dynamic grid sizes work correctly: large s values are unreachable when s/d > θ,
+		// causing the ray to miss and the algorithm to descend — the correct behavior.
+		float triangle_x_loc = cur->s;
 		if (cur->s < out.min_s)
 			out.min_s = cur->s;
 
 		// Y-offset uses unique DFS index so triangles don't overlap (paper: ρ per node)
 		float y_center = (float)out.num_nodes;
 
-		// Thin AABB at same position as the triangle shadow slab:
-		//   X = cofm.x (zero-width slab, same hit/miss semantics as triangle),
-		//   Y = DFS index ± 1.0, Z = ±0.5
+		// Thin AABB at X = s (half-side-length):
+		//   X = s (zero-width slab, hit test encodes BH criterion: s ≤ θ·d)
+		//   Y = DFS index ± 0.49 (non-overlapping, unique node selection per ray)
+		//   Z = ±0.5
 		int ai = out.num_nodes * 6;
-		out.aabbs[ai + 0] = triangle_x_loc;	 // minX = cofm.x
-		out.aabbs[ai + 1] = y_center - 1.0f; // minY
-		out.aabbs[ai + 2] = -0.5f;			 // minZ
-		out.aabbs[ai + 3] = triangle_x_loc;	 // maxX = cofm.x (thin slab)
-		out.aabbs[ai + 4] = y_center + 1.0f; // maxY
-		out.aabbs[ai + 5] = 0.5f;			 // maxZ
+		out.aabbs[ai + 0] = triangle_x_loc;	  // minX = s
+		out.aabbs[ai + 1] = y_center - 0.49f; // minY (non-overlapping)
+		out.aabbs[ai + 2] = -0.5f;			  // minZ
+		out.aabbs[ai + 3] = triangle_x_loc;	  // maxX = s (thin slab)
+		out.aabbs[ai + 4] = y_center + 0.49f; // maxY (non-overlapping)
+		out.aabbs[ai + 5] = 0.5f;			  // maxZ
 
 		// Device node
 		bh_device_node_t *dn = &out.device_nodes[out.num_nodes];
@@ -455,10 +454,10 @@ bh_dfs_output_t bh_tree_to_dfs_array(bh_tree_t *tree)
 		dn->center_of_mass_y = cur->cofm.y;
 		dn->center_of_mass_z = cur->cofm.z;
 		dn->is_leaf = (cur->type == BH_LEAF) ? 1 : 0;
-		dn->next_ray_location_x = triangle_x_loc;
+		dn->next_ray_location_x = 0.0f; // ray origin always at X = 0 (paper's DFS space)
 		dn->next_ray_location_y = y_center;
 		dn->next_prim_id = (int)(out.num_nodes + 1); // DFS successor
-		dn->auto_rope_ray_location_x = triangle_x_loc;
+		dn->auto_rope_ray_location_x = 0.0f;		 // ray origin always at X = 0
 		dn->auto_rope_ray_location_y = y_center;
 		dn->auto_rope_prim_id = -1; // sentinel = terminate
 		dn->num_particles = cur->num_particles;

@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "vulkan/buffers.h"
 #include "vulkan/renderer.h"
@@ -364,8 +365,12 @@ bool yhrt_worker_step(Renderer *r)
 	if (r->yhrt_current_iter >= r->yhrt_maxiter)
 		return false;
 
+	struct timespec t0, t1, t2, t3, t4, t5;
+	clock_gettime(CLOCK_MONOTONIC, &t0);
+
 	// Wait for previous GPU work — fence stays SIGNALED after this
 	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->yhrt_dispatch_fence, VK_TRUE, UINT64_MAX), "Failed to wait for YHRT dispatch fence");
+	clock_gettime(CLOCK_MONOTONIC, &t1);
 
 	// Read back Fnorm from previous iteration (valid because fence was just waited on)
 	if (r->yhrt_current_iter > 0) {
@@ -397,6 +402,7 @@ bool yhrt_worker_step(Renderer *r)
 
 	// ---- Read back positions from GPU for BH octree rebuild ----
 	yhrt_readback_positions_to_cpu(r);
+	clock_gettime(CLOCK_MONOTONIC, &t2);
 
 	// ---- First-iteration debug: repulsion forces with correct positions ----
 	if (r->yhrt_current_iter == 0) {
@@ -475,6 +481,7 @@ bool yhrt_worker_step(Renderer *r)
 
 	// ---- BH octree build + BLAS/TLAS rebuild ----
 	bhrt_build(r->bhrt, r->yhrt_cpu_positions, cmd);
+	clock_gettime(CLOCK_MONOTONIC, &t3);
 
 	// Barrier: AS build → compute
 	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
@@ -524,6 +531,16 @@ bool yhrt_worker_step(Renderer *r)
 	pthread_mutex_lock(&r->core.graphicsQueueMutex);
 	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, r->yhrt_dispatch_fence), "Failed to submit YHRT work");
 	pthread_mutex_unlock(&r->core.graphicsQueueMutex);
+	clock_gettime(CLOCK_MONOTONIC, &t4);
+
+	if ((r->yhrt_current_iter % 100) == 0 || r->yhrt_current_iter < 5) {
+		double dt_fence = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
+		double dt_readback = (t2.tv_sec - t1.tv_sec) + (t2.tv_nsec - t1.tv_nsec) / 1e9;
+		double dt_build = (t3.tv_sec - t2.tv_sec) + (t3.tv_nsec - t2.tv_nsec) / 1e9;
+		double dt_gpu = (t4.tv_sec - t3.tv_sec) + (t4.tv_nsec - t3.tv_nsec) / 1e9;
+		double dt_total = (t4.tv_sec - t0.tv_sec) + (t4.tv_nsec - t0.tv_nsec) / 1e9;
+		printf("[YHRT-TIME] iter=%d  fence=%.3f  pos_readback=%.3f  octree_build=%.3f  gpu_record=%.3f  total=%.3f ms\n", r->yhrt_current_iter, dt_fence * 1000.0, dt_readback * 1000.0, dt_build * 1000.0, dt_gpu * 1000.0, dt_total * 1000.0);
+	}
 
 	r->yhrt_current_iter++;
 	return true;
