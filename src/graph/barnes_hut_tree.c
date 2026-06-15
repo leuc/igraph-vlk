@@ -391,8 +391,7 @@ bh_dfs_output_t bh_tree_to_dfs_array(bh_tree_t *tree)
 	// Estimate capacity: worst case ~ 2 * num_particles (leaf + internal nodes)
 	// Start with 256 and grow dynamically
 	int capacity = 256;
-	out.vertices = (float *)malloc(sizeof(float) * 9 * capacity);
-	out.indices = (uint32_t *)malloc(sizeof(uint32_t) * 3 * capacity);
+	out.aabbs = (float *)malloc(sizeof(float) * 6 * capacity);
 	out.device_nodes = (bh_device_node_t *)calloc(capacity, sizeof(bh_device_node_t));
 	out.num_nodes = 0;
 	out.min_s = 1e10f;
@@ -419,8 +418,7 @@ bh_dfs_output_t bh_tree_to_dfs_array(bh_tree_t *tree)
 		// Grow arrays if needed
 		if (out.num_nodes >= capacity) {
 			capacity *= 2;
-			out.vertices = (float *)realloc(out.vertices, sizeof(float) * 9 * capacity);
-			out.indices = (uint32_t *)realloc(out.indices, sizeof(uint32_t) * 3 * capacity);
+			out.aabbs = (float *)realloc(out.aabbs, sizeof(float) * 6 * capacity);
 			out.device_nodes = (bh_device_node_t *)realloc(out.device_nodes, sizeof(bh_device_node_t) * capacity);
 			node_stack = (stack_entry_t *)realloc(node_stack, sizeof(stack_entry_t) * capacity);
 		}
@@ -439,24 +437,16 @@ bh_dfs_output_t bh_tree_to_dfs_array(bh_tree_t *tree)
 		// Y-offset uses unique DFS index so triangles don't overlap (paper: ρ per node)
 		float y_center = (float)out.num_nodes;
 
-		// Triangle vertices: X = s, Y = unique index, Z = ±0.5
-		int vi = out.num_nodes * 9;
-		out.vertices[vi + 0] = triangle_x_loc;
-		out.vertices[vi + 1] = y_center;
-		out.vertices[vi + 2] = -0.5f;
-		out.vertices[vi + 3] = triangle_x_loc;
-		out.vertices[vi + 4] = y_center - 1.0f;
-		out.vertices[vi + 5] = 0.5f;
-		out.vertices[vi + 6] = triangle_x_loc;
-		out.vertices[vi + 7] = y_center + 1.0f;
-		out.vertices[vi + 8] = 0.5f;
-
-		// Indices
-		int ii = out.num_nodes * 3;
-		int base_vert = out.num_nodes * 3;
-		out.indices[ii + 0] = (uint32_t)(base_vert);
-		out.indices[ii + 1] = (uint32_t)(base_vert + 1);
-		out.indices[ii + 2] = (uint32_t)(base_vert + 2);
+		// Thin AABB at same position as the triangle shadow slab:
+		//   X = cofm.x (zero-width slab, same hit/miss semantics as triangle),
+		//   Y = DFS index ± 1.0, Z = ±0.5
+		int ai = out.num_nodes * 6;
+		out.aabbs[ai + 0] = triangle_x_loc;	 // minX = cofm.x
+		out.aabbs[ai + 1] = y_center - 1.0f; // minY
+		out.aabbs[ai + 2] = -0.5f;			 // minZ
+		out.aabbs[ai + 3] = triangle_x_loc;	 // maxX = cofm.x (thin slab)
+		out.aabbs[ai + 4] = y_center + 1.0f; // maxY
+		out.aabbs[ai + 5] = 0.5f;			 // maxZ
 
 		// Device node
 		bh_device_node_t *dn = &out.device_nodes[out.num_nodes];
@@ -504,11 +494,9 @@ void bh_dfs_output_free(bh_dfs_output_t *out)
 {
 	if (!out)
 		return;
-	free(out->vertices);
-	free(out->indices);
+	free(out->aabbs);
 	free(out->device_nodes);
-	out->vertices = NULL;
-	out->indices = NULL;
+	out->aabbs = NULL;
 	out->device_nodes = NULL;
 	out->num_nodes = 0;
 }

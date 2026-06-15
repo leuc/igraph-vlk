@@ -7,18 +7,18 @@
 // OptiX trace/invoke.
 //
 // Each workgroup processes one particle. The shader walks the octree by
-// tracing rays through a triangle-mesh BLAS. The BVH spatially organizes
+// tracing rays through an AABB-based BLAS. The BVH spatially organizes
 // octree nodes so that the hardware accelerates traversal.
 //
-// Closest-hit (triangle intersection)  = BH criterion NOT met (approximate)
-// Miss (no triangle in range)          = BH criterion met or end (descend)
+// AABB hit (closest confirmed candidate) = BH criterion NOT met (approximate)
+// Miss (no AABB in range)               = BH criterion met or end (descend)
 //
 // Binding layout:
 //   binding 0: NodeBuffer    — vec4[xyz=pos, w=unused] per particle (readonly)
 //   binding 1: ForceBuffer   — vec4[force.xyz, 0] per particle (writeonly)
 //   binding 2: PointBuffer   — vec4[xyz=pos, w=mass] per particle (readonly)
 //   binding 3: BhNodeBuffer  — BhNode[] octree device nodes (readonly)
-//   binding 4: TLAS          — accelerationStructureEXT over triangle mesh
+//   binding 4: TLAS          — accelerationStructureEXT over AABB mesh
 //
 // Push constants (16 bytes):
 //   uint   particle_count
@@ -118,10 +118,11 @@ void main()
 	//   origin = (ray_origin.x, ray_origin.y, 0.0)  — 2D DFS space
 	//   direction = (1, 0, 0)                       — along X axis (OWL: vec3f(1,0,0))
 	//   tmax = ray_length                           — distance * theta (OWL: sqrtf(r_2) * THRESHOLD)
-	//   Flags: TERMINATE_ON_FIRST_HIT | OPAQUE      — matches OWL: OPTIX_RAY_FLAG_DISABLE_ANYHIT | TERMINATE_ON_FIRST_HIT
+	//   Flags: OPAQUE                                — matches OWL: OPTIX_RAY_FLAG_DISABLE_ANYHIT
+	//   Note: no TERMINATE_ON_FIRST_HIT for AABBs (no intersection shader for auto-commit)
 		rayQueryEXT rq;
 		rayQueryInitializeEXT(rq, tlas,
-		                      gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT,
+		                      gl_RayFlagsOpaqueEXT,
 		                      0xFF,
 		                      vec3(ray_origin, 0.0),
 		                      0.0,
@@ -129,10 +130,19 @@ void main()
 		                      ray_length);
 
 		// Traverse BVH — replaces OWL's optixTraverse + optixInvoke
-		while (rayQueryProceedEXT(rq)) {}
+		// For AABB geometry, manually confirm the first candidate intersection
+		// (AABBs need explicit rayQueryConfirmIntersectionEXT without an intersection shader).
+		// BVH traversal returns candidates in front-to-back order, so the first
+		// confirmed candidate is the closest hit.
+		while (rayQueryProceedEXT(rq)) {
+			if (rayQueryGetIntersectionTypeEXT(rq, false) == gl_RayQueryCandidateIntersectionAABBEXT) {
+				rayQueryConfirmIntersectionEXT(rq);
+				break;
+			}
+		}
 
 		// Check intersection type — replaces OWL closest-hit / miss programs
-		if (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCandidateIntersectionTriangleEXT) {
+		if (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCandidateIntersectionAABBEXT) {
 			// ======== CLOSEST HIT (OWL: OPTIX_CLOSEST_HIT_PROGRAM(TriangleMesh)) ========
 			// Paper Algorithm 1 Line 5-13: the hit node's triangle was intersected.
 			// Process HIT node: forces + auto-rope from hit node.

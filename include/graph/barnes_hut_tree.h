@@ -74,8 +74,7 @@ typedef struct
 // ---------------------------------------------------------------------------
 typedef struct
 {
-	float *vertices;   // 9 floats per node (3 verts × 3 floats)
-	uint32_t *indices; // 3 uint32 per node
+	float *aabbs; // 6 floats per node (minXYZ, maxXYZ) — matches VkAabbPositionsKHR
 	bh_device_node_t *device_nodes;
 	int num_nodes;
 	float min_s;

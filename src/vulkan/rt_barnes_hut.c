@@ -62,12 +62,9 @@ struct BarnesHutRT
 	VkDeviceMemory force_staging_mem;
 
 	// Octree mesh buffers (reallocated each build if needed)
-	VkBuffer vertex_buf;
-	VkDeviceMemory vertex_mem;
-	VkDeviceSize vertex_capacity;
-	VkBuffer index_buf;
-	VkDeviceMemory index_mem;
-	VkDeviceSize index_capacity;
+	VkBuffer aabb_buf;
+	VkDeviceMemory aabb_mem;
+	VkDeviceSize aabb_capacity;
 	VkBuffer node_buf;
 	VkDeviceMemory node_mem;
 	VkDeviceSize node_capacity;
@@ -176,8 +173,7 @@ void bhrt_destroy(BarnesHutRT *bh)
 	VK_DESTROY_BUFFER(bh->core->device, bh->pos_buf, bh->pos_mem);
 	VK_DESTROY_BUFFER(bh->core->device, bh->force_buf, bh->force_mem);
 	VK_DESTROY_BUFFER(bh->core->device, bh->force_staging_buf, bh->force_staging_mem);
-	VK_DESTROY_BUFFER(bh->core->device, bh->vertex_buf, bh->vertex_mem);
-	VK_DESTROY_BUFFER(bh->core->device, bh->index_buf, bh->index_mem);
+	VK_DESTROY_BUFFER(bh->core->device, bh->aabb_buf, bh->aabb_mem);
 	VK_DESTROY_BUFFER(bh->core->device, bh->node_buf, bh->node_mem);
 
 	bhrt_destroy_as_resources(bh);
@@ -227,7 +223,7 @@ bool bhrt_session_init(BarnesHutRT *bh, const float *positions, const float *mas
 
 	// Force output buffer (vec4 per particle)
 	VkDeviceSize forceSize = sizeof(float) * 4 * particle_count;
-	rt_helpers_create_device_buffer(bh->core, forceSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &bh->force_buf, &bh->force_mem);
+	rt_helpers_create_device_buffer(bh->core, forceSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->force_buf, &bh->force_mem);
 
 	// Force staging buffer (for CPU readback)
 	rt_helpers_create_buffer(bh->core, forceSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->force_staging_buf, &bh->force_staging_mem);
@@ -280,10 +276,8 @@ void bhrt_session_cleanup(BarnesHutRT *bh)
 	bh->pos_capacity = 0;
 	VK_DESTROY_BUFFER(bh->core->device, bh->force_buf, bh->force_mem);
 	VK_DESTROY_BUFFER(bh->core->device, bh->force_staging_buf, bh->force_staging_mem);
-	VK_DESTROY_BUFFER(bh->core->device, bh->vertex_buf, bh->vertex_mem);
-	bh->vertex_capacity = 0;
-	VK_DESTROY_BUFFER(bh->core->device, bh->index_buf, bh->index_mem);
-	bh->index_capacity = 0;
+	VK_DESTROY_BUFFER(bh->core->device, bh->aabb_buf, bh->aabb_mem);
+	bh->aabb_capacity = 0;
 	VK_DESTROY_BUFFER(bh->core->device, bh->node_buf, bh->node_mem);
 	bh->node_capacity = 0;
 
@@ -357,26 +351,17 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 
 	bh->num_prims = (uint32_t)dfs.num_nodes;
 
-	// ---- Step 3: Upload octree mesh to GPU ----
-	VkDeviceSize vertSize = sizeof(float) * 9 * dfs.num_nodes;
-	VkDeviceSize idxSize = sizeof(uint32_t) * 3 * dfs.num_nodes;
+	// ---- Step 3: Upload octree AABBs + device nodes to GPU ----
+	VkDeviceSize aabbSize = sizeof(float) * 6 * dfs.num_nodes;
 	VkDeviceSize nodeSize = sizeof(bh_device_node_t) * dfs.num_nodes;
 
-	// Vertex buffer
-	if (vertSize > bh->vertex_capacity) {
-		VK_DESTROY_BUFFER(bh->core->device, bh->vertex_buf, bh->vertex_mem);
-		rt_helpers_create_device_buffer(bh->core, vertSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->vertex_buf, &bh->vertex_mem);
-		bh->vertex_capacity = vertSize;
+	// AABB buffer (minXYZ + maxXYZ per node)
+	if (aabbSize > bh->aabb_capacity) {
+		VK_DESTROY_BUFFER(bh->core->device, bh->aabb_buf, bh->aabb_mem);
+		rt_helpers_create_device_buffer(bh->core, aabbSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->aabb_buf, &bh->aabb_mem);
+		bh->aabb_capacity = aabbSize;
 	}
-	rt_helpers_staging_upload(bh->core, bh->vertex_buf, dfs.vertices, vertSize);
-
-	// Index buffer
-	if (idxSize > bh->index_capacity) {
-		VK_DESTROY_BUFFER(bh->core->device, bh->index_buf, bh->index_mem);
-		rt_helpers_create_device_buffer(bh->core, idxSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &bh->index_buf, &bh->index_mem);
-		bh->index_capacity = idxSize;
-	}
-	rt_helpers_staging_upload(bh->core, bh->index_buf, dfs.indices, idxSize);
+	rt_helpers_staging_upload(bh->core, bh->aabb_buf, dfs.aabbs, aabbSize);
 
 	// Node buffer (BhNode[])
 	if (nodeSize > bh->node_capacity) {
@@ -393,23 +378,18 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 	// ---- Step 4: Destroy old BLAS/TLAS ----
 	bhrt_destroy_as_resources(bh);
 
-	// ---- Step 5: Build triangle-mesh BLAS ----
-	uint64_t vertAddr = rt_helpers_get_buffer_device_address(bh->core->device, bh->vertex_buf);
-	uint64_t idxAddr = rt_helpers_get_buffer_device_address(bh->core->device, bh->index_buf);
+	// ---- Step 5: Build AABB BLAS ----
+	uint64_t aabbAddr = rt_helpers_get_buffer_device_address(bh->core->device, bh->aabb_buf);
 
 	VkAccelerationStructureGeometryKHR blasGeometry = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-		.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
+		.geometryType = VK_GEOMETRY_TYPE_AABBS_KHR,
 		.flags = VK_GEOMETRY_OPAQUE_BIT_KHR,
-		.geometry.triangles =
+		.geometry.aabbs =
 			{
-				.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
-				.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
-				.vertexData.deviceAddress = vertAddr,
-				.vertexStride = sizeof(float) * 3,
-				.maxVertex = (uint32_t)(bh->num_prims * 3 - 1),
-				.indexType = VK_INDEX_TYPE_UINT32,
-				.indexData.deviceAddress = idxAddr,
+				.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR,
+				.data.deviceAddress = aabbAddr,
+				.stride = sizeof(float) * 6,
 			},
 	};
 
