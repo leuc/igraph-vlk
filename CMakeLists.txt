@@ -49,6 +49,7 @@ find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
 	    shaders/textquad.frag
 	    shaders/routing.comp
 	    shaders/splc.comp
+    shaders/bcgl.comp
 	    shaders/ray.vert
 	    shaders/ray.frag
 	)
@@ -97,6 +98,7 @@ add_executable(igraph-vlk
     src/vulkan/renderer_cleanup.c
     src/vulkan/renderer_update_node_labels.c
     src/vulkan/renderer_init_splc_buffers.c
+    src/vulkan/renderer_bcgl.c
 
     # Graph modules
     src/graph/graph_core.c
@@ -118,8 +120,9 @@ add_executable(igraph-vlk
      src/graph/layouts_gem.c
      src/graph/layouts_yifan_hu.c
      src/graph/layouts_forceatlas2.c
-     src/graph/layouts_tsne.c
-     src/graph/layouts_apply.c
+       src/graph/layouts_tsne.c
+       src/graph/layouts_bcgl.c
+       src/graph/layouts_apply.c
      src/graph/wrappers_community.c
      src/graph/wrappers_centrality.c
 src/graph/wrappers_constructors.c
@@ -184,6 +187,7 @@ target_compile_definitions(igraph-vlk PRIVATE
     TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv"
     ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv"
     SPLC_COMP_SHADER_PATH="shaders/splc.comp.spv"
+    BCGL_COMP_SHADER_PATH="shaders/bcgl.comp.spv"
     RAY_VERT_SHADER_PATH="shaders/ray.vert.spv"
     RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv"
 )

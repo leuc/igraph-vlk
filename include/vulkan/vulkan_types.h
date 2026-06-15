@@ -33,6 +33,48 @@ typedef struct
 	float weight;
 } SPLCEdge;
 
+// BCGL (Binary Classification-Based Graph Layout) compute types
+typedef struct
+{
+	vec3 pos;
+	float pad0;
+	vec3 velocity;
+	float pad1;
+} BCGLNodeData;
+
+typedef struct
+{
+	uint32_t vertexCount;
+	uint32_t edgeCount;
+	float lambda_bc;
+	float lambda_compact;
+	float lambda_length;
+	float learning_rate;
+	float momentum;
+	float b;
+} BCGLPushConstants;
+
+typedef struct
+{
+	VkBuffer node_buf;
+	VkDeviceMemory node_mem;
+	VkBuffer topo_nodes_buf;
+	VkDeviceMemory topo_nodes_mem;
+	VkBuffer topo_edges_buf;
+	VkDeviceMemory topo_edges_mem;
+	VkDescriptorPool pool;
+	VkDescriptorSet desc_set;
+	VkPipeline pipeline;
+	VkPipelineLayout layout;
+	VkDescriptorSetLayout desc_layout;
+	uint32_t capacity_nodes;
+	uint32_t capacity_edges;
+	VkFence fence;
+	VkCommandPool cmd_pool;
+	VkCommandBuffer cmd_buf;
+	bool active;
+} BCGLComputeContext;
+
 typedef struct
 {
 	int graphicsFamily;
@@ -364,6 +406,9 @@ typedef struct Renderer
 	VkPipeline splc_compute_pipeline;
 	VkPipelineLayout splc_compute_pipeline_layout;
 	VkDescriptorSetLayout splc_compute_descriptor_set_layout;
+
+	// BCGL (Binary Classification-Based Graph Layout) compute context
+	BCGLComputeContext bcgl_ctx;
 } Renderer;
 
 #endif // VULKAN_TYPES_H

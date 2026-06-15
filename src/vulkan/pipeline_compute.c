@@ -1,5 +1,6 @@
 #include "vulkan/pipeline_compute.h"
 #include "vulkan/renderer.h"
+#include "vulkan/renderer_bcgl.h"
 #include "vulkan/utils.h"
 
 void renderer_create_compute_pipelines(Renderer *r)
@@ -20,6 +21,7 @@ void renderer_create_compute_pipelines(Renderer *r)
 	vkDestroyShaderModule(r->core.device, sphericalShaderModule, NULL);
 
 	renderer_create_splc_compute_pipeline(r);
+	renderer_create_bcgl_compute_pipeline(r);
 }
 
 void renderer_create_splc_compute_pipeline(Renderer *r)

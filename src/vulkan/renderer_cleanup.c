@@ -6,6 +6,7 @@
 #include "vulkan/commands.h"
 #include "vulkan/device.h"
 #include "vulkan/render_pass.h"
+#include "vulkan/renderer_bcgl.h"
 #include "vulkan/swapchain.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
@@ -141,6 +142,7 @@ void renderer_cleanup(Renderer *r)
 	VK_CHECK(vkDeviceWaitIdle(r->core.device), "Failed to wait for device idle on cleanup");
 	cleanup_uniform_buffers(r);
 	cleanup_compute_context(r);
+	renderer_cleanup_bcgl(r);
 	cleanup_geometry_buffers(r);
 	cleanup_menu_label_atlases(r);
 	cleanup_xr_resources(r);

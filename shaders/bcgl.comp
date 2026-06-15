@@ -1,0 +1,111 @@
+#version 450
+
+layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+// Hyperparameters matching the paper
+layout(push_constant) uniform PushConstants {
+    uint vertexCount;
+    uint edgeCount;
+    float lambda_bc;       // e.g., 1.0
+    float lambda_compact;  // e.g., 0.01
+    float lambda_length;   // e.g., 0.01
+    float learning_rate;   // e.g., 0.01
+    float momentum;        // e.g., 0.9
+    float b;               // Student's t-distribution degrees of freedom (e.g., 1.0)
+} pcs;
+
+// Aligned to 16 bytes for std430
+struct BCGLNode {
+    vec3 pos;
+    float pad0;
+    vec3 velocity;
+    float pad1;
+};
+
+// Re-using the topology structure you already have for SPLC
+struct TopoNode {
+    uint edge_offset;
+    uint out_degree;
+};
+
+struct TopoEdge {
+    uint target_node;
+    float weight; // Unused for layout, but keeps alignment with your SPLCEdge
+};
+
+layout(std430, binding = 0) buffer NodeBuffer { BCGLNode nodes[]; };
+layout(std430, binding = 1) readonly buffer TopoNodeBuffer { TopoNode topo_nodes[]; };
+layout(std430, binding = 2) readonly buffer TopoEdgeBuffer { TopoEdge topo_edges[]; };
+
+void main() {
+    uint u = gl_GlobalInvocationID.x;
+    if (u >= pcs.vertexCount) return;
+
+    vec3 pos_u = nodes[u].pos;
+    vec3 grad = vec3(0.0);
+
+    // ==========================================
+    // Phase 1: N-Body Repulsion (Assume all nodes are y=0)
+    // ==========================================
+    for (uint v = 0; v < pcs.vertexCount; v++) {
+        if (u == v) continue;
+        
+        vec3 pos_v = nodes[v].pos;
+        vec3 delta = pos_u - pos_v;
+        float dist = length(delta);
+        
+        // Anti-singularity jitter
+        if (dist < 1e-4) {
+            delta = vec3(0.001 * float(u%3 - 1), 0.001 * float(v%3 - 1), 0.001);
+            dist = length(delta);
+        }
+
+        float dist_sq = dist * dist;
+        float p_val = 1.0 / (1.0 + dist_sq / pcs.b); // Student t-distribution
+        
+        // Repulsive force for non-edges (minimizing -log(1-p))
+        float rep_force = - (1.0 - p_val) / dist; 
+        grad += pcs.lambda_bc * rep_force * (delta / dist);
+    }
+
+    // ==========================================
+    // Phase 2: Edge Correction (y=1)
+    // ==========================================
+    TopoNode t_node = topo_nodes[u];
+    for (uint i = 0; i < t_node.out_degree; i++) {
+        uint v = topo_edges[t_node.edge_offset + i].target_node;
+        
+        vec3 pos_v = nodes[v].pos;
+        vec3 delta = pos_u - pos_v;
+        float dist = length(delta);
+        if (dist < 1e-4) { delta = vec3(0.001); dist = length(delta); }
+
+        float dist_sq = dist * dist;
+        float p_val = 1.0 / (1.0 + dist_sq / pcs.b);
+        
+        // 2a. Subtract the incorrect repulsive force added in Phase 1
+        float rep_force = - (1.0 - p_val) / dist;
+        grad -= pcs.lambda_bc * rep_force * (delta / dist);
+
+        // 2b. Add the correct attractive force (minimizing -log p)
+        float attr_force = p_val * dist;
+        
+        // 2c. Add the length regularization penalty (pulls toward length=1)
+        attr_force += pcs.lambda_length * (dist - 1.0) / max(1.0, float(pcs.edgeCount));
+        
+        grad += pcs.lambda_bc * attr_force * (delta / dist);
+    }
+
+    // ==========================================
+    // Phase 3: Compactness & SGD Momentum
+    // ==========================================
+    // Pull slightly toward origin
+    grad += pcs.lambda_compact * pos_u / float(pcs.vertexCount);
+
+    vec3 vel = nodes[u].velocity;
+    vel = pcs.momentum * vel - pcs.learning_rate * grad;
+    
+    // Write back
+    nodes[u].velocity = vel;
+    nodes[u].pos = pos_u + vel;
+}
