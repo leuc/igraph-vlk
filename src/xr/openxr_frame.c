@@ -138,8 +138,7 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 		}
 
 		VK_CHECK(vkResetCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], 0), "XR: Failed to reset command buffer");
-		VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-		vkRes = vkBeginCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], &bi);
+		vkRes = vkBeginCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], &VK_CMD_BEGIN_INFO);
 		if (vkRes != VK_SUCCESS) {
 			fprintf(stderr, "XR: vkBeginCommandBuffer failed: %d\n", vkRes);
 			xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);

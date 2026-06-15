@@ -265,8 +265,7 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 	VK_CHECK(vkAllocateCommandBuffers(r->core.device, &cmdBufInfo, &r->yhrt_cmd_buf), "Failed to allocate YHRT command buffer");
 
 	{
-		VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT};
-		VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &r->yhrt_dispatch_fence), "Failed to create YHRT dispatch fence");
+		VK_CHECK(vkCreateFence(r->core.device, &VK_SIGNALED_FENCE_INFO, NULL, &r->yhrt_dispatch_fence), "Failed to create YHRT dispatch fence");
 	}
 
 	// ---- Edge buffer ----
@@ -330,8 +329,7 @@ static void yhrt_readback_positions_to_cpu(Renderer *r)
 	VK_CHECK(vkAllocateCommandBuffers(r->core.device, &cmdInfo, &cmd), "Failed to allocate YHRT readback cmd");
 	VK_CHECK(vkBeginCommandBuffer(cmd, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin YHRT readback cmd");
 
-	VkMemoryBarrier nodeBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT};
-	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &nodeBarrier, 0, NULL, 0, NULL);
+	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 
 	VkBufferCopy posCopy = {.size = sizeof(vec4) * r->yhrt_vcount};
 	vkCmdCopyBuffer(cmd, r->yhrt_node_buf, r->yhrt_pos_staging_buf, 1, &posCopy);
@@ -339,8 +337,7 @@ static void yhrt_readback_positions_to_cpu(Renderer *r)
 	VK_CHECK(vkEndCommandBuffer(cmd), "Failed to end YHRT readback cmd");
 	VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cmd};
 	VkFence fence;
-	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-	VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &fence), "Failed to create readback fence");
+	VK_CHECK(vkCreateFence(r->core.device, &VK_FENCE_INFO, NULL, &fence), "Failed to create readback fence");
 	pthread_mutex_lock(&r->core.graphicsQueueMutex);
 	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, fence), "Failed to submit YHRT readback");
 	pthread_mutex_unlock(&r->core.graphicsQueueMutex);
@@ -428,8 +425,7 @@ bool yhrt_worker_step(Renderer *r)
 		}
 
 		VkFence dbgFence;
-		VkFenceCreateInfo dbgFenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-		VK_CHECK(vkCreateFence(r->core.device, &dbgFenceInfo, NULL, &dbgFence), "debug fence");
+		VK_CHECK(vkCreateFence(r->core.device, &VK_FENCE_INFO, NULL, &dbgFence), "debug fence");
 
 		VK_CHECK(vkResetCommandBuffer(r->yhrt_cmd_buf, 0), "debug reset cmd");
 		VkCommandBufferBeginInfo dbgBegin = VK_CMD_BEGIN_INFO_ONETIME;
@@ -474,8 +470,7 @@ bool yhrt_worker_step(Renderer *r)
 
 	// ---- Begin command buffer (our own pool) ----
 	VK_CHECK(vkResetCommandBuffer(r->yhrt_cmd_buf, 0), "Failed to reset YHRT cmd buffer");
-	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-	VK_CHECK(vkBeginCommandBuffer(r->yhrt_cmd_buf, &beginInfo), "Failed to begin YHRT cmd buffer");
+	VK_CHECK(vkBeginCommandBuffer(r->yhrt_cmd_buf, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin YHRT cmd buffer");
 	VkCommandBuffer cmd = r->yhrt_cmd_buf;
 
 	// ---- BH octree build + BLAS/TLAS rebuild ----

@@ -212,7 +212,7 @@ void text_atlas_ensure_uploaded(TextAtlas *ta, VkDevice device, VkPhysicalDevice
 	if (ta->image == VK_NULL_HANDLE) {
 		create_image(device, physicalDevice, ta->width, ta->height, VK_FORMAT_R8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &ta->image, &ta->memory);
 
-		vkCreateImageView(device, &VK_IMAGE_VIEW_2D(ta->image, VK_FORMAT_R8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT), NULL, &ta->view);
+		VK_CHECK(vkCreateImageView(device, &VK_IMAGE_VIEW_2D(ta->image, VK_FORMAT_R8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT), NULL, &ta->view), "Failed to create atlas image view");
 
 		transition_image_layout(device, commandPool, queue, ta->image, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	} else {
@@ -225,7 +225,7 @@ void text_atlas_ensure_uploaded(TextAtlas *ta, VkDevice device, VkPhysicalDevice
 	VK_CREATE_HOST_BUFFER(device, physicalDevice, imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &stagingBuf, &stagingMem);
 
 	void *mapped;
-	vkMapMemory(device, stagingMem, 0, imgSize, 0, &mapped);
+	VK_CHECK(vkMapMemory(device, stagingMem, 0, imgSize, 0, &mapped), "Failed to map staging memory for atlas upload");
 	memcpy(mapped, ta->pixels, imgSize);
 	vkUnmapMemory(device, stagingMem);
 

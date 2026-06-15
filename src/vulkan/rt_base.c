@@ -176,7 +176,7 @@ static VkDeviceSize rt_base_build_blas(RTBase *base, float search_radius)
 	VkDeviceMemory aabbMem = VK_NULL_HANDLE;
 	rt_helpers_create_buffer(base->core, sizeof(VkAabbPositionsKHR), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, &aabbBuf, &aabbMem);
 	void *mapped;
-	vkMapMemory(base->core->device, aabbMem, 0, sizeof(VkAabbPositionsKHR), 0, &mapped);
+	VK_CHECK(vkMapMemory(base->core->device, aabbMem, 0, sizeof(VkAabbPositionsKHR), 0, &mapped), "Failed to map AABB memory");
 	memcpy(mapped, &aabb, sizeof(VkAabbPositionsKHR));
 	vkUnmapMemory(base->core->device, aabbMem);
 
@@ -389,8 +389,7 @@ VkCommandBuffer rt_base_begin_commands(RTBase *base)
 {
 	VkCommandBuffer cmd = base->cmd_buf;
 	VK_CHECK(vkResetCommandBuffer(cmd, 0), "Failed to reset RTBase worker cmd");
-	VkCommandBufferBeginInfo beginInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-	VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo), "Failed to begin RTBase worker cmd");
+	VK_CHECK(vkBeginCommandBuffer(cmd, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin RTBase worker cmd");
 	return cmd;
 }
 

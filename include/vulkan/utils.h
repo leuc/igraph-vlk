@@ -69,6 +69,8 @@ static const VkPipelineDepthStencilStateCreateInfo VK_DEPTH_STENCIL_STATE_DISABL
 
 #define VK_SIGNALED_FENCE_INFO ((VkFenceCreateInfo){.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT})
 
+#define VK_FENCE_INFO ((VkFenceCreateInfo){.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO})
+
 #define VK_SEMAPHORE_INFO ((VkSemaphoreCreateInfo){.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO})
 
 #define VK_FRAMEBUFFER_INFO(rp, views, w, h) ((VkFramebufferCreateInfo){.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = rp, .attachmentCount = 2, .pAttachments = views, .width = w, .height = h, .layers = 1})

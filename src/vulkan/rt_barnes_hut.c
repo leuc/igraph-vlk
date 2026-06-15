@@ -525,8 +525,7 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 		free(posData);
 	}
 
-	VkMemoryBarrier posBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR};
-	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &posBarrier, 0, NULL, 0, NULL);
+	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
 
 	// ---- Step 9: Record BLAS build ----
 	blasBuildInfo.dstAccelerationStructure = bh->blas;
@@ -536,8 +535,7 @@ void bhrt_build(BarnesHutRT *bh, const float *positions, VkCommandBuffer cmd)
 	rt_helpers_get_CmdBuildAccelerationStructuresKHR()(cmd, 1, &blasBuildInfo, &pBlasRange);
 
 	// BLAS barrier
-	VkMemoryBarrier blasBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, .dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR};
-	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &blasBarrier, 0, NULL, 0, NULL);
+	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
 
 	// ---- Step 10: Record TLAS build ----
 	tlasBuildInfo.dstAccelerationStructure = bh->tlas;
@@ -626,8 +624,7 @@ void bhrt_readback_forces(BarnesHutRT *bh, float *out_forces)
 	VkCommandBuffer cmd;
 	VK_ONE_SHOT_BEGIN(bh->core->device, (uint32_t)bh->core->graphicsQueueFamily, cmdPool, cmd);
 
-	VkMemoryBarrier forceBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT};
-	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &forceBarrier, 0, NULL, 0, NULL);
+	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 
 	VkBufferCopy copyRegion = {.size = forceSize};
 	vkCmdCopyBuffer(cmd, bh->force_buf, bh->force_staging_buf, 1, &copyRegion);
