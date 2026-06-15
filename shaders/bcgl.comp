@@ -22,7 +22,7 @@ struct BCGLNode {
     float pad1;
 };
 
-// Re-using the topology structure you already have for SPLC
+// BCGL topology
 struct TopoNode {
     uint edge_offset;
     uint out_degree;
@@ -30,7 +30,7 @@ struct TopoNode {
 
 struct TopoEdge {
     uint target_node;
-    float weight; // Unused for layout, but keeps alignment with your SPLCEdge
+    uint pad; 
 };
 
 layout(std430, binding = 0) buffer NodeBuffer { BCGLNode nodes[]; };
@@ -63,9 +63,10 @@ void main() {
         float dist_sq = dist * dist;
         float p_val = 1.0 / (1.0 + dist_sq / pcs.b); // Student t-distribution
         
-        // Repulsive force for non-edges (minimizing -log(1-p))
-        float rep_force = - (1.0 - p_val) / dist; 
-        grad += pcs.lambda_bc * rep_force * (delta / dist);
+		// Repulsive force for non-edges (minimizing -log(1-p))
+		float rep_force = - (1.0 - p_val) / dist;
+		float density_scale = max(1.0, float(pcs.vertexCount) / 1000.0);
+		grad += (pcs.lambda_bc * rep_force * (delta / dist)) / density_scale;
     }
 
     // ==========================================
@@ -102,10 +103,17 @@ void main() {
     // Pull slightly toward origin
     grad += pcs.lambda_compact * pos_u / float(pcs.vertexCount);
 
-    vec3 vel = nodes[u].velocity;
-    vel = pcs.momentum * vel - pcs.learning_rate * grad;
-    
-    // Write back
-    nodes[u].velocity = vel;
-    nodes[u].pos = pos_u + vel;
+	vec3 vel = nodes[u].velocity;
+	vel = pcs.momentum * vel - pcs.learning_rate * grad;
+
+	// Gradient clipping to prevent NaN on massive dense graphs
+	float speed = length(vel);
+	float max_speed = 10.0;
+	if (speed > max_speed) {
+		vel = (vel / speed) * max_speed;
+	}
+
+	// Write back
+	nodes[u].velocity = vel;
+	nodes[u].pos = pos_u + vel;
 }

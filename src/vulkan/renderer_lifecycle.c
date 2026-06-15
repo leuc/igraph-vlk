@@ -24,6 +24,20 @@ static bool atlasLoaded = false;
 
 bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 {
+	// BCGL zero-init — must come before any pipeline/buffer creation so we start clean
+	memset(&r->bcgl_ctx, 0, sizeof(BCGLComputeContext));
+	r->bcgl_ctx.node_buf = VK_NULL_HANDLE;
+	r->bcgl_ctx.topo_nodes_buf = VK_NULL_HANDLE;
+	r->bcgl_ctx.topo_edges_buf = VK_NULL_HANDLE;
+	r->bcgl_ctx.pool = VK_NULL_HANDLE;
+	r->bcgl_ctx.desc_set = VK_NULL_HANDLE;
+	r->bcgl_ctx.pipeline = VK_NULL_HANDLE;
+	r->bcgl_ctx.layout = VK_NULL_HANDLE;
+	r->bcgl_ctx.desc_layout = VK_NULL_HANDLE;
+	r->bcgl_ctx.fence = VK_NULL_HANDLE;
+	r->bcgl_ctx.cmd_pool = VK_NULL_HANDLE;
+	r->bcgl_ctx.cmd_buf = VK_NULL_HANDLE;
+
 	r->window = window;
 	r->nodeCount = graph->node_count;
 	r->edgeCount = graph->edge_count;
@@ -159,20 +173,6 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->splc_last_level_time = 0.0;
 	r->splc_level_interval = 0.5f;
 	r->splc_active = false;
-
-	// BCGL zero-init
-	memset(&r->bcgl_ctx, 0, sizeof(BCGLComputeContext));
-	r->bcgl_ctx.node_buf = VK_NULL_HANDLE;
-	r->bcgl_ctx.topo_nodes_buf = VK_NULL_HANDLE;
-	r->bcgl_ctx.topo_edges_buf = VK_NULL_HANDLE;
-	r->bcgl_ctx.pool = VK_NULL_HANDLE;
-	r->bcgl_ctx.desc_set = VK_NULL_HANDLE;
-	r->bcgl_ctx.pipeline = VK_NULL_HANDLE;
-	r->bcgl_ctx.layout = VK_NULL_HANDLE;
-	r->bcgl_ctx.desc_layout = VK_NULL_HANDLE;
-	r->bcgl_ctx.fence = VK_NULL_HANDLE;
-	r->bcgl_ctx.cmd_pool = VK_NULL_HANDLE;
-	r->bcgl_ctx.cmd_buf = VK_NULL_HANDLE;
 
 	renderer_update_graph(r, graph);
 	r->labelTreeNeedsRebuild = true;

@@ -20,11 +20,11 @@ static const BCGLPushConstants BCGL_DEFAULTS = {
 };
 
 // ============================================================================
-// Build CSR topology from igraph (same pattern as SPLC's splc_build_topology)
+// Build CSR topology from igraph
 // ============================================================================
-static void bcgl_build_topology(const igraph_t *g, igraph_integer_t n, SPLCNode **out_nodes, SPLCEdge **out_edges, uint32_t *out_total_edges)
+static void bcgl_build_topology(const igraph_t *g, igraph_integer_t n, BCGLTopoNode **out_nodes, BCGLTopoEdge **out_edges, uint32_t *out_total_edges)
 {
-	SPLCNode *topo_nodes = calloc(n, sizeof(SPLCNode));
+	BCGLTopoNode *topo_nodes = calloc(n, sizeof(BCGLTopoNode));
 	igraph_vector_int_t out_neis;
 	igraph_vector_int_init(&out_neis, 0);
 
@@ -36,14 +36,14 @@ static void bcgl_build_topology(const igraph_t *g, igraph_integer_t n, SPLCNode 
 		edge_offset += (uint32_t)igraph_vector_int_size(&out_neis);
 	}
 
-	SPLCEdge *topo_edges = calloc(edge_offset, sizeof(SPLCEdge));
+	BCGLTopoEdge *topo_edges = calloc(edge_offset, sizeof(BCGLTopoEdge));
 	uint32_t e_idx = 0;
 	for (igraph_integer_t i = 0; i < n; i++) {
 		igraph_vector_int_clear(&out_neis);
 		igraph_neighbors(g, &out_neis, i, IGRAPH_OUT, IGRAPH_LOOPS, IGRAPH_NO_MULTIPLE);
 		for (igraph_integer_t j = 0; j < igraph_vector_int_size(&out_neis); j++) {
 			topo_edges[e_idx].target_node = (uint32_t)VECTOR(out_neis)[j];
-			topo_edges[e_idx].weight = 0.0f;
+			topo_edges[e_idx].pad = 0;
 			e_idx++;
 		}
 	}
@@ -92,10 +92,10 @@ static void bcgl_create_gpu_buffers(Renderer *r, igraph_integer_t n, uint32_t to
 		ctx->capacity_nodes = (uint32_t)n;
 	}
 	if (ctx->topo_nodes_buf == VK_NULL_HANDLE) {
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(SPLCNode) * n, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &ctx->topo_nodes_buf, &ctx->topo_nodes_mem);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(BCGLTopoNode) * n, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &ctx->topo_nodes_buf, &ctx->topo_nodes_mem);
 	}
 	if (ctx->topo_edges_buf == VK_NULL_HANDLE && total_edges > 0) {
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(SPLCEdge) * total_edges, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &ctx->topo_edges_buf, &ctx->topo_edges_mem);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(BCGLTopoEdge) * total_edges, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &ctx->topo_edges_buf, &ctx->topo_edges_mem);
 		ctx->capacity_edges = total_edges;
 	}
 }
@@ -103,13 +103,13 @@ static void bcgl_create_gpu_buffers(Renderer *r, igraph_integer_t n, uint32_t to
 // ============================================================================
 // Write topology to GPU (one-time after graph load)
 // ============================================================================
-static void bcgl_upload_topology(Renderer *r, igraph_integer_t n, uint32_t total_edges, SPLCNode *topo_nodes, SPLCEdge *topo_edges)
+static void bcgl_upload_topology(Renderer *r, igraph_integer_t n, uint32_t total_edges, BCGLTopoNode *topo_nodes, BCGLTopoEdge *topo_edges)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
 
-	update_buffer(r->core.device, ctx->topo_nodes_mem, sizeof(SPLCNode) * n, topo_nodes);
+	update_buffer(r->core.device, ctx->topo_nodes_mem, sizeof(BCGLTopoNode) * n, topo_nodes);
 	if (total_edges > 0)
-		update_buffer(r->core.device, ctx->topo_edges_mem, sizeof(SPLCEdge) * total_edges, topo_edges);
+		update_buffer(r->core.device, ctx->topo_edges_mem, sizeof(BCGLTopoEdge) * total_edges, topo_edges);
 }
 
 // ============================================================================
@@ -261,8 +261,8 @@ void renderer_init_bcgl_buffers(Renderer *r, GraphData *graph)
 	bcgl_destroy_old_buffers(r);
 
 	// Build CSR topology
-	SPLCNode *topo_nodes;
-	SPLCEdge *topo_edges;
+	BCGLTopoNode *topo_nodes;
+	BCGLTopoEdge *topo_edges;
 	uint32_t total_edges;
 	bcgl_build_topology(&graph->g, n, &topo_nodes, &topo_edges, &total_edges);
 

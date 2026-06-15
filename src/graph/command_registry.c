@@ -76,7 +76,7 @@ const CommandDef g_command_registry[] = {
 
 	// Non-Igraph
 	{"Layout", "lay_layered_sphere", "Layered Sphere", compute_layout_layered_sphere, apply_layout_matrix, free_layout_matrix},
-	{"Layout", "lay_bcgl", "BCGL (GPU, Block-Constrained)", compute_layout_bcgl, apply_layout_bcgl, free_layout_bcgl},
+	{"Layout", "lay_bcgl", "BCGL-t (Binary Classification)", compute_layout_bcgl, apply_layout_bcgl, free_layout_bcgl},
 	// =========================================================================
 	// Layout menu - Geometric
 	// =========================================================================

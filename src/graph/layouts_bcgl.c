@@ -55,7 +55,16 @@ void apply_layout_bcgl(ExecutionContext *ctx, void *result_data)
 
 	// Init BCGL GPU buffers and run the optimization
 	renderer_init_bcgl_buffers(renderer, data);
-	renderer_dispatch_bcgl_layout(renderer, data, 200);
+
+	uint32_t iterations = 200;
+	if (data->node_count > 50000)
+		iterations = 5;
+	else if (data->node_count > 10000)
+		iterations = 20;
+	else if (data->node_count > 2000)
+		iterations = 50;
+
+	renderer_dispatch_bcgl_layout(renderer, data, iterations);
 	renderer_readback_bcgl_positions(renderer, data);
 
 	// Sync positions to the layout matrix so standard apply path works

@@ -42,6 +42,19 @@ typedef struct
 	float pad1;
 } BCGLNodeData;
 
+// BCGL specific CSR Topology
+typedef struct
+{
+	uint32_t edge_offset;
+	uint32_t out_degree;
+} BCGLTopoNode;
+
+typedef struct
+{
+	uint32_t target_node;
+	uint32_t pad; // 8-byte alignment
+} BCGLTopoEdge;
+
 typedef struct
 {
 	uint32_t vertexCount;
