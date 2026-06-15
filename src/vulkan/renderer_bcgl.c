@@ -63,7 +63,6 @@ static void bcgl_destroy_old_buffers(Renderer *r)
 
 	if (ctx->fence != VK_NULL_HANDLE) {
 		vkWaitForFences(r->core.device, 1, &ctx->fence, VK_TRUE, UINT64_MAX);
-		vkResetFences(r->core.device, 1, &ctx->fence);
 	}
 
 	VK_DESTROY_BUFFER(r->core.device, ctx->node_buf, ctx->node_mem);
@@ -251,12 +250,6 @@ void renderer_init_bcgl_buffers(Renderer *r, GraphData *graph)
 	igraph_integer_t m = graph->edge_count;
 	if (n == 0)
 		return;
-
-	// Wait for any in-flight work
-	if (ctx->fence != VK_NULL_HANDLE) {
-		vkWaitForFences(r->core.device, 1, &ctx->fence, VK_TRUE, UINT64_MAX);
-		vkResetFences(r->core.device, 1, &ctx->fence);
-	}
 
 	bcgl_destroy_old_buffers(r);
 
