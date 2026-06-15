@@ -579,25 +579,6 @@ bool rt_base_submit_commands(RTBase *base, VkFence fence)
 	return true;
 }
 
-void rt_base_record_tlas_update(RTBase *base, VkCommandBuffer cmd, uint32_t active_vcount)
-{
-	VkAccelerationStructureGeometryKHR tlasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR, .geometry.instances = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR, .data.deviceAddress = rt_base_get_buffer_address(base, base->instance_buf)}};
-	VkAccelerationStructureBuildGeometryInfoKHR tlasBuildInfo = {
-		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-		.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
-		.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR,
-		.srcAccelerationStructure = base->tlas,
-		.dstAccelerationStructure = base->tlas,
-		.geometryCount = 1,
-		.pGeometries = &tlasGeometry,
-		.scratchData.deviceAddress = rt_base_get_buffer_address(base, base->as_scratch_buf),
-	};
-	VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = {.primitiveCount = active_vcount};
-	const VkAccelerationStructureBuildRangeInfoKHR *pTlasRange = &tlasRangeInfo;
-	rt_funcs.CmdBuildAccelerationStructuresKHR(cmd, 1, &tlasBuildInfo, &pTlasRange);
-}
-
 // ============================================================================
 // Public API — Position Readback
 // ============================================================================

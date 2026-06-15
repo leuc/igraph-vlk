@@ -15,8 +15,8 @@
 // builds an octree on CPU, linearizes it to a triangle-mesh BLAS, and
 // dispatches ray queries against it. The BH module manages its own BLAS/TLAS.
 //
-// Attraction, update, cooling schedule, and progressive insertion remain as
-// in the original YHRT implementation.
+// Attraction, update, and cooling schedule remain as in the original YHRT
+// implementation.
 //
 // =============================================================================
 
@@ -181,10 +181,6 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 	r->yhrt_tolerance = 0.001f;
 	r->yhrt_p = 1.0f;
 	r->yhrt_fnorm_readback_pending = false;
-
-	// Progressive insertion: start with one workgroup worth of nodes, ramp up each iteration
-	uint32_t batch = r->core.deviceProperties.limits.maxComputeWorkGroupInvocations;
-	r->yhrt_active_vcount = (batch < r->yhrt_vcount) ? batch : r->yhrt_vcount;
 
 	// Compute K from initial positions (matches igraph's compute_average_edge_length_3d)
 	float total_len = 0.0f;
@@ -538,22 +534,6 @@ bool yhrt_worker_step(Renderer *r)
 	// Wait for previous GPU work — fence stays SIGNALED after this
 	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->yhrt_dispatch_fence, VK_TRUE, UINT64_MAX), "Failed to wait for YHRT dispatch fence");
 
-	// Progressive insertion: add a batch of nodes every 5 iterations
-	uint32_t prev_active_vcount = r->yhrt_active_vcount;
-	{
-		uint32_t batch = r->core.deviceProperties.limits.maxComputeWorkGroupInvocations;
-		uint32_t new_active = (r->yhrt_current_iter / 5 + 1) * batch;
-		if (new_active > r->yhrt_vcount)
-			new_active = r->yhrt_vcount;
-
-		if (new_active != prev_active_vcount) {
-			printf("[YHRT] progressive: %u -> %u nodes (batch=%u)\n", prev_active_vcount, new_active, batch);
-			r->yhrt_Fnorm0 = INFINITY;
-			r->yhrt_step = 0.1f;
-		}
-		r->yhrt_active_vcount = new_active;
-	}
-
 	// Read back Fnorm from previous iteration (valid because fence was just waited on)
 	if (r->yhrt_current_iter > 0) {
 		float fnorm = 0.0f;
@@ -562,12 +542,12 @@ bool yhrt_worker_step(Renderer *r)
 			if (r->yhrt_fp64_supported)
 				fnorm = (float)(*(double *)mapped);
 			else
-				fnorm = (*(float *)mapped) * (float)prev_active_vcount;
+				fnorm = (*(float *)mapped) * (float)r->yhrt_vcount;
 			vkUnmapMemory(r->core.device, r->yhrt_staging_mem);
 		}
 
 		if ((r->yhrt_current_iter - 1) % 50 == 0)
-			printf("[YHRT] iter=%d, step=%g, Fnorm=%g, Fnorm0=%g, active=%u/%u, repulsive_exp=%g, natlen=%g\n", r->yhrt_current_iter - 1, r->yhrt_step, fnorm, r->yhrt_Fnorm0, r->yhrt_active_vcount, r->yhrt_vcount, r->yhrt_p, r->yhrt_K);
+			printf("[YHRT] iter=%d, step=%g, Fnorm=%g, Fnorm0=%g, repulsive_exp=%g, natlen=%g\n", r->yhrt_current_iter - 1, r->yhrt_step, fnorm, r->yhrt_Fnorm0, r->yhrt_p, r->yhrt_K);
 
 		if (fnorm < r->yhrt_Fnorm0) {
 			if (fnorm > 0.95f * r->yhrt_Fnorm0) {
@@ -579,11 +559,8 @@ bool yhrt_worker_step(Renderer *r)
 		}
 		r->yhrt_Fnorm0 = fnorm;
 
-		if (r->yhrt_step < r->yhrt_tolerance) {
-			if (r->yhrt_active_vcount >= r->yhrt_vcount)
-				return false;
-			r->yhrt_step = r->yhrt_tolerance;
-		}
+		if (r->yhrt_step < r->yhrt_tolerance)
+			return false;
 	}
 
 	// ---- Read back positions from GPU for BH octree rebuild ----
@@ -690,7 +667,7 @@ bool yhrt_worker_step(Renderer *r)
 		float KP, CRK, p, step_size;
 		uint32_t vertex_count, edge_count;
 		float R;
-	} pc = {r->yhrt_KP, r->yhrt_CRK, r->yhrt_p, r->yhrt_step, r->yhrt_active_vcount, r->yhrt_ecount, r->yhrt_R};
+	} pc = {r->yhrt_KP, r->yhrt_CRK, r->yhrt_p, r->yhrt_step, r->yhrt_vcount, r->yhrt_ecount, r->yhrt_R};
 
 	// Attraction — all edges
 	YHRT_DISPATCH_COMPUTE(cmd, r->yhrt_attraction_pipeline, r->yhrt_pipeline_layout, r->yhrt_desc_set, pc, (r->yhrt_ecount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE);
@@ -699,7 +676,7 @@ bool yhrt_worker_step(Renderer *r)
 
 	// Update — only active nodes
 	VkPipeline updatePipeline = r->yhrt_fp64_supported ? r->yhrt_update_fp64_pipeline : r->yhrt_update_pipeline;
-	YHRT_DISPATCH_COMPUTE(cmd, updatePipeline, r->yhrt_pipeline_layout, r->yhrt_desc_set, pc, (r->yhrt_active_vcount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE);
+	YHRT_DISPATCH_COMPUTE(cmd, updatePipeline, r->yhrt_pipeline_layout, r->yhrt_desc_set, pc, (r->yhrt_vcount + YHRT_WORKGROUP_SIZE - 1) / YHRT_WORKGROUP_SIZE);
 
 	// Fnorm + position readback copies
 	VK_PIPELINE_BARRIER(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);

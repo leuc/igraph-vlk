@@ -31,9 +31,8 @@ void rt_base_create_buffer(RTBase *base, VkDeviceSize size, VkBufferUsageFlags u
 void rt_base_create_device_buffer(RTBase *base, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer *buf, VkDeviceMemory *mem);
 void rt_base_staging_upload(RTBase *base, VkBuffer dst, const void *data, VkDeviceSize size, bool thread_safe);
 
-// Command buffer lifecycle: begin, record dispatches, record TLAS update, submit
+// Command buffer lifecycle: begin, record dispatches, submit
 VkCommandBuffer rt_base_begin_commands(RTBase *base);
-void rt_base_record_tlas_update(RTBase *base, VkCommandBuffer cmd, uint32_t active_vcount);
 bool rt_base_submit_commands(RTBase *base, VkFence fence);
 
 // Position readback (algorithm must have copied node_buf -> node_staging_buf first)
