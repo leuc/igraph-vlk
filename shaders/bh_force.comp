@@ -134,13 +134,15 @@ void main()
 		// Check intersection type — replaces OWL closest-hit / miss programs
 		if (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCandidateIntersectionTriangleEXT) {
 			// ======== CLOSEST HIT (OWL: OPTIX_CLOSEST_HIT_PROGRAM(TriangleMesh)) ========
-			// OWL: closest-hit processes the NODE IN THE PAYLOAD (current prim_id),
-			// NOT the BVH-hit node. The ray hit is just a signal that the BH
-			// criterion is NOT met (node is close enough to need processing).
-			if (node.is_leaf == 1u) {
+			// Paper Algorithm 1 Line 5-13: the hit node's triangle was intersected.
+			// Process HIT node: forces + auto-rope from hit node.
+			int hit_prim = int(rayQueryGetIntersectionPrimitiveIndexEXT(rq, true));
+			BhNode hit_node = bh_nodes[hit_prim];
+
+			if (hit_node.is_leaf == 1u) {
 				// Leaf: compute pairwise 3D forces with all particles in bucket
-				for (int p = 0; p < node.num_particles; p++) {
-					int pid = node.particles[p];
+				for (int p = 0; p < hit_node.num_particles; p++) {
+					int pid = hit_node.particles[p];
 					if (pid != int(i)) {
 						vec3 pd = pos - points[pid].xyz;
 						float pr2 = dot(pd, pd);
@@ -152,15 +154,19 @@ void main()
 				}
 			} else {
 				// Internal: approximate with total mass at CoM
-				float dist = sqrt(r2);
+				float hdx = pos.x - hit_node.center_of_mass_x;
+				float hdy = pos.y - hit_node.center_of_mass_y;
+				float hdz = pos.z - hit_node.center_of_mass_z;
+				float hr2 = hdx * hdx + hdy * hdy + hdz * hdz;
+				float dist = sqrt(hr2);
 				if (dist > 1e-12) {
-						force_vec += vec3(dx, dy, dz) * (my_mass * node.mass) / r2 * pc.G;
+					force_vec += vec3(hdx, hdy, hdz) * (my_mass * hit_node.mass) / hr2 * pc.G;
 				}
 			}
 
-			// Follow auto-rope (skip subtree) — OWL: optixSetPayload_4(bhNode.autoRopePrimId)
-			prim_id = node.auto_rope_prim_id;
-			ray_origin = vec2(node.auto_rope_ray_location_x, node.auto_rope_ray_location_y);
+			// Follow auto-rope from HIT node — Paper Algorithm 1 Line 13: ray.origin ← node.autorope
+			prim_id = hit_node.auto_rope_prim_id;
+			ray_origin = vec2(hit_node.auto_rope_ray_location_x, hit_node.auto_rope_ray_location_y);
 			ray_self = 0u;
 		} else {
 			// ======== MISS (OWL: OPTIX_MISS_PROGRAM(miss)) ========

@@ -414,21 +414,30 @@ bh_dfs_output_t bh_tree_to_dfs_array(bh_tree_t *tree)
 			node_stack = (stack_entry_t *)realloc(node_stack, sizeof(stack_entry_t) * capacity);
 		}
 
-		// Shadow triangle X at node's center of mass (spatially meaningful, always reachable)
+		// Shadow triangle X at node's center of mass (reachable by rays with dynamic grid).
+		// The paper places triangles at X = s (half-side-length), but this assumes a fixed
+		// large grid size (e.g. OWL's GRID_SIZE=10). With igraph's dynamically computed grid,
+		// s can be much larger than the particle distances, making triangles unreachable.
+		// Using cofm.x positions triangles within particle space so the ray length θ·d can
+		// reach them, while still implementing the BH criterion: nodes close to the particle
+		// (cofm.x within θ·d) are hit and approximated; far nodes are missed and descended.
 		float triangle_x_loc = cur->cofm.x;
 		if (cur->s < out.min_s)
 			out.min_s = cur->s;
 
-		// Triangle vertices: X = cofm.x (reachable by ray), Y = level (DFS depth), Z = ±0.5
+		// Y-offset uses unique DFS index so triangles don't overlap (paper: ρ per node)
+		float y_center = (float)out.num_nodes;
+
+		// Triangle vertices: X = s, Y = unique index, Z = ±0.5
 		int vi = out.num_nodes * 9;
 		out.vertices[vi + 0] = triangle_x_loc;
-		out.vertices[vi + 1] = (float)level;
+		out.vertices[vi + 1] = y_center;
 		out.vertices[vi + 2] = -0.5f;
 		out.vertices[vi + 3] = triangle_x_loc;
-		out.vertices[vi + 4] = (float)(level - 1);
+		out.vertices[vi + 4] = y_center - 1.0f;
 		out.vertices[vi + 5] = 0.5f;
 		out.vertices[vi + 6] = triangle_x_loc;
-		out.vertices[vi + 7] = (float)(level + 1);
+		out.vertices[vi + 7] = y_center + 1.0f;
 		out.vertices[vi + 8] = 0.5f;
 
 		// Indices
@@ -446,10 +455,10 @@ bh_dfs_output_t bh_tree_to_dfs_array(bh_tree_t *tree)
 		dn->center_of_mass_z = cur->cofm.z;
 		dn->is_leaf = (cur->type == BH_LEAF) ? 1 : 0;
 		dn->next_ray_location_x = triangle_x_loc;
-		dn->next_ray_location_y = (float)level;
+		dn->next_ray_location_y = y_center;
 		dn->next_prim_id = (int)(out.num_nodes + 1); // DFS successor
 		dn->auto_rope_ray_location_x = triangle_x_loc;
-		dn->auto_rope_ray_location_y = (float)level;
+		dn->auto_rope_ray_location_y = y_center;
 		dn->auto_rope_prim_id = -1; // sentinel = terminate
 		dn->num_particles = cur->num_particles;
 		for (int p = 0; p < cur->num_particles && p < BH_BUCKET_SIZE; p++)
