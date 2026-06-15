@@ -31,6 +31,7 @@
 #include "vulkan/buffers.h"
 #include "vulkan/renderer.h"
 #include "vulkan/rt_barnes_hut.h"
+#include "vulkan/rt_helpers.h"
 #include "vulkan/utils.h"
 
 #define YHRT_WORKGROUP_SIZE 256
@@ -211,24 +212,7 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 
 	// ---- Upload NodeBuffer ----
 	VkDeviceSize nodeSize = sizeof(vec4) * vcount;
-	VkBufferCreateInfo nodeBufInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = nodeSize, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-	VK_CHECK(vkCreateBuffer(r->core.device, &nodeBufInfo, NULL, &r->yhrt_node_buf), "Failed to create YHRT node buffer");
-	VkMemoryRequirements nodeMemReqs;
-	vkGetBufferMemoryRequirements(r->core.device, r->yhrt_node_buf, &nodeMemReqs);
-	VkPhysicalDeviceMemoryProperties nodeMemProps;
-	vkGetPhysicalDeviceMemoryProperties(r->core.physicalDevice, &nodeMemProps);
-	uint32_t nodeMemType = UINT32_MAX;
-	for (uint32_t i = 0; i < nodeMemProps.memoryTypeCount; i++) {
-		if ((nodeMemReqs.memoryTypeBits & (1 << i)) && (nodeMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-			nodeMemType = i;
-			break;
-		}
-	}
-	if (nodeMemType == UINT32_MAX)
-		exit_with_error("YHRT: no device-local memory for node buffer");
-	VkMemoryAllocateInfo nodeAllocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = nodeMemReqs.size, .memoryTypeIndex = nodeMemType};
-	VK_CHECK(vkAllocateMemory(r->core.device, &nodeAllocInfo, NULL, &r->yhrt_node_mem), "Failed to allocate YHRT node buffer memory");
-	VK_CHECK(vkBindBufferMemory(r->core.device, r->yhrt_node_buf, r->yhrt_node_mem, 0), "Failed to bind YHRT node buffer memory");
+	rt_helpers_create_device_buffer(&r->core, nodeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_node_buf, &r->yhrt_node_mem);
 
 	float *nodeData = malloc(sizeof(float) * 4 * vcount);
 	for (igraph_integer_t i = 0; i < vcount; i++) {
@@ -247,51 +231,7 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 	for (igraph_integer_t i = 0; i < 3 && i < vcount; i++)
 		printf("  node[%ld] pos=(%.4f, %.4f, %.4f) deg=%.0f\n", (long)i, nodeData[i * 4 + 0], nodeData[i * 4 + 1], nodeData[i * 4 + 2], nodeData[i * 4 + 3]);
 
-	// Upload using staging buffer
-	VkBufferCreateInfo stagingBufInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = nodeSize, .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-	VkBuffer stagingBuf;
-	VkDeviceMemory stagingMem;
-	VK_CHECK(vkCreateBuffer(r->core.device, &stagingBufInfo, NULL, &stagingBuf), "Failed to create YHRT staging buffer");
-	VkMemoryRequirements stagingMemReqs;
-	vkGetBufferMemoryRequirements(r->core.device, stagingBuf, &stagingMemReqs);
-	uint32_t stagingMemType = UINT32_MAX;
-	for (uint32_t i = 0; i < nodeMemProps.memoryTypeCount; i++) {
-		if ((stagingMemReqs.memoryTypeBits & (1 << i)) && (nodeMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) && (nodeMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
-			stagingMemType = i;
-			break;
-		}
-	}
-	if (stagingMemType == UINT32_MAX)
-		exit_with_error("YHRT: no host-visible memory for staging");
-	VkMemoryAllocateInfo stagingAllocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = stagingMemReqs.size, .memoryTypeIndex = stagingMemType};
-	VK_CHECK(vkAllocateMemory(r->core.device, &stagingAllocInfo, NULL, &stagingMem), "Failed to allocate YHRT staging buffer memory");
-	VK_CHECK(vkBindBufferMemory(r->core.device, stagingBuf, stagingMem, 0), "Failed to bind YHRT staging buffer memory");
-	void *stagingMapped;
-	VK_CHECK(vkMapMemory(r->core.device, stagingMem, 0, nodeSize, 0, &stagingMapped), "Failed to map YHRT staging upload");
-	memcpy(stagingMapped, nodeData, nodeSize);
-	vkUnmapMemory(r->core.device, stagingMem);
-	// One-time submit for copy
-	VkCommandPoolCreateInfo tmpPoolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = (uint32_t)r->core.graphicsQueueFamily};
-	VkCommandPool tmpPool;
-	VK_CHECK(vkCreateCommandPool(r->core.device, &tmpPoolInfo, NULL, &tmpPool), "Failed to create YHRT tmp pool");
-	VkCommandBufferAllocateInfo tmpCmdInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = tmpPool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
-	VkCommandBuffer tmpCmd;
-	VK_CHECK(vkAllocateCommandBuffers(r->core.device, &tmpCmdInfo, &tmpCmd), "Failed to allocate YHRT tmp cmd");
-	VK_CHECK(vkBeginCommandBuffer(tmpCmd, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin YHRT tmp cmd");
-	VkBufferCopy copyRegion = {.size = nodeSize};
-	vkCmdCopyBuffer(tmpCmd, stagingBuf, r->yhrt_node_buf, 1, &copyRegion);
-	VK_CHECK(vkEndCommandBuffer(tmpCmd), "Failed to end YHRT tmp cmd");
-	VkSubmitInfo tmpSubmit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &tmpCmd};
-	VkFence fence;
-	VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-	VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &fence), "Failed to create YHRT init fence");
-	pthread_mutex_lock(&r->core.graphicsQueueMutex);
-	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &tmpSubmit, fence), "Failed to submit YHRT tmp upload");
-	pthread_mutex_unlock(&r->core.graphicsQueueMutex);
-	VK_CHECK(vkWaitForFences(r->core.device, 1, &fence, VK_TRUE, UINT64_MAX), "Failed to wait for YHRT init fence");
-	vkDestroyFence(r->core.device, fence, NULL);
-	vkDestroyCommandPool(r->core.device, tmpPool, NULL);
-	VK_DESTROY_BUFFER(r->core.device, stagingBuf, stagingMem);
+	rt_helpers_staging_upload(&r->core, r->yhrt_node_buf, nodeData, nodeSize);
 	free(nodeData);
 
 	// ---- Initialize BH session ----
@@ -311,58 +251,12 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 	}
 
 	// ---- Fnorm + dispatch fence ----
-	VkBufferCreateInfo fnormBufInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = sizeof(double), .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-	VK_CHECK(vkCreateBuffer(r->core.device, &fnormBufInfo, NULL, &r->yhrt_fnorm_buf), "Failed to create YHRT fnorm buffer");
-	VkMemoryRequirements fnormMemReqs;
-	vkGetBufferMemoryRequirements(r->core.device, r->yhrt_fnorm_buf, &fnormMemReqs);
-	uint32_t fnormMemType = UINT32_MAX;
-	for (uint32_t i = 0; i < nodeMemProps.memoryTypeCount; i++) {
-		if ((fnormMemReqs.memoryTypeBits & (1 << i)) && (nodeMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-			fnormMemType = i;
-			break;
-		}
-	}
-	if (fnormMemType == UINT32_MAX)
-		exit_with_error("YHRT: no device-local memory for fnorm buffer");
-	VkMemoryAllocateInfo fnormAllocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = fnormMemReqs.size, .memoryTypeIndex = fnormMemType};
-	VK_CHECK(vkAllocateMemory(r->core.device, &fnormAllocInfo, NULL, &r->yhrt_fnorm_mem), "Failed to allocate YHRT fnorm buffer memory");
-	VK_CHECK(vkBindBufferMemory(r->core.device, r->yhrt_fnorm_buf, r->yhrt_fnorm_mem, 0), "Failed to bind YHRT fnorm buffer memory");
+	rt_helpers_create_device_buffer(&r->core, sizeof(double), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_fnorm_buf, &r->yhrt_fnorm_mem);
 
-	VkBufferCreateInfo stagingBufInfo2 = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = sizeof(double), .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-	VK_CHECK(vkCreateBuffer(r->core.device, &stagingBufInfo2, NULL, &r->yhrt_staging_buf), "Failed to create YHRT staging buffer");
-	VkMemoryRequirements staging2MemReqs;
-	vkGetBufferMemoryRequirements(r->core.device, r->yhrt_staging_buf, &staging2MemReqs);
-	uint32_t staging2MemType = UINT32_MAX;
-	for (uint32_t i = 0; i < nodeMemProps.memoryTypeCount; i++) {
-		if ((staging2MemReqs.memoryTypeBits & (1 << i)) && (nodeMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) && (nodeMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
-			staging2MemType = i;
-			break;
-		}
-	}
-	if (staging2MemType == UINT32_MAX)
-		exit_with_error("YHRT: no host-visible memory for fnorm staging");
-	VkMemoryAllocateInfo staging2AllocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = staging2MemReqs.size, .memoryTypeIndex = staging2MemType};
-	VK_CHECK(vkAllocateMemory(r->core.device, &staging2AllocInfo, NULL, &r->yhrt_staging_mem), "Failed to allocate YHRT fnorm staging memory");
-	VK_CHECK(vkBindBufferMemory(r->core.device, r->yhrt_staging_buf, r->yhrt_staging_mem, 0), "Failed to bind YHRT fnorm staging buffer");
+	rt_helpers_create_buffer(&r->core, sizeof(double), VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_staging_buf, &r->yhrt_staging_mem);
 
 	// ---- Position staging buffer (GPU→CPU readback every iteration) ----
-	VkDeviceSize posStageSize = sizeof(vec4) * vcount;
-	VkBufferCreateInfo posStageBufInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = posStageSize, .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-	VK_CHECK(vkCreateBuffer(r->core.device, &posStageBufInfo, NULL, &r->yhrt_pos_staging_buf), "Failed to create YHRT pos staging buffer");
-	VkMemoryRequirements posStageMemReqs;
-	vkGetBufferMemoryRequirements(r->core.device, r->yhrt_pos_staging_buf, &posStageMemReqs);
-	uint32_t posStageMemType = UINT32_MAX;
-	for (uint32_t i = 0; i < nodeMemProps.memoryTypeCount; i++) {
-		if ((posStageMemReqs.memoryTypeBits & (1 << i)) && (nodeMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) && (nodeMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
-			posStageMemType = i;
-			break;
-		}
-	}
-	if (posStageMemType == UINT32_MAX)
-		exit_with_error("YHRT: no host-visible memory for pos staging");
-	VkMemoryAllocateInfo posStageAllocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = posStageMemReqs.size, .memoryTypeIndex = posStageMemType};
-	VK_CHECK(vkAllocateMemory(r->core.device, &posStageAllocInfo, NULL, &r->yhrt_pos_staging_mem), "Failed to allocate YHRT pos staging memory");
-	VK_CHECK(vkBindBufferMemory(r->core.device, r->yhrt_pos_staging_buf, r->yhrt_pos_staging_mem, 0), "Failed to bind YHRT pos staging buffer");
+	rt_helpers_create_buffer(&r->core, sizeof(vec4) * vcount, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_pos_staging_buf, &r->yhrt_pos_staging_mem);
 
 	// ---- Command pool + buffer (per-iteration GPU work) ----
 	VkCommandPoolCreateInfo cmdPoolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, .queueFamilyIndex = (uint32_t)r->core.graphicsQueueFamily};
@@ -384,22 +278,7 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 			float weight;
 		};
 		VkDeviceSize edgeSize = sizeof(struct EdgeData) * ecount;
-		VkBufferCreateInfo edgeBufInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = edgeSize, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-		VK_CHECK(vkCreateBuffer(r->core.device, &edgeBufInfo, NULL, &r->yhrt_edge_buf), "Failed to create YHRT edge buffer");
-		VkMemoryRequirements edgeMemReqs;
-		vkGetBufferMemoryRequirements(r->core.device, r->yhrt_edge_buf, &edgeMemReqs);
-		uint32_t edgeMemType = UINT32_MAX;
-		for (uint32_t i = 0; i < nodeMemProps.memoryTypeCount; i++) {
-			if ((edgeMemReqs.memoryTypeBits & (1 << i)) && (nodeMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-				edgeMemType = i;
-				break;
-			}
-		}
-		if (edgeMemType == UINT32_MAX)
-			exit_with_error("YHRT: no device-local memory for edge buffer");
-		VkMemoryAllocateInfo edgeAllocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = edgeMemReqs.size, .memoryTypeIndex = edgeMemType};
-		VK_CHECK(vkAllocateMemory(r->core.device, &edgeAllocInfo, NULL, &r->yhrt_edge_mem), "Failed to allocate YHRT edge buffer memory");
-		VK_CHECK(vkBindBufferMemory(r->core.device, r->yhrt_edge_buf, r->yhrt_edge_mem, 0), "Failed to bind YHRT edge buffer memory");
+		rt_helpers_create_device_buffer(&r->core, edgeSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->yhrt_edge_buf, &r->yhrt_edge_mem);
 
 		struct EdgeData *edgeData = malloc(edgeSize);
 		for (igraph_integer_t e = 0; e < ecount; e++) {
@@ -407,50 +286,7 @@ bool yhrt_worker_init(Renderer *r, igraph_t *graph, igraph_matrix_t *init_positi
 			edgeData[e].to = (uint32_t)IGRAPH_TO(graph, e);
 			edgeData[e].weight = 1.0f;
 		}
-		// Upload via one-time command (fresh local staging resources)
-		VkBufferCreateInfo edgeStageBufInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = edgeSize, .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-		VkBuffer edgeStageBuf;
-		VkDeviceMemory edgeStageMem;
-		VK_CHECK(vkCreateBuffer(r->core.device, &edgeStageBufInfo, NULL, &edgeStageBuf), "Failed to create edge staging buffer");
-		VkMemoryRequirements edgeStageMemReqs;
-		vkGetBufferMemoryRequirements(r->core.device, edgeStageBuf, &edgeStageMemReqs);
-		uint32_t edgeStageMemType = UINT32_MAX;
-		for (uint32_t i = 0; i < nodeMemProps.memoryTypeCount; i++) {
-			if ((edgeStageMemReqs.memoryTypeBits & (1 << i)) && (nodeMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) && (nodeMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
-				edgeStageMemType = i;
-				break;
-			}
-		}
-		if (edgeStageMemType == UINT32_MAX)
-			exit_with_error("YHRT: no host-visible memory for edge staging");
-		VkMemoryAllocateInfo edgeStageAllocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = edgeStageMemReqs.size, .memoryTypeIndex = edgeStageMemType};
-		VK_CHECK(vkAllocateMemory(r->core.device, &edgeStageAllocInfo, NULL, &edgeStageMem), "Failed to allocate edge staging memory");
-		VK_CHECK(vkBindBufferMemory(r->core.device, edgeStageBuf, edgeStageMem, 0), "Failed to bind edge staging buffer");
-		void *edgeStageMapped;
-		VK_CHECK(vkMapMemory(r->core.device, edgeStageMem, 0, edgeSize, 0, &edgeStageMapped), "Failed to map edge staging");
-		memcpy(edgeStageMapped, edgeData, edgeSize);
-		vkUnmapMemory(r->core.device, edgeStageMem);
-		VkCommandPoolCreateInfo edgePoolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = (uint32_t)r->core.graphicsQueueFamily};
-		VkCommandPool edgePool;
-		VK_CHECK(vkCreateCommandPool(r->core.device, &edgePoolInfo, NULL, &edgePool), "Failed to create edge tmp pool");
-		VkCommandBufferAllocateInfo edgeCmdInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = edgePool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
-		VkCommandBuffer edgeCmd;
-		VK_CHECK(vkAllocateCommandBuffers(r->core.device, &edgeCmdInfo, &edgeCmd), "Failed to allocate edge tmp cmd");
-		VK_CHECK(vkBeginCommandBuffer(edgeCmd, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin edge upload cmd");
-		VkBufferCopy edgeCopy = {.size = edgeSize};
-		vkCmdCopyBuffer(edgeCmd, edgeStageBuf, r->yhrt_edge_buf, 1, &edgeCopy);
-		VK_CHECK(vkEndCommandBuffer(edgeCmd), "Failed to end edge upload cmd");
-		VkSubmitInfo edgeSubmit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &edgeCmd};
-		VkFence fence;
-		VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-		VK_CHECK(vkCreateFence(r->core.device, &fenceInfo, NULL, &fence), "Failed to create edge upload fence");
-		pthread_mutex_lock(&r->core.graphicsQueueMutex);
-		VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &edgeSubmit, fence), "Failed to submit edge upload");
-		pthread_mutex_unlock(&r->core.graphicsQueueMutex);
-		VK_CHECK(vkWaitForFences(r->core.device, 1, &fence, VK_TRUE, UINT64_MAX), "Failed to wait for edge upload fence");
-		vkDestroyFence(r->core.device, fence, NULL);
-		VK_DESTROY_BUFFER(r->core.device, edgeStageBuf, edgeStageMem);
-		vkDestroyCommandPool(r->core.device, edgePool, NULL);
+		rt_helpers_staging_upload(&r->core, r->yhrt_edge_buf, edgeData, edgeSize);
 		free(edgeData);
 	}
 

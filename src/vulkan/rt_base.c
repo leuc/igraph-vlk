@@ -154,6 +154,164 @@ void rt_base_destroy(RTBase *base)
 }
 
 // ============================================================================
+// Internal — Per-Session Helpers
+// ============================================================================
+
+static void rt_base_create_worker_cmd(RTBase *base)
+{
+	VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, .queueFamilyIndex = (uint32_t)base->core->graphicsQueueFamily};
+	VK_CHECK(vkCreateCommandPool(base->core->device, &poolInfo, NULL, &base->cmd_pool), "Failed to create RTBase worker cmd pool");
+	VkCommandBufferAllocateInfo cmdInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = base->cmd_pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
+	VK_CHECK(vkAllocateCommandBuffers(base->core->device, &cmdInfo, &base->cmd_buf), "Failed to allocate RTBase worker cmd");
+}
+
+static VkDeviceSize rt_base_build_blas(RTBase *base, float search_radius)
+{
+	VkAccelerationStructureGeometryKHR blasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_AABBS_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR};
+
+	// Size the BLAS
+	VkAabbPositionsKHR aabb = {.minX = -search_radius, .minY = -search_radius, .minZ = -search_radius, .maxX = search_radius, .maxY = search_radius, .maxZ = search_radius};
+
+	VkBuffer aabbBuf = VK_NULL_HANDLE;
+	VkDeviceMemory aabbMem = VK_NULL_HANDLE;
+	rt_helpers_create_buffer(base->core, sizeof(VkAabbPositionsKHR), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, &aabbBuf, &aabbMem);
+	void *mapped;
+	vkMapMemory(base->core->device, aabbMem, 0, sizeof(VkAabbPositionsKHR), 0, &mapped);
+	memcpy(mapped, &aabb, sizeof(VkAabbPositionsKHR));
+	vkUnmapMemory(base->core->device, aabbMem);
+
+	blasGeometry.geometry.aabbs.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
+	blasGeometry.geometry.aabbs.data.deviceAddress = rt_helpers_get_buffer_device_address(base->core->device, aabbBuf);
+	blasGeometry.geometry.aabbs.stride = sizeof(VkAabbPositionsKHR);
+
+	VkAccelerationStructureBuildGeometryInfoKHR blasBuildInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &blasGeometry};
+
+	uint32_t maxPrims = 1;
+	VkAccelerationStructureBuildSizesInfoKHR blasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+	rt_helpers_get_GetAccelerationStructureBuildSizesKHR()(base->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &blasBuildInfo, &maxPrims, &blasSizeInfo);
+
+	rt_helpers_create_device_buffer(base->core, blasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &base->blas_buf, &base->blas_mem);
+
+	VkAccelerationStructureCreateInfoKHR blasCreateInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR, .buffer = base->blas_buf, .offset = 0, .size = blasSizeInfo.accelerationStructureSize, .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR};
+	VK_CHECK(rt_helpers_get_CreateAccelerationStructureKHR()(base->core->device, &blasCreateInfo, NULL, &base->blas), "Failed to create BLAS");
+
+	// Size the TLAS (to get scratch size)
+	VkAccelerationStructureGeometryKHR tlasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR, .geometry.instances = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR}};
+	{
+		tlasGeometry.geometry.instances.data.deviceAddress = 0;
+		VkAccelerationStructureBuildGeometryInfoKHR tlasBuildInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &tlasGeometry};
+		VkAccelerationStructureBuildSizesInfoKHR tlasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+		uint32_t maxInstances = base->vcount;
+		rt_helpers_get_GetAccelerationStructureBuildSizesKHR()(base->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tlasBuildInfo, &maxInstances, &tlasSizeInfo);
+
+		// Shared scratch buffer
+		VkDeviceSize scratchSize = blasSizeInfo.buildScratchSize > tlasSizeInfo.buildScratchSize ? blasSizeInfo.buildScratchSize : tlasSizeInfo.buildScratchSize;
+		rt_helpers_create_device_buffer(base->core, scratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &base->as_scratch_buf, &base->as_scratch_mem);
+	}
+
+	// Build the BLAS (one-time, synchronous)
+	blasBuildInfo.dstAccelerationStructure = base->blas;
+	blasBuildInfo.scratchData.deviceAddress = rt_helpers_get_buffer_device_address(base->core->device, base->as_scratch_buf);
+	const VkAccelerationStructureBuildRangeInfoKHR blasRangeInfo = {.primitiveCount = 1};
+	const VkAccelerationStructureBuildRangeInfoKHR *pBlasRange = &blasRangeInfo;
+
+	VkCommandPool blasPool;
+	VkCommandBuffer blasCmd;
+	VK_ONE_SHOT_BEGIN(base->core->device, (uint32_t)base->core->graphicsQueueFamily, blasPool, blasCmd);
+
+	rt_helpers_get_CmdBuildAccelerationStructuresKHR()(blasCmd, 1, &blasBuildInfo, &pBlasRange);
+
+	pthread_mutex_lock(&base->core->graphicsQueueMutex);
+	VK_ONE_SHOT_END(base->core->device, base->core->graphicsQueue, blasPool, blasCmd);
+	pthread_mutex_unlock(&base->core->graphicsQueueMutex);
+
+	VK_DESTROY_BUFFER(base->core->device, aabbBuf, aabbMem);
+
+	return blasSizeInfo.buildScratchSize;
+}
+
+static bool rt_base_build_tlas(RTBase *base, igraph_matrix_t *init_positions)
+{
+	uint32_t vcount = base->vcount;
+
+	VkAccelerationStructureGeometryKHR tlasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR, .geometry.instances = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR}};
+
+	// Create instance buffer
+	VkDeviceSize instSize = sizeof(VkAccelerationStructureInstanceKHR) * vcount;
+	rt_helpers_create_device_buffer(base->core, instSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &base->instance_buf, &base->instance_mem);
+
+	uint32_t ncols = (uint32_t)igraph_matrix_ncol(init_positions);
+
+	VkAccelerationStructureInstanceKHR *instances = calloc(vcount, sizeof(VkAccelerationStructureInstanceKHR));
+	uint64_t blasAddr = rt_helpers_get_as_device_address(base->core->device, base->blas);
+	for (uint32_t i = 0; i < vcount; i++) {
+		memset(&instances[i], 0, sizeof(VkAccelerationStructureInstanceKHR));
+		instances[i].instanceCustomIndex = i;
+		instances[i].mask = 0xFF;
+		instances[i].instanceShaderBindingTableRecordOffset = 0;
+		instances[i].flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
+		instances[i].accelerationStructureReference = blasAddr;
+
+		float *m = (float *)instances[i].transform.matrix[0];
+		m[0] = 1.0f;
+		m[1] = 0.0f;
+		m[2] = 0.0f;
+		m[3] = (float)MATRIX(*init_positions, i, 0);
+		m[4] = 0.0f;
+		m[5] = 1.0f;
+		m[6] = 0.0f;
+		m[7] = (float)MATRIX(*init_positions, i, 1);
+		m[8] = 0.0f;
+		m[9] = 0.0f;
+		m[10] = 1.0f;
+		m[11] = (ncols > 2) ? (float)MATRIX(*init_positions, i, 2) : 0.0f;
+	}
+	rt_helpers_staging_upload(base->core, base->instance_buf, instances, instSize);
+	free(instances);
+
+	// Size and create TLAS
+	uint64_t instAddr = rt_helpers_get_buffer_device_address(base->core->device, base->instance_buf);
+	tlasGeometry.geometry.instances.data.deviceAddress = instAddr;
+
+	VkAccelerationStructureBuildSizesInfoKHR tlasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+	{
+		VkAccelerationStructureBuildGeometryInfoKHR tmpInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &tlasGeometry};
+		uint32_t maxInstances = vcount;
+		rt_helpers_get_GetAccelerationStructureBuildSizesKHR()(base->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tmpInfo, &maxInstances, &tlasSizeInfo);
+	}
+
+	rt_helpers_create_device_buffer(base->core, tlasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, &base->tlas_buf, &base->tlas_mem);
+	VkAccelerationStructureCreateInfoKHR tlasCreate = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR, .buffer = base->tlas_buf, .size = tlasSizeInfo.accelerationStructureSize, .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR};
+	VK_CHECK(rt_helpers_get_CreateAccelerationStructureKHR()(base->core->device, &tlasCreate, NULL, &base->tlas), "Failed to create TLAS");
+
+	// Build the TLAS
+	VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = {.primitiveCount = vcount};
+	const VkAccelerationStructureBuildRangeInfoKHR *pTlasRange = &tlasRangeInfo;
+	VkAccelerationStructureBuildGeometryInfoKHR tlasBuildInfo = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+		.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
+		.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+		.dstAccelerationStructure = base->tlas,
+		.geometryCount = 1,
+		.pGeometries = &tlasGeometry,
+		.scratchData.deviceAddress = rt_helpers_get_buffer_device_address(base->core->device, base->as_scratch_buf),
+	};
+
+	VkCommandPool tlasPool;
+	VkCommandBuffer tlasCmd;
+	VK_ONE_SHOT_BEGIN(base->core->device, (uint32_t)base->core->graphicsQueueFamily, tlasPool, tlasCmd);
+
+	rt_helpers_get_CmdBuildAccelerationStructuresKHR()(tlasCmd, 1, &tlasBuildInfo, &pTlasRange);
+
+	pthread_mutex_lock(&base->core->graphicsQueueMutex);
+	VK_ONE_SHOT_END(base->core->device, base->core->graphicsQueue, tlasPool, tlasCmd);
+	pthread_mutex_unlock(&base->core->graphicsQueueMutex);
+
+	return true;
+}
+
+// ============================================================================
 // Public API — Per-Session
 // ============================================================================
 
@@ -164,174 +322,20 @@ bool rt_base_session_init(RTBase *base, igraph_t *graph, igraph_matrix_t *init_p
 		return false;
 	}
 
-	uint32_t vcount = (uint32_t)igraph_vcount(graph);
-	uint32_t ecount = (uint32_t)igraph_ecount(graph);
-	base->vcount = vcount;
-	base->ecount = ecount;
+	base->vcount = (uint32_t)igraph_vcount(graph);
+	base->ecount = (uint32_t)igraph_ecount(graph);
 	base->search_radius = search_radius;
 	base->fp64_supported = base->core->fp64_atomics_supported;
 	base->session_active = true;
 
-	// ---- Create worker-thread command pool + buffer ----
-	{
-		VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, .queueFamilyIndex = (uint32_t)base->core->graphicsQueueFamily};
-		VK_CHECK(vkCreateCommandPool(base->core->device, &poolInfo, NULL, &base->cmd_pool), "Failed to create RTBase worker cmd pool");
-		VkCommandBufferAllocateInfo cmdInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = base->cmd_pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
-		VK_CHECK(vkAllocateCommandBuffers(base->core->device, &cmdInfo, &base->cmd_buf), "Failed to allocate RTBase worker cmd");
-	}
+	rt_base_create_worker_cmd(base);
 
-	// ---- Staging buffer for periodic position readback ----
-	VkDeviceSize nodeSize = sizeof(vec4) * vcount;
-	rt_helpers_create_buffer(base->core, nodeSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &base->node_staging_buf, &base->node_staging_mem);
+	// Staging buffer for periodic position readback
+	rt_helpers_create_buffer(base->core, sizeof(vec4) * base->vcount, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &base->node_staging_buf, &base->node_staging_mem);
 
-	// =====================================================================
-	// BLAS + TLAS Build
-	// =====================================================================
-
-	VkDeviceSize blasScratchSize = 0;
-	VkDeviceSize tlasScratchSize = 0;
-	VkBuffer aabbBuf = VK_NULL_HANDLE;
-	VkDeviceMemory aabbMem = VK_NULL_HANDLE;
-
-	VkAccelerationStructureGeometryKHR blasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_AABBS_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR};
-	VkAccelerationStructureBuildGeometryInfoKHR blasBuildInfo = {0};
-
-	VkAccelerationStructureGeometryKHR tlasGeometry = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR, .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR, .flags = VK_GEOMETRY_OPAQUE_BIT_KHR, .geometry.instances = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR}};
-
-	VkAccelerationStructureBuildRangeInfoKHR blasRangeInfo = {.primitiveCount = 1};
-	VkAccelerationStructureBuildRangeInfoKHR tlasRangeInfo = {.primitiveCount = vcount};
-
-	// Step 1: Size the BLAS
-	{
-		VkAabbPositionsKHR aabb = {.minX = -search_radius, .minY = -search_radius, .minZ = -search_radius, .maxX = search_radius, .maxY = search_radius, .maxZ = search_radius};
-
-		rt_helpers_create_buffer(base->core, sizeof(VkAabbPositionsKHR), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, &aabbBuf, &aabbMem);
-		void *mapped;
-		vkMapMemory(base->core->device, aabbMem, 0, sizeof(VkAabbPositionsKHR), 0, &mapped);
-		memcpy(mapped, &aabb, sizeof(VkAabbPositionsKHR));
-		vkUnmapMemory(base->core->device, aabbMem);
-
-		blasGeometry.geometry.aabbs.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
-		blasGeometry.geometry.aabbs.data.deviceAddress = rt_helpers_get_buffer_device_address(base->core->device, aabbBuf);
-		blasGeometry.geometry.aabbs.stride = sizeof(VkAabbPositionsKHR);
-
-		blasBuildInfo = (VkAccelerationStructureBuildGeometryInfoKHR){.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &blasGeometry};
-
-		uint32_t maxPrims = 1;
-		VkAccelerationStructureBuildSizesInfoKHR blasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
-		rt_helpers_get_GetAccelerationStructureBuildSizesKHR()(base->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &blasBuildInfo, &maxPrims, &blasSizeInfo);
-
-		rt_helpers_create_device_buffer(base->core, blasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &base->blas_buf, &base->blas_mem);
-		blasScratchSize = blasSizeInfo.buildScratchSize;
-
-		VkAccelerationStructureCreateInfoKHR blasCreateInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR, .buffer = base->blas_buf, .offset = 0, .size = blasSizeInfo.accelerationStructureSize, .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR};
-		VK_CHECK(rt_helpers_get_CreateAccelerationStructureKHR()(base->core->device, &blasCreateInfo, NULL, &base->blas), "Failed to create BLAS");
-	}
-
-	// Step 2: Size the TLAS
-	{
-		tlasGeometry.geometry.instances.data.deviceAddress = 0;
-		VkAccelerationStructureBuildGeometryInfoKHR tlasBuildInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &tlasGeometry};
-		uint32_t maxInstances = vcount;
-		VkAccelerationStructureBuildSizesInfoKHR tlasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
-		rt_helpers_get_GetAccelerationStructureBuildSizesKHR()(base->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tlasBuildInfo, &maxInstances, &tlasSizeInfo);
-
-		tlasScratchSize = tlasSizeInfo.buildScratchSize;
-	}
-
-	// Shared scratch buffer
-	VkDeviceSize scratchSize = blasScratchSize > tlasScratchSize ? blasScratchSize : tlasScratchSize;
-	rt_helpers_create_device_buffer(base->core, scratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &base->as_scratch_buf, &base->as_scratch_mem);
-
-	// Step 3: Build the BLAS (one-time, synchronous)
-	{
-		blasBuildInfo.dstAccelerationStructure = base->blas;
-		blasBuildInfo.scratchData.deviceAddress = rt_helpers_get_buffer_device_address(base->core->device, base->as_scratch_buf);
-		const VkAccelerationStructureBuildRangeInfoKHR *pBlasRange = &blasRangeInfo;
-
-		VkCommandPool blasPool;
-		VkCommandBuffer blasCmd;
-		VK_ONE_SHOT_BEGIN(base->core->device, (uint32_t)base->core->graphicsQueueFamily, blasPool, blasCmd);
-
-		rt_helpers_get_CmdBuildAccelerationStructuresKHR()(blasCmd, 1, &blasBuildInfo, &pBlasRange);
-
-		pthread_mutex_lock(&base->core->graphicsQueueMutex);
-		VK_ONE_SHOT_END(base->core->device, base->core->graphicsQueue, blasPool, blasCmd);
-		pthread_mutex_unlock(&base->core->graphicsQueueMutex);
-
-		VK_DESTROY_BUFFER(base->core->device, aabbBuf, aabbMem);
-	}
-
-	// Step 4: Create TLAS instances and build the TLAS
-	{
-		VkDeviceSize instSize = sizeof(VkAccelerationStructureInstanceKHR) * vcount;
-		rt_helpers_create_device_buffer(base->core, instSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &base->instance_buf, &base->instance_mem);
-
-		uint32_t ncols = (uint32_t)igraph_matrix_ncol(init_positions);
-
-		VkAccelerationStructureInstanceKHR *instances = calloc(vcount, sizeof(VkAccelerationStructureInstanceKHR));
-		uint64_t blasAddr = rt_helpers_get_as_device_address(base->core->device, base->blas);
-		for (uint32_t i = 0; i < vcount; i++) {
-			memset(&instances[i], 0, sizeof(VkAccelerationStructureInstanceKHR));
-			instances[i].instanceCustomIndex = i;
-			instances[i].mask = 0xFF;
-			instances[i].instanceShaderBindingTableRecordOffset = 0;
-			instances[i].flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
-			instances[i].accelerationStructureReference = blasAddr;
-
-			float *m = (float *)instances[i].transform.matrix[0];
-			m[0] = 1.0f;
-			m[1] = 0.0f;
-			m[2] = 0.0f;
-			m[3] = (float)MATRIX(*init_positions, i, 0);
-			m[4] = 0.0f;
-			m[5] = 1.0f;
-			m[6] = 0.0f;
-			m[7] = (float)MATRIX(*init_positions, i, 1);
-			m[8] = 0.0f;
-			m[9] = 0.0f;
-			m[10] = 1.0f;
-			m[11] = (ncols > 2) ? (float)MATRIX(*init_positions, i, 2) : 0.0f;
-		}
-		rt_helpers_staging_upload(base->core, base->instance_buf, instances, instSize);
-		free(instances);
-
-		uint64_t instAddr = rt_helpers_get_buffer_device_address(base->core->device, base->instance_buf);
-		tlasGeometry.geometry.instances.data.deviceAddress = instAddr;
-
-		VkAccelerationStructureBuildSizesInfoKHR tlasSizeInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
-		{
-			VkAccelerationStructureBuildGeometryInfoKHR tmpInfo = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR, .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR, .geometryCount = 1, .pGeometries = &tlasGeometry};
-			uint32_t maxInstances = vcount;
-			rt_helpers_get_GetAccelerationStructureBuildSizesKHR()(base->core->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tmpInfo, &maxInstances, &tlasSizeInfo);
-		}
-
-		rt_helpers_create_device_buffer(base->core, tlasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, &base->tlas_buf, &base->tlas_mem);
-		VkAccelerationStructureCreateInfoKHR tlasCreate = {.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR, .buffer = base->tlas_buf, .size = tlasSizeInfo.accelerationStructureSize, .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR};
-		VK_CHECK(rt_helpers_get_CreateAccelerationStructureKHR()(base->core->device, &tlasCreate, NULL, &base->tlas), "Failed to create TLAS");
-
-		VkAccelerationStructureBuildGeometryInfoKHR tlasBuildInfo = {
-			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-			.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-			.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
-			.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
-			.dstAccelerationStructure = base->tlas,
-			.geometryCount = 1,
-			.pGeometries = &tlasGeometry,
-			.scratchData.deviceAddress = rt_helpers_get_buffer_device_address(base->core->device, base->as_scratch_buf),
-		};
-		const VkAccelerationStructureBuildRangeInfoKHR *pTlasRange = &tlasRangeInfo;
-
-		VkCommandPool tlasPool;
-		VkCommandBuffer tlasCmd;
-		VK_ONE_SHOT_BEGIN(base->core->device, (uint32_t)base->core->graphicsQueueFamily, tlasPool, tlasCmd);
-
-		rt_helpers_get_CmdBuildAccelerationStructuresKHR()(tlasCmd, 1, &tlasBuildInfo, &pTlasRange);
-
-		pthread_mutex_lock(&base->core->graphicsQueueMutex);
-		VK_ONE_SHOT_END(base->core->device, base->core->graphicsQueue, tlasPool, tlasCmd);
-		pthread_mutex_unlock(&base->core->graphicsQueueMutex);
-	}
+	// BLAS + TLAS build
+	rt_base_build_blas(base, search_radius);
+	rt_base_build_tlas(base, init_positions);
 
 	return true;
 }
