@@ -4,6 +4,71 @@
 
 Interactive graph visualization with 30+ layout algorithms, 12 community detection methods, 10 centrality measures, real-time GPU-accelerated animations, VR support, and a 3D spherical menu system.
 
+## Index
+
+- [Usage](#usage)
+- [Features](#features)
+  - [Graph I/O & Generation](#graph-io--generation)
+  - [Graph Analysis](#graph-analysis)
+  - [Graph Layout Algorithms](#graph-layout-algorithms)
+  - [Rendering (Vulkan)](#rendering-vulkan)
+  - [UI & Interaction](#ui--interaction)
+  - [VR / XR (OpenXR)](#vr--xr-openxr)
+  - [Background Worker Thread](#background-worker-thread)
+- [Build & Run](#build--run)
+- [Architecture](#architecture)
+- [Selected Scientific References](#selected-scientific-references)
+
+## Usage
+
+### Mouse
+
+| Action | Effect |
+|---|---|
+| Mouse move (locked) | Camera yaw/pitch look |
+| Left-click | Pick nearest node or edge (select) |
+| Left-click on menu item | Execute command or expand/collapse branch |
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|---|---|
+| `W` / `A` / `S` / `D` | Camera movement (forward/left/back/right) |
+| `Shift` | 3x camera speed |
+| `Space` | Toggle 3D menu |
+| `Escape` / `Q` | Quit |
+| `N` | Toggle node visibility |
+| `E` | Toggle edge visibility |
+| `M` | Cycle edge routing mode (straight ↔ spherical PCB) |
+| `H` | Toggle HUD overlay |
+| `R` | Reset graph to original state |
+| `1`–`9` | Filter nodes by minimum degree |
+| `K` | Cycle k-core threshold filter |
+| `J` | Highlight infrastructure (articulation points + bridge endpoints) |
+| `+` / `=` | Increase layout scale (1.2x) |
+| `-` | Decrease layout scale (1.2x) |
+| `Alt`+`Enter` | Toggle fullscreen |
+| `Alt`+`Left` / `Alt`+`Right` | Switch monitors in fullscreen |
+
+### Gamepad
+
+| Control | Action |
+|---|---|
+| Left stick | Movement (forward/back/strafe) |
+| Right stick | Camera look |
+| Start | Toggle menu |
+| A | Activate crosshair-hovered menu item |
+| Auto-detection | Hotplug support via GLFW Gamepad + raw joystick APIs |
+| Deadzone | 0.2 with scaled response curve |
+
+### Graph Filtering
+
+| Shortcut | Action |
+|---|---|
+| `1`–`9` | Remove nodes with degree < N and re-layout |
+| `K` | Increment k-core threshold, remove nodes below it |
+| `J` | Color articulation points red, bridge endpoints orange |
+
 ## Features
 
 ### Graph I/O & Generation
@@ -118,9 +183,6 @@ Layouts run on a background thread with real-time snapshot polling for interacti
 - **Info cards**: Side-by-side key-value panels for global network property display
 - **HUD overlay**: Node/edge count, degree filter, k-core filter, FPS, job progress, menu state
 - **Crosshair**: Screen-center reticle for immersive menu interaction
-- **Mouse**: WASD + mouse-look camera, left-click ray-picking (nodes/edges/menu items)
-- **Keyboard shortcuts**: N/E/H toggle nodes/edges/HUD, M cycles edge routing, 1-9 degree filter, K k-core filter, J highlight infrastructure (articulation points + bridges), R reset, +/- scale, Alt+Enter fullscreen, Alt+Left/Right multi-monitor
-- **Gamepad**: Left-stick movement, right-stick look, Start toggles menu, A activates selection. Auto-detection + hotplug. SDL-compatible controller DB. Deadzone 0.2 with scaled response.
 - **Ray picking**: Sphere intersection (nodes), segment distance (edges), quad intersection (menu billboards)
 
 ### VR / XR (OpenXR)
@@ -131,14 +193,6 @@ Layouts run on a background thread with real-time snapshot polling for interacti
 - Multi-view rendering (up to 3 views)
 - VR-aware menu spawning (relative to headset pose)
 - Depth buffers per XR view
-
-### Graph Filtering
-
-| Shortcut | Action |
-|---|---|
-| `1`–`9` | Minimum degree filter |
-| `K` | Cycle k-core threshold filter |
-| `J` | Highlight infrastructure (articulation points in red, bridge endpoints in orange) |
 
 ### Background Worker Thread
 
