@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 igraph-vlk team
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 #include "graph/wrappers_centrality.h"
 #include "app_state.h"
 #include "interaction/state.h"
