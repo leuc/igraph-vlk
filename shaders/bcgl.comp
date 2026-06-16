@@ -44,9 +44,13 @@ void main() {
     vec3 pos_u = nodes[u].pos;
     vec3 grad = vec3(0.0);
 
+
+// ==========================================
+    // Phase 1: N-Body Repulsion
     // ==========================================
-    // Phase 1: N-Body Repulsion (Assume all nodes are y=0)
-    // ==========================================
+    // Scale global repulsion to balance against local edge attraction
+    float rep_scale = 10.0 / max(1.0, float(pcs.vertexCount));
+
     for (uint v = 0; v < pcs.vertexCount; v++) {
         if (u == v) continue;
         
@@ -61,16 +65,17 @@ void main() {
         }
 
         float dist_sq = dist * dist;
-        float p_val = 1.0 / (1.0 + dist_sq / pcs.b); // Student t-distribution
+        float p_val = 1.0 / (1.0 + dist_sq / pcs.b);
         
-		// Repulsive force for non-edges (minimizing -log(1-p))
-		float rep_force = - (1.0 - p_val) / dist;
-		float density_scale = max(1.0, float(pcs.vertexCount) / 1000.0);
-		grad += (pcs.lambda_bc * rep_force * (delta / dist)) / density_scale;
+        // FIX 1: Correct derivative for repulsion (-p / dist)
+        float rep_force = -p_val / dist;
+        
+        // FIX 2: Apply a consistent repulsion scale
+        grad += (pcs.lambda_bc * rep_scale * rep_force) * (delta / dist);
     }
 
     // ==========================================
-    // Phase 2: Edge Correction (y=1)
+    // Phase 2: Edge Correction
     // ==========================================
     TopoNode t_node = topo_nodes[u];
     for (uint i = 0; i < t_node.out_degree; i++) {
@@ -84,15 +89,15 @@ void main() {
         float dist_sq = dist * dist;
         float p_val = 1.0 / (1.0 + dist_sq / pcs.b);
         
-        // 2a. Subtract the incorrect repulsive force added in Phase 1
-        float rep_force = - (1.0 - p_val) / dist;
-        grad -= pcs.lambda_bc * rep_force * (delta / dist);
+        // 2a. Subtract Phase 1's repulsion (FIX 2: Ensure exact same scale is used)
+        float rep_force = -p_val / dist;
+        grad -= (pcs.lambda_bc * rep_scale * rep_force) * (delta / dist);
 
-        // 2b. Add the correct attractive force (minimizing -log p)
+        // 2b. Add the correct attractive force (derivative of -log p)
         float attr_force = p_val * dist;
         
-        // 2c. Add the length regularization penalty (pulls toward length=1)
-        attr_force += pcs.lambda_length * (dist - 1.0) / max(1.0, float(pcs.edgeCount));
+        // 2c. Length regularization penalty (FIX 3: Do not divide by edgeCount)
+        attr_force += pcs.lambda_length * (dist - 1.0);
         
         grad += pcs.lambda_bc * attr_force * (delta / dist);
     }
