@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 igraph-vlk team
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 #include "vulkan/pipeline_graphics.h"
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_geometry.h"

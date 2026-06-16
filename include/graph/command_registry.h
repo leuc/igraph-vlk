@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 igraph-vlk team
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 #ifndef COMMAND_REGISTRY_H
 #define COMMAND_REGISTRY_H
 #include "interaction/state.h"

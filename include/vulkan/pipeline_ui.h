@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 igraph-vlk team
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 #ifndef PIPELINE_UI_H
 #define PIPELINE_UI_H
 
