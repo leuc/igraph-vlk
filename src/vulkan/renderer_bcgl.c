@@ -12,9 +12,9 @@
 // ============================================================================
 static const BCGLPushConstants BCGL_DEFAULTS = {
 	.lambda_bc = 1.0f,
-	.lambda_compact = 1.0f,
+	.lambda_compact = 0.01f,
 	.lambda_length = 0.01f,
-	.learning_rate = 0.05f,
+	.learning_rate = 0.01f,
 	.momentum = 0.9f,
 	.b = 1.0f,
 };

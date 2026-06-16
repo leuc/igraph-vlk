@@ -119,7 +119,6 @@ Mimic existing patterns strictly. Run `clang-format` after edits.
 
 ### Comments
 - Inline: `// comment`.
-- Sections: `// ============================================================================`.
 - Todos: `// TODO: desc` (sparse).
 
 ### Includes

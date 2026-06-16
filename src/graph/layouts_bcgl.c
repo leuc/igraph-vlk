@@ -106,10 +106,6 @@ void apply_layout_bcgl(ExecutionContext *ctx, void *result_data)
 	renderer_init_bcgl_buffers(renderer, data);
 
 	uint32_t total_iterations = 500;
-	//if (data->node_count > 50000)
-	//	total_iterations = 20;
-	//else if (data->node_count > 10000)
-	//	total_iterations = 50;
 
 	// Break the execution into 10 chunks for debugging
 	uint32_t chunks = 10;

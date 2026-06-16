@@ -30,7 +30,7 @@ struct TopoNode {
 
 struct TopoEdge {
     uint target_node;
-    uint pad; 
+    uint pad;
 };
 
 layout(std430, binding = 0) buffer NodeBuffer { BCGLNode nodes[]; };
@@ -45,19 +45,17 @@ void main() {
     vec3 grad = vec3(0.0);
 
 
-// ==========================================
     // Phase 1: N-Body Repulsion
-    // ==========================================
     // Scale global repulsion to balance against local edge attraction
     float rep_scale = 10.0 / max(1.0, float(pcs.vertexCount));
 
     for (uint v = 0; v < pcs.vertexCount; v++) {
         if (u == v) continue;
-        
+
         vec3 pos_v = nodes[v].pos;
         vec3 delta = pos_u - pos_v;
         float dist = length(delta);
-        
+
         // Anti-singularity jitter
         if (dist < 1e-4) {
             delta = vec3(0.001 * float(u%3 - 1), 0.001 * float(v%3 - 1), 0.001);
@@ -66,21 +64,19 @@ void main() {
 
         float dist_sq = dist * dist;
         float p_val = 1.0 / (1.0 + dist_sq / pcs.b);
-        
+
         // FIX 1: Correct derivative for repulsion (-p / dist)
         float rep_force = -p_val / dist;
-        
+
         // FIX 2: Apply a consistent repulsion scale
         grad += (pcs.lambda_bc * rep_scale * rep_force) * (delta / dist);
     }
 
-    // ==========================================
     // Phase 2: Edge Correction
-    // ==========================================
     TopoNode t_node = topo_nodes[u];
     for (uint i = 0; i < t_node.out_degree; i++) {
         uint v = topo_edges[t_node.edge_offset + i].target_node;
-        
+
         vec3 pos_v = nodes[v].pos;
         vec3 delta = pos_u - pos_v;
         float dist = length(delta);
@@ -88,35 +84,26 @@ void main() {
 
         float dist_sq = dist * dist;
         float p_val = 1.0 / (1.0 + dist_sq / pcs.b);
-        
+
         // 2a. Subtract Phase 1's repulsion (FIX 2: Ensure exact same scale is used)
         float rep_force = -p_val / dist;
         grad -= (pcs.lambda_bc * rep_scale * rep_force) * (delta / dist);
 
         // 2b. Add the correct attractive force (derivative of -log p)
         float attr_force = p_val * dist;
-        
+
         // 2c. Length regularization penalty (FIX 3: Do not divide by edgeCount)
         attr_force += pcs.lambda_length * (dist - 1.0);
-        
+
         grad += pcs.lambda_bc * attr_force * (delta / dist);
     }
 
-    // ==========================================
     // Phase 3: Compactness & SGD Momentum
-    // ==========================================
     // Pull slightly toward origin
     grad += pcs.lambda_compact * pos_u / float(pcs.vertexCount);
 
 	vec3 vel = nodes[u].velocity;
 	vel = pcs.momentum * vel - pcs.learning_rate * grad;
-
-	// Gradient clipping to prevent NaN on massive dense graphs
-	float speed = length(vel);
-	float max_speed = 10.0;
-	if (speed > max_speed) {
-		vel = (vel / speed) * max_speed;
-	}
 
 	// Write back
 	nodes[u].velocity = vel;
