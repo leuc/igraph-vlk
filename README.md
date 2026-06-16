@@ -4,6 +4,19 @@
 
 Interactive graph visualization with 30+ layout algorithms, 12 community detection methods, 10 centrality measures, real-time GPU-accelerated animations, VR support, and a 3D spherical menu system.
 
+## EXPERIMENTAL
+
+Development is still very fluid and experimental.
+The goal is a desktop app for exploring very large graphs.
+
+The "hard" C and Vulkan code is written with AI support.
+Be aware that the AI may have introduced errors.
+
+Efforts are made to:
+- Keep code structured and maintainable for humans
+- Cross-check implementations with reference code and papers
+- Test, compare and validate results
+
 ## Index
 
 - [Usage](#usage)
