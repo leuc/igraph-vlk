@@ -17,6 +17,57 @@
 #include <stdlib.h>
 
 // ============================================================================
+// CENTER LAYOUT + AUTO-SCALE (no rotation)
+// ============================================================================
+void layout_center_and_autoscale(igraph_matrix_t *mat)
+{
+	igraph_integer_t n = igraph_matrix_nrow(mat);
+	igraph_integer_t dim = igraph_matrix_ncol(mat);
+	if (n == 0 || dim < 2)
+		return;
+
+	double mean_x = 0.0, mean_y = 0.0, mean_z = 0.0;
+	for (igraph_integer_t i = 0; i < n; i++) {
+		mean_x += MATRIX(*mat, i, 0);
+		mean_y += MATRIX(*mat, i, 1);
+		if (dim > 2)
+			mean_z += MATRIX(*mat, i, 2);
+	}
+	mean_x /= n;
+	mean_y /= n;
+	if (dim > 2)
+		mean_z /= n;
+
+	double max_radius_sq = 0.0;
+	for (igraph_integer_t i = 0; i < n; i++) {
+		double x = MATRIX(*mat, i, 0) - mean_x;
+		double y = MATRIX(*mat, i, 1) - mean_y;
+		double z = (dim > 2) ? (MATRIX(*mat, i, 2) - mean_z) : 0.0;
+		MATRIX(*mat, i, 0) = x;
+		MATRIX(*mat, i, 1) = y;
+		if (dim > 2)
+			MATRIX(*mat, i, 2) = z;
+		double r2 = x * x + y * y + z * z;
+		if (r2 > max_radius_sq)
+			max_radius_sq = r2;
+	}
+
+	double max_radius = sqrt(max_radius_sq);
+	if (max_radius < 1e-12)
+		return;
+
+	double target_radius = 3.0 * pow((double)n, 1.0 / 3.0);
+	double scale = target_radius / max_radius;
+
+	for (igraph_integer_t i = 0; i < n; i++) {
+		MATRIX(*mat, i, 0) *= scale;
+		MATRIX(*mat, i, 1) *= scale;
+		if (dim > 2)
+			MATRIX(*mat, i, 2) *= scale;
+	}
+}
+
+// ============================================================================
 // FREE LAYOUT DATA
 // ============================================================================
 void free_layout_matrix(void *result_data)
@@ -55,7 +106,7 @@ void apply_layout_matrix(ExecutionContext *ctx, void *result_data)
 	igraph_matrix_destroy(&data->current_layout);
 	igraph_matrix_init_copy(&data->current_layout, layout);
 
-	igraph_layout_align(&data->g, &data->current_layout);
+	layout_center_and_autoscale(&data->current_layout);
 
 	if (data->nodes) {
 		for (igraph_integer_t i = 0; i < data->node_count; i++) {
