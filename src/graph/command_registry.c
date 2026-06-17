@@ -111,6 +111,12 @@ const CommandDef g_command_registry[] = {
 	{"Layout/Dimension Reduction ", "igraph_layout_bhtsne_3d", "t-SNE (Barnes-Hut) (3D)", compute_igraph_layout_bhtsne_3d, apply_layout_matrix, free_layout_matrix},
 
 	// =========================================================================
+	// Layout menu - Binary Classification (BCGL)
+	// =========================================================================
+	{"Layout/Binary Classification", "igraph_layout_bcgl", "BCGL-t (2D)", compute_igraph_layout_bcgl, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Binary Classification", "igraph_layout_bcgl_3d", "BCGL-t (3D)", compute_igraph_layout_bcgl_3d, apply_layout_matrix, free_layout_matrix},
+
+	// =========================================================================
 	// Analysis menu - Centrality & Roles
 	// =========================================================================
 	{"Analysis/Centrality", "igraph_degree", "Degree", compute_igraph_degree, apply_centrality_scores, centrality_scores_free},

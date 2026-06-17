@@ -26,6 +26,10 @@ void *compute_igraph_layout_yifan_hu(igraph_t *graph);
 void *compute_igraph_layout_yifan_hu_3d(igraph_t *graph);
 void *compute_igraph_layout_lgl(igraph_t *graph);
 
+// Binary classification-based graph layouts (BCGL)
+void *compute_igraph_layout_bcgl(igraph_t *graph);
+void *compute_igraph_layout_bcgl_3d(igraph_t *graph);
+
 // Tree layouts
 void *compute_igraph_layout_reingold_tilford(igraph_t *graph);
 void *compute_igraph_layout_sugiyama(igraph_t *graph);
@@ -55,6 +59,9 @@ void *compute_igraph_layout_bhtsne(igraph_t *graph);
 
 // Community-based layouts
 void *compute_layout_layered_sphere(igraph_t *graph);
+
+// Layout post-processing: center at origin + auto-scale (no rotation)
+void layout_center_and_autoscale(igraph_matrix_t *mat);
 
 // Standard apply and free functions
 void free_layout_matrix(void *result_data);
