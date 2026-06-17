@@ -221,7 +221,7 @@ void renderer_create_bcgl_compute_pipeline(Renderer *r)
 	// Command pool + buffer + fence
 	VkCommandPoolCreateInfo cmdPoolInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-		.queueFamilyIndex = 0,
+		.queueFamilyIndex = r->core.graphicsQueueFamily,
 		.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
 	};
 	VK_CHECK(vkCreateCommandPool(r->core.device, &cmdPoolInfo, NULL, &ctx->cmd_pool), "Failed to create BCGL command pool");
