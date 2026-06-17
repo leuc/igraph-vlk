@@ -45,7 +45,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->xrDepthImageViews = NULL;
 	r->renderPassXR = VK_NULL_HANDLE;
 	r->xrFormat = VK_FORMAT_UNDEFINED;
-	r->currentRoutingMode = ROUTING_MODE_SPHERICAL_PCB;
+	r->currentRoutingMode = ROUTING_MODE_STRAIGHT;
 	glfwSetWindowTitle(window, "igraph-vlk");
 
 	vulkan_device_create(&r->core, window, xr);
