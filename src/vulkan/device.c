@@ -49,7 +49,7 @@ static int rate_device_suitability(VkPhysicalDevice device)
 
 static VkQueueFamilyInfo find_queue_families(VkPhysicalDevice device, VkSurfaceKHR surface)
 {
-	VkQueueFamilyInfo info = {.graphicsFamily = -1, .presentFamily = -1};
+	VkQueueFamilyInfo info = {.graphicsFamily = -1, .presentFamily = -1, .computeFamily = -1};
 
 	uint32_t queueFamilyCount = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, NULL);
@@ -61,12 +61,20 @@ static VkQueueFamilyInfo find_queue_families(VkPhysicalDevice device, VkSurfaceK
 		if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
 			info.graphicsFamily = i;
 
+		// Prefer a dedicated compute family (compute without graphics)
+		if ((queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT) && !(queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && info.computeFamily == -1)
+			info.computeFamily = i;
+
+		// Fallback: any family with compute bit
+		if (info.computeFamily == -1 && (queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT))
+			info.computeFamily = i;
+
 		VkBool32 presentSupport = false;
 		VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport), "Failed to query physical device surface support");
 		if (presentSupport)
 			info.presentFamily = i;
 
-		if (info.graphicsFamily != -1 && info.presentFamily != -1)
+		if (info.graphicsFamily != -1 && info.presentFamily != -1 && info.computeFamily != -1)
 			break;
 	}
 	free(queueFamilies);
@@ -242,13 +250,17 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 
 	core->graphicsQueueFamily = queueFamilyInfo.graphicsFamily;
 	core->presentQueueFamily = queueFamilyInfo.presentFamily;
+	core->computeQueueFamily = queueFamilyInfo.computeFamily;
 
 	float queuePriority = 1.0f;
-	VkDeviceQueueCreateInfo queueCreateInfos[2];
+	VkDeviceQueueCreateInfo queueCreateInfos[3];
 	uint32_t queueCreateInfoCount = 0;
 	queueCreateInfos[queueCreateInfoCount++] = (VkDeviceQueueCreateInfo){.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = queueFamilyInfo.graphicsFamily, .queueCount = 1, .pQueuePriorities = &queuePriority};
 	if (queueFamilyInfo.graphicsFamily != queueFamilyInfo.presentFamily) {
 		queueCreateInfos[queueCreateInfoCount++] = (VkDeviceQueueCreateInfo){.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = queueFamilyInfo.presentFamily, .queueCount = 1, .pQueuePriorities = &queuePriority};
+	}
+	if (queueFamilyInfo.computeFamily != queueFamilyInfo.graphicsFamily && queueFamilyInfo.computeFamily != queueFamilyInfo.presentFamily) {
+		queueCreateInfos[queueCreateInfoCount++] = (VkDeviceQueueCreateInfo){.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = queueFamilyInfo.computeFamily, .queueCount = 1, .pQueuePriorities = &queuePriority};
 	}
 
 	const char *deviceExtensions[64];
@@ -296,6 +308,13 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 
 	vkGetDeviceQueue(core->device, queueFamilyInfo.graphicsFamily, 0, &core->graphicsQueue);
 	vkGetDeviceQueue(core->device, queueFamilyInfo.presentFamily, 0, &core->presentQueue);
+
+	// Compute queue: use dedicated compute family if available, otherwise fallback to graphics
+	if (queueFamilyInfo.computeFamily >= 0) {
+		vkGetDeviceQueue(core->device, queueFamilyInfo.computeFamily, 0, &core->computeQueue);
+	} else {
+		core->computeQueue = core->graphicsQueue;
+	}
 
 	vkGetPhysicalDeviceProperties(core->physicalDevice, &core->deviceProperties);
 }

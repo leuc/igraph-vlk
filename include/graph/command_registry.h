@@ -20,6 +20,9 @@ typedef void (*IgraphApplyFunc)(ExecutionContext *ctx, void *result_data);
 // 3. Cleanup function to free the result_data
 typedef void (*IgraphFreeFunc)(void *result_data);
 
+// 4. Per-frame GPU poll function. Returns true when GPU work is complete.
+typedef bool (*IgraphGpuPollFunc)(ExecutionContext *ctx);
+
 typedef struct CommandDef
 {
 	const char *category_path; // e.g. "Layout/Force-Directed"
@@ -28,6 +31,7 @@ typedef struct CommandDef
 	IgraphWorkerFunc worker_func;
 	IgraphApplyFunc apply_func;
 	IgraphFreeFunc free_func;
+	IgraphGpuPollFunc gpu_poll_func; // NULL = CPU-only, non-NULL = GPU job
 } CommandDef;
 
 extern const CommandDef g_command_registry[];

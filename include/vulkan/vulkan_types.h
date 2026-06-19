@@ -91,12 +91,15 @@ typedef struct
 	VkCommandPool cmd_pool;
 	VkCommandBuffer cmd_buf;
 	bool active;
+	uint32_t iterations_dispatched;
+	uint32_t total_iterations;
 } BCGLComputeContext;
 
 typedef struct
 {
 	int graphicsFamily;
 	int presentFamily;
+	int computeFamily;
 } VkQueueFamilyInfo;
 
 // --- GEOMETRY TYPES ---
@@ -221,9 +224,11 @@ typedef struct
 	VkDevice device;
 	VkQueue graphicsQueue;
 	VkQueue presentQueue;
+	VkQueue computeQueue;
 	VkSurfaceKHR surface;
 	int graphicsQueueFamily;
 	int presentQueueFamily;
+	int computeQueueFamily;
 	VkPhysicalDeviceProperties deviceProperties;
 } VulkanCore;
 

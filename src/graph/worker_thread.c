@@ -246,6 +246,7 @@ WorkerJob *worker_thread_submit_job(WorkerThreadContext *context, CommandDef *cm
 	job->worker_func = cmd->worker_func;
 	job->apply_func = cmd->apply_func;
 	job->free_func = cmd->free_func;
+	job->gpu_poll_func = cmd->gpu_poll_func;
 
 	if (pthread_mutex_init(&job->mutex, NULL) != 0) {
 		free(ctx_copy);

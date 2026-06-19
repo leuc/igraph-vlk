@@ -16,10 +16,17 @@ void renderer_create_bcgl_compute_pipeline(Renderer *r);
 void renderer_init_bcgl_buffers(Renderer *r, GraphData *graph);
 
 /**
- * Dispatch the BCGL layout optimization on the GPU.
- * Runs `iterations` SGD steps, blocking until complete.
+ * Dispatch a chunk of BCGL layout iterations on the GPU (non-blocking).
+ * Records and submits the command buffer, returns immediately.
+ * Caller must check the fence before dispatching another chunk.
  */
-void renderer_dispatch_bcgl_layout(Renderer *r, GraphData *graph, uint32_t iterations);
+void renderer_dispatch_bcgl_chunk(Renderer *r, GraphData *graph, uint32_t iterations);
+
+/**
+ * Check if the most recent BCGL dispatch chunk has completed (non-blocking).
+ * Returns VK_SUCCESS if complete, VK_NOT_READY if still in flight.
+ */
+VkResult renderer_bcgl_fence_status(Renderer *r);
 
 /**
  * Read back BCGL node positions from GPU and write to graph->nodes[].position.

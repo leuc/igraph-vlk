@@ -63,8 +63,9 @@ void *compute_layout_bcgl(igraph_t *graph);
 void free_layout_matrix(void *result_data);
 void apply_layout_matrix(ExecutionContext *ctx, void *result_data);
 
-// BCGL apply and free
+// BCGL apply, free, and GPU poll
 void apply_layout_bcgl(ExecutionContext *ctx, void *result_data);
 void free_layout_bcgl(void *result_data);
+bool poll_bcgl_gpu(ExecutionContext *ctx);
 
 #endif // GRAPH_WRAPPERS_LAYOUT_H

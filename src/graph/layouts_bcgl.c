@@ -9,6 +9,9 @@
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_bcgl.h"
 
+#define BCGL_TOTAL_ITERATIONS 500
+#define BCGL_CHUNK_SIZE 5
+
 // ============================================================================
 // Worker: Seed random 3D layout for BCGL starting positions
 // ============================================================================
@@ -77,7 +80,7 @@ static void debug_print_bcgl_stats(Renderer *r, uint32_t current_iter, uint32_t 
 }
 
 // ============================================================================
-// Apply: Push seed into graph, init GPU buffers, run optimization, readback
+// Apply: One-shot fast setup — seed positions + init GPU buffers
 // ============================================================================
 void apply_layout_bcgl(ExecutionContext *ctx, void *result_data)
 {
@@ -102,39 +105,58 @@ void apply_layout_bcgl(ExecutionContext *ctx, void *result_data)
 		}
 	}
 
-	// Init BCGL GPU buffers and run the optimization
+	// Init BCGL GPU buffers (fast, non-blocking)
 	renderer_init_bcgl_buffers(renderer, data);
 
-	uint32_t total_iterations = 500;
+	// Set iteration counters for the per-frame poll loop
+	renderer->bcgl_ctx.total_iterations = BCGL_TOTAL_ITERATIONS;
+	renderer->bcgl_ctx.iterations_dispatched = 0;
 
-	// Break the execution into 10 chunks for debugging
-	uint32_t chunks = 10;
-	uint32_t iter_per_chunk = total_iterations / chunks;
+	printf("--- Starting BCGL GPU Optimization (%u iterations) ---\n", BCGL_TOTAL_ITERATIONS);
+}
 
-	printf("--- Starting BCGL GPU Optimization ---\n");
-	for (uint32_t i = 0; i < chunks; i++) {
-		renderer_dispatch_bcgl_layout(renderer, data, iter_per_chunk);
+// ============================================================================
+// GPU Poll: Per-frame chunked dispatch — returns true when complete
+// ============================================================================
+bool poll_bcgl_gpu(ExecutionContext *ctx)
+{
+	if (!ctx || !ctx->app_state)
+		return true;
 
-		uint32_t current_iter = (i + 1) * iter_per_chunk;
-		debug_print_bcgl_stats(renderer, current_iter, total_iterations);
-	}
-	printf("--- Optimization Complete ---\n");
+	AppState *state = ctx->app_state;
+	Renderer *renderer = &state->renderer;
+	GraphData *data = &state->current_graph;
+	BCGLComputeContext *bcgl = &renderer->bcgl_ctx;
 
-	renderer_readback_bcgl_positions(renderer, data);
-
-	// Sync positions to the layout matrix so standard apply path works
-	igraph_matrix_destroy(layout);
-	igraph_matrix_init(layout, data->node_count, 3);
-	for (igraph_integer_t i = 0; i < data->node_count; i++) {
-		MATRIX(*layout, i, 0) = (igraph_real_t)data->nodes[i].position[0];
-		MATRIX(*layout, i, 1) = (igraph_real_t)data->nodes[i].position[1];
-		MATRIX(*layout, i, 2) = (igraph_real_t)data->nodes[i].position[2];
+	if (!bcgl->active) {
+		return true;
 	}
 
-	renderer_update_graph(renderer, data);
-	renderer->labelTreeNeedsRebuild = true;
+	// Check if prior chunk is still in flight
+	VkResult fenceStatus = renderer_bcgl_fence_status(renderer);
+	if (fenceStatus == VK_NOT_READY)
+		return false;
 
-	printf("BCGL layout applied (%u vertices, %u edges)\n", data->node_count, data->edge_count);
+	// Prior chunk done — upload positions to renderer so changes are visible
+	if (bcgl->iterations_dispatched > 0) {
+		debug_print_bcgl_stats(renderer, bcgl->iterations_dispatched, bcgl->total_iterations);
+		renderer_readback_bcgl_positions(renderer, data);
+		renderer_update_graph(renderer, data);
+		renderer->labelTreeNeedsRebuild = true;
+	}
+
+	// Dispatch next chunk or finish
+	if (bcgl->iterations_dispatched < bcgl->total_iterations) {
+		uint32_t remaining = bcgl->total_iterations - bcgl->iterations_dispatched;
+		uint32_t chunk = remaining < BCGL_CHUNK_SIZE ? remaining : BCGL_CHUNK_SIZE;
+
+		renderer_dispatch_bcgl_chunk(renderer, data, chunk);
+		bcgl->iterations_dispatched += chunk;
+		return false;
+	}
+
+	// All iterations complete
+	return true;
 }
 
 // ============================================================================

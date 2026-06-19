@@ -218,10 +218,10 @@ void renderer_create_bcgl_compute_pipeline(Renderer *r)
 	};
 	VK_CHECK(vkAllocateDescriptorSets(r->core.device, &setInfo, &ctx->desc_set), "Failed to allocate BCGL descriptor set");
 
-	// Command pool + buffer + fence
+	// Command pool + buffer + fence — uses compute queue family
 	VkCommandPoolCreateInfo cmdPoolInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-		.queueFamilyIndex = r->core.graphicsQueueFamily,
+		.queueFamilyIndex = r->core.computeQueueFamily,
 		.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
 	};
 	VK_CHECK(vkCreateCommandPool(r->core.device, &cmdPoolInfo, NULL, &ctx->cmd_pool), "Failed to create BCGL command pool");
@@ -273,12 +273,14 @@ void renderer_init_bcgl_buffers(Renderer *r, GraphData *graph)
 	free(topo_edges);
 
 	ctx->active = true;
+	ctx->iterations_dispatched = 0;
+	ctx->total_iterations = 0;
 }
 
 // ============================================================================
-// PUBLIC: Dispatch BCGL layout optimization
+// PUBLIC: Dispatch a chunk of BCGL iterations (non-blocking)
 // ============================================================================
-void renderer_dispatch_bcgl_layout(Renderer *r, GraphData *graph, uint32_t iterations)
+void renderer_dispatch_bcgl_chunk(Renderer *r, GraphData *graph, uint32_t iterations)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
 	if (!ctx->active || !ctx->pipeline)
@@ -288,9 +290,9 @@ void renderer_dispatch_bcgl_layout(Renderer *r, GraphData *graph, uint32_t itera
 	if (n == 0)
 		return;
 
-	// Wait for any prior work
+	// Caller must ensure prior fence is signaled before calling this.
+	// Reset the fence for this chunk's submission.
 	if (ctx->fence != VK_NULL_HANDLE) {
-		vkWaitForFences(r->core.device, 1, &ctx->fence, VK_TRUE, UINT64_MAX);
 		vkResetFences(r->core.device, 1, &ctx->fence);
 	}
 
@@ -331,14 +333,24 @@ void renderer_dispatch_bcgl_layout(Renderer *r, GraphData *graph, uint32_t itera
 
 	VK_CHECK(vkEndCommandBuffer(ctx->cmd_buf), "Failed to end BCGL command buffer");
 
-	// Submit and wait
+	// Submit — do NOT wait for the fence here
 	VkSubmitInfo submitInfo = {
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 		.commandBufferCount = 1,
 		.pCommandBuffers = &ctx->cmd_buf,
 	};
-	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submitInfo, ctx->fence), "Failed to submit BCGL command buffer");
-	VK_CHECK(vkWaitForFences(r->core.device, 1, &ctx->fence, VK_TRUE, UINT64_MAX), "Failed to wait for BCGL fence");
+	VK_CHECK(vkQueueSubmit(r->core.computeQueue, 1, &submitInfo, ctx->fence), "Failed to submit BCGL command buffer");
+}
+
+// ============================================================================
+// PUBLIC: Check if the most recent BCGL dispatch has completed (non-blocking)
+// ============================================================================
+VkResult renderer_bcgl_fence_status(Renderer *r)
+{
+	BCGLComputeContext *ctx = &r->bcgl_ctx;
+	if (ctx->fence == VK_NULL_HANDLE)
+		return VK_SUCCESS;
+	return vkGetFenceStatus(r->core.device, ctx->fence);
 }
 
 // ============================================================================

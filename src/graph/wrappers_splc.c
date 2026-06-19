@@ -140,3 +140,22 @@ void apply_splc_animation(ExecutionContext *ctx, void *result_data)
 	igraph_vector_int_destroy(&indeg);
 	igraph_vector_int_destroy(&outdeg);
 }
+
+// ============================================================================
+// GPU Poll: Per-frame lifecycle — returns true when SPLC animation is complete
+// ============================================================================
+bool poll_splc_gpu(ExecutionContext *ctx)
+{
+	if (!ctx || !ctx->app_state)
+		return true;
+
+	Renderer *r = &ctx->app_state->renderer;
+
+	// SPLC per-frame dispatch happens in renderer_draw_frame.
+	// This poll manages the lifecycle: once splc_active goes false (all levels
+	// dispatched and readback done), the job is complete.
+	if (!r->splc_active && !r->splc_readback_pending)
+		return true;
+
+	return false;
+}

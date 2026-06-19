@@ -36,6 +36,7 @@ typedef struct
 	IgraphWorkerFunc worker_func;
 	IgraphApplyFunc apply_func;
 	IgraphFreeFunc free_func;
+	IgraphGpuPollFunc gpu_poll_func;
 
 	// Timing
 	struct timespec start_time; // set when job begins executing

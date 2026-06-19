@@ -69,6 +69,7 @@ typedef struct AppState
 	/* Job tracking */
 	WorkerJob *current_worker_job;
 	bool job_in_progress;
+	bool gpu_polling; // true while driving gpu_poll_func per frame
 	char job_status_message[256];
 	float job_progress;
 } AppState;

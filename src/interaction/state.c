@@ -147,63 +147,83 @@ void update_app_state(AppState *state)
 		break;
 
 	case STATE_JOB_IN_PROGRESS:
-		// Check job status and update progress
 		if (state->current_worker_job) {
+			// GPU polling phase: worker already completed, drive gpu_poll_func per frame
+			if (state->gpu_polling) {
+				WorkerJob *job = state->current_worker_job;
+				ExecutionContext ec = {0};
+				ec.app_state = state;
+				ec.current_graph = &state->current_graph.g;
+
+				bool done = job->gpu_poll_func(&ec);
+
+				if (done) {
+					// GPU work complete — finalize
+					if (job->free_func && job->result_data) {
+						job->free_func(job->result_data);
+					}
+					worker_job_free(&state->worker_ctx, job);
+					state->current_worker_job = NULL;
+					state->gpu_polling = false;
+					state->job_in_progress = false;
+
+					if (app->pending_command && app->pending_command->produces_visual_output) {
+						app->has_visual_results = true;
+						app->current_state = STATE_DISPLAY_RESULTS;
+					} else {
+						app->pending_command = NULL;
+						app->current_state = STATE_MENU_OPEN;
+					}
+				}
+				break;
+			}
+
+			// CPU polling phase: wait for worker thread to complete
 			WorkerJobStatus status = worker_thread_get_job_status(state->current_worker_job, &state->job_progress);
 
-			// Update status message from igraph handler
 			const char *job_msg = worker_thread_get_job_status_message(state->current_worker_job);
 			if (job_msg && job_msg[0]) {
 				snprintf(state->job_status_message, sizeof(state->job_status_message), "%s", job_msg);
 			}
 
 			if (status == JOB_STATUS_COMPLETED) {
-				printf("[State] Job completed successfully\n");
-
-				// Safely apply layout on main thread from worker's result
 				WorkerJob *job = state->current_worker_job;
-				if (job) {
-					// Apply dynamic result if available
+				if (job->gpu_poll_func) {
+					// GPU job: apply_func does one-shot setup, then enter GPU polling phase
 					if (job->apply_func && job->result_data) {
 						job->apply_func(job->ctx, job->result_data);
-						Renderer *r = &state->renderer;
-						r->labelTreeNeedsRebuild = true;
 					}
-
-					// Free dynamic result if available
+					state->gpu_polling = true;
+					// State stays STATE_JOB_IN_PROGRESS — gpu_poll_func drives completion
+				} else {
+					// CPU-only job: apply + free immediately
+					if (job->apply_func && job->result_data) {
+						job->apply_func(job->ctx, job->result_data);
+						state->renderer.labelTreeNeedsRebuild = true;
+					}
 					if (job->free_func && job->result_data) {
 						job->free_func(job->result_data);
 					}
-
 					worker_job_free(&state->worker_ctx, job);
-				}
+					state->current_worker_job = NULL;
+					state->job_in_progress = false;
 
-				state->job_in_progress = false;
-				state->current_worker_job = NULL;
-
-				// Check if this command produced visual results
-				if (app->pending_command && app->pending_command->produces_visual_output) {
-					app->has_visual_results = true;
-					app->current_state = STATE_DISPLAY_RESULTS;
-				} else {
-					// Reset after execution but keep menu open
-					app->pending_command = NULL;
-					app->current_state = STATE_MENU_OPEN;
+					if (app->pending_command && app->pending_command->produces_visual_output) {
+						app->has_visual_results = true;
+						app->current_state = STATE_DISPLAY_RESULTS;
+					} else {
+						app->pending_command = NULL;
+						app->current_state = STATE_MENU_OPEN;
+					}
 				}
 			} else if (status == JOB_STATUS_FAILED || status == JOB_STATUS_CANCELLED) {
 				printf("[State] Job failed or was cancelled\n");
-
-				WorkerJob *job = state->current_worker_job;
-				if (job) {
-					worker_job_free(&state->worker_ctx, job);
-				}
-
-				state->job_in_progress = false;
+				worker_job_free(&state->worker_ctx, state->current_worker_job);
 				state->current_worker_job = NULL;
+				state->job_in_progress = false;
 				app->pending_command = NULL;
 				app->current_state = STATE_MENU_OPEN;
 			}
-			// If still running, continue polling
 		}
 		break;
 
