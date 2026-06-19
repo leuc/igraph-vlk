@@ -81,7 +81,6 @@ const CommandDef g_command_registry[] = {
 
 	// Non-Igraph
 	{"Layout", "lay_layered_sphere", "Layered Sphere", compute_layout_layered_sphere, apply_layout_matrix, free_layout_matrix},
-	{"Layout", "lay_bcgl", "BCGL-t (Binary Classification)", compute_layout_bcgl, apply_layout_bcgl, free_layout_bcgl, poll_bcgl_gpu},
 	// =========================================================================
 	// Layout menu - Geometric
 	// =========================================================================
@@ -116,6 +115,7 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	{"Layout/Binary Classification", "igraph_layout_bcgl", "BCGL-t (2D)", compute_igraph_layout_bcgl, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Binary Classification", "igraph_layout_bcgl_3d", "BCGL-t (3D)", compute_igraph_layout_bcgl_3d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Binary Classification", "lay_bcgl", "BCGL-t (3D GPU Compute)", compute_layout_bcgl, apply_layout_bcgl, free_layout_bcgl, poll_bcgl_gpu},
 
 	// =========================================================================
 	// Analysis menu - Centrality & Roles

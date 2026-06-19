@@ -122,10 +122,11 @@ add_executable(igraph-vlk
      src/graph/layouts_graphopt.c
      src/graph/layouts_gem.c
      src/graph/layouts_yifan_hu.c
-     src/graph/layouts_forceatlas2.c
-      src/graph/layouts_tsne.c
-      src/graph/layouts_bcgl.c
-      src/graph/layouts_apply.c
+      src/graph/layouts_forceatlas2.c
+       src/graph/layouts_tsne.c
+       src/graph/layouts_vk_bcgl.c
+       src/graph/layouts_bcgl.c
+       src/graph/layouts_apply.c
      src/graph/wrappers_community.c
      src/graph/wrappers_centrality.c
 src/graph/wrappers_constructors.c
