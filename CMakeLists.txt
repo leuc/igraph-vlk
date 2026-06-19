@@ -52,7 +52,7 @@ find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
 	    shaders/textquad.frag
 	    shaders/routing.comp
 	    shaders/splc.comp
-    shaders/bcgl.comp
+            shaders/bcgl.comp
 	    shaders/ray.vert
 	    shaders/ray.frag
 	)
@@ -123,9 +123,9 @@ add_executable(igraph-vlk
      src/graph/layouts_gem.c
      src/graph/layouts_yifan_hu.c
      src/graph/layouts_forceatlas2.c
-       src/graph/layouts_tsne.c
-       src/graph/layouts_vk_bcgl.c
-       src/graph/layouts_apply.c
+      src/graph/layouts_tsne.c
+      src/graph/layouts_bcgl.c
+      src/graph/layouts_apply.c
      src/graph/wrappers_community.c
      src/graph/wrappers_centrality.c
 src/graph/wrappers_constructors.c

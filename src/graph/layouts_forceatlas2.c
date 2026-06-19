@@ -96,11 +96,5 @@ void *compute_igraph_layout_forceatlas2_3d(igraph_t *graph)
 		return NULL;
 	}
 
-	/*
-	 * igraph_layout_align() centers and optionally scales the layout
-	 * @param graph   The graph (used for vertex count)
-	 * @param layout  Layout matrix to align
-	 */
-	igraph_layout_align(graph, result);
 	return result;
 }
