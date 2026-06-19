@@ -57,11 +57,11 @@ void cleanup_geometry_buffers(Renderer *r)
 
 void cleanup_menu_label_atlases(Renderer *r)
 {
-	VK_DESTROY_BUFFER(r->core.device, r->menuQuadVertexBuffer, r->menuQuadVertexBufferMemory);
-	VK_DESTROY_BUFFER(r->core.device, r->menuQuadIndexBuffer, r->menuQuadIndexBufferMemory);
-	VK_DESTROY_BUFFER(r->core.device, r->menuInstanceBuffer, r->menuInstanceBufferMemory);
-	VK_DESTROY_BUFFER(r->core.device, r->textQuadInstanceBuffer, r->textQuadInstanceBufferMemory);
-	text_atlas_destroy(&r->menuTextAtlas, r->core.device);
+	VK_DESTROY_BUFFER(r->core.device, r->menu.quad_vertex, r->menu.quad_vertex_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->menu.quad_index, r->menu.quad_index_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->menu.instance, r->menu.instance_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->menu.text_quad_instance, r->menu.text_quad_instance_memory);
+	text_atlas_destroy(&r->menu.text_atlas, r->core.device);
 	text_atlas_destroy(&r->nodeTextAtlas, r->core.device);
 	text_atlas_destroy(&r->detailCardAtlas, r->core.device);
 	igraph_bh_tree_destroy(&r->labelTree);

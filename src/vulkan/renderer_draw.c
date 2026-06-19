@@ -59,10 +59,10 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	if (r->nodeLabelInstanceCount > 0 && r->nodeLabelInstanceBuffer != VK_NULL_HANDLE) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.label);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.node_label_sets[ubo_idx], 0, NULL);
-		VkBuffer nVs[] = {r->menuQuadVertexBuffer, r->nodeLabelInstanceBuffer};
+		VkBuffer nVs[] = {r->menu.quad_vertex, r->nodeLabelInstanceBuffer};
 		VkDeviceSize nOs[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, nVs, nOs);
-		vkCmdBindIndexBuffer(cmd, r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdBindIndexBuffer(cmd, r->menu.quad_index, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdDrawIndexed(cmd, 6, r->nodeLabelInstanceCount, 0, 0, 0);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.sets[ubo_idx], 0, NULL);
 	}
@@ -70,29 +70,29 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	if (r->detailCardVisible && r->detailCardInstanceBuffer != VK_NULL_HANDLE) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.label);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.detail_card_sets[ubo_idx], 0, NULL);
-		VkBuffer dVs[] = {r->menuQuadVertexBuffer, r->detailCardInstanceBuffer};
+		VkBuffer dVs[] = {r->menu.quad_vertex, r->detailCardInstanceBuffer};
 		VkDeviceSize dOs[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, dVs, dOs);
-		vkCmdBindIndexBuffer(cmd, r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdBindIndexBuffer(cmd, r->menu.quad_index, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.sets[ubo_idx], 0, NULL);
 	}
-	if (r->menuNodeCount > 0 && r->menuInstanceBuffer != VK_NULL_HANDLE) {
+	if (r->menu.node_count > 0 && r->menu.instance != VK_NULL_HANDLE) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.menu);
-		VkBuffer mVs[] = {r->menuQuadVertexBuffer, r->menuInstanceBuffer};
+		VkBuffer mVs[] = {r->menu.quad_vertex, r->menu.instance};
 		VkDeviceSize mOs[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, mVs, mOs);
-		vkCmdBindIndexBuffer(cmd, r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexed(cmd, r->menuQuadIndexCount, r->menuNodeCount, 0, 0, 0);
+		vkCmdBindIndexBuffer(cmd, r->menu.quad_index, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(cmd, r->menu.quad_index_count, r->menu.node_count, 0, 0, 0);
 	}
-	if (r->textQuadInstanceCount > 0 && r->textQuadInstanceBuffer != VK_NULL_HANDLE) {
+	if (r->menu.text_quad_instance_count > 0 && r->menu.text_quad_instance != VK_NULL_HANDLE) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.textQuad);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.text_quad_sets[ubo_idx], 0, NULL);
-		VkBuffer tVs[] = {r->menuQuadVertexBuffer, r->textQuadInstanceBuffer};
+		VkBuffer tVs[] = {r->menu.quad_vertex, r->menu.text_quad_instance};
 		VkDeviceSize tOs[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, tVs, tOs);
-		vkCmdBindIndexBuffer(cmd, r->menuQuadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexed(cmd, 6, r->textQuadInstanceCount, 0, 0, 0);
+		vkCmdBindIndexBuffer(cmd, r->menu.quad_index, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(cmd, 6, r->menu.text_quad_instance_count, 0, 0, 0);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.sets[ubo_idx], 0, NULL);
 	}
 	if (r->showUI) {

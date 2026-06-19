@@ -355,6 +355,22 @@ typedef struct
 	uint32_t capacity;
 } EdgeBuffers;
 
+typedef struct
+{
+	VkBuffer quad_vertex;
+	VkDeviceMemory quad_vertex_memory;
+	VkBuffer quad_index;
+	VkDeviceMemory quad_index_memory;
+	VkBuffer instance;
+	VkDeviceMemory instance_memory;
+	uint32_t node_count;
+	uint32_t quad_index_count;
+	VkBuffer text_quad_instance;
+	VkDeviceMemory text_quad_instance_memory;
+	uint32_t text_quad_instance_count;
+	TextAtlas text_atlas;
+} MenuBuffers;
+
 typedef struct Renderer
 {
 	GLFWwindow *window;
@@ -414,20 +430,7 @@ typedef struct Renderer
 	VkDeviceMemory uiTextInstanceBufferMemory;
 	uint32_t uiTextCharCount;
 
-	// 3D Spherical Menu
-	VkBuffer menuQuadVertexBuffer;
-	VkDeviceMemory menuQuadVertexBufferMemory;
-	VkBuffer menuQuadIndexBuffer;
-	VkDeviceMemory menuQuadIndexBufferMemory;
-	VkBuffer menuInstanceBuffer;
-	VkDeviceMemory menuInstanceBufferMemory;
-	uint32_t menuNodeCount;
-	uint32_t menuQuadIndexCount;
-	// Generic text quad pipeline
-	VkBuffer textQuadInstanceBuffer;
-	VkDeviceMemory textQuadInstanceBufferMemory;
-	uint32_t textQuadInstanceCount;
-	TextAtlas menuTextAtlas;
+	MenuBuffers menu;
 
 	// Node Labels (LOD)
 	TextAtlas nodeTextAtlas;

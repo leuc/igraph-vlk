@@ -50,7 +50,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 	float world_text_scale = 0.003f;
 
 	// Clear text atlas and rebuild
-	text_atlas_clear(&r->menuTextAtlas);
+	text_atlas_clear(&r->menu.text_atlas);
 
 	// Reset cached text regions so they get re-rendered into the fresh atlas
 	{
@@ -114,7 +114,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 			// Render label text into atlas
 			if (current->label && current->label[0]) {
 				if (current->cachedTextRegion.width_px < 0.5f) {
-					text_atlas_render(&r->menuTextAtlas, &globalAtlas, current->label, &current->cachedTextRegion);
+					text_atlas_render(&r->menu.text_atlas, &globalAtlas, current->label, &current->cachedTextRegion);
 				}
 				tq->textUV[0] = current->cachedTextRegion.u0;
 				tq->textUV[1] = current->cachedTextRegion.v0;
@@ -151,7 +151,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 				}
 
 				TextRegion arrowRegion;
-				text_atlas_render(&r->menuTextAtlas, &globalAtlas, ">", &arrowRegion);
+				text_atlas_render(&r->menu.text_atlas, &globalAtlas, ">", &arrowRegion);
 
 				// Position arrow at right edge of the item
 				vec3 arrow_pos;
@@ -250,7 +250,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 					}
 
 					TextRegion titleRegion;
-					text_atlas_render(&r->menuTextAtlas, &globalAtlas, current->label, &titleRegion);
+					text_atlas_render(&r->menu.text_atlas, &globalAtlas, current->label, &titleRegion);
 
 					// Position title at the same spot as before
 					vec3 title_pos;
@@ -359,7 +359,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 		// Info card title text (TextQuadInstance on title bar)
 		{
 			TextRegion titleRegion;
-			text_atlas_render(&r->menuTextAtlas, &globalAtlas, ctx->info_card.title, &titleRegion);
+			text_atlas_render(&r->menu.text_atlas, &globalAtlas, ctx->info_card.title, &titleRegion);
 
 			vec3 title_pos;
 			glm_vec3_copy(card_pos, title_pos);
@@ -423,7 +423,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 			snprintf(combined, sizeof(combined), "%s   %s", ctx->info_card.pairs[i].key, ctx->info_card.pairs[i].value);
 
 			TextRegion rowRegion;
-			text_atlas_render(&r->menuTextAtlas, &globalAtlas, combined, &rowRegion);
+			text_atlas_render(&r->menu.text_atlas, &globalAtlas, combined, &rowRegion);
 
 			if (tq_count >= tq_capacity) {
 				tq_capacity *= 2;
@@ -468,12 +468,12 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 	}
 
 	// --- Ensure text atlas is uploaded to GPU ---
-	text_atlas_ensure_uploaded(&r->menuTextAtlas, r->core.device, r->core.physicalDevice, r->commands.commandPool, r->core.graphicsQueue);
+	text_atlas_ensure_uploaded(&r->menu.text_atlas, r->core.device, r->core.physicalDevice, r->commands.commandPool, r->core.graphicsQueue);
 
 	// Update text quad descriptor sets to point to the text atlas
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 		VkDescriptorBufferInfo bufferInfo = {r->ubo.buffers[i], 0, sizeof(UniformBufferObject)};
-		VkDescriptorImageInfo imageInfo = {r->texture.sampler, r->menuTextAtlas.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+		VkDescriptorImageInfo imageInfo = {r->texture.sampler, r->menu.text_atlas.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 		VkWriteDescriptorSet writes[] = {
 			VK_WRITE_DESC_BUFFER(r->descriptors.text_quad_sets[i], 0, &bufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER),
 			VK_WRITE_DESC_IMAGE(r->descriptors.text_quad_sets[i], 1, &imageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER),
@@ -484,19 +484,19 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 	// --- Upload MenuInstance buffer (background-only quads) ---
 	if (instance_count > 0) {
 		VkDeviceSize bufferSize = sizeof(MenuInstance) * instance_count;
-		VK_DESTROY_BUFFER(r->core.device, r->menuInstanceBuffer, r->menuInstanceBufferMemory);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->menuInstanceBuffer, &r->menuInstanceBufferMemory);
-		update_buffer(r->core.device, r->menuInstanceBufferMemory, bufferSize, instances);
-		r->menuNodeCount = instance_count;
+		VK_DESTROY_BUFFER(r->core.device, r->menu.instance, r->menu.instance_memory);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->menu.instance, &r->menu.instance_memory);
+		update_buffer(r->core.device, r->menu.instance_memory, bufferSize, instances);
+		r->menu.node_count = instance_count;
 	}
 
 	// --- Upload TextQuadInstance buffer (text-bearing quads) ---
 	if (tq_count > 0) {
 		VkDeviceSize tqBufferSize = sizeof(TextQuadInstance) * tq_count;
-		VK_DESTROY_BUFFER(r->core.device, r->textQuadInstanceBuffer, r->textQuadInstanceBufferMemory);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, tqBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->textQuadInstanceBuffer, &r->textQuadInstanceBufferMemory);
-		update_buffer(r->core.device, r->textQuadInstanceBufferMemory, tqBufferSize, tq_instances);
-		r->textQuadInstanceCount = tq_count;
+		VK_DESTROY_BUFFER(r->core.device, r->menu.text_quad_instance, r->menu.text_quad_instance_memory);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, tqBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->menu.text_quad_instance, &r->menu.text_quad_instance_memory);
+		update_buffer(r->core.device, r->menu.text_quad_instance_memory, tqBufferSize, tq_instances);
+		r->menu.text_quad_instance_count = tq_count;
 	}
 
 	free(instances);
