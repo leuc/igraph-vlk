@@ -128,9 +128,8 @@ bool poll_bcgl_gpu(ExecutionContext *ctx)
 	GraphData *data = &state->current_graph;
 	BCGLComputeContext *bcgl = &renderer->bcgl_ctx;
 
-	if (!bcgl->active) {
+	if (!bcgl->active)
 		return true;
-	}
 
 	// Check if prior chunk is still in flight
 	VkResult fenceStatus = renderer_bcgl_fence_status(renderer);
@@ -152,11 +151,17 @@ bool poll_bcgl_gpu(ExecutionContext *ctx)
 
 		renderer_dispatch_bcgl_chunk(renderer, data, chunk);
 		bcgl->iterations_dispatched += chunk;
-		return false;
 	}
 
+	// Update HUD progress
+	state->job_progress = (float)bcgl->iterations_dispatched / (float)bcgl->total_iterations;
+	snprintf(state->job_status_message, sizeof(state->job_status_message), "BCGL %u/%u", bcgl->iterations_dispatched, bcgl->total_iterations);
+
 	// All iterations complete
-	return true;
+	if (bcgl->iterations_dispatched >= bcgl->total_iterations)
+		return true;
+
+	return false;
 }
 
 // ============================================================================
