@@ -67,10 +67,10 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.sets[ubo_idx], 0, NULL);
 	}
 	// Detail card (single instance, dedicated atlas)
-	if (r->detailCardVisible && r->detailCardInstanceBuffer != VK_NULL_HANDLE) {
+	if (r->detail.visible && r->detail.instance != VK_NULL_HANDLE) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.label);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.detail_card_sets[ubo_idx], 0, NULL);
-		VkBuffer dVs[] = {r->menu.quad_vertex, r->detailCardInstanceBuffer};
+		VkBuffer dVs[] = {r->menu.quad_vertex, r->detail.instance};
 		VkDeviceSize dOs[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, dVs, dOs);
 		vkCmdBindIndexBuffer(cmd, r->menu.quad_index, 0, VK_INDEX_TYPE_UINT32);

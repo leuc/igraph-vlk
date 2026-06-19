@@ -255,14 +255,14 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->label.tree_needs_rebuild = true;
 
 	// Initialize dedicated detail card atlas and single-instance buffer
-	if (!text_atlas_init(&r->detailCardAtlas, 2048, 4096)) {
+	if (!text_atlas_init(&r->detail.atlas, 2048, 4096)) {
 		fprintf(stderr, "Failed to initialize detail card text atlas\n");
 		return false;
 	}
-	r->detailCardInstanceBuffer = VK_NULL_HANDLE;
-	r->detailCardInstanceBufferMemory = VK_NULL_HANDLE;
-	r->detailCardVisible = false;
-	r->detailCardNode = -1;
+	r->detail.instance = VK_NULL_HANDLE;
+	r->detail.instance_memory = VK_NULL_HANDLE;
+	r->detail.visible = false;
+	r->detail.node = -1;
 	r->label.cache_valid = false;
 
 	r->graphUpdateRingIndex = 0;

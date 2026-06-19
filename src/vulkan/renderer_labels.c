@@ -269,7 +269,7 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 {
 	if (graph->node_count == 0) {
 		r->label.count = 0;
-		r->detailCardVisible = false;
+		r->detail.visible = false;
 		return;
 	}
 
@@ -283,7 +283,7 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 
 		if (!camera_moved && !selection_changed) {
 			if (selected_node >= 0 && selected_node < (int)graph->node_count)
-				r->detailCardVisible = (r->detailCardNode >= 0);
+				r->detail.visible = (r->detail.node >= 0);
 			return;
 		}
 	}
@@ -348,12 +348,12 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 
 	// Detail card: only rebuild atlas on selection change
 	if (selected_node >= 0 && selected_node < (int)graph->node_count) {
-		if (selected_node != r->detailCardNode)
+		if (selected_node != r->detail.node)
 			detail_card_update(r, graph, selected_node);
 		else
-			r->detailCardVisible = true;
+			r->detail.visible = true;
 	} else {
-		r->detailCardVisible = false;
-		r->detailCardNode = -1;
+		r->detail.visible = false;
+		r->detail.node = -1;
 	}
 }

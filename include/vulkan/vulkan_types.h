@@ -385,6 +385,16 @@ typedef struct
 	bool cache_valid;
 } LabelBuffers;
 
+typedef struct
+{
+	TextAtlas atlas;
+	VkBuffer instance;
+	VkDeviceMemory instance_memory;
+	bool visible;
+	NodeLabelInstance instance_data;
+	int node; // node index the detail card was built for, -1 = none
+} DetailCard;
+
 typedef struct Renderer
 {
 	GLFWwindow *window;
@@ -448,13 +458,7 @@ typedef struct Renderer
 
 	LabelBuffers label;
 
-	// Detail card (single-instance, dedicated atlas)
-	TextAtlas detailCardAtlas;
-	VkBuffer detailCardInstanceBuffer;
-	VkDeviceMemory detailCardInstanceBufferMemory;
-	bool detailCardVisible;
-	NodeLabelInstance detailCardInstance;
-	int detailCardNode; // node index the detail card was built for, -1 = none
+	DetailCard detail;
 
 	VkBuffer rayVertexBuffer;
 	VkDeviceMemory rayVertexBufferMemory;

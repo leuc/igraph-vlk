@@ -123,7 +123,7 @@ void detail_card_update(Renderer *r, GraphData *graph, int selected_node)
 		return;
 	}
 
-	text_atlas_clear(&r->detailCardAtlas);
+	text_atlas_clear(&r->detail.atlas);
 
 	vec3 normal, upGuide = {0.0f, 1.0f, 0.0f};
 	glm_vec3_normalize_to(graph->nodes[selected_node].position, normal);
@@ -141,15 +141,15 @@ void detail_card_update(Renderer *r, GraphData *graph, int selected_node)
 	glm_vec3_scale(label_pos, r->layoutScale, label_pos);
 
 	TextRegion region;
-	text_atlas_render(&r->detailCardAtlas, &globalAtlas, detail, &region);
+	text_atlas_render(&r->detail.atlas, &globalAtlas, detail, &region);
 
 	if (region.width_px > 0.0f && region.height_px > 0.0f) {
-		if (r->detailCardInstanceBuffer == VK_NULL_HANDLE) {
-			VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(NodeLabelInstance), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->detailCardInstanceBuffer, &r->detailCardInstanceBufferMemory);
+		if (r->detail.instance == VK_NULL_HANDLE) {
+			VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(NodeLabelInstance), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->detail.instance, &r->detail.instance_memory);
 		}
 
 		float world_text_scale = 0.003f;
-		NodeLabelInstance *inst = &r->detailCardInstance;
+		NodeLabelInstance *inst = &r->detail.instance_data;
 		glm_vec3_copy(label_pos, inst->worldPos);
 		inst->bgColor[0] = 0.02f;
 		inst->bgColor[1] = 0.02f;
@@ -169,18 +169,18 @@ void detail_card_update(Renderer *r, GraphData *graph, int selected_node)
 		inst->textRegion[2] = 1.0f;
 		inst->textRegion[3] = 1.0f;
 
-		text_atlas_ensure_uploaded(&r->detailCardAtlas, r->core.device, r->core.physicalDevice, r->commands.commandPool, r->core.graphicsQueue);
+		text_atlas_ensure_uploaded(&r->detail.atlas, r->core.device, r->core.physicalDevice, r->commands.commandPool, r->core.graphicsQueue);
 
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 			VkDescriptorBufferInfo bufferInfo = {r->ubo.buffers[i], 0, sizeof(UniformBufferObject)};
-			VkDescriptorImageInfo imageInfo = {r->texture.sampler, r->detailCardAtlas.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+			VkDescriptorImageInfo imageInfo = {r->texture.sampler, r->detail.atlas.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 			VkWriteDescriptorSet writes[] = {VK_WRITE_DESC_BUFFER(r->descriptors.detail_card_sets[i], 0, &bufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER), VK_WRITE_DESC_IMAGE(r->descriptors.detail_card_sets[i], 1, &imageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)};
 			vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
 		}
 
-		update_buffer(r->core.device, r->detailCardInstanceBufferMemory, sizeof(NodeLabelInstance), &r->detailCardInstance);
-		r->detailCardVisible = true;
-		r->detailCardNode = selected_node;
+		update_buffer(r->core.device, r->detail.instance_memory, sizeof(NodeLabelInstance), &r->detail.instance_data);
+		r->detail.visible = true;
+		r->detail.node = selected_node;
 	} else {
 		fprintf(stderr, "renderer_update_node_labels: detail card atlas render empty (text len %zu)\n", text_len);
 	}
