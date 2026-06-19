@@ -40,7 +40,7 @@ static void debug_print_bcgl_stats(Renderer *r, uint32_t current_iter, uint32_t 
 	if (ctx->node_mem == VK_NULL_HANDLE)
 		return;
 
-	igraph_integer_t n = r->nodeCount;
+	igraph_integer_t n = r->node.count;
 	void *mapped;
 	vkMapMemory(r->core.device, ctx->node_mem, 0, sizeof(BCGLNodeData) * n, 0, &mapped);
 	BCGLNodeData *gpu_nodes = (BCGLNodeData *)mapped;

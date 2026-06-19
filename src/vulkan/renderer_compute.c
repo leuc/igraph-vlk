@@ -355,7 +355,7 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	for (int i = 0; i < 5; i++)
 		splc_destroy_buffer(r->core.device, old_bufs[i].buf, old_bufs[i].mem);
 
-	r->edgeCount = graph->edge_count;
+	r->edge.count = graph->edge_count;
 	r->splc.active = true;
 	r->splc.current_level = 0;
 	r->splc.last_level_time = glfwGetTime();

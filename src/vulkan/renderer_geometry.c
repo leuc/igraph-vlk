@@ -20,48 +20,48 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 {
 	// Ring-buffered fence sync instead of vkDeviceWaitIdle
 	uint32_t ringIdx = r->graphUpdateRingIndex;
-	if (r->nodePositionBuffer != VK_NULL_HANDLE) {
+	if (r->node.position != VK_NULL_HANDLE) {
 		VK_CHECK(vkWaitForFences(r->core.device, 1, &r->graphUpdateFences[ringIdx], VK_TRUE, UINT64_MAX), "Failed to wait for graph update fences");
 		VK_CHECK(vkResetFences(r->core.device, 1, &r->graphUpdateFences[ringIdx]), "Failed to reset graph update fences");
 	}
 
 	// If edge count changed while SPLC was active, reset to avoid stale/out-of-bounds reads
-	if (r->splc.active && r->edgeCount != graph->edge_count) {
+	if (r->splc.active && r->edge.count != graph->edge_count) {
 		r->splc.active = false;
 	}
 
-	r->nodeCount = graph->node_count;
-	r->edgeCount = graph->edge_count;
+	r->node.count = graph->node_count;
+	r->edge.count = graph->edge_count;
 
 	// Pre-allocate or grow node buffers (split: position + attribute)
-	if (r->nodeCapacity < graph->node_count) {
-		VK_DESTROY_BUFFER(r->core.device, r->nodePositionBuffer, r->nodePositionMemory);
-		VK_DESTROY_BUFFER(r->core.device, r->nodeAttributeBuffer, r->nodeAttributeMemory);
-		VK_DESTROY_BUFFER(r->core.device, r->nodeAttributeStagingBuffer, r->nodeAttributeStagingMemory);
+	if (r->node.capacity < graph->node_count) {
+		VK_DESTROY_BUFFER(r->core.device, r->node.position, r->node.position_memory);
+		VK_DESTROY_BUFFER(r->core.device, r->node.attribute, r->node.attribute_memory);
+		VK_DESTROY_BUFFER(r->core.device, r->node.staging, r->node.staging_memory);
 		// Position buffer: HOST_COHERENT for fast mapped updates
-		create_mapped_buffer(r->core.device, r->core.physicalDevice, sizeof(NodePosition) * graph->node_count, &r->nodePositionBuffer, &r->nodePositionMemory);
+		create_mapped_buffer(r->core.device, r->core.physicalDevice, sizeof(NodePosition) * graph->node_count, &r->node.position, &r->node.position_memory);
 		// Attribute buffer: DEVICE_LOCAL with staging buffer for rare updates
-		create_staging_buffer(r->core.device, r->core.physicalDevice, sizeof(NodeAttribute) * graph->node_count, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->nodeAttributeStagingBuffer, &r->nodeAttributeStagingMemory, &r->nodeAttributeBuffer, &r->nodeAttributeMemory);
-		r->nodeCapacity = graph->node_count;
+		create_staging_buffer(r->core.device, r->core.physicalDevice, sizeof(NodeAttribute) * graph->node_count, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->node.staging, &r->node.staging_memory, &r->node.attribute, &r->node.attribute_memory);
+		r->node.capacity = graph->node_count;
 		r->needsAttributeUpload = VK_TRUE;
-	} else if (graph->node_count < r->nodeCount) {
+	} else if (graph->node_count < r->node.count) {
 		// Node count decreased - need to re-upload attributes
 		r->needsAttributeUpload = VK_TRUE;
 	}
 
 	// Pre-allocate or grow edge buffers (split: position + attribute)
 	int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
-	r->edgeVertexCount = graph->edge_count * segments * 2;
-	uint32_t neededEdgeVerts = r->edgeVertexCount;
-	if (r->edgeCapacity < neededEdgeVerts) {
-		VK_DESTROY_BUFFER(r->core.device, r->edgePositionBuffer, r->edgePositionMemory);
-		VK_DESTROY_BUFFER(r->core.device, r->edgeAttributeBuffer, r->edgeAttributeMemory);
-		VK_DESTROY_BUFFER(r->core.device, r->edgeAttributeStagingBuffer, r->edgeAttributeStagingMemory);
+	r->edge.vertex_count = graph->edge_count * segments * 2;
+	uint32_t neededEdgeVerts = r->edge.vertex_count;
+	if (r->edge.capacity < neededEdgeVerts) {
+		VK_DESTROY_BUFFER(r->core.device, r->edge.position, r->edge.position_memory);
+		VK_DESTROY_BUFFER(r->core.device, r->edge.attribute, r->edge.attribute_memory);
+		VK_DESTROY_BUFFER(r->core.device, r->edge.staging, r->edge.staging_memory);
 		// Position buffer: HOST_COHERENT for fast mapped updates
-		create_mapped_buffer(r->core.device, r->core.physicalDevice, sizeof(EdgePosition) * neededEdgeVerts, &r->edgePositionBuffer, &r->edgePositionMemory);
+		create_mapped_buffer(r->core.device, r->core.physicalDevice, sizeof(EdgePosition) * neededEdgeVerts, &r->edge.position, &r->edge.position_memory);
 		// Attribute buffer: DEVICE_LOCAL with staging buffer for rare updates
-		create_staging_buffer(r->core.device, r->core.physicalDevice, sizeof(EdgeAttribute) * neededEdgeVerts, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->edgeAttributeStagingBuffer, &r->edgeAttributeStagingMemory, &r->edgeAttributeBuffer, &r->edgeAttributeMemory);
-		r->edgeCapacity = neededEdgeVerts;
+		create_staging_buffer(r->core.device, r->core.physicalDevice, sizeof(EdgeAttribute) * neededEdgeVerts, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->edge.staging, &r->edge.staging_memory, &r->edge.attribute, &r->edge.attribute_memory);
+		r->edge.capacity = neededEdgeVerts;
 		r->needsAttributeUpload = VK_TRUE;
 	}
 
@@ -79,17 +79,17 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 		nodeAttributes[i].selected = graph->nodes[i].selected;
 	}
 	// Fast path: update positions via mapped buffer
-	update_buffer_mapped(r->core.device, r->nodePositionMemory, sizeof(NodePosition) * graph->node_count, nodePositions, &r->core.deviceProperties);
+	update_buffer_mapped(r->core.device, r->node.position_memory, sizeof(NodePosition) * graph->node_count, nodePositions, &r->core.deviceProperties);
 	// Rare: update attributes via staged copy
 	if (r->needsAttributeUpload) {
-		update_buffer_staged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(NodeAttribute) * graph->node_count, nodeAttributes, r->nodeAttributeStagingBuffer, r->nodeAttributeStagingMemory, r->nodeAttributeBuffer, &r->core.deviceProperties);
+		update_buffer_staged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(NodeAttribute) * graph->node_count, nodeAttributes, r->node.staging, r->node.staging_memory, r->node.attribute, &r->core.deviceProperties);
 	}
 	free(nodePositions);
 	free(nodeAttributes);
 
 	// Split edge data into position + attribute buffers
-	EdgePosition *edgePositions = calloc(r->edgeVertexCount, sizeof(EdgePosition));
-	EdgeAttribute *edgeAttributes = calloc(r->edgeVertexCount, sizeof(EdgeAttribute));
+	EdgePosition *edgePositions = calloc(r->edge.vertex_count, sizeof(EdgePosition));
+	EdgeAttribute *edgeAttributes = calloc(r->edge.vertex_count, sizeof(EdgeAttribute));
 
 	// Dispatch edge routing compute shader if needed
 	CompEdge *cEdges = NULL;
@@ -171,15 +171,15 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 		}
 	}
 
-	r->edgeVertexCount = idx;
+	r->edge.vertex_count = idx;
 
 	// Fast path: update positions via mapped buffer
-	if (r->edgeVertexCount > 0) {
-		update_buffer_mapped(r->core.device, r->edgePositionMemory, sizeof(EdgePosition) * r->edgeVertexCount, edgePositions, &r->core.deviceProperties);
+	if (r->edge.vertex_count > 0) {
+		update_buffer_mapped(r->core.device, r->edge.position_memory, sizeof(EdgePosition) * r->edge.vertex_count, edgePositions, &r->core.deviceProperties);
 	}
 	// Rare: update attributes via staged copy (only when flag set)
-	if (r->needsAttributeUpload && r->edgeVertexCount > 0) {
-		update_buffer_staged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(EdgeAttribute) * r->edgeVertexCount, edgeAttributes, r->edgeAttributeStagingBuffer, r->edgeAttributeStagingMemory, r->edgeAttributeBuffer, &r->core.deviceProperties);
+	if (r->needsAttributeUpload && r->edge.vertex_count > 0) {
+		update_buffer_staged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(EdgeAttribute) * r->edge.vertex_count, edgeAttributes, r->edge.staging, r->edge.staging_memory, r->edge.attribute, &r->core.deviceProperties);
 	}
 	free(edgePositions);
 	free(edgeAttributes);

@@ -44,9 +44,9 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->bcgl_ctx.cmd_buf = VK_NULL_HANDLE;
 
 	r->window = window;
-	r->nodeCount = graph->node_count;
-	r->edgeCount = graph->edge_count;
-	r->edgeVertexCount = 0;
+	r->node.count = graph->node_count;
+	r->edge.count = graph->edge_count;
+	r->edge.vertex_count = 0;
 	r->showNodes = true;
 	r->showEdges = true;
 	r->showUI = true;
@@ -81,7 +81,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 		text_generate_atlas(app_path_resolve(FONT_PATH), &globalAtlas);
 		atlasLoaded = true;
 	}
-	create_image(r->core.device, r->core.physicalDevice, globalAtlas.width, globalAtlas.height, VK_FORMAT_R8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->textureImage, &r->textureImageMemory);
+	create_image(r->core.device, r->core.physicalDevice, globalAtlas.width, globalAtlas.height, VK_FORMAT_R8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->texture.image, &r->texture.memory);
 	VkDeviceSize imgSize = globalAtlas.width * globalAtlas.height;
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
@@ -90,18 +90,18 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	VK_CHECK(vkMapMemory(r->core.device, stagingBufferMemory, 0, imgSize, 0, &dataPtr), "Failed to map texture staging buffer memory");
 	memcpy(dataPtr, globalAtlas.atlasData, imgSize);
 	vkUnmapMemory(r->core.device, stagingBufferMemory);
-	transition_image_layout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	transition_image_layout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->texture.image, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 	VkCommandBuffer commandBuffer = begin_single_time_commands(r->core.device, r->commands.commandPool);
 	VkBufferImageCopy bufferImageCopy = {.bufferOffset = 0, .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .imageExtent = {(uint32_t)globalAtlas.width, (uint32_t)globalAtlas.height, 1}};
-	vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, r->textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopy);
+	vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, r->texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopy);
 	end_single_time_commands(r->core.device, r->commands.commandPool, r->core.graphicsQueue, commandBuffer);
 	VK_DESTROY_BUFFER(r->core.device, stagingBuffer, stagingBufferMemory);
-	transition_image_layout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	transition_image_layout(r->core.device, r->commands.commandPool, r->core.graphicsQueue, r->texture.image, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-	VK_CHECK(vkCreateImageView(r->core.device, &VK_IMAGE_VIEW_2D(r->textureImage, VK_FORMAT_R8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT), NULL, &r->textureImageView), "Failed to create texture image view");
+	VK_CHECK(vkCreateImageView(r->core.device, &VK_IMAGE_VIEW_2D(r->texture.image, VK_FORMAT_R8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT), NULL, &r->texture.view), "Failed to create texture image view");
 	VkSamplerCreateInfo samplerInfo = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = VK_FILTER_LINEAR, .minFilter = VK_FILTER_LINEAR, .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR, .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE};
-	VK_CHECK(vkCreateSampler(r->core.device, &samplerInfo, NULL, &r->textureSampler), "Failed to create texture sampler");
+	VK_CHECK(vkCreateSampler(r->core.device, &samplerInfo, NULL, &r->texture.sampler), "Failed to create texture sampler");
 
 	renderer_create_pipelines(r);
 
@@ -139,14 +139,14 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->menuNodeCount = 0;
 	r->textQuadInstanceCount = 0;
 
-	r->nodePositionBuffer = VK_NULL_HANDLE;
-	r->nodeAttributeBuffer = VK_NULL_HANDLE;
-	r->nodeAttributeStagingBuffer = VK_NULL_HANDLE;
-	r->nodeCapacity = 0;
-	r->edgePositionBuffer = VK_NULL_HANDLE;
-	r->edgeAttributeBuffer = VK_NULL_HANDLE;
-	r->edgeAttributeStagingBuffer = VK_NULL_HANDLE;
-	r->edgeCapacity = 0;
+	r->node.position = VK_NULL_HANDLE;
+	r->node.attribute = VK_NULL_HANDLE;
+	r->node.staging = VK_NULL_HANDLE;
+	r->node.capacity = 0;
+	r->edge.position = VK_NULL_HANDLE;
+	r->edge.attribute = VK_NULL_HANDLE;
+	r->edge.staging = VK_NULL_HANDLE;
+	r->edge.capacity = 0;
 	r->needsAttributeUpload = VK_TRUE;
 
 	r->computeCtx.nodeBuf = VK_NULL_HANDLE;
@@ -182,11 +182,11 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	renderer_update_graph(r, graph);
 	r->labelTreeNeedsRebuild = true;
 
-	r->uniformBuffers = malloc(sizeof(VkBuffer) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
-	r->uniformBuffersMemory = malloc(sizeof(VkDeviceMemory) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
+	r->ubo.buffers = malloc(sizeof(VkBuffer) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
+	r->ubo.memory = malloc(sizeof(VkDeviceMemory) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &r->uniformBuffers[i], &r->uniformBuffersMemory[i]);
-		VK_CHECK(vkMapMemory(r->core.device, r->uniformBuffersMemory[i], 0, sizeof(UniformBufferObject), 0, &r->uboMapped[i]), "Failed to map UBO memory");
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &r->ubo.buffers[i], &r->ubo.memory[i]);
+		VK_CHECK(vkMapMemory(r->core.device, r->ubo.memory[i], 0, sizeof(UniformBufferObject), 0, &r->ubo.mapped[i]), "Failed to map UBO memory");
 	}
 
 	VkDescriptorPoolSize descriptorPoolSizes[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4}, {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 8}};
@@ -206,8 +206,8 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->descriptors.detail_card_sets = &r->descriptors.sets[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 3];
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-		VkDescriptorBufferInfo bufferInfo = {r->uniformBuffers[i], 0, sizeof(UniformBufferObject)};
-		VkDescriptorImageInfo imageInfo = {r->textureSampler, r->textureImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+		VkDescriptorBufferInfo bufferInfo = {r->ubo.buffers[i], 0, sizeof(UniformBufferObject)};
+		VkDescriptorImageInfo imageInfo = {r->texture.sampler, r->texture.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 		VkWriteDescriptorSet descriptorWrites[] = {VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 0, &bufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER), VK_WRITE_DESC_IMAGE(r->descriptors.sets[i], 1, &imageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)};
 		vkUpdateDescriptorSets(r->core.device, 2, descriptorWrites, 0, NULL);
 	}
@@ -270,12 +270,12 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 		VK_CHECK(vkCreateFence(r->core.device, &VK_SIGNALED_FENCE_INFO, NULL, &r->graphUpdateFences[i]), "Failed to create graph update fence");
 	}
 
-	glm_mat4_identity(r->ubo.model);
-	glm_mat4_identity(r->ubo.view);
+	glm_mat4_identity(r->ubo.data.model);
+	glm_mat4_identity(r->ubo.data.view);
 	int w, h;
 	glfwGetFramebufferSize(window, &w, &h);
-	glm_perspective(glm_rad(45.0f), (float)w / (float)h, 0.1f, 1000.0f, r->ubo.proj);
-	r->ubo.proj[1][1] *= -1;
+	glm_perspective(glm_rad(45.0f), (float)w / (float)h, 0.1f, 1000.0f, r->ubo.data.proj);
+	r->ubo.data.proj[1][1] *= -1;
 	return true;
 }
 
@@ -327,8 +327,8 @@ void renderer_recreate_swapchain(Renderer *r)
 
 	// Update projection matrix for new aspect ratio
 	float aspect = (float)r->swapchain.extent.width / (float)r->swapchain.extent.height;
-	glm_perspective(glm_rad(45.0f), aspect, 0.1f, 1000.0f, r->ubo.proj);
-	r->ubo.proj[1][1] *= -1;
+	glm_perspective(glm_rad(45.0f), aspect, 0.1f, 1000.0f, r->ubo.data.proj);
+	r->ubo.data.proj[1][1] *= -1;
 
 	r->framebufferResized = false;
 }

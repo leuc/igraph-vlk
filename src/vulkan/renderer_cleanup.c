@@ -19,7 +19,7 @@
 void cleanup_uniform_buffers(Renderer *r)
 {
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++)
-		VK_DESTROY_BUFFER(r->core.device, r->uniformBuffers[i], r->uniformBuffersMemory[i]);
+		VK_DESTROY_BUFFER(r->core.device, r->ubo.buffers[i], r->ubo.memory[i]);
 	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++)
 		vkDestroyFence(r->core.device, r->graphUpdateFences[i], NULL);
 }
@@ -42,12 +42,12 @@ void cleanup_compute_context(Renderer *r)
 void cleanup_geometry_buffers(Renderer *r)
 {
 	VK_DESTROY_BUFFER(r->core.device, r->labelVertexBuffer, r->labelVertexBufferMemory);
-	VK_DESTROY_BUFFER(r->core.device, r->edgePositionBuffer, r->edgePositionMemory);
-	VK_DESTROY_BUFFER(r->core.device, r->edgeAttributeBuffer, r->edgeAttributeMemory);
-	VK_DESTROY_BUFFER(r->core.device, r->edgeAttributeStagingBuffer, r->edgeAttributeStagingMemory);
-	VK_DESTROY_BUFFER(r->core.device, r->nodePositionBuffer, r->nodePositionMemory);
-	VK_DESTROY_BUFFER(r->core.device, r->nodeAttributeBuffer, r->nodeAttributeMemory);
-	VK_DESTROY_BUFFER(r->core.device, r->nodeAttributeStagingBuffer, r->nodeAttributeStagingMemory);
+	VK_DESTROY_BUFFER(r->core.device, r->edge.position, r->edge.position_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->edge.attribute, r->edge.attribute_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->edge.staging, r->edge.staging_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->node.position, r->node.position_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->node.attribute, r->node.attribute_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->node.staging, r->node.staging_memory);
 	VK_DESTROY_BUFFER(r->core.device, r->nodeVertexBuffer, r->nodeVertexBufferMemory);
 	VK_DESTROY_BUFFER(r->core.device, r->rayVertexBuffer, r->rayVertexBufferMemory);
 	VK_DESTROY_BUFFER(r->core.device, r->uiBgVertexBuffer, r->uiBgVertexBufferMemory);
@@ -116,10 +116,10 @@ void cleanup_splc_pipelines_core(Renderer *r)
 		vkDestroyDescriptorSetLayout(r->core.device, r->descriptors.splc_compute_layout, NULL);
 
 	vkDestroyDescriptorPool(r->core.device, r->descriptors.pool, NULL);
-	vkDestroySampler(r->core.device, r->textureSampler, NULL);
-	vkDestroyImageView(r->core.device, r->textureImageView, NULL);
-	vkDestroyImage(r->core.device, r->textureImage, NULL);
-	vkFreeMemory(r->core.device, r->textureImageMemory, NULL);
+	vkDestroySampler(r->core.device, r->texture.sampler, NULL);
+	vkDestroyImageView(r->core.device, r->texture.view, NULL);
+	vkDestroyImage(r->core.device, r->texture.image, NULL);
+	vkFreeMemory(r->core.device, r->texture.memory, NULL);
 
 	vkDestroyPipeline(r->core.device, r->pipelines.compute_spherical, NULL);
 	vkDestroyPipelineLayout(r->core.device, r->computePipelineLayout, NULL);

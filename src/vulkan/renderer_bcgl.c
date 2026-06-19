@@ -138,7 +138,7 @@ static void bcgl_seed_positions(Renderer *r, GraphData *graph)
 static void bcgl_write_descriptors(Renderer *r)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
-	igraph_integer_t n = r->nodeCount;
+	igraph_integer_t n = r->node.count;
 
 	VkDescriptorBufferInfo nodeInfo = {ctx->node_buf, 0, VK_WHOLE_SIZE};
 	VkDescriptorBufferInfo topoNodesInfo = {ctx->topo_nodes_buf, 0, VK_WHOLE_SIZE};

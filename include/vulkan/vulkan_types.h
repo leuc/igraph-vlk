@@ -203,6 +203,22 @@ typedef struct
 
 typedef struct
 {
+	VkBuffer *buffers;
+	VkDeviceMemory *memory;
+	void *mapped[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
+	UniformBufferObject data;
+} UniformBuffers;
+
+typedef struct
+{
+	VkImage image;
+	VkDeviceMemory memory;
+	VkImageView view;
+	VkSampler sampler;
+} Texture;
+
+typedef struct
+{
 	VkBuffer nodeBuf;
 	VkDeviceMemory nodeMem;
 	VkBuffer edgeBuf;
@@ -314,6 +330,31 @@ typedef struct
 	VkPipelineLayout pipeline_layout;
 } SPLCComputeContext;
 
+typedef struct
+{
+	VkBuffer position;
+	VkDeviceMemory position_memory;
+	VkBuffer attribute;
+	VkDeviceMemory attribute_memory;
+	VkBuffer staging;
+	VkDeviceMemory staging_memory;
+	uint32_t count;
+	uint32_t capacity;
+} NodeBuffers;
+
+typedef struct
+{
+	VkBuffer position;
+	VkDeviceMemory position_memory;
+	VkBuffer attribute;
+	VkDeviceMemory attribute_memory;
+	VkBuffer staging;
+	VkDeviceMemory staging_memory;
+	uint32_t count;
+	uint32_t vertex_count;
+	uint32_t capacity;
+} EdgeBuffers;
+
 typedef struct Renderer
 {
 	GLFWwindow *window;
@@ -339,14 +380,8 @@ typedef struct Renderer
 	VkBuffer nodeVertexBuffer;
 	VkDeviceMemory nodeVertexBufferMemory;
 
-	VkBuffer *uniformBuffers;
-	VkDeviceMemory *uniformBuffersMemory;
-	void *uboMapped[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
-	UniformBufferObject ubo;
-	VkImage textureImage;
-	VkDeviceMemory textureImageMemory;
-	VkImageView textureImageView;
-	VkSampler textureSampler;
+	UniformBuffers ubo;
+	Texture texture;
 
 	// XR-specific depth buffers (per view, separate from desktop)
 	uint32_t xr_view_count;
@@ -354,24 +389,9 @@ typedef struct Renderer
 	VkDeviceMemory *xrDepthImageMemories; // [view_index]
 	VkImageView *xrDepthImageViews;		  // [view_index]
 
-	VkBuffer nodePositionBuffer;
-	VkDeviceMemory nodePositionMemory;
-	VkBuffer nodeAttributeBuffer;
-	VkDeviceMemory nodeAttributeMemory;
-	VkBuffer nodeAttributeStagingBuffer;
-	VkDeviceMemory nodeAttributeStagingMemory;
-	uint32_t nodeCount;
-	uint32_t nodeCapacity;
+	NodeBuffers node;
 
-	VkBuffer edgePositionBuffer;
-	VkDeviceMemory edgePositionMemory;
-	VkBuffer edgeAttributeBuffer;
-	VkDeviceMemory edgeAttributeMemory;
-	VkBuffer edgeAttributeStagingBuffer;
-	VkDeviceMemory edgeAttributeStagingMemory;
-	uint32_t edgeCount;
-	uint32_t edgeVertexCount;
-	uint32_t edgeCapacity;
+	EdgeBuffers edge;
 
 	bool needsAttributeUpload;
 

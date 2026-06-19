@@ -17,10 +17,10 @@
 void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index, bool has_ray, vec3 ray_origin, vec3 ray_dir)
 {
 	uint32_t ubo_idx = r->commands.currentFrame * MAX_VIEWS + view_index;
-	UniformBufferObject eye_ubo = r->ubo;
+	UniformBufferObject eye_ubo = r->ubo.data;
 	glm_mat4_copy(view, eye_ubo.view);
 	glm_mat4_copy(proj, eye_ubo.proj);
-	memcpy(r->uboMapped[ubo_idx], &eye_ubo, sizeof(UniformBufferObject));
+	memcpy(r->ubo.mapped[ubo_idx], &eye_ubo, sizeof(UniformBufferObject));
 
 	VkClearValue cv[2];
 	cv[0].color = (VkClearColorValue){0.01f, 0.01f, 0.02f, 1.0f};
@@ -35,25 +35,25 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.sets[ubo_idx], 0, NULL);
 
-	if (r->showEdges && r->edgeCount > 0) {
+	if (r->showEdges && r->edge.count > 0) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.edge);
 		// Push segments per edge for edge index calculation
 		int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
 		uint32_t segs = (uint32_t)segments;
 		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(mat4) * 2, sizeof(uint32_t), &segs);
-		VkBuffer eBs[] = {r->edgePositionBuffer, r->edgeAttributeBuffer};
+		VkBuffer eBs[] = {r->edge.position, r->edge.attribute};
 		VkDeviceSize eOs[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, eBs, eOs);
-		vkCmdDraw(cmd, r->edgeVertexCount, 1, 0, 0);
+		vkCmdDraw(cmd, r->edge.vertex_count, 1, 0, 0);
 	}
-	if (r->showNodes && r->nodeCount > 0) {
+	if (r->showNodes && r->node.count > 0) {
 		float a = 1.0f;
 		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 4, &a);
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.node);
-		VkBuffer vbs[] = {r->nodeVertexBuffer, r->nodePositionBuffer, r->nodeAttributeBuffer};
+		VkBuffer vbs[] = {r->nodeVertexBuffer, r->node.position, r->node.attribute};
 		VkDeviceSize vos[] = {0, 0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 3, vbs, vos);
-		vkCmdDraw(cmd, 3, r->nodeCount, 0, 0);
+		vkCmdDraw(cmd, 3, r->node.count, 0, 0);
 	}
 	// Node labels (opaque, depth-writing) — draw before menu so menu occludes them
 	if (r->nodeLabelInstanceCount > 0 && r->nodeLabelInstanceBuffer != VK_NULL_HANDLE) {
@@ -152,7 +152,7 @@ void renderer_draw_frame(Renderer *r, GraphData *graph)
 		}
 	}
 
-	renderer_render_scene(r, r->commands.commandBuffers[r->commands.currentFrame], r->renderPass.renderPass, r->renderPass.framebuffers[imageIndex], r->swapchain.extent, r->ubo.view, r->ubo.proj, 0, false, (vec3){0}, (vec3){0});
+	renderer_render_scene(r, r->commands.commandBuffers[r->commands.currentFrame], r->renderPass.renderPass, r->renderPass.framebuffers[imageIndex], r->swapchain.extent, r->ubo.data.view, r->ubo.data.proj, 0, false, (vec3){0}, (vec3){0});
 	VK_CHECK(vkEndCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame]), "Failed to end command buffer");
 
 	VkPipelineStageFlags waitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
