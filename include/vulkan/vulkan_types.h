@@ -371,6 +371,20 @@ typedef struct
 	TextAtlas text_atlas;
 } MenuBuffers;
 
+typedef struct
+{
+	TextAtlas atlas;
+	VkBuffer instance;
+	VkDeviceMemory instance_memory;
+	uint32_t count;
+	uint32_t capacity;
+	igraph_bh_tree_t tree;
+	bool tree_needs_rebuild;
+	vec3 camera_pos;
+	int selected_node;
+	bool cache_valid;
+} LabelBuffers;
+
 typedef struct Renderer
 {
 	GLFWwindow *window;
@@ -432,17 +446,7 @@ typedef struct Renderer
 
 	MenuBuffers menu;
 
-	// Node Labels (LOD)
-	TextAtlas nodeTextAtlas;
-	VkBuffer nodeLabelInstanceBuffer;
-	VkDeviceMemory nodeLabelInstanceBufferMemory;
-	uint32_t nodeLabelInstanceCount;
-	uint32_t nodeLabelCapacity;
-	igraph_bh_tree_t labelTree;
-	bool labelTreeNeedsRebuild;
-	vec3 labelCameraPos;
-	int labelSelectedNode;
-	bool labelCacheValid;
+	LabelBuffers label;
 
 	// Detail card (single-instance, dedicated atlas)
 	TextAtlas detailCardAtlas;

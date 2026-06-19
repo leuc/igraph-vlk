@@ -190,14 +190,14 @@ void detail_card_update(Renderer *r, GraphData *graph, int selected_node)
 
 void label_upload_and_update_descriptors(Renderer *r, uint32_t inst_count, NodeLabelInstance *instances)
 {
-	text_atlas_ensure_uploaded(&r->nodeTextAtlas, r->core.device, r->core.physicalDevice, r->commands.commandPool, r->core.graphicsQueue);
+	text_atlas_ensure_uploaded(&r->label.atlas, r->core.device, r->core.physicalDevice, r->commands.commandPool, r->core.graphicsQueue);
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 		VkDescriptorBufferInfo bufferInfo = {r->ubo.buffers[i], 0, sizeof(UniformBufferObject)};
-		VkDescriptorImageInfo imageInfo = {r->texture.sampler, r->nodeTextAtlas.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+		VkDescriptorImageInfo imageInfo = {r->texture.sampler, r->label.atlas.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 		VkWriteDescriptorSet writes[] = {VK_WRITE_DESC_BUFFER(r->descriptors.node_label_sets[i], 0, &bufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER), VK_WRITE_DESC_IMAGE(r->descriptors.node_label_sets[i], 1, &imageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)};
 		vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
 	}
 
-	update_buffer(r->core.device, r->nodeLabelInstanceBufferMemory, sizeof(NodeLabelInstance) * inst_count, instances);
+	update_buffer(r->core.device, r->label.instance_memory, sizeof(NodeLabelInstance) * inst_count, instances);
 }

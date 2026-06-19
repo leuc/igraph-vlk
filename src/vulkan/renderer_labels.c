@@ -133,8 +133,8 @@ static void label_rebuild_tree(Renderer *r, GraphData *graph)
 	igraph_integer_t max_level, leaf_capacity;
 	igraph_bh_tree_get_scaling_params(n, 3, &max_level, &leaf_capacity);
 
-	igraph_bh_tree_destroy(&r->labelTree);
-	igraph_error_t err = igraph_bh_tree_init(&r->labelTree, 3, 0.7, max_level, leaf_capacity);
+	igraph_bh_tree_destroy(&r->label.tree);
+	igraph_error_t err = igraph_bh_tree_init(&r->label.tree, 3, 0.7, max_level, leaf_capacity);
 	if (err != IGRAPH_SUCCESS) {
 		fprintf(stderr, "label_rebuild_tree: igraph_bh_tree_init failed\n");
 		return;
@@ -153,7 +153,7 @@ static void label_rebuild_tree(Renderer *r, GraphData *graph)
 	for (uint32_t i = 0; i < n; i++)
 		VECTOR(masses)[i] = 1.0;
 
-	err = igraph_bh_tree_build(&r->labelTree, &coords, &masses);
+	err = igraph_bh_tree_build(&r->label.tree, &coords, &masses);
 	igraph_matrix_destroy(&coords);
 	igraph_vector_destroy(&masses);
 
@@ -162,7 +162,7 @@ static void label_rebuild_tree(Renderer *r, GraphData *graph)
 		return;
 	}
 
-	r->labelTreeNeedsRebuild = false;
+	r->label.tree_needs_rebuild = false;
 }
 
 // Find K nearest nodes to the query point using BH tree traversal.
@@ -172,7 +172,7 @@ static uint32_t bh_find_nearest_k(Renderer *r, const float query[3], uint32_t k,
 	BHHeapEntry *heap = malloc(sizeof(BHHeapEntry) * k);
 	uint32_t heap_size = 0;
 
-	bh_traverse_nearest_k(&r->labelTree, 0, query, k, heap, &heap_size);
+	bh_traverse_nearest_k(&r->label.tree, 0, query, k, heap, &heap_size);
 
 	// Extract results, sort by distance ascending for label_build_lod_instances
 	// Convert max-heap to sorted array: repeatedly extract max, then reverse
@@ -191,10 +191,10 @@ static uint32_t bh_find_nearest_k(Renderer *r, const float query[3], uint32_t k,
 // Ensure the node label instance buffer is large enough for 'needed' instances.
 static void label_ensure_instance_buffer(Renderer *r, uint32_t needed)
 {
-	if (!r->nodeLabelInstanceBuffer || r->nodeLabelCapacity < needed) {
-		VK_DESTROY_BUFFER(r->core.device, r->nodeLabelInstanceBuffer, r->nodeLabelInstanceBufferMemory);
-		r->nodeLabelCapacity = needed > 128 ? needed : 128;
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(NodeLabelInstance) * r->nodeLabelCapacity, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->nodeLabelInstanceBuffer, &r->nodeLabelInstanceBufferMemory);
+	if (!r->label.instance || r->label.capacity < needed) {
+		VK_DESTROY_BUFFER(r->core.device, r->label.instance, r->label.instance_memory);
+		r->label.capacity = needed > 128 ? needed : 128;
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(NodeLabelInstance) * r->label.capacity, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->label.instance, &r->label.instance_memory);
 	}
 }
 
@@ -202,7 +202,7 @@ static void label_ensure_instance_buffer(Renderer *r, uint32_t needed)
 // Returns the number of instances written.
 static uint32_t label_build_lod_instances(Renderer *r, GraphData *graph, uint32_t label_count, DistIdxPair *sorted, int selected_node, NodeLabelInstance *instances)
 {
-	text_atlas_clear(&r->nodeTextAtlas);
+	text_atlas_clear(&r->label.atlas);
 
 	float world_text_scale = 0.003f;
 	float fixed_offset = 0.4f;
@@ -234,7 +234,7 @@ static uint32_t label_build_lod_instances(Renderer *r, GraphData *graph, uint32_
 
 		// Render label text into LOD atlas
 		TextRegion region;
-		text_atlas_render(&r->nodeTextAtlas, &globalAtlas, label, &region);
+		text_atlas_render(&r->label.atlas, &globalAtlas, label, &region);
 
 		// Build instance
 		NodeLabelInstance *inst = &instances[inst_idx];
@@ -268,18 +268,18 @@ static uint32_t label_build_lod_instances(Renderer *r, GraphData *graph, uint32_
 void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos, int selected_node)
 {
 	if (graph->node_count == 0) {
-		r->nodeLabelInstanceCount = 0;
+		r->label.count = 0;
 		r->detailCardVisible = false;
 		return;
 	}
 
 	// Check if labels can be skipped (camera hasn't moved, selection unchanged)
-	if (!r->labelTreeNeedsRebuild && r->labelCacheValid) {
+	if (!r->label.tree_needs_rebuild && r->label.cache_valid) {
 		vec3 delta;
-		glm_vec3_sub(camera_pos, r->labelCameraPos, delta);
+		glm_vec3_sub(camera_pos, r->label.camera_pos, delta);
 		float dist2 = glm_vec3_dot(delta, delta);
 		bool camera_moved = dist2 > 0.0001f;
-		bool selection_changed = (selected_node != r->labelSelectedNode);
+		bool selection_changed = (selected_node != r->label.selected_node);
 
 		if (!camera_moved && !selection_changed) {
 			if (selected_node >= 0 && selected_node < (int)graph->node_count)
@@ -289,10 +289,10 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 	}
 
 	// Rebuild BH tree if positions changed
-	if (r->labelTreeNeedsRebuild)
+	if (r->label.tree_needs_rebuild)
 		label_rebuild_tree(r, graph);
 
-	r->nodeLabelInstanceCount = 0;
+	r->label.count = 0;
 
 	// Find K nearest nodes via BH traversal
 	uint32_t max_labels = 200;
@@ -339,12 +339,12 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 	if (inst_idx > 0)
 		label_upload_and_update_descriptors(r, inst_idx, instances);
 
-	r->nodeLabelInstanceCount = inst_idx;
+	r->label.count = inst_idx;
 	free(instances);
 
-	glm_vec3_copy(camera_pos, r->labelCameraPos);
-	r->labelSelectedNode = selected_node;
-	r->labelCacheValid = true;
+	glm_vec3_copy(camera_pos, r->label.camera_pos);
+	r->label.selected_node = selected_node;
+	r->label.cache_valid = true;
 
 	// Detail card: only rebuild atlas on selection change
 	if (selected_node >= 0 && selected_node < (int)graph->node_count) {

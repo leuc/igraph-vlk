@@ -47,7 +47,7 @@ void apply_remove_feedback_arc_set(ExecutionContext *ctx, void *result_data)
 
 	graph_rebuild_edges(data);
 	renderer_update_graph(&state->renderer, data);
-	state->renderer.labelTreeNeedsRebuild = true;
+	state->renderer.label.tree_needs_rebuild = true;
 
 	printf("[apply] Removed feedback arc set - %d vertices, %d edges\n", data->node_count, data->edge_count);
 }

@@ -119,7 +119,7 @@ void apply_splc_animation(ExecutionContext *ctx, void *result_data)
 	graph_rebuild_edges(data);
 	renderer_init_splc_buffers(&state->renderer, data);
 	renderer_update_graph(&state->renderer, data);
-	state->renderer.labelTreeNeedsRebuild = true;
+	state->renderer.label.tree_needs_rebuild = true;
 
 	printf("SPLC animation started (graph has %d levels)\n", state->renderer.splc.num_levels);
 

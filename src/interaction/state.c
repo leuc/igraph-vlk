@@ -199,7 +199,7 @@ void update_app_state(AppState *state)
 					// CPU-only job: apply + free immediately
 					if (job->apply_func && job->result_data) {
 						job->apply_func(job->ctx, job->result_data);
-						state->renderer.labelTreeNeedsRebuild = true;
+						state->renderer.label.tree_needs_rebuild = true;
 					}
 					if (job->free_func && job->result_data) {
 						job->free_func(job->result_data);

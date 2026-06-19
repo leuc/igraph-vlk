@@ -141,7 +141,7 @@ bool poll_bcgl_gpu(ExecutionContext *ctx)
 		debug_print_bcgl_stats(renderer, bcgl->iterations_dispatched, bcgl->total_iterations);
 		renderer_readback_bcgl_positions(renderer, data);
 		renderer_update_graph(renderer, data);
-		renderer->labelTreeNeedsRebuild = true;
+		renderer->label.tree_needs_rebuild = true;
 	}
 
 	// Dispatch next chunk or finish

@@ -180,7 +180,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->splc.active = false;
 
 	renderer_update_graph(r, graph);
-	r->labelTreeNeedsRebuild = true;
+	r->label.tree_needs_rebuild = true;
 
 	r->ubo.buffers = malloc(sizeof(VkBuffer) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
 	r->ubo.memory = malloc(sizeof(VkDeviceMemory) * MAX_FRAMES_IN_FLIGHT * MAX_VIEWS);
@@ -243,16 +243,16 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	}
 
 	// Initialize node label atlas and instance buffer
-	if (!text_atlas_init(&r->nodeTextAtlas, 2048, 4096)) {
+	if (!text_atlas_init(&r->label.atlas, 2048, 4096)) {
 		fprintf(stderr, "Failed to initialize node label text atlas\n");
 		return false;
 	}
-	r->nodeLabelInstanceBuffer = VK_NULL_HANDLE;
-	r->nodeLabelInstanceBufferMemory = VK_NULL_HANDLE;
-	r->nodeLabelInstanceCount = 0;
-	r->nodeLabelCapacity = 0;
-	memset(&r->labelTree, 0, sizeof(r->labelTree));
-	r->labelTreeNeedsRebuild = true;
+	r->label.instance = VK_NULL_HANDLE;
+	r->label.instance_memory = VK_NULL_HANDLE;
+	r->label.count = 0;
+	r->label.capacity = 0;
+	memset(&r->label.tree, 0, sizeof(r->label.tree));
+	r->label.tree_needs_rebuild = true;
 
 	// Initialize dedicated detail card atlas and single-instance buffer
 	if (!text_atlas_init(&r->detailCardAtlas, 2048, 4096)) {
@@ -263,7 +263,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->detailCardInstanceBufferMemory = VK_NULL_HANDLE;
 	r->detailCardVisible = false;
 	r->detailCardNode = -1;
-	r->labelCacheValid = false;
+	r->label.cache_valid = false;
 
 	r->graphUpdateRingIndex = 0;
 	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++) {

@@ -56,14 +56,14 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdDraw(cmd, 3, r->node.count, 0, 0);
 	}
 	// Node labels (opaque, depth-writing) — draw before menu so menu occludes them
-	if (r->nodeLabelInstanceCount > 0 && r->nodeLabelInstanceBuffer != VK_NULL_HANDLE) {
+	if (r->label.count > 0 && r->label.instance != VK_NULL_HANDLE) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.label);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.node_label_sets[ubo_idx], 0, NULL);
-		VkBuffer nVs[] = {r->menu.quad_vertex, r->nodeLabelInstanceBuffer};
+		VkBuffer nVs[] = {r->menu.quad_vertex, r->label.instance};
 		VkDeviceSize nOs[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, nVs, nOs);
 		vkCmdBindIndexBuffer(cmd, r->menu.quad_index, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexed(cmd, 6, r->nodeLabelInstanceCount, 0, 0, 0);
+		vkCmdDrawIndexed(cmd, 6, r->label.count, 0, 0, 0);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.sets[ubo_idx], 0, NULL);
 	}
 	// Detail card (single instance, dedicated atlas)

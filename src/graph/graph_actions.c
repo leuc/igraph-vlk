@@ -40,6 +40,6 @@ void graph_action_reset(AppState *state)
 
 	if (graph_load_graphml(state->current_filename, &state->current_graph, LAYOUT_GRID_3D, NULL, NULL)) {
 		renderer_update_graph(&state->renderer, &state->current_graph);
-		state->renderer.labelTreeNeedsRebuild = true;
+		state->renderer.label.tree_needs_rebuild = true;
 	}
 }
