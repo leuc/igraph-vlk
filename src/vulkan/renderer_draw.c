@@ -36,7 +36,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[ubo_idx], 0, NULL);
 
 	if (r->showEdges && r->edgeCount > 0) {
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->edgePipeline);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.edge);
 		// Push segments per edge for edge index calculation
 		int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
 		uint32_t segs = (uint32_t)segments;
@@ -49,7 +49,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	if (r->showNodes && r->nodeCount > 0) {
 		float a = 1.0f;
 		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 4, &a);
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->nodePipeline);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.node);
 		VkBuffer vbs[] = {r->nodeVertexBuffer, r->nodePositionBuffer, r->nodeAttributeBuffer};
 		VkDeviceSize vos[] = {0, 0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 3, vbs, vos);
@@ -57,7 +57,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	}
 	// Node labels (opaque, depth-writing) — draw before menu so menu occludes them
 	if (r->nodeLabelInstanceCount > 0 && r->nodeLabelInstanceBuffer != VK_NULL_HANDLE) {
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.label);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->nodeLabelDescSets[ubo_idx], 0, NULL);
 		VkBuffer nVs[] = {r->menuQuadVertexBuffer, r->nodeLabelInstanceBuffer};
 		VkDeviceSize nOs[] = {0, 0};
@@ -68,7 +68,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	}
 	// Detail card (single instance, dedicated atlas)
 	if (r->detailCardVisible && r->detailCardInstanceBuffer != VK_NULL_HANDLE) {
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->labelPipeline);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.label);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->detailCardDescSets[ubo_idx], 0, NULL);
 		VkBuffer dVs[] = {r->menuQuadVertexBuffer, r->detailCardInstanceBuffer};
 		VkDeviceSize dOs[] = {0, 0};
@@ -78,7 +78,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptorSets[ubo_idx], 0, NULL);
 	}
 	if (r->menuNodeCount > 0 && r->menuInstanceBuffer != VK_NULL_HANDLE) {
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->menuPipeline);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.menu);
 		VkBuffer mVs[] = {r->menuQuadVertexBuffer, r->menuInstanceBuffer};
 		VkDeviceSize mOs[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, mVs, mOs);
@@ -86,7 +86,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdDrawIndexed(cmd, r->menuQuadIndexCount, r->menuNodeCount, 0, 0, 0);
 	}
 	if (r->textQuadInstanceCount > 0 && r->textQuadInstanceBuffer != VK_NULL_HANDLE) {
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->textQuadPipeline);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.textQuad);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->textQuadDescriptorSets[ubo_idx], 0, NULL);
 		VkBuffer tVs[] = {r->menuQuadVertexBuffer, r->textQuadInstanceBuffer};
 		VkDeviceSize tOs[] = {0, 0};
@@ -98,7 +98,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	if (r->showUI) {
 		float viewportSize[2] = {(float)extent.width, (float)extent.height};
 		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(mat4) * 2 + sizeof(float) + sizeof(uint32_t), sizeof(float) * 2, viewportSize);
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->uiPipeline);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.ui);
 		VkBuffer bVs[] = {r->uiBgVertexBuffer, r->uiBgInstanceBuffer};
 		VkDeviceSize bOs[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, bVs, bOs);

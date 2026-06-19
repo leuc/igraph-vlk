@@ -29,7 +29,7 @@ void renderer_create_graphics_pipelines(Renderer *r)
 	VkPipelineVertexInputStateCreateInfo nodeVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 3, .pVertexBindingDescriptions = nodeBindings, .vertexAttributeDescriptionCount = 6, .pVertexAttributeDescriptions = nodeAttributes};
 	VkPipelineInputAssemblyStateCreateInfo nodeInputAssembly = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
 	VkGraphicsPipelineCreateInfo nodePipelineInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = nodeShaderStages, .pVertexInputState = &nodeVertexInput, .pInputAssemblyState = &nodeInputAssembly, .pViewportState = &viewportState, .pRasterizationState = &rasterizationState, .pMultisampleState = &multisampleState, .pColorBlendState = &colorBlendState, .pDepthStencilState = &nodeDepthStencilState, .pDynamicState = &dynamicState, .layout = r->pipelineLayout, .renderPass = r->renderPass.renderPass};
-	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &nodePipelineInfo, NULL, &r->nodePipeline), "Failed to create node graphics pipeline");
+	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &nodePipelineInfo, NULL, &r->pipelines.node), "Failed to create node graphics pipeline");
 
 	// Edges
 	VkPipelineShaderStageCreateInfo edgeShaderStages[] = {VK_SHADER_STAGE_VERT(edgeVertexShaderModule), VK_SHADER_STAGE_FRAG(edgeFragmentShaderModule)};
@@ -38,7 +38,7 @@ void renderer_create_graphics_pipelines(Renderer *r)
 	VkPipelineVertexInputStateCreateInfo edgeVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 2, .pVertexBindingDescriptions = edgeBindings, .vertexAttributeDescriptionCount = 4, .pVertexAttributeDescriptions = edgeAttributes};
 	VkPipelineInputAssemblyStateCreateInfo edgeInputAssembly = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, .topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST};
 	VkGraphicsPipelineCreateInfo edgePipelineInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = edgeShaderStages, .pVertexInputState = &edgeVertexInput, .pInputAssemblyState = &edgeInputAssembly, .pViewportState = &viewportState, .pRasterizationState = &rasterizationState, .pMultisampleState = &multisampleState, .pColorBlendState = &colorBlendState, .pDepthStencilState = &nodeDepthStencilState, .pDynamicState = &dynamicState, .layout = r->pipelineLayout, .renderPass = r->renderPass.renderPass};
-	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &edgePipelineInfo, NULL, &r->edgePipeline), "Failed to create edge graphics pipeline");
+	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &edgePipelineInfo, NULL, &r->pipelines.edge), "Failed to create edge graphics pipeline");
 
 	// Ray
 	VkPipelineShaderStageCreateInfo rayShaderStages[] = {VK_SHADER_STAGE_VERT(rayVertexShaderModule), VK_SHADER_STAGE_FRAG(rayFragmentShaderModule)};
@@ -46,7 +46,7 @@ void renderer_create_graphics_pipelines(Renderer *r)
 	VkVertexInputAttributeDescription rayAttributes[] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0}, {1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 12}};
 	VkPipelineVertexInputStateCreateInfo rayVertexInput = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, .vertexBindingDescriptionCount = 1, .pVertexBindingDescriptions = &rayBindings, .vertexAttributeDescriptionCount = 2, .pVertexAttributeDescriptions = rayAttributes};
 	VkGraphicsPipelineCreateInfo rayPipelineInfo = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2, .pStages = rayShaderStages, .pVertexInputState = &rayVertexInput, .pInputAssemblyState = &edgeInputAssembly, .pViewportState = &viewportState, .pRasterizationState = &rasterizationState, .pMultisampleState = &multisampleState, .pColorBlendState = &colorBlendState, .pDepthStencilState = &nodeDepthStencilState, .pDynamicState = &dynamicState, .layout = r->pipelineLayout, .renderPass = r->renderPass.renderPass};
-	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &rayPipelineInfo, NULL, &r->rayPipeline), "Failed to create ray graphics pipeline");
+	VK_CHECK(vkCreateGraphicsPipelines(r->core.device, VK_NULL_HANDLE, 1, &rayPipelineInfo, NULL, &r->pipelines.ray), "Failed to create ray graphics pipeline");
 
 	vkDestroyShaderModule(r->core.device, rayFragmentShaderModule, NULL);
 	vkDestroyShaderModule(r->core.device, rayVertexShaderModule, NULL);

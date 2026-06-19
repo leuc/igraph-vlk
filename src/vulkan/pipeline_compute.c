@@ -22,7 +22,7 @@ void renderer_create_compute_pipelines(Renderer *r)
 	VK_CHECK(create_shader_module(r->core.device, ROUTING_COMP_SHADER_PATH, &sphericalShaderModule), "Failed to create compute shader module");
 	VkPipelineShaderStageCreateInfo computeStageSpherical = VK_SHADER_STAGE_COMP(sphericalShaderModule);
 	VkComputePipelineCreateInfo computePipelineInfoSpherical = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = computeStageSpherical, .layout = r->computePipelineLayout};
-	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &computePipelineInfoSpherical, NULL, &r->computeSphericalPipeline), "Failed to create compute spherical pipeline");
+	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &computePipelineInfoSpherical, NULL, &r->pipelines.compute_spherical), "Failed to create compute spherical pipeline");
 	vkDestroyShaderModule(r->core.device, sphericalShaderModule, NULL);
 
 	renderer_create_splc_compute_pipeline(r);
@@ -45,7 +45,7 @@ void renderer_create_splc_compute_pipeline(Renderer *r)
 	VK_CHECK(create_shader_module(r->core.device, SPLC_COMP_SHADER_PATH, &splcShaderModule), "Failed to create SPLC compute shader module");
 	VkPipelineShaderStageCreateInfo splcStage = VK_SHADER_STAGE_COMP(splcShaderModule);
 	VkComputePipelineCreateInfo splcPipelineInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = splcStage, .layout = r->splc_compute_pipeline_layout};
-	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &splcPipelineInfo, NULL, &r->splc_compute_pipeline), "Failed to create SPLC compute pipeline");
+	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &splcPipelineInfo, NULL, &r->pipelines.compute_splc), "Failed to create SPLC compute pipeline");
 	vkDestroyShaderModule(r->core.device, splcShaderModule, NULL);
 
 	VkDescriptorPoolSize splcPoolSizes = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 5};

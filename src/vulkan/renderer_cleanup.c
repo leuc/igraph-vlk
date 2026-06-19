@@ -108,8 +108,8 @@ void cleanup_splc_pipelines_core(Renderer *r)
 	}
 	if (r->splc_descriptor_pool != VK_NULL_HANDLE)
 		vkDestroyDescriptorPool(r->core.device, r->splc_descriptor_pool, NULL);
-	if (r->splc_compute_pipeline != VK_NULL_HANDLE)
-		vkDestroyPipeline(r->core.device, r->splc_compute_pipeline, NULL);
+	if (r->pipelines.compute_splc != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->pipelines.compute_splc, NULL);
 	if (r->splc_compute_pipeline_layout != VK_NULL_HANDLE)
 		vkDestroyPipelineLayout(r->core.device, r->splc_compute_pipeline_layout, NULL);
 	if (r->splc_compute_descriptor_set_layout != VK_NULL_HANDLE)
@@ -121,16 +121,16 @@ void cleanup_splc_pipelines_core(Renderer *r)
 	vkDestroyImage(r->core.device, r->textureImage, NULL);
 	vkFreeMemory(r->core.device, r->textureImageMemory, NULL);
 
-	vkDestroyPipeline(r->core.device, r->computeSphericalPipeline, NULL);
+	vkDestroyPipeline(r->core.device, r->pipelines.compute_spherical, NULL);
 	vkDestroyPipelineLayout(r->core.device, r->computePipelineLayout, NULL);
 	vkDestroyDescriptorSetLayout(r->core.device, r->computeDescriptorSetLayout, NULL);
-	vkDestroyPipeline(r->core.device, r->uiPipeline, NULL);
-	vkDestroyPipeline(r->core.device, r->labelPipeline, NULL);
-	vkDestroyPipeline(r->core.device, r->menuPipeline, NULL);
-	vkDestroyPipeline(r->core.device, r->textQuadPipeline, NULL);
-	vkDestroyPipeline(r->core.device, r->rayPipeline, NULL);
-	vkDestroyPipeline(r->core.device, r->edgePipeline, NULL);
-	vkDestroyPipeline(r->core.device, r->nodePipeline, NULL);
+	vkDestroyPipeline(r->core.device, r->pipelines.ui, NULL);
+	vkDestroyPipeline(r->core.device, r->pipelines.label, NULL);
+	vkDestroyPipeline(r->core.device, r->pipelines.menu, NULL);
+	vkDestroyPipeline(r->core.device, r->pipelines.textQuad, NULL);
+	vkDestroyPipeline(r->core.device, r->pipelines.ray, NULL);
+	vkDestroyPipeline(r->core.device, r->pipelines.edge, NULL);
+	vkDestroyPipeline(r->core.device, r->pipelines.node, NULL);
 	vkDestroyPipelineLayout(r->core.device, r->pipelineLayout, NULL);
 	vkDestroyDescriptorSetLayout(r->core.device, r->descriptorSetLayout, NULL);
 

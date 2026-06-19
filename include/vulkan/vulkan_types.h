@@ -265,6 +265,19 @@ typedef struct
 	uint32_t imageCount;
 } VulkanCommands;
 
+typedef struct
+{
+	VkPipeline node;
+	VkPipeline edge;
+	VkPipeline label;
+	VkPipeline ui;
+	VkPipeline menu;
+	VkPipeline textQuad;
+	VkPipeline ray;
+	VkPipeline compute_spherical;
+	VkPipeline compute_splc;
+} Pipelines;
+
 typedef struct Renderer
 {
 	GLFWwindow *window;
@@ -278,17 +291,12 @@ typedef struct Renderer
 	VkFormat xrFormat;		   // XR swapchain format (may differ from desktop)
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
-	VkPipeline nodePipeline;
-	VkPipeline edgePipeline;
-	VkPipeline labelPipeline;
-	VkPipeline uiPipeline;
+	Pipelines pipelines;
 
 	EdgeRoutingMode currentRoutingMode;
 
 	VkDescriptorSetLayout computeDescriptorSetLayout;
 	VkPipelineLayout computePipelineLayout;
-
-	VkPipeline computeSphericalPipeline;
 
 	VkFramebuffer **xrFramebuffers; // [view_index][image_index]
 	uint32_t *xrFramebufferImageCount;
@@ -362,10 +370,7 @@ typedef struct Renderer
 	VkDeviceMemory menuInstanceBufferMemory;
 	uint32_t menuNodeCount;
 	uint32_t menuQuadIndexCount;
-	VkPipeline menuPipeline; // Instanced menu rendering pipeline
-
 	// Generic text quad pipeline
-	VkPipeline textQuadPipeline;
 	VkBuffer textQuadInstanceBuffer;
 	VkDeviceMemory textQuadInstanceBufferMemory;
 	uint32_t textQuadInstanceCount;
@@ -394,7 +399,6 @@ typedef struct Renderer
 	NodeLabelInstance detailCardInstance;
 	int detailCardNode; // node index the detail card was built for, -1 = none
 
-	VkPipeline rayPipeline;
 	VkBuffer rayVertexBuffer;
 	VkDeviceMemory rayVertexBufferMemory;
 	uint32_t rayVertexCount;
@@ -426,7 +430,6 @@ typedef struct Renderer
 	VkDeviceMemory splc_max_memory;
 	VkDescriptorPool splc_descriptor_pool;
 	VkDescriptorSet splc_descriptor_set;
-	VkPipeline splc_compute_pipeline;
 	VkPipelineLayout splc_compute_pipeline_layout;
 	VkDescriptorSetLayout splc_compute_descriptor_set_layout;
 

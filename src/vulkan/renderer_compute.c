@@ -110,7 +110,7 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	VK_CHECK(vkResetCommandBuffer(ctx->cmdBuf, 0), "Failed to reset compute command buffer");
 	VK_CHECK(vkBeginCommandBuffer(ctx->cmdBuf, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin compute command buffer");
 
-	vkCmdBindPipeline(ctx->cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computeSphericalPipeline);
+	vkCmdBindPipeline(ctx->cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->pipelines.compute_spherical);
 	vkCmdBindDescriptorSets(ctx->cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, r->computePipelineLayout, 0, 1, &ctx->descSet, 0, NULL);
 
 	struct
@@ -387,7 +387,7 @@ void renderer_dispatch_splc_level(Renderer *r, VkCommandBuffer cmd)
 	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &memBarrier, 0, NULL, 0, NULL);
 
 	// Bind SPLC compute pipeline
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->splc_compute_pipeline);
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->pipelines.compute_splc);
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->splc_compute_pipeline_layout, 0, 1, &r->splc_descriptor_set, 0, NULL);
 
 	// Push constant: num_nodes_in_level

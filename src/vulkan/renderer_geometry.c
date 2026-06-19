@@ -212,7 +212,7 @@ void renderer_render_ray(Renderer *r, VkCommandBuffer cmd, vec3 origin, vec3 dir
 	update_buffer(r->core.device, r->rayVertexBufferMemory, sizeof(vertices), vertices);
 
 	// Draw
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->rayPipeline);
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.ray);
 
 	struct
 	{
