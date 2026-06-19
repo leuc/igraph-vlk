@@ -278,6 +278,20 @@ typedef struct
 	VkPipeline compute_splc;
 } Pipelines;
 
+typedef struct
+{
+	VkDescriptorSetLayout layout;
+	VkDescriptorSetLayout compute_layout;
+	VkDescriptorSetLayout splc_compute_layout;
+	VkDescriptorPool pool;
+	VkDescriptorSet *sets;
+	VkDescriptorSet *text_quad_sets;
+	VkDescriptorSet *node_label_sets;
+	VkDescriptorSet *detail_card_sets;
+	VkDescriptorPool splc_pool;
+	VkDescriptorSet splc_set;
+} Descriptors;
+
 typedef struct Renderer
 {
 	GLFWwindow *window;
@@ -289,13 +303,12 @@ typedef struct Renderer
 
 	VkRenderPass renderPassXR; // XR render pass (if format differs)
 	VkFormat xrFormat;		   // XR swapchain format (may differ from desktop)
-	VkDescriptorSetLayout descriptorSetLayout;
+	Descriptors descriptors;
 	VkPipelineLayout pipelineLayout;
 	Pipelines pipelines;
 
 	EdgeRoutingMode currentRoutingMode;
 
-	VkDescriptorSetLayout computeDescriptorSetLayout;
 	VkPipelineLayout computePipelineLayout;
 
 	VkFramebuffer **xrFramebuffers; // [view_index][image_index]
@@ -307,8 +320,6 @@ typedef struct Renderer
 	VkBuffer *uniformBuffers;
 	VkDeviceMemory *uniformBuffersMemory;
 	void *uboMapped[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
-	VkDescriptorPool descriptorPool;
-	VkDescriptorSet *descriptorSets;
 	UniformBufferObject ubo;
 	VkImage textureImage;
 	VkDeviceMemory textureImageMemory;
@@ -375,11 +386,9 @@ typedef struct Renderer
 	VkDeviceMemory textQuadInstanceBufferMemory;
 	uint32_t textQuadInstanceCount;
 	TextAtlas menuTextAtlas;
-	VkDescriptorSet *textQuadDescriptorSets;
 
 	// Node Labels (LOD)
 	TextAtlas nodeTextAtlas;
-	VkDescriptorSet *nodeLabelDescSets;
 	VkBuffer nodeLabelInstanceBuffer;
 	VkDeviceMemory nodeLabelInstanceBufferMemory;
 	uint32_t nodeLabelInstanceCount;
@@ -392,7 +401,6 @@ typedef struct Renderer
 
 	// Detail card (single-instance, dedicated atlas)
 	TextAtlas detailCardAtlas;
-	VkDescriptorSet *detailCardDescSets;
 	VkBuffer detailCardInstanceBuffer;
 	VkDeviceMemory detailCardInstanceBufferMemory;
 	bool detailCardVisible;
@@ -428,10 +436,7 @@ typedef struct Renderer
 	bool splc_readback_pending;
 	VkBuffer splc_max_buffer;
 	VkDeviceMemory splc_max_memory;
-	VkDescriptorPool splc_descriptor_pool;
-	VkDescriptorSet splc_descriptor_set;
 	VkPipelineLayout splc_compute_pipeline_layout;
-	VkDescriptorSetLayout splc_compute_descriptor_set_layout;
 
 	// BCGL (Binary Classification-Based Graph Layout) compute context
 	BCGLComputeContext bcgl_ctx;

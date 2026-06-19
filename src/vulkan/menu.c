@@ -475,8 +475,8 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 		VkDescriptorBufferInfo bufferInfo = {r->uniformBuffers[i], 0, sizeof(UniformBufferObject)};
 		VkDescriptorImageInfo imageInfo = {r->textureSampler, r->menuTextAtlas.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 		VkWriteDescriptorSet writes[] = {
-			VK_WRITE_DESC_BUFFER(r->textQuadDescriptorSets[i], 0, &bufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER),
-			VK_WRITE_DESC_IMAGE(r->textQuadDescriptorSets[i], 1, &imageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER),
+			VK_WRITE_DESC_BUFFER(r->descriptors.text_quad_sets[i], 0, &bufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER),
+			VK_WRITE_DESC_IMAGE(r->descriptors.text_quad_sets[i], 1, &imageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER),
 		};
 		vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
 	}

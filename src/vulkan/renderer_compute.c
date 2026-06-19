@@ -60,7 +60,7 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 		VkDescriptorPoolCreateInfo descriptorPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &descriptorPoolSizes};
 		VK_CHECK(vkCreateDescriptorPool(r->core.device, &descriptorPoolInfo, NULL, &ctx->pool), "Failed to create compute descriptor pool");
 
-		VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = ctx->pool, .descriptorSetCount = 1, .pSetLayouts = &r->computeDescriptorSetLayout};
+		VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = ctx->pool, .descriptorSetCount = 1, .pSetLayouts = &r->descriptors.compute_layout};
 		VK_CHECK(vkAllocateDescriptorSets(r->core.device, &descriptorSetAllocInfo, &ctx->descSet), "Failed to allocate compute descriptor set");
 
 		ctx->initialized = VK_TRUE;
@@ -201,14 +201,14 @@ static void splc_create_fallback_buffers(Renderer *r, uint32_t m)
 
 static void splc_write_graphics_descriptors(Renderer *r)
 {
-	if (r->descriptorSets == NULL)
+	if (r->descriptors.sets == NULL)
 		return;
 	VkDescriptorBufferInfo edgeWeightInfo = {r->splc_edges_buffer, 0, VK_WHOLE_SIZE};
 	VkDescriptorBufferInfo maxWeightInfo = {r->splc_max_buffer, 0, VK_WHOLE_SIZE};
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 		VkWriteDescriptorSet descWrites[] = {
-			VK_WRITE_DESC_BUFFER(r->descriptorSets[i], 2, &edgeWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-			VK_WRITE_DESC_BUFFER(r->descriptorSets[i], 3, &maxWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 2, &edgeWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 3, &maxWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
 		};
 		vkUpdateDescriptorSets(r->core.device, 2, descWrites, 0, NULL);
 	}
@@ -299,7 +299,7 @@ static void splc_write_compute_descriptors(Renderer *r)
 	VkDescriptorBufferInfo levelInfo = {r->splc_level_buffer, 0, VK_WHOLE_SIZE};
 	VkDescriptorBufferInfo maxInfo = {r->splc_max_buffer, 0, VK_WHOLE_SIZE};
 	VkWriteDescriptorSet splcWrites[] = {
-		VK_WRITE_DESC_BUFFER(r->splc_descriptor_set, 0, &nodeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->splc_descriptor_set, 1, &edgeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->splc_descriptor_set, 2, &trafficInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->splc_descriptor_set, 3, &levelInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->splc_descriptor_set, 4, &maxInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+		VK_WRITE_DESC_BUFFER(r->descriptors.splc_set, 0, &nodeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.splc_set, 1, &edgeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.splc_set, 2, &trafficInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.splc_set, 3, &levelInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.splc_set, 4, &maxInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
 	};
 	vkUpdateDescriptorSets(r->core.device, 5, splcWrites, 0, NULL);
 }
@@ -388,7 +388,7 @@ void renderer_dispatch_splc_level(Renderer *r, VkCommandBuffer cmd)
 
 	// Bind SPLC compute pipeline
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->pipelines.compute_splc);
-	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->splc_compute_pipeline_layout, 0, 1, &r->splc_descriptor_set, 0, NULL);
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, r->splc_compute_pipeline_layout, 0, 1, &r->descriptors.splc_set, 0, NULL);
 
 	// Push constant: num_nodes_in_level
 	vkCmdPushConstants(cmd, r->splc_compute_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &num_in_level);

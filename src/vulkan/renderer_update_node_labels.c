@@ -174,7 +174,7 @@ void detail_card_update(Renderer *r, GraphData *graph, int selected_node)
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 			VkDescriptorBufferInfo bufferInfo = {r->uniformBuffers[i], 0, sizeof(UniformBufferObject)};
 			VkDescriptorImageInfo imageInfo = {r->textureSampler, r->detailCardAtlas.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-			VkWriteDescriptorSet writes[] = {VK_WRITE_DESC_BUFFER(r->detailCardDescSets[i], 0, &bufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER), VK_WRITE_DESC_IMAGE(r->detailCardDescSets[i], 1, &imageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)};
+			VkWriteDescriptorSet writes[] = {VK_WRITE_DESC_BUFFER(r->descriptors.detail_card_sets[i], 0, &bufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER), VK_WRITE_DESC_IMAGE(r->descriptors.detail_card_sets[i], 1, &imageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)};
 			vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
 		}
 
@@ -195,7 +195,7 @@ void label_upload_and_update_descriptors(Renderer *r, uint32_t inst_count, NodeL
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 		VkDescriptorBufferInfo bufferInfo = {r->uniformBuffers[i], 0, sizeof(UniformBufferObject)};
 		VkDescriptorImageInfo imageInfo = {r->textureSampler, r->nodeTextAtlas.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-		VkWriteDescriptorSet writes[] = {VK_WRITE_DESC_BUFFER(r->nodeLabelDescSets[i], 0, &bufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER), VK_WRITE_DESC_IMAGE(r->nodeLabelDescSets[i], 1, &imageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)};
+		VkWriteDescriptorSet writes[] = {VK_WRITE_DESC_BUFFER(r->descriptors.node_label_sets[i], 0, &bufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER), VK_WRITE_DESC_IMAGE(r->descriptors.node_label_sets[i], 1, &imageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)};
 		vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
 	}
 
