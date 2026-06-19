@@ -121,7 +121,7 @@ void apply_splc_animation(ExecutionContext *ctx, void *result_data)
 	renderer_update_graph(&state->renderer, data);
 	state->renderer.labelTreeNeedsRebuild = true;
 
-	printf("SPLC animation started (graph has %d levels)\n", state->renderer.splc_num_levels);
+	printf("SPLC animation started (graph has %d levels)\n", state->renderer.splc.num_levels);
 
 	igraph_vector_int_t indeg, outdeg;
 	igraph_integer_t nv = igraph_vcount(&data->g);
@@ -154,7 +154,7 @@ bool poll_splc_gpu(ExecutionContext *ctx)
 	// SPLC per-frame dispatch happens in renderer_draw_frame.
 	// This poll manages the lifecycle: once splc_active goes false (all levels
 	// dispatched and readback done), the job is complete.
-	if (!r->splc_active && !r->splc_readback_pending)
+	if (!r->splc.active && !r->splc.readback_pending)
 		return true;
 
 	return false;

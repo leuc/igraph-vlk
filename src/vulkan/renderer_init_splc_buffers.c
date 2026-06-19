@@ -9,14 +9,14 @@
 
 void splc_save_old_buffers(Renderer *r, BufPair out[5])
 {
-	out[0].buf = r->splc_nodes_buffer;
-	out[0].mem = r->splc_nodes_memory;
-	out[1].buf = r->splc_edges_buffer;
-	out[1].mem = r->splc_edges_memory;
-	out[2].buf = r->splc_traffic_buffer;
-	out[2].mem = r->splc_traffic_memory;
-	out[3].buf = r->splc_level_buffer;
-	out[3].mem = r->splc_level_memory;
-	out[4].buf = r->splc_max_buffer;
-	out[4].mem = r->splc_max_memory;
+	out[0].buf = r->splc.nodes_buffer;
+	out[0].mem = r->splc.nodes_memory;
+	out[1].buf = r->splc.edges_buffer;
+	out[1].mem = r->splc.edges_memory;
+	out[2].buf = r->splc.traffic_buffer;
+	out[2].mem = r->splc.traffic_memory;
+	out[3].buf = r->splc.level_buffer;
+	out[3].mem = r->splc.level_memory;
+	out[4].buf = r->splc.max_buffer;
+	out[4].mem = r->splc.max_memory;
 }

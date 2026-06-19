@@ -162,22 +162,22 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->computeCtx.fence = VK_NULL_HANDLE;
 	r->computeCtx.initialized = VK_FALSE;
 
-	r->splc_nodes_buffer = VK_NULL_HANDLE;
-	r->splc_nodes_memory = VK_NULL_HANDLE;
-	r->splc_edges_buffer = VK_NULL_HANDLE;
-	r->splc_edges_memory = VK_NULL_HANDLE;
-	r->splc_traffic_buffer = VK_NULL_HANDLE;
-	r->splc_traffic_memory = VK_NULL_HANDLE;
-	r->splc_level_buffer = VK_NULL_HANDLE;
-	r->splc_level_memory = VK_NULL_HANDLE;
-	r->splc_max_buffer = VK_NULL_HANDLE;
-	r->splc_max_memory = VK_NULL_HANDLE;
-	r->splc_level_groups = NULL;
-	r->splc_num_levels = 0;
-	r->splc_current_level = 0;
-	r->splc_last_level_time = 0.0;
-	r->splc_level_interval = 0.5f;
-	r->splc_active = false;
+	r->splc.nodes_buffer = VK_NULL_HANDLE;
+	r->splc.nodes_memory = VK_NULL_HANDLE;
+	r->splc.edges_buffer = VK_NULL_HANDLE;
+	r->splc.edges_memory = VK_NULL_HANDLE;
+	r->splc.traffic_buffer = VK_NULL_HANDLE;
+	r->splc.traffic_memory = VK_NULL_HANDLE;
+	r->splc.level_buffer = VK_NULL_HANDLE;
+	r->splc.level_memory = VK_NULL_HANDLE;
+	r->splc.max_buffer = VK_NULL_HANDLE;
+	r->splc.max_memory = VK_NULL_HANDLE;
+	r->splc.level_groups = NULL;
+	r->splc.num_levels = 0;
+	r->splc.current_level = 0;
+	r->splc.last_level_time = 0.0;
+	r->splc.level_interval = 0.5f;
+	r->splc.active = false;
 
 	renderer_update_graph(r, graph);
 	r->labelTreeNeedsRebuild = true;
@@ -213,14 +213,14 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	}
 
 	// Create a dummy SPLC max weight buffer so binding 3 is always valid
-	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc_max_buffer, &r->splc_max_memory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc.max_buffer, &r->splc.max_memory);
 	uint32_t zero = 0;
-	update_buffer(r->core.device, r->splc_max_memory, sizeof(uint32_t), &zero);
+	update_buffer(r->core.device, r->splc.max_memory, sizeof(uint32_t), &zero);
 
 	// Update graphics descriptor sets with SPLC SSBOs (binding 2 = edge weights, binding 3 = max weight)
-	if (r->splc_edges_buffer != VK_NULL_HANDLE) {
-		VkDescriptorBufferInfo edgeWeightInfo = {r->splc_edges_buffer, 0, VK_WHOLE_SIZE};
-		VkDescriptorBufferInfo maxWeightInfo = {r->splc_max_buffer, 0, VK_WHOLE_SIZE};
+	if (r->splc.edges_buffer != VK_NULL_HANDLE) {
+		VkDescriptorBufferInfo edgeWeightInfo = {r->splc.edges_buffer, 0, VK_WHOLE_SIZE};
+		VkDescriptorBufferInfo maxWeightInfo = {r->splc.max_buffer, 0, VK_WHOLE_SIZE};
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 			VkWriteDescriptorSet descWrites[] = {
 				VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 2, &edgeWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
@@ -229,7 +229,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 			vkUpdateDescriptorSets(r->core.device, 2, descWrites, 0, NULL);
 		}
 	} else {
-		VkDescriptorBufferInfo maxWeightInfo = {r->splc_max_buffer, 0, VK_WHOLE_SIZE};
+		VkDescriptorBufferInfo maxWeightInfo = {r->splc.max_buffer, 0, VK_WHOLE_SIZE};
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
 			VkWriteDescriptorSet maxWrite = VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 3, &maxWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 			vkUpdateDescriptorSets(r->core.device, 1, &maxWrite, 0, NULL);

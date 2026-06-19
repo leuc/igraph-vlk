@@ -93,25 +93,25 @@ void cleanup_xr_resources(Renderer *r)
 
 void cleanup_splc_pipelines_core(Renderer *r)
 {
-	VK_DESTROY_BUFFER(r->core.device, r->splc_nodes_buffer, r->splc_nodes_memory);
-	VK_DESTROY_BUFFER(r->core.device, r->splc_edges_buffer, r->splc_edges_memory);
-	VK_DESTROY_BUFFER(r->core.device, r->splc_traffic_buffer, r->splc_traffic_memory);
-	VK_DESTROY_BUFFER(r->core.device, r->splc_level_buffer, r->splc_level_memory);
-	VK_DESTROY_BUFFER(r->core.device, r->splc_max_buffer, r->splc_max_memory);
-	if (r->splc_level_groups) {
-		for (int i = 0; i < r->splc_num_levels; i++) {
-			if (r->splc_level_groups[i])
-				igraph_vector_int_destroy(r->splc_level_groups[i]);
-			free(r->splc_level_groups[i]);
+	VK_DESTROY_BUFFER(r->core.device, r->splc.nodes_buffer, r->splc.nodes_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->splc.edges_buffer, r->splc.edges_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->splc.traffic_buffer, r->splc.traffic_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->splc.level_buffer, r->splc.level_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->splc.max_buffer, r->splc.max_memory);
+	if (r->splc.level_groups) {
+		for (int i = 0; i < r->splc.num_levels; i++) {
+			if (r->splc.level_groups[i])
+				igraph_vector_int_destroy(r->splc.level_groups[i]);
+			free(r->splc.level_groups[i]);
 		}
-		free(r->splc_level_groups);
+		free(r->splc.level_groups);
 	}
 	if (r->descriptors.splc_pool != VK_NULL_HANDLE)
 		vkDestroyDescriptorPool(r->core.device, r->descriptors.splc_pool, NULL);
 	if (r->pipelines.compute_splc != VK_NULL_HANDLE)
 		vkDestroyPipeline(r->core.device, r->pipelines.compute_splc, NULL);
-	if (r->splc_compute_pipeline_layout != VK_NULL_HANDLE)
-		vkDestroyPipelineLayout(r->core.device, r->splc_compute_pipeline_layout, NULL);
+	if (r->splc.pipeline_layout != VK_NULL_HANDLE)
+		vkDestroyPipelineLayout(r->core.device, r->splc.pipeline_layout, NULL);
 	if (r->descriptors.splc_compute_layout != VK_NULL_HANDLE)
 		vkDestroyDescriptorSetLayout(r->core.device, r->descriptors.splc_compute_layout, NULL);
 

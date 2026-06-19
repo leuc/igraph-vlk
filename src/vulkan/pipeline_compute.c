@@ -39,12 +39,12 @@ void renderer_create_splc_compute_pipeline(Renderer *r)
 
 	VkPushConstantRange splcPushConstant = {.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = sizeof(uint32_t)};
 	VkPipelineLayoutCreateInfo splcPipelineLayoutInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->descriptors.splc_compute_layout, .pushConstantRangeCount = 1, .pPushConstantRanges = &splcPushConstant};
-	VK_CHECK(vkCreatePipelineLayout(r->core.device, &splcPipelineLayoutInfo, NULL, &r->splc_compute_pipeline_layout), "Failed to create SPLC compute pipeline layout");
+	VK_CHECK(vkCreatePipelineLayout(r->core.device, &splcPipelineLayoutInfo, NULL, &r->splc.pipeline_layout), "Failed to create SPLC compute pipeline layout");
 
 	VkShaderModule splcShaderModule = VK_NULL_HANDLE;
 	VK_CHECK(create_shader_module(r->core.device, SPLC_COMP_SHADER_PATH, &splcShaderModule), "Failed to create SPLC compute shader module");
 	VkPipelineShaderStageCreateInfo splcStage = VK_SHADER_STAGE_COMP(splcShaderModule);
-	VkComputePipelineCreateInfo splcPipelineInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = splcStage, .layout = r->splc_compute_pipeline_layout};
+	VkComputePipelineCreateInfo splcPipelineInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = splcStage, .layout = r->splc.pipeline_layout};
 	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &splcPipelineInfo, NULL, &r->pipelines.compute_splc), "Failed to create SPLC compute pipeline");
 	vkDestroyShaderModule(r->core.device, splcShaderModule, NULL);
 

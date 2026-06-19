@@ -124,10 +124,10 @@ void renderer_draw_frame(Renderer *r, GraphData *graph)
 	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->commands.inFlightFences[r->commands.currentFrame], VK_TRUE, UINT64_MAX), "Failed to wait for in-flight fences");
 
 	// SPLC readback: sync GPU edge weights to host graph after animation completes
-	if (r->splc_readback_pending) {
+	if (r->splc.readback_pending) {
 		renderer_readback_splc_weights(r, graph);
-		r->splc_readback_pending = false;
-		r->splc_active = false;
+		r->splc.readback_pending = false;
+		r->splc.active = false;
 	}
 
 	uint32_t imageIndex;
@@ -145,9 +145,9 @@ void renderer_draw_frame(Renderer *r, GraphData *graph)
 	VK_CHECK(vkBeginCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], &VK_CMD_BEGIN_INFO), "Failed to begin command buffer");
 
 	// SPLC animation: advance one level every splc_level_interval seconds
-	if (r->splc_active) {
+	if (r->splc.active) {
 		double now = glfwGetTime();
-		if (now - r->splc_last_level_time >= r->splc_level_interval) {
+		if (now - r->splc.last_level_time >= r->splc.level_interval) {
 			renderer_dispatch_splc_level(r, r->commands.commandBuffers[r->commands.currentFrame]);
 		}
 	}

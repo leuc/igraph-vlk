@@ -292,6 +292,28 @@ typedef struct
 	VkDescriptorSet splc_set;
 } Descriptors;
 
+typedef struct
+{
+	VkBuffer nodes_buffer;
+	VkDeviceMemory nodes_memory;
+	VkBuffer edges_buffer;
+	VkDeviceMemory edges_memory;
+	VkBuffer traffic_buffer;
+	VkDeviceMemory traffic_memory;
+	VkBuffer level_buffer;
+	VkDeviceMemory level_memory;
+	igraph_vector_int_t **level_groups;
+	int num_levels;
+	int current_level;
+	double last_level_time;
+	float level_interval;
+	bool active;
+	bool readback_pending;
+	VkBuffer max_buffer;
+	VkDeviceMemory max_memory;
+	VkPipelineLayout pipeline_layout;
+} SPLCComputeContext;
+
 typedef struct Renderer
 {
 	GLFWwindow *window;
@@ -419,24 +441,7 @@ typedef struct Renderer
 	ComputeContext computeCtx;
 
 	// SPLC (Search Path Link Count) animation
-	VkBuffer splc_nodes_buffer;
-	VkDeviceMemory splc_nodes_memory;
-	VkBuffer splc_edges_buffer;
-	VkDeviceMemory splc_edges_memory;
-	VkBuffer splc_traffic_buffer;
-	VkDeviceMemory splc_traffic_memory;
-	VkBuffer splc_level_buffer;
-	VkDeviceMemory splc_level_memory;
-	igraph_vector_int_t **splc_level_groups;
-	int splc_num_levels;
-	int splc_current_level;
-	double splc_last_level_time;
-	float splc_level_interval;
-	bool splc_active;
-	bool splc_readback_pending;
-	VkBuffer splc_max_buffer;
-	VkDeviceMemory splc_max_memory;
-	VkPipelineLayout splc_compute_pipeline_layout;
+	SPLCComputeContext splc;
 
 	// BCGL (Binary Classification-Based Graph Layout) compute context
 	BCGLComputeContext bcgl_ctx;
