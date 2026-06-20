@@ -19,6 +19,17 @@
 typedef enum { LAYOUT_FR_3D, LAYOUT_KK_3D, LAYOUT_RANDOM_3D, LAYOUT_SPHERE, LAYOUT_GRID_3D, LAYOUT_UMAP_3D, LAYOUT_DRL_3D } LayoutType;
 
 /* ============================================================================
+ * Attribute Filtering
+ * ============================================================================ */
+
+typedef struct
+{
+	char *name;
+	int num_values;
+	char **values;
+} FilterableAttr;
+
+/* ============================================================================
  * Core Data Structures
  * ============================================================================ */
 
@@ -30,6 +41,7 @@ typedef struct
 	char *label;
 	int degree;
 	float selected;
+	float visible;
 } Node;
 
 typedef struct
@@ -67,6 +79,9 @@ typedef struct
 	LayoutType active_layout;
 	Hub *hubs;
 	int hub_count;
+
+	FilterableAttr *filterable_attrs;
+	int num_filterable_attrs;
 } GraphData;
 
 #endif // GRAPH_TYPES_H

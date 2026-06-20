@@ -6,6 +6,7 @@
 #ifndef UI_MENU_H
 #define UI_MENU_H
 
+#include "graph/graph_types.h" // For GraphData
 #include "interaction/camera.h"
 #include "interaction/spatial.h"
 #include "interaction/state.h" // For MenuNode, MenuNodeType, IgraphCommand, etc.
@@ -34,5 +35,23 @@ void init_menu_tree(MenuNode *root);
 void menu_tree_destroy(MenuNode *node);
 void update_menu_transforms(MenuNode *node, const SpatialBasis *basis);
 MenuNode *raycast_menu_vr(struct AppState *state, vec3 ray_ori, vec3 ray_dir);
+
+// ============================================================================
+// Dynamic Attribute Filter Menu
+// ============================================================================
+
+/**
+ * Populate the "Node > Filter" submenu with entries from the graph's
+ * filterable attributes (low-cardinality string/boolean attributes).
+ * @param root Root menu node
+ * @param data GraphData with filterable_attrs populated
+ */
+void menu_populate_attribute_filters(MenuNode *root, GraphData *data);
+
+/**
+ * Clear all dynamically added filter entries from the "Node > Filter" submenu.
+ * @param root Root menu node
+ */
+void menu_clear_attribute_filters(MenuNode *root);
 
 #endif // UI_MENU_H

@@ -107,6 +107,7 @@ add_executable(igraph-vlk
     src/graph/graph_core.c
     src/graph/graph_io.c
     src/graph/graph_filter.c
+    src/graph/graph_filter_visibility.c
     src/graph/layered_sphere.c
     src/graph/graph_actions.c
      # Layout wrappers (split by algorithm)
@@ -146,6 +147,7 @@ src/graph/wrappers_constructors.c
     src/interaction/spatial.c
     src/interaction/state.c
     src/interaction/gamepad.c
+    src/interaction/filter.c
 
     # UI modules
     src/ui/hud.c

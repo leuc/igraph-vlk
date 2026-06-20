@@ -74,6 +74,8 @@ typedef struct
 	const struct CommandDef *cmd_def; // Pointer to command definition in registry
 
 	bool produces_visual_output; // If true, shows results overlay before returning to graph
+
+	void *user_data; // Optional context (e.g., FilterContext for attribute filters)
 } IgraphCommand;
 
 // --- 3D Spherical Menu Tree Structure ---

@@ -77,10 +77,12 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 		nodeAttributes[i].size = size;
 		nodeAttributes[i].degree = graph->nodes[i].degree;
 		nodeAttributes[i].selected = graph->nodes[i].selected;
+		nodeAttributes[i].visible = graph->nodes[i].visible;
 	}
 	// Fast path: update positions via mapped buffer
 	update_buffer_mapped(r->core.device, r->node.position_memory, sizeof(NodePosition) * graph->node_count, nodePositions, &r->core.deviceProperties);
 	// Rare: update attributes via staged copy
+	r->needsAttributeUpload = VK_TRUE;
 	if (r->needsAttributeUpload) {
 		update_buffer_staged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(NodeAttribute) * graph->node_count, nodeAttributes, r->node.staging, r->node.staging_memory, r->node.attribute, &r->core.deviceProperties);
 	}
@@ -139,12 +141,14 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 				memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].from].color, 12);
 				edgeAttributes[idx].selected = graph->edges[i].selected;
 				edgeAttributes[idx].normalized_pos = current_segment_start_len / (total_length > 0.0f ? total_length : 1.0f);
+				edgeAttributes[idx].visible = (graph->nodes[graph->edges[i].from].visible > 0.5f && graph->nodes[graph->edges[i].to].visible > 0.5f) ? 1.0f : 0.0f;
 				idx++;
 
 				memcpy(edgePositions[idx].pos, cEdges[i].path[p + 1], 12);
 				memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].to].color, 12);
 				edgeAttributes[idx].selected = graph->edges[i].selected;
 				edgeAttributes[idx].normalized_pos = (current_segment_start_len + segment_length) / (total_length > 0.0f ? total_length : 1.0f);
+				edgeAttributes[idx].visible = edgeAttributes[idx - 1].visible;
 				idx++;
 				current_segment_start_len += segment_length;
 			}
@@ -157,16 +161,20 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 			glm_vec3_scale(graph->nodes[graph->edges[i].from].position, r->layoutScale, p1);
 			glm_vec3_scale(graph->nodes[graph->edges[i].to].position, r->layoutScale, p2);
 
+			float edge_vis = (graph->nodes[graph->edges[i].from].visible > 0.5f && graph->nodes[graph->edges[i].to].visible > 0.5f) ? 1.0f : 0.0f;
+
 			memcpy(edgePositions[idx].pos, p1, 12);
 			memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].from].color, 12);
 			edgeAttributes[idx].selected = graph->edges[i].selected;
 			edgeAttributes[idx].normalized_pos = 0.0f;
+			edgeAttributes[idx].visible = edge_vis;
 			idx++;
 
 			memcpy(edgePositions[idx].pos, p2, 12);
 			memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].to].color, 12);
 			edgeAttributes[idx].selected = graph->edges[i].selected;
 			edgeAttributes[idx].normalized_pos = 1.0f;
+			edgeAttributes[idx].visible = edge_vis;
 			idx++;
 		}
 	}

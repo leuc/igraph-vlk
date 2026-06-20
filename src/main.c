@@ -5,6 +5,7 @@
 
 #include "app_state.h"
 #include "graph/graph_actions.h"
+#include "graph/graph_filter_visibility.h"
 #include "graph/graph_io.h"
 #include "graph/wrappers_layout.h"
 #include "interaction/camera.h"
@@ -168,6 +169,7 @@ int main(int argc, char **argv)
 	// Initialize FSM menu system
 	MenuNode *root_menu = (MenuNode *)malloc(sizeof(MenuNode));
 	init_menu_tree(root_menu);
+	menu_populate_attribute_filters(root_menu, &app.current_graph);
 	app_context_init(&app.app_ctx, &app.current_graph.g, root_menu);
 
 	// Initialize worker thread for long-running operations

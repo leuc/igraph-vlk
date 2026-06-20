@@ -212,6 +212,8 @@ static uint32_t label_build_lod_instances(Renderer *r, GraphData *graph, uint32_
 		uint32_t ni = sorted[j].idx;
 		if ((int)ni == selected_node)
 			continue;
+		if (graph->nodes[ni].visible < 0.5f)
+			continue;
 		const char *label = graph->nodes[ni].label;
 		if (!label || !label[0])
 			continue;

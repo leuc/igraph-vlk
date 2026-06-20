@@ -3,11 +3,15 @@
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in float fragSelected;
 layout(location = 2) in float fragNormalizedPos;
+layout(location = 3) in float fragVisible;
 
 layout(location = 0) out vec4 outColor;
 
 void main()
 {
+	if (fragVisible < 0.5)
+		discard;
+
 	float alpha = 0.8;
 	vec3 finalColor = fragColor;
 

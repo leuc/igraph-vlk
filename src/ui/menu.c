@@ -5,6 +5,8 @@
 
 #include "ui/menu.h"
 #include "graph/command_registry.h"
+#include "graph/graph_filter_visibility.h"
+#include "graph/graph_types.h"
 #include "vulkan/text.h"
 #include <igraph.h>
 #include <math.h>
@@ -134,6 +136,8 @@ void menu_tree_destroy(MenuNode *node)
 			free((void *)node->command->display_name);
 		if (node->command->params)
 			free(node->command->params);
+		if (node->command->user_data)
+			free(node->command->user_data);
 		free(node->command);
 	}
 }
@@ -270,4 +274,155 @@ void update_menu_transforms(MenuNode *node, const SpatialBasis *basis)
 	spatial_resolve_position(basis, -0.6f, 0.4f, 2.5f, root_top_left);
 
 	update_nextstep_layout_recursive(node, root_top_left);
+}
+
+// ============================================================================
+// Dynamic Attribute Filter Menu
+// ============================================================================
+
+typedef struct
+{
+	char *command_id;
+	char *attr_name;
+	char *attr_value;
+} FilterLookup;
+
+static FilterLookup *g_filter_lookup = NULL;
+static int g_filter_lookup_count = 0;
+static int g_filter_lookup_capacity = 0;
+
+// Get the command ID for a filter entry (static buffer, call within same scope)
+static void filter_make_command_id(char *buf, size_t buf_size, const char *attr_name, const char *attr_value)
+{
+	snprintf(buf, buf_size, "filter_%s_%s", attr_name, attr_value);
+}
+
+// Register a filter in the lookup table
+static void filter_register(const char *command_id, const char *attr_name, const char *attr_value)
+{
+	if (g_filter_lookup_count >= g_filter_lookup_capacity) {
+		g_filter_lookup_capacity = g_filter_lookup_capacity ? g_filter_lookup_capacity * 2 : 64;
+		g_filter_lookup = realloc(g_filter_lookup, sizeof(FilterLookup) * g_filter_lookup_capacity);
+	}
+	FilterLookup *entry = &g_filter_lookup[g_filter_lookup_count++];
+	entry->command_id = strdup(command_id);
+	entry->attr_name = strdup(attr_name);
+	entry->attr_value = strdup(attr_value);
+}
+
+// Find a branch by label in a parent's children (searches all children)
+static MenuNode *find_child_branch(MenuNode *parent, const char *label)
+{
+	if (!parent)
+		return NULL;
+	for (int i = 0; i < parent->num_children; i++) {
+		if (parent->children[i]->type == NODE_BRANCH && strcmp(parent->children[i]->label, label) == 0)
+			return parent->children[i];
+	}
+	return NULL;
+}
+
+// Declare the filter execute function (implemented in interaction/filter.c)
+extern void execute_filter_reset(ExecutionContext *ctx);
+extern void execute_filter_by_attr(ExecutionContext *ctx);
+
+void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
+{
+	if (!root || !data)
+		return;
+
+	// Find or create "Node" branch
+	MenuNode *node_branch = find_child_branch(root, "Node");
+	if (!node_branch) {
+		node_branch = create_menu_node("Node", NODE_BRANCH);
+		root->children = realloc(root->children, sizeof(MenuNode *) * (root->num_children + 1));
+		root->children[root->num_children++] = node_branch;
+	}
+
+	// Find or create "Filter" sub-branch
+	MenuNode *filter_branch = find_child_branch(node_branch, "Filter");
+	if (!filter_branch) {
+		filter_branch = create_menu_node("Filter", NODE_BRANCH);
+		node_branch->children = realloc(node_branch->children, sizeof(MenuNode *) * (node_branch->num_children + 1));
+		node_branch->children[node_branch->num_children++] = filter_branch;
+	}
+
+	// Add "Show All" leaf
+	MenuNode *show_all = create_menu_node("Show All", NODE_LEAF_COMMAND);
+	show_all->command = create_command("filter_show_all", "Show All", execute_filter_reset, 0);
+	show_all->command->cmd_def = NULL;
+	filter_branch->children = realloc(filter_branch->children, sizeof(MenuNode *) * (filter_branch->num_children + 1));
+	filter_branch->children[filter_branch->num_children++] = show_all;
+
+	if (data->num_filterable_attrs == 0)
+		return;
+
+	// Add attribute name sub-branches with value leaves
+	for (int a = 0; a < data->num_filterable_attrs; a++) {
+		FilterableAttr *fa = &data->filterable_attrs[a];
+
+		MenuNode *attr_branch = create_menu_node(fa->name, NODE_BRANCH);
+
+		for (int v = 0; v < fa->num_values; v++) {
+			char cmd_id[256];
+			filter_make_command_id(cmd_id, sizeof(cmd_id), fa->name, fa->values[v]);
+
+			MenuNode *val_leaf = create_menu_node(fa->values[v], NODE_LEAF_COMMAND);
+			val_leaf->command = create_command(cmd_id, fa->values[v], execute_filter_by_attr, 0);
+			val_leaf->command->cmd_def = NULL;
+
+			// Store attr name/value in user_data
+			FilterContext *fc = malloc(sizeof(FilterContext));
+			fc->attr_name = fa->name;
+			fc->attr_value = fa->values[v];
+			val_leaf->command->user_data = fc;
+
+			attr_branch->children = realloc(attr_branch->children, sizeof(MenuNode *) * (attr_branch->num_children + 1));
+			attr_branch->children[attr_branch->num_children++] = val_leaf;
+
+			filter_register(cmd_id, fa->name, fa->values[v]);
+		}
+
+		filter_branch->children = realloc(filter_branch->children, sizeof(MenuNode *) * (filter_branch->num_children + 1));
+		filter_branch->children[filter_branch->num_children++] = attr_branch;
+	}
+}
+
+// Helper: recursively remove children from a node (free their trees)
+static void menu_clear_children(MenuNode *node)
+{
+	if (!node)
+		return;
+	for (int i = 0; i < node->num_children; i++) {
+		menu_tree_destroy(node->children[i]);
+	}
+	free(node->children);
+	node->children = NULL;
+	node->num_children = 0;
+}
+
+void menu_clear_attribute_filters(MenuNode *root)
+{
+	if (!root)
+		return;
+
+	// Free the filter lookup table
+	for (int i = 0; i < g_filter_lookup_count; i++) {
+		free(g_filter_lookup[i].command_id);
+		free(g_filter_lookup[i].attr_name);
+		free(g_filter_lookup[i].attr_value);
+	}
+	free(g_filter_lookup);
+	g_filter_lookup = NULL;
+	g_filter_lookup_count = 0;
+	g_filter_lookup_capacity = 0;
+
+	// Find "Node" branch, then "Filter" sub-branch, clear its children
+	MenuNode *node_branch = find_child_branch(root, "Node");
+	if (!node_branch)
+		return;
+	MenuNode *filter_branch = find_child_branch(node_branch, "Filter");
+	if (!filter_branch)
+		return;
+	menu_clear_children(filter_branch);
 }

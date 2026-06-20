@@ -115,6 +115,7 @@ typedef struct
 	float size;
 	int degree;
 	float selected;
+	float visible;
 } NodeAttribute;
 
 typedef struct
@@ -127,6 +128,7 @@ typedef struct
 	vec3 color;
 	float selected;
 	float normalized_pos;
+	float visible;
 } EdgeAttribute;
 
 typedef struct

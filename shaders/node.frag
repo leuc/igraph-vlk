@@ -12,11 +12,15 @@ layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec3 fragColor;
 layout(location = 2) in flat int fragDegree;
 layout(location = 3) in float fragSelected;
+layout(location = 4) in float fragVisible;
 
 layout(location = 0) out vec4 outColor;
 
 void main()
 {
+	if (fragVisible < 0.5)
+		discard;
+
 	vec2 uv = fragTexCoord;
 	float dist = length(uv);
 	int deg = fragDegree;
