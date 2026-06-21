@@ -32,29 +32,59 @@ static void focus_callback(GLFWwindow *window, int focused);
 static void joystick_callback(int jid, int event);
 static void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 
+static void load_gamepad_mappings(void)
+{
+	FILE *fp = fopen("gamecontrollerdb.txt", "r");
+	if (!fp)
+		return;
+	fseek(fp, 0, SEEK_END);
+	long size = ftell(fp);
+	rewind(fp);
+	char *buf = malloc(size + 1);
+	if (buf) {
+		size_t nread = fread(buf, 1, size, fp);
+		buf[nread] = '\0';
+		if (glfwUpdateGamepadMappings(buf))
+			printf("[INPUT] Loaded gamepad mappings from gamecontrollerdb.txt\n");
+		free(buf);
+	}
+	fclose(fp);
+}
+
 void interaction_init(GLFWwindow *window)
 {
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetMouseButtonCallback(window, mouse_button_callback);
 	glfwSetCursorPosCallback(window, mouse_callback);
 	glfwSetWindowFocusCallback(window, focus_callback);
-	glfwSetJoystickCallback(joystick_callback);
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
+	// Load mappings before scanning — GLFW won't fire CONNECTED
+	// for devices already present at startup.
+	load_gamepad_mappings();
 	gamepad_id = gamepad_get_first_active();
 	if (gamepad_id >= 0) {
-		printf("[INPUT] Gamepad detected on joystick %d\n", gamepad_id);
+		const char *name = glfwGetGamepadName(gamepad_id);
+		printf("[INPUT] Gamepad detected on joystick %d: %s\n", gamepad_id, name ? name : "Unknown");
 	}
+
+	// Register callback for future hot-plug events only
+	glfwSetJoystickCallback(joystick_callback);
 }
 
 static void joystick_callback(int jid, int event)
 {
-	if (event == GLFW_DISCONNECTED && jid == gamepad_id) {
+	if (event == GLFW_CONNECTED) {
+		// Use jid directly — no scanning needed
+		if (glfwJoystickIsGamepad(jid) && gamepad_id < 0) {
+			gamepad_id = jid;
+			const char *name = glfwGetGamepadName(jid);
+			printf("[INPUT] Gamepad connected on joystick %d: %s\n", jid, name ? name : "Unknown");
+		}
+	} else if (event == GLFW_DISCONNECTED && jid == gamepad_id) {
 		printf("[INPUT] Gamepad %d disconnected\n", jid);
 		gamepad_id = -1;
-	} else if (event == GLFW_CONNECTED && gamepad_id < 0) {
-		gamepad_id = gamepad_get_first_active();
 	}
 }
 

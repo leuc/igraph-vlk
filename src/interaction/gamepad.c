@@ -32,33 +32,28 @@ static float apply_deadzone(float value)
 
 int gamepad_get_first_active(void)
 {
-	printf("[GAMEPAD] Scanning for joysticks...\n");
-	for (int i = 0; i < 16; i++) {
-		if (glfwJoystickPresent(i)) {
-			const char *name = glfwGetJoystickName(i);
-			int axes = 0, buttons = 0;
-			glfwGetJoystickAxes(i, &axes);
-			glfwGetJoystickButtons(i, &buttons);
-			bool is_gamepad = glfwJoystickIsGamepad(i);
-			printf("[GAMEPAD]   %d: \"%s\" (%d axes, %d buttons) %s\n", i, name ? name : "?", axes, buttons, is_gamepad ? "GAMEPAD" : "raw joystick");
+	for (int i = GLFW_JOYSTICK_1; i <= GLFW_JOYSTICK_LAST; i++) {
+		if (!glfwJoystickPresent(i))
+			continue;
+
+		// Mapped gamepads are gentle — no raw device queries needed
+		if (glfwJoystickIsGamepad(i)) {
+			const char *name = glfwGetGamepadName(i);
+			printf("[GAMEPAD] Found mapped gamepad at %d: %s\n", i, name ? name : "Unknown");
+			return i;
 		}
-	}
-	for (int i = 0; i < 16; i++) {
-		if (glfwJoystickPresent(i) && glfwJoystickIsGamepad(i)) {
+
+		// Only query axes/buttons as a last resort for unmapped joysticks
+		int axes = 0, buttons = 0;
+		glfwGetJoystickAxes(i, &axes);
+		glfwGetJoystickButtons(i, &buttons);
+		if (axes >= 4 && buttons >= 8) {
+			const char *name = glfwGetJoystickName(i);
+			printf("[GAMEPAD] Using raw joystick %d: %s\n", i, name ? name : "Unknown");
 			return i;
 		}
 	}
-	for (int i = 0; i < 16; i++) {
-		if (glfwJoystickPresent(i)) {
-			int axes = 0, buttons = 0;
-			glfwGetJoystickAxes(i, &axes);
-			glfwGetJoystickButtons(i, &buttons);
-			if (axes >= 4 && buttons >= 8) {
-				printf("[GAMEPAD] Using joystick %d in raw mode\n", i);
-				return i;
-			}
-		}
-	}
+
 	return -1;
 }
 
