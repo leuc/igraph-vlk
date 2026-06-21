@@ -82,7 +82,6 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	// Fast path: update positions via mapped buffer
 	update_buffer_mapped(r->core.device, r->node.position_memory, sizeof(NodePosition) * graph->node_count, nodePositions, &r->core.deviceProperties);
 	// Rare: update attributes via staged copy
-	r->needsAttributeUpload = VK_TRUE;
 	if (r->needsAttributeUpload) {
 		update_buffer_staged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(NodeAttribute) * graph->node_count, nodeAttributes, r->node.staging, r->node.staging_memory, r->node.attribute, &r->core.deviceProperties);
 	}

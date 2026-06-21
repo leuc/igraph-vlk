@@ -52,6 +52,6 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data);
  * Clear all dynamically added filter entries from the "Node > Filter" submenu.
  * @param root Root menu node
  */
-void menu_clear_attribute_filters(MenuNode *root);
+void menu_clear_attribute_filters(MenuNode *root, GraphData *data);
 
 #endif // UI_MENU_H

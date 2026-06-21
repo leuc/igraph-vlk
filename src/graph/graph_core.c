@@ -137,14 +137,26 @@ void graph_build_visualization(GraphData *data)
 							all_present = false;
 							break;
 						}
-						values = realloc(values, sizeof(char *) * (num_values + 1));
+						char **tmp = realloc(values, sizeof(char *) * (num_values + 1));
+						if (!tmp) {
+							all_present = false;
+							break;
+						}
+						values = tmp;
 						values[num_values] = strdup(val);
 						num_values++;
 					}
 				}
 				if (all_present && num_values > 1 && num_values <= max_values) {
 					printf("[Filter]   %s: %d distinct values (accepted)\n", name, num_values);
-					data->filterable_attrs = realloc(data->filterable_attrs, sizeof(FilterableAttr) * (data->num_filterable_attrs + 1));
+					FilterableAttr *tmp = realloc(data->filterable_attrs, sizeof(FilterableAttr) * (data->num_filterable_attrs + 1));
+					if (!tmp) {
+						for (int v = 0; v < num_values; v++)
+							free(values[v]);
+						free(values);
+						continue;
+					}
+					data->filterable_attrs = tmp;
 					data->filterable_attrs[data->num_filterable_attrs].name = strdup(name);
 					data->filterable_attrs[data->num_filterable_attrs].values = values;
 					data->filterable_attrs[data->num_filterable_attrs].num_values = num_values;
@@ -246,6 +258,17 @@ void graph_free_data(GraphData *data)
 		free(data->filterable_attrs);
 		data->filterable_attrs = NULL;
 		data->num_filterable_attrs = 0;
+	}
+	if (data->filter_lookup) {
+		for (int i = 0; i < data->filter_lookup_count; i++) {
+			free(data->filter_lookup[i].command_id);
+			free(data->filter_lookup[i].attr_name);
+			free(data->filter_lookup[i].attr_value);
+		}
+		free(data->filter_lookup);
+		data->filter_lookup = NULL;
+		data->filter_lookup_count = 0;
+		data->filter_lookup_capacity = 0;
 	}
 	if (data->nodes) {
 		for (uint32_t i = 0; i < data->node_count; i++)

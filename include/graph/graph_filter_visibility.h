@@ -11,8 +11,8 @@
 // Context passed through IgraphCommand.user_data for attribute filter operations
 typedef struct
 {
-	const char *attr_name;
-	const char *attr_value;
+	char *attr_name;
+	char *attr_value;
 } FilterContext;
 
 /**

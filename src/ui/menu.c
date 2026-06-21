@@ -53,6 +53,7 @@ static IgraphCommand *create_command(const char *id_name, const char *display_na
 	cmd->params = (CommandParameter *)malloc(sizeof(CommandParameter) * num_params);
 	cmd->produces_visual_output = false;
 	cmd->cmd_def = NULL;
+	cmd->user_data = NULL;
 	return cmd;
 }
 
@@ -94,7 +95,12 @@ void init_menu_tree(MenuNode *root)
 
 				if (branch == NULL) {
 					branch = create_menu_node(token, NODE_BRANCH);
-					current_parent->children = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode *) * (current_parent->num_children + 1));
+					MenuNode **tmp = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode *) * (current_parent->num_children + 1));
+					if (!tmp) {
+						menu_tree_destroy(branch);
+						return;
+					}
+					current_parent->children = tmp;
 					current_parent->children[current_parent->num_children] = branch;
 					current_parent->num_children++;
 				}
@@ -108,7 +114,12 @@ void init_menu_tree(MenuNode *root)
 		leaf->command = create_command(cmd_def->command_id, cmd_def->display_name, NULL, 0);
 		leaf->command->cmd_def = cmd_def;
 
-		current_parent->children = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode *) * (current_parent->num_children + 1));
+		MenuNode **tmp = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode *) * (current_parent->num_children + 1));
+		if (!tmp) {
+			menu_tree_destroy(leaf);
+			return;
+		}
+		current_parent->children = tmp;
 		current_parent->children[current_parent->num_children] = leaf;
 		current_parent->num_children++;
 	}
@@ -136,8 +147,12 @@ void menu_tree_destroy(MenuNode *node)
 			free((void *)node->command->display_name);
 		if (node->command->params)
 			free(node->command->params);
-		if (node->command->user_data)
+		if (node->command->user_data) {
+			FilterContext *fc = (FilterContext *)node->command->user_data;
+			free((void *)fc->attr_name);
+			free((void *)fc->attr_value);
 			free(node->command->user_data);
+		}
 		free(node->command);
 	}
 }
@@ -280,17 +295,6 @@ void update_menu_transforms(MenuNode *node, const SpatialBasis *basis)
 // Dynamic Attribute Filter Menu
 // ============================================================================
 
-typedef struct
-{
-	char *command_id;
-	char *attr_name;
-	char *attr_value;
-} FilterLookup;
-
-static FilterLookup *g_filter_lookup = NULL;
-static int g_filter_lookup_count = 0;
-static int g_filter_lookup_capacity = 0;
-
 // Get the command ID for a filter entry (static buffer, call within same scope)
 static void filter_make_command_id(char *buf, size_t buf_size, const char *attr_name, const char *attr_value)
 {
@@ -298,13 +302,17 @@ static void filter_make_command_id(char *buf, size_t buf_size, const char *attr_
 }
 
 // Register a filter in the lookup table
-static void filter_register(const char *command_id, const char *attr_name, const char *attr_value)
+static void filter_register(GraphData *data, const char *command_id, const char *attr_name, const char *attr_value)
 {
-	if (g_filter_lookup_count >= g_filter_lookup_capacity) {
-		g_filter_lookup_capacity = g_filter_lookup_capacity ? g_filter_lookup_capacity * 2 : 64;
-		g_filter_lookup = realloc(g_filter_lookup, sizeof(FilterLookup) * g_filter_lookup_capacity);
+	if (data->filter_lookup_count >= data->filter_lookup_capacity) {
+		int new_cap = data->filter_lookup_capacity ? data->filter_lookup_capacity * 2 : 64;
+		FilterLookup *tmp = realloc(data->filter_lookup, sizeof(FilterLookup) * new_cap);
+		if (!tmp)
+			return;
+		data->filter_lookup = tmp;
+		data->filter_lookup_capacity = new_cap;
 	}
-	FilterLookup *entry = &g_filter_lookup[g_filter_lookup_count++];
+	FilterLookup *entry = &data->filter_lookup[data->filter_lookup_count++];
 	entry->command_id = strdup(command_id);
 	entry->attr_name = strdup(attr_name);
 	entry->attr_value = strdup(attr_value);
@@ -331,11 +339,19 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 	if (!root || !data)
 		return;
 
+	// Clear any existing filter entries to prevent duplicates
+	menu_clear_attribute_filters(root, data);
+
 	// Find or create "Node" branch
 	MenuNode *node_branch = find_child_branch(root, "Node");
 	if (!node_branch) {
 		node_branch = create_menu_node("Node", NODE_BRANCH);
-		root->children = realloc(root->children, sizeof(MenuNode *) * (root->num_children + 1));
+		MenuNode **tmp = realloc(root->children, sizeof(MenuNode *) * (root->num_children + 1));
+		if (!tmp) {
+			menu_tree_destroy(node_branch);
+			return;
+		}
+		root->children = tmp;
 		root->children[root->num_children++] = node_branch;
 	}
 
@@ -343,7 +359,12 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 	MenuNode *filter_branch = find_child_branch(node_branch, "Filter");
 	if (!filter_branch) {
 		filter_branch = create_menu_node("Filter", NODE_BRANCH);
-		node_branch->children = realloc(node_branch->children, sizeof(MenuNode *) * (node_branch->num_children + 1));
+		MenuNode **tmp = realloc(node_branch->children, sizeof(MenuNode *) * (node_branch->num_children + 1));
+		if (!tmp) {
+			menu_tree_destroy(filter_branch);
+			return;
+		}
+		node_branch->children = tmp;
 		node_branch->children[node_branch->num_children++] = filter_branch;
 	}
 
@@ -351,8 +372,15 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 	MenuNode *show_all = create_menu_node("Show All", NODE_LEAF_COMMAND);
 	show_all->command = create_command("filter_show_all", "Show All", execute_filter_reset, 0);
 	show_all->command->cmd_def = NULL;
-	filter_branch->children = realloc(filter_branch->children, sizeof(MenuNode *) * (filter_branch->num_children + 1));
-	filter_branch->children[filter_branch->num_children++] = show_all;
+	{
+		MenuNode **tmp = realloc(filter_branch->children, sizeof(MenuNode *) * (filter_branch->num_children + 1));
+		if (!tmp) {
+			menu_tree_destroy(show_all);
+			return;
+		}
+		filter_branch->children = tmp;
+		filter_branch->children[filter_branch->num_children++] = show_all;
+	}
 
 	if (data->num_filterable_attrs == 0)
 		return;
@@ -373,18 +401,33 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 
 			// Store attr name/value in user_data
 			FilterContext *fc = malloc(sizeof(FilterContext));
-			fc->attr_name = fa->name;
-			fc->attr_value = fa->values[v];
+			fc->attr_name = strdup(fa->name);
+			fc->attr_value = strdup(fa->values[v]);
 			val_leaf->command->user_data = fc;
 
-			attr_branch->children = realloc(attr_branch->children, sizeof(MenuNode *) * (attr_branch->num_children + 1));
+			MenuNode **tmp = realloc(attr_branch->children, sizeof(MenuNode *) * (attr_branch->num_children + 1));
+			if (!tmp) {
+				menu_tree_destroy(val_leaf);
+				free(fc->attr_name);
+				free(fc->attr_value);
+				free(fc);
+				continue;
+			}
+			attr_branch->children = tmp;
 			attr_branch->children[attr_branch->num_children++] = val_leaf;
 
-			filter_register(cmd_id, fa->name, fa->values[v]);
+			filter_register(data, cmd_id, fa->name, fa->values[v]);
 		}
 
-		filter_branch->children = realloc(filter_branch->children, sizeof(MenuNode *) * (filter_branch->num_children + 1));
-		filter_branch->children[filter_branch->num_children++] = attr_branch;
+		{
+			MenuNode **tmp = realloc(filter_branch->children, sizeof(MenuNode *) * (filter_branch->num_children + 1));
+			if (!tmp) {
+				menu_tree_destroy(attr_branch);
+				continue;
+			}
+			filter_branch->children = tmp;
+			filter_branch->children[filter_branch->num_children++] = attr_branch;
+		}
 	}
 }
 
@@ -401,21 +444,23 @@ static void menu_clear_children(MenuNode *node)
 	node->num_children = 0;
 }
 
-void menu_clear_attribute_filters(MenuNode *root)
+void menu_clear_attribute_filters(MenuNode *root, GraphData *data)
 {
 	if (!root)
 		return;
 
 	// Free the filter lookup table
-	for (int i = 0; i < g_filter_lookup_count; i++) {
-		free(g_filter_lookup[i].command_id);
-		free(g_filter_lookup[i].attr_name);
-		free(g_filter_lookup[i].attr_value);
+	if (data) {
+		for (int i = 0; i < data->filter_lookup_count; i++) {
+			free(data->filter_lookup[i].command_id);
+			free(data->filter_lookup[i].attr_name);
+			free(data->filter_lookup[i].attr_value);
+		}
+		free(data->filter_lookup);
+		data->filter_lookup = NULL;
+		data->filter_lookup_count = 0;
+		data->filter_lookup_capacity = 0;
 	}
-	free(g_filter_lookup);
-	g_filter_lookup = NULL;
-	g_filter_lookup_count = 0;
-	g_filter_lookup_capacity = 0;
 
 	// Find "Node" branch, then "Filter" sub-branch, clear its children
 	MenuNode *node_branch = find_child_branch(root, "Node");
