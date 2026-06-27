@@ -2,7 +2,7 @@
 
 3D network viewer based on [igraph](https://igraph.org/) and Vulkan, written in C.
 
-Interactive graph visualization with 30+ layout algorithms, 12 community detection methods, 10 centrality measures, real-time GPU-accelerated animations, VR support, and a 3D spherical menu system.
+Interactive graph visualization with 35+ layout algorithms, 12 community detection methods, 10 centrality measures, real-time GPU-accelerated animations, VR support, and a 3D spherical menu system.
 
 ## EXPERIMENTAL
 
@@ -168,13 +168,21 @@ Layouts run on a background thread with real-time snapshot polling for interacti
 **Geometric (8):**
 - Circle (2D/3D), Star, Grid (2D/3D), Sphere, Random (2D/3D)
 
-**MDS / Dimension Reduction (6):**
-- Torgerson MDS (2D/3D) — Cox & Cox (1994)
+**MDS (3):**
+- Torgerson MDS (2D) — Cox & Cox (1994)
+- Torgerson MDS (3D) — Cox & Cox (1994)
+- **Spherical MDS (3D)** — Miller, Huroyan & Kobourov (2023) *Spherical Graph Drawing by Multi-Dimensional Scaling*
+
+**Dimension Reduction (4):**
 - UMAP (2D/3D) — McInnes, Healy & Melville (2018) *UMAP: Uniform Manifold Approximation and Projection for Dimension Reduction*
 - t-SNE Barnes-Hut (2D/3D) — Van der Maaten & Hinton (2008)
 
 **Bipartite (2):**
 - Sugiyama Bipartite, Simple Bipartite
+
+**Binary Classification (3):**
+- **BCGL-t (2D/3D)** — Yan, Zhao & Yang (2022) *BCGL: Binary Classification-Based Graph Layout*
+- **BCGL-t (3D GPU Compute)** — GPU-accelerated iteration via compute shader with real-time convergence
 
 **Custom Layout:**
 - **Layered Sphere** — custom multi-sphere community-aware layout using Leiden CPM communities, k-core nucleus sorting, Fibonacci sphere + Hilbert curve slotting, iterative intra/inter-sphere geodesic optimization (OpenMP parallelized)
@@ -218,7 +226,9 @@ All graph operations run on a dedicated pthread with a circular job queue. Featu
 
 ## Build & Run
 
-igraph-vlk builds against a patched `igraph` testing branch that includes experimental layout implementations (ForceAtlas2 2D/3D, Yifan Hu 2D/3D, Barnes-Hut t-SNE 2D/3D, Radial Sugiyama, Layered Sphere).
+igraph-vlk builds against a patched `igraph` testing branch that includes experimental layout implementations (ForceAtlas2 2D/3D, Yifan Hu 2D/3D, Barnes-Hut t-SNE 2D/3D, Radial Sugiyama, Layered Sphere, Spherical MDS, BCGL-t).
+
+Flatpak builds are available at [github.com/leuc/io.github.leuc.igraph-vlk/releases](https://github.com/leuc/io.github.leuc.igraph-vlk/releases).
 
 ```sh
 # Build igraph testing branch

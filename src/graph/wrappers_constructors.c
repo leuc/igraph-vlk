@@ -427,6 +427,8 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 	}
 
 	// Free current graph data (nodes, edges, layout, igraph_t, etc.)
+	// After this, current_layout is either destroyed (if graph existed) or zeroed.
+	// In either case it must be re-initialized before use.
 	graph_free_data(data);
 
 	// Copy new graph into data->g
@@ -438,15 +440,18 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 	data->graph_initialized = true;
 
 	// Compute a sphere layout for the new graph BEFORE refreshing data
-	igraph_matrix_t *layout = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
-	if (igraph_matrix_init(layout, data->node_count, 3) == IGRAPH_SUCCESS) {
-		if (igraph_layout_sphere(&data->g, layout) == IGRAPH_SUCCESS) {
-			// Replace current_layout with the new layout
-			igraph_matrix_destroy(&data->current_layout);
+	int n = igraph_vcount(&data->g);
+	if (n > 0) {
+		igraph_matrix_t *layout = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
+		if (igraph_matrix_init(layout, n, 3) == IGRAPH_SUCCESS) {
+			if (igraph_layout_sphere(&data->g, layout) != IGRAPH_SUCCESS)
+				igraph_layout_grid(&data->g, layout, 0);
 			igraph_matrix_init_copy(&data->current_layout, layout);
+			igraph_matrix_destroy(layout);
+			IGRAPH_FREE(layout);
 		}
-		igraph_matrix_destroy(layout);
-		IGRAPH_FREE(layout);
+	} else {
+		igraph_matrix_init(&data->current_layout, 1, 3);
 	}
 
 	graph_build_visualization(data);

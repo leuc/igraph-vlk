@@ -69,18 +69,14 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (filename == NULL) {
-		fprintf(stderr, "Usage: %s <graph.graphml>\n", argv[0]);
-		return EXIT_FAILURE;
-	}
-
 	app.current_filename = filename;
-
-	// Initialize graph data
 	app.current_graph.graph_initialized = false;
-	if (!graph_load_graphml(app.current_filename, &app.current_graph, LAYOUT_GRID_3D, NULL, NULL)) {
-		fprintf(stderr, "Failed to load graph: %s\n", app.current_filename);
-		return EXIT_FAILURE;
+
+	if (filename) {
+		if (!graph_load_graphml(filename, &app.current_graph, LAYOUT_GRID_3D, NULL, NULL)) {
+			fprintf(stderr, "Failed to load graph: %s\n", filename);
+			return EXIT_FAILURE;
+		}
 	}
 
 	// Initialize GLFW

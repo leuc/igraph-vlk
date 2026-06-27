@@ -102,6 +102,8 @@ void create_staging_buffer(VkDevice device, VkPhysicalDevice physicalDevice, VkD
 
 void update_buffer_staged(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkDeviceSize size, const void *data, VkBuffer stagingBuf, VkDeviceMemory stagingMem, VkBuffer deviceBuf, const VkPhysicalDeviceProperties *deviceProps)
 {
+	if (size == 0)
+		return;
 	VkDeviceSize atomSize = deviceProps->limits.nonCoherentAtomSize;
 	VkDeviceSize alignedSize = VK_ALIGN_UP(size, atomSize);
 	void *mapped;

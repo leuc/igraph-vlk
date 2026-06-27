@@ -14,6 +14,8 @@
 
 // ============================================================================
 // BCGL LAYOUT (2D) - Binary Classification-Based Graph Layout
+// Yan, Zhao & Yang (2022) — IEICE Trans. Inf. & Syst. E105.D(9), 1610-1619
+// https://doi.org/10.1587/transinf.2021EDP7260
 // ============================================================================
 void *compute_igraph_layout_bcgl(igraph_t *graph)
 {
@@ -59,6 +61,8 @@ void *compute_igraph_layout_bcgl(igraph_t *graph)
 
 // ============================================================================
 // BCGL LAYOUT (3D) - Binary Classification-Based Graph Layout
+// Yan, Zhao & Yang (2022) — IEICE Trans. Inf. & Syst. E105.D(9), 1610-1619
+// https://doi.org/10.1587/transinf.2021EDP7260
 // ============================================================================
 void *compute_igraph_layout_bcgl_3d(igraph_t *graph)
 {
@@ -84,12 +88,12 @@ void *compute_igraph_layout_bcgl_3d(igraph_t *graph)
 	 * 3D version of BCGL layout algorithm.
 	 */
 	igraph_error_t code = igraph_layout_bcgl_3d(graph, result,
-												0,	   // use_seed: false (random init)
-												250,   // niter
-												0.05,  // learning_rate
-												0.9,   // momentum
-												0.01,  // lambda_compact
-												0.01,  // lambda_length
+												0,	  // use_seed: false (random init)
+												250,  // niter
+												0.05, // learning_rate
+												0.9,  // momentum
+												0.01, // lambda_compact
+												0.01, // lambda_length
 												IGRAPH_LAYOUT_BCGL_DISTRIBUTION_STUDENT_T,
 												1); // use_bh: true (Barnes-Hut approximation)
 
