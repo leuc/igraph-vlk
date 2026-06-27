@@ -31,7 +31,7 @@ jobs:
             runner: ubuntu-24.04
             distro: "24.04"
           - ubuntu: "26.04"
-            runner: ubuntu-latest
+            runner: ubuntu-26.04
             distro: "26.04"
     steps:
       - name: Checkout
