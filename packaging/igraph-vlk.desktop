@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=igraph-vlk
+Comment=3D network graph viewer with Vulkan rendering
+Exec=igraph-vlk
+Icon=igraph-vlk
+Terminal=false
+Categories=Science;Education;DataVisualization;

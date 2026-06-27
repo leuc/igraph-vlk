@@ -1,0 +1,102 @@
+---
+name: Build .deb Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v0.1.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Pre-Release'
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  build-deb:
+    name: "Build .deb (ubuntu-latest)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            libvulkan-dev libglfw3-dev libcglm-dev libomp-dev \
+            glslang-tools \
+            libopenxr-dev \
+            fonts-inconsolata
+          sudo apt-get install -y libstb-dev 2>/dev/null || \
+            sudo sh -c 'mkdir -p /usr/include/stb && \
+              curl -fsSL https://raw.githubusercontent.com/nothings/stb/master/stb_truetype.h \
+              > /usr/include/stb/stb_truetype.h'
+
+      - name: Cache igraph build
+        id: cache-igraph
+        uses: actions/cache@v4
+        with:
+          path: igraph-install
+          key: igraph-linux-1.0.1-testing-${{ hashFiles('.github/workflows/build-deb.yml') }}
+
+      - name: Checkout igraph
+        if: steps.cache-igraph.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: leuc/igraph
+          ref: testing
+          path: igraph-src
+          fetch-depth: 1
+
+      - name: Build igraph from source
+        if: steps.cache-igraph.outputs.cache-hit != 'true'
+        run: |
+          echo "1.0.1-leuc-testing" > igraph-src/IGRAPH_VERSION
+          cmake -S igraph-src -B igraph-build \
+            -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/igraph-install \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DIGRAPH_ENABLE_TLS=ON
+          cmake --build igraph-build --parallel
+          cmake --build igraph-build --target check
+          cmake --install igraph-build
+
+      - name: Fetch gamecontrollerdb.txt
+        run: |
+          curl -fsSL -o gamecontrollerdb.txt \
+            https://raw.githubusercontent.com/mdqinc/SDL_GameControllerDB/master/gamecontrollerdb.txt
+
+      - name: Configure igraph-vlk
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -Digraph_ROOT=$GITHUB_WORKSPACE/igraph-install
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Package .deb
+        run: cd build && cpack -G DEB -R "${{ inputs.version }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: igraph-vlk-deb
+          path: build/*.deb
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          name: "igraph-vlk ${{ inputs.version }}"
+          tag_name: ${{ inputs.version }}
+          prerelease: ${{ inputs.prerelease }}
+          files: build/*.deb
