@@ -10,6 +10,7 @@
 #include "interaction/menu.h"
 #include "interaction/picking.h"
 #include "interaction/spatial.h"
+#include "vulkan/app_path.h"
 #include <GLFW/glfw3.h>
 #include <getopt.h>
 #include <stdio.h>
@@ -34,7 +35,8 @@ static void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 
 static void load_gamepad_mappings(void)
 {
-	FILE *fp = fopen("gamecontrollerdb.txt", "r");
+	const char *path = app_path_resolve("gamecontrollerdb.txt");
+	FILE *fp = fopen(path, "rb");
 	if (!fp)
 		return;
 	fseek(fp, 0, SEEK_END);
