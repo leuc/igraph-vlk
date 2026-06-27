@@ -63,7 +63,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DIGRAPH_ENABLE_TLS=ON
           cmake --build igraph-build --parallel
-          cmake --build igraph-build --target check
+          cmake --build igraph-build --target check --parallel
           cmake --install igraph-build
 
       - name: Fetch gamecontrollerdb.txt
