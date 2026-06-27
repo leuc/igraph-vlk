@@ -79,10 +79,11 @@ elseif(APPLE)
     set(_FONT_NAMES "Inconsolata.otf" "Monaco.ttf" "Menlo.ttc" "Courier New.ttf")
     set(_FONT_PATHS "/System/Library/Fonts" "/Library/Fonts" "$ENV{HOME}/Library/Fonts")
 else()
-    set(_FONT_NAMES "Inconsolata.otf" "Inconsolata-Regular.otf" "DejaVuSansMono.ttf" "LiberationMono-Regular.ttf")
+    set(_FONT_NAMES "Inconsolata.otf" "Inconsolata-Regular.otf" "Inconsolata-Regular.ttf" "Inconsolata.ttf" "DejaVuSansMono.ttf" "LiberationMono-Regular.ttf")
     set(_FONT_PATHS
         "/usr/share/fonts/truetype/inconsolata"
         "/usr/share/fonts/opentype/inconsolata"
+        "/app/share/fonts/truetype/inconsolata"
         "/usr/share/fonts/truetype/dejavu"
         "/usr/share/fonts/truetype/liberation"
         "/usr/local/share/fonts"
