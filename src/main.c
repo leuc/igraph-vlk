@@ -45,6 +45,9 @@ int main(int argc, char **argv)
 
 	AppState app = {0};
 
+	// Register igraph C attribute handler before any graph operations
+	igraph_set_attribute_table(&igraph_cattribute_table);
+
 	// Set defaults
 	app.last_picked_node = -1;
 	app.last_picked_edge = -1;

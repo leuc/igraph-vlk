@@ -177,6 +177,11 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->splc.level_interval = 0.5f;
 	r->splc.active = false;
 
+	r->graphUpdateRingIndex = 0;
+	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++) {
+		VK_CHECK(vkCreateFence(r->core.device, &VK_SIGNALED_FENCE_INFO, NULL, &r->graphUpdateFences[i]), "Failed to create graph update fence");
+	}
+
 	renderer_update_graph(r, graph);
 	r->label.tree_needs_rebuild = true;
 
@@ -262,11 +267,6 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->detail.visible = false;
 	r->detail.node = -1;
 	r->label.cache_valid = false;
-
-	r->graphUpdateRingIndex = 0;
-	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++) {
-		VK_CHECK(vkCreateFence(r->core.device, &VK_SIGNALED_FENCE_INFO, NULL, &r->graphUpdateFences[i]), "Failed to create graph update fence");
-	}
 
 	glm_mat4_identity(r->ubo.data.model);
 	glm_mat4_identity(r->ubo.data.view);
