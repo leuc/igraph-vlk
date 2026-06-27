@@ -309,6 +309,9 @@ static void splc_write_compute_descriptors(Renderer *r)
 // ============================================================================
 void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 {
+	if (!r->core.has_atomic_float)
+		return;
+
 	BufPair old_bufs[5];
 	splc_save_old_buffers(r, old_bufs);
 	splc_destroy_old_buffers(r);
@@ -363,7 +366,7 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 
 void renderer_dispatch_splc_level(Renderer *r, VkCommandBuffer cmd)
 {
-	if (!r->splc.active || r->splc.level_groups == NULL)
+	if (!r->core.has_atomic_float || !r->splc.active || r->splc.level_groups == NULL)
 		return;
 	if (r->splc.current_level >= r->splc.num_levels) {
 		r->splc.readback_pending = true;
@@ -410,7 +413,7 @@ advance:
 // ============================================================================
 void renderer_readback_splc_weights(Renderer *r, GraphData *graph)
 {
-	if (r->splc.edges_memory == VK_NULL_HANDLE)
+	if (!r->core.has_atomic_float || r->splc.edges_memory == VK_NULL_HANDLE)
 		return;
 
 	VkDeviceSize edge_buf_size = sizeof(SPLCEdge) * graph->edge_count;

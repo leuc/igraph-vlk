@@ -25,7 +25,8 @@ void renderer_create_compute_pipelines(Renderer *r)
 	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &computePipelineInfoSpherical, NULL, &r->pipelines.compute_spherical), "Failed to create compute spherical pipeline");
 	vkDestroyShaderModule(r->core.device, sphericalShaderModule, NULL);
 
-	renderer_create_splc_compute_pipeline(r);
+	if (r->core.has_atomic_float)
+		renderer_create_splc_compute_pipeline(r);
 	renderer_create_bcgl_compute_pipeline(r);
 }
 

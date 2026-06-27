@@ -248,6 +248,7 @@ typedef struct
 	int presentQueueFamily;
 	int computeQueueFamily;
 	VkPhysicalDeviceProperties deviceProperties;
+	bool has_atomic_float;
 } VulkanCore;
 
 typedef struct
