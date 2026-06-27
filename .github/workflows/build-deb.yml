@@ -16,10 +16,23 @@ on:
 
 jobs:
   build-deb:
-    name: "Build .deb (ubuntu-latest)"
-    runs-on: ubuntu-latest
+    name: "Build .deb (Ubuntu ${{ matrix.ubuntu }})"
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ubuntu: "22.04"
+            runner: ubuntu-22.04
+            distro: "22.04"
+          - ubuntu: "24.04"
+            runner: ubuntu-24.04
+            distro: "24.04"
+          - ubuntu: "26.04"
+            runner: ubuntu-latest
+            distro: "26.04"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,9 +43,8 @@ jobs:
           sudo apt-get install -y \
             build-essential cmake ninja-build \
             libvulkan-dev libglfw3-dev libcglm-dev libomp-dev \
-            glslang-tools \
-            libopenxr-dev \
-            fonts-inconsolata
+            glslang-tools
+          sudo apt-get install -y libopenxr-dev || true
           sudo apt-get install -y libstb-dev 2>/dev/null || \
             sudo sh -c 'mkdir -p /usr/include/stb && \
               curl -fsSL https://raw.githubusercontent.com/nothings/stb/master/stb_truetype.h \
@@ -43,7 +55,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: igraph-install
-          key: igraph-linux-1.0.1-testing-${{ hashFiles('.github/workflows/build-deb.yml') }}
+          key: igraph-linux-1.0.1-${{ matrix.ubuntu }}-${{ hashFiles('.github/workflows/build-deb.yml') }}
 
       - name: Checkout igraph
         if: steps.cache-igraph.outputs.cache-hit != 'true'
@@ -77,19 +89,34 @@ jobs:
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/usr \
-            -Digraph_ROOT=$GITHUB_WORKSPACE/igraph-install
+            -Digraph_ROOT=$GITHUB_WORKSPACE/igraph-install \
+            -DCPACK_PACKAGE_VERSION="${{ inputs.version }}"
 
       - name: Build
         run: cmake --build build --parallel
 
       - name: Package .deb
-        run: cd build && cpack -G DEB -R "${{ inputs.version }}"
+        run: cd build && cpack -G DEB -R "${{ inputs.version }}~${{ matrix.distro }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: igraph-vlk-deb
+          name: igraph-vlk-deb-${{ matrix.distro }}
           path: build/*.deb
+
+  release:
+    name: Create Release
+    needs: build-deb
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: igraph-vlk-deb-*
+          path: artifacts
+          merge-multiple: true
 
       - name: Create Release
         uses: softprops/action-gh-release@v3
@@ -99,4 +126,4 @@ jobs:
           name: "igraph-vlk ${{ inputs.version }}"
           tag_name: ${{ inputs.version }}
           prerelease: ${{ inputs.prerelease }}
-          files: build/*.deb
+          files: artifacts/*.deb
