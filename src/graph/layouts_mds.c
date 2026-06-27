@@ -127,3 +127,29 @@ void *compute_igraph_layout_mds_3d(igraph_t *graph)
 	// }
 	return result;
 }
+
+void *compute_igraph_layout_mds_spherical(igraph_t *graph)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
+	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
+		IGRAPH_FREE(result);
+		return NULL;
+	}
+
+	igraph_integer_t num_iter = vcount * 3;
+	if (num_iter < 200)
+		num_iter = 200;
+	if (num_iter > 1000)
+		num_iter = 1000;
+
+	igraph_error_t code = igraph_layout_mds_spherical(graph, result, NULL, num_iter, 10.0);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
+
+	return result;
+}

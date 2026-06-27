@@ -48,6 +48,7 @@ void *compute_igraph_layout_random(igraph_t *graph);
 // Bipartite layouts
 void *compute_igraph_layout_mds(igraph_t *graph);
 void *compute_igraph_layout_mds_3d(igraph_t *graph);
+void *compute_igraph_layout_mds_spherical(igraph_t *graph);
 void *compute_igraph_layout_bipartite(igraph_t *graph);
 void *compute_igraph_layout_bipartite_simple(igraph_t *graph);
 

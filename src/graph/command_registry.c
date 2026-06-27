@@ -102,6 +102,7 @@ const CommandDef g_command_registry[] = {
 	// Multidimensional Scaling
 	{"Layout/Multidimensional Scaling", "igraph_layout_mds", "Torgerson MDS (2D)", compute_igraph_layout_mds, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Multidimensional Scaling", "igraph_layout_mds_3d", "Torgerson MDS (3D)", compute_igraph_layout_mds_3d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Multidimensional Scaling", "igraph_layout_mds_spherical", "Spherical MDS (3D)", compute_igraph_layout_mds_spherical, apply_layout_matrix, free_layout_matrix},
 	// =========================================================================
 	// Layout menu - Graph Embedding
 	// =========================================================================
