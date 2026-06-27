@@ -1,0 +1,11 @@
+format:
+  tab_size: 4
+  line_width: 9999
+  use_tabchars: true
+  max_subgroups_hwrap: 9999
+  max_pargs_hwrap: 9999
+  separate_ctrl_name_with_space: false
+  command_case: "lower"
+  keyword_case: "unchanged"
+  always_wrap: []
+  dangle_parens: false
