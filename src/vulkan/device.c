@@ -12,6 +12,11 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
+// Fallback for older Vulkan headers (Ubuntu 22.04 ships v1.3.204, lacks this constant)
+#ifndef VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR
+#define VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR 0x00000001
+#endif
+
 #include "vulkan/utils.h"
 
 #ifdef USE_OPENXR
