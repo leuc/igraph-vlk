@@ -35,7 +35,7 @@ jobs:
             distro: "26.04"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install system dependencies
         run: |
@@ -52,14 +52,14 @@ jobs:
 
       - name: Cache igraph build
         id: cache-igraph
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: igraph-install
           key: igraph-linux-1.0.1-${{ matrix.ubuntu }}-${{ hashFiles('.github/workflows/build-deb.yml') }}
 
       - name: Checkout igraph
         if: steps.cache-igraph.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: leuc/igraph
           ref: testing
@@ -99,7 +99,7 @@ jobs:
         run: cd build && cpack -G DEB -R "${{ inputs.version }}~${{ matrix.distro }}"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: igraph-vlk-deb-${{ matrix.distro }}
           path: build/*.deb
@@ -112,7 +112,7 @@ jobs:
       contents: write
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: igraph-vlk-deb-*
           path: artifacts
