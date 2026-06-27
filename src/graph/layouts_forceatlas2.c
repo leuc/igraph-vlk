@@ -9,7 +9,9 @@
 #include <igraph.h>
 #include <igraph_constants.h>
 #include <math.h>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -69,12 +71,14 @@ void *compute_igraph_layout_forceatlas2_3d(igraph_t *graph)
 	printf("[ForceAtlas2] Starting: vcount=%d, ecount=%d, iterations=%d, scaling=%.2f, gravity=%.2f\n", (int)vcount, (int)ecount, (int)iterations, scaling_ratio, gravity);
 	fflush(stdout);
 
+#ifdef _OPENMP
 #pragma omp parallel
 	{
 		if (omp_get_thread_num() == 0) {
 			printf("[ForceAtlas2] OpenMP report: using %d threads\n", omp_get_num_threads());
 		}
 	}
+#endif
 
 	igraph_error_t code = igraph_layout_forceatlas2_3d(graph, result,
 													   1500,		  // iterations

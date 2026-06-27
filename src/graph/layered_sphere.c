@@ -6,7 +6,9 @@
 #include "graph/layered_sphere.h"
 
 #include <math.h>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -498,7 +500,9 @@ static bool layered_sphere_iterate(LayeredSphereContext *ctx, const igraph_t *ig
 
 	double damping_factor = fmax(0.05, 0.4 * pow(0.95, ctx->phase_iter));
 
+#ifdef _OPENMP
 #pragma omp parallel for schedule(dynamic) reduction(+ : local_moves)
+#endif
 	for (int s = start_s; s < ctx->num_spheres; s += step_s) {
 		double radius = ctx->grids[s].radius;
 

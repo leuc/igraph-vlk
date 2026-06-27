@@ -14,7 +14,6 @@
 #include <igraph_constants.h>
 #include <igraph_progress.h>
 #include <math.h>
-#include <omp.h>
 #include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
