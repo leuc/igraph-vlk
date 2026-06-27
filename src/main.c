@@ -32,6 +32,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+static const char *glfw_error_desc = NULL;
+static void glfw_error_cb(int code, const char *desc)
+{
+	glfw_error_desc = desc;
+	fprintf(stderr, "[GLFW Error %d] %s\n", code, desc);
+}
+
 /**
  * igraph-vlk: Vulkan-based 3D graph visualization
  *
@@ -83,8 +90,9 @@ int main(int argc, char **argv)
 	}
 
 	// Initialize GLFW
+	glfwSetErrorCallback(glfw_error_cb);
 	if (!glfwInit()) {
-		fprintf(stderr, "Failed to initialize GLFW\n");
+		fprintf(stderr, "Failed to initialize GLFW%s%s\n", glfw_error_desc ? ": " : "", glfw_error_desc ? glfw_error_desc : "");
 		graph_free_data(&app.current_graph);
 		return EXIT_FAILURE;
 	}

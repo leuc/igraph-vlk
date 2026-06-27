@@ -98,6 +98,37 @@ static bool has_device_extension(VkPhysicalDevice device, const char *name)
 	return found;
 }
 
+// Validate the final device extension list against what the device actually
+// supports. Removes unsupported extensions in-place and logs each removal.
+static uint32_t validate_device_extensions(VkPhysicalDevice device, const char **extensions, uint32_t count, bool *out_atomic_float)
+{
+	uint32_t availCount = 0;
+	vkEnumerateDeviceExtensionProperties(device, NULL, &availCount, NULL);
+	VkExtensionProperties *availExts = malloc(sizeof(VkExtensionProperties) * availCount);
+	vkEnumerateDeviceExtensionProperties(device, NULL, &availCount, availExts);
+
+	uint32_t writeIdx = 0;
+	for (uint32_t i = 0; i < count; i++) {
+		bool found = false;
+		for (uint32_t j = 0; j < availCount; j++) {
+			if (strcmp(extensions[i], availExts[j].extensionName) == 0) {
+				found = true;
+				break;
+			}
+		}
+		if (found) {
+			extensions[writeIdx++] = extensions[i];
+		} else {
+			fprintf(stderr, "[Vulkan] Dropping unsupported device extension: %s\n", extensions[i]);
+			if (strcmp(extensions[i], VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME) == 0)
+				*out_atomic_float = false;
+		}
+	}
+
+	free(availExts);
+	return writeIdx;
+}
+
 void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 {
 	core->instance = VK_NULL_HANDLE;
@@ -350,32 +381,64 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 	}
 #endif
 
-	// Build device feature chain
-	VkPhysicalDeviceFeatures deviceFeatures = {0};
+	// Validate all requested extensions against actual device support
+	deviceExtensionCount = validate_device_extensions(core->physicalDevice, deviceExtensions, deviceExtensionCount, &core->has_atomic_float);
 
-	// Vulkan 1.2 features (core, no extension needed)
+	// Query actual device features before enabling them
+	VkPhysicalDeviceShaderAtomicFloatFeaturesEXT queryAtomicFloat = {0};
+	queryAtomicFloat.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
+
+	VkPhysicalDeviceVulkan12Features queryVulkan12 = {0};
+	queryVulkan12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+	queryVulkan12.pNext = core->has_atomic_float ? &queryAtomicFloat : NULL;
+
+	VkPhysicalDeviceFeatures2 queryFeatures2 = {0};
+	queryFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+	queryFeatures2.pNext = &queryVulkan12;
+	vkGetPhysicalDeviceFeatures2(core->physicalDevice, &queryFeatures2);
+
+	if (!queryVulkan12.descriptorIndexing) {
+		fprintf(stderr, "[Vulkan] FATAL: descriptorIndexing not supported by device\n");
+		exit_with_error("Missing required Vulkan 1.2 feature: descriptorIndexing");
+	}
+
+	if (!queryVulkan12.descriptorBindingStorageBufferUpdateAfterBind) {
+		fprintf(stderr, "[Vulkan] FATAL: descriptorBindingStorageBufferUpdateAfterBind not supported by device\n");
+		exit_with_error("Missing required Vulkan 1.2 feature: descriptorBindingStorageBufferUpdateAfterBind");
+	}
+
+	if (core->has_atomic_float && !queryAtomicFloat.shaderBufferFloat32AtomicAdd) {
+		printf("[Vulkan] shaderBufferFloat32AtomicAdd not supported, disabling SPLC\n");
+		core->has_atomic_float = false;
+	}
+
+	if (core->has_atomic_float)
+		printf("[Vulkan] Atomic float enabled: atomics=%d, atomicAdd=%d\n", queryAtomicFloat.shaderBufferFloat32Atomics, queryAtomicFloat.shaderBufferFloat32AtomicAdd);
+	else
+		printf("[Vulkan] Atomic float available but atomicAdd not supported, SPLC disabled\n");
+
+	// Build device feature chain using only queried/supported features
 	VkPhysicalDeviceVulkan12Features vulkan12Features = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
 		.pNext = NULL,
-		.descriptorIndexing = VK_TRUE,
-		.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE,
+		.descriptorIndexing = queryVulkan12.descriptorIndexing,
+		.descriptorBindingStorageBufferUpdateAfterBind = queryVulkan12.descriptorBindingStorageBufferUpdateAfterBind,
 	};
 
 	void **nextPtr = &vulkan12Features.pNext;
 
-	// Optional: atomic float features
+	// Optional: atomic float features (only what the device supports)
 	VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomicFloatFeatures = {0};
 	if (core->has_atomic_float) {
 		atomicFloatFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
 		atomicFloatFeatures.pNext = NULL;
-		atomicFloatFeatures.shaderBufferFloat32Atomics = VK_TRUE;
-		atomicFloatFeatures.shaderBufferFloat32AtomicAdd = VK_TRUE;
+		atomicFloatFeatures.shaderBufferFloat32Atomics = queryAtomicFloat.shaderBufferFloat32Atomics;
+		atomicFloatFeatures.shaderBufferFloat32AtomicAdd = queryAtomicFloat.shaderBufferFloat32AtomicAdd;
 		*nextPtr = &atomicFloatFeatures;
 		nextPtr = &atomicFloatFeatures.pNext;
 	}
 
-	VkDeviceCreateInfo deviceInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &vulkan12Features, .queueCreateInfoCount = queueCreateInfoCount, .pQueueCreateInfos = queueCreateInfos, .enabledExtensionCount = deviceExtensionCount, .ppEnabledExtensionNames = deviceExtensions, .pEnabledFeatures = &deviceFeatures, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
-
+	VkDeviceCreateInfo deviceInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &vulkan12Features, .queueCreateInfoCount = queueCreateInfoCount, .pQueueCreateInfos = queueCreateInfos, .enabledExtensionCount = deviceExtensionCount, .ppEnabledExtensionNames = deviceExtensions, .pEnabledFeatures = NULL, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
 	VK_CHECK(vkCreateDevice(core->physicalDevice, &deviceInfo, NULL, &core->device), "Failed to create logical device");
 
 	for (uint32_t i = 0; i < deviceExtensionStrdupCount; i++)
