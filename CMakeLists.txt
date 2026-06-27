@@ -71,6 +71,30 @@ endforeach()
 
 find_package(OpenMP REQUIRED)
 
+# Cross-platform monospace font discovery for text rendering
+if(WIN32)
+    set(_FONT_NAMES "Inconsolata.otf" "consola.ttf" "cour.ttf")
+    set(_FONT_PATHS "C:/Windows/Fonts" "$ENV{LOCALAPPDATA}/Microsoft/Windows/Fonts")
+elseif(APPLE)
+    set(_FONT_NAMES "Inconsolata.otf" "Monaco.ttf" "Menlo.ttc" "Courier New.ttf")
+    set(_FONT_PATHS "/System/Library/Fonts" "/Library/Fonts" "$ENV{HOME}/Library/Fonts")
+else()
+    set(_FONT_NAMES "Inconsolata.otf" "Inconsolata-Regular.otf" "DejaVuSansMono.ttf" "LiberationMono-Regular.ttf")
+    set(_FONT_PATHS
+        "/usr/share/fonts/truetype/inconsolata"
+        "/usr/share/fonts/opentype/inconsolata"
+        "/usr/share/fonts/truetype/dejavu"
+        "/usr/share/fonts/truetype/liberation"
+        "/usr/local/share/fonts"
+    )
+endif()
+find_file(MONOSPACE_FONT NAMES ${_FONT_NAMES} PATHS ${_FONT_PATHS})
+if(MONOSPACE_FONT)
+    message(STATUS "Found monospace font: ${MONOSPACE_FONT}")
+else()
+    message(FATAL_ERROR "No monospace font found — install Inconsolata, DejaVu Sans Mono, or Liberation Mono")
+endif()
+
 add_executable(igraph-vlk
     src/main.c
 
@@ -179,6 +203,7 @@ if(USE_OPENXR)
 endif()
 
 target_compile_definitions(igraph-vlk PRIVATE
+    FONT_PATH="${MONOSPACE_FONT}"
     NODE_VERT_SHADER_PATH="shaders/node.vert.spv"
     NODE_FRAG_SHADER_PATH="shaders/node.frag.spv"
     EDGE_VERT_SHADER_PATH="shaders/edge.vert.spv"

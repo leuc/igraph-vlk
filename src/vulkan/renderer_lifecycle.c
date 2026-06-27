@@ -22,8 +22,6 @@
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
 
-#define FONT_PATH "/usr/share/fonts/truetype/inconsolata/Inconsolata.otf"
-
 FontAtlas globalAtlas;
 static bool atlasLoaded = false;
 
