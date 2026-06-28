@@ -534,50 +534,131 @@ static MenuNode *find_or_create_path(MenuNode *root, const char *path)
 	return current;
 }
 
-void menu_populate_netzschleuder(MenuNode *root)
+static MenuNode *create_netz_leaf(const char *label, const StaticNetEntry *entry)
 {
-	fprintf(stderr, "[Netzschleuder] Loading catalog...\n");
-	NetzschleuderCatalog *cat = netzschleuder_catalog_load();
-	if (!cat)
+	MenuNode *leaf = create_menu_node(label, NODE_LEAF_COMMAND);
+	leaf->command = create_command(netzschleuder_download_def.command_id, label, NULL, 2);
+	leaf->command->cmd_def = &netzschleuder_download_def;
+	leaf->command->params[0].name = "entry_id";
+	leaf->command->params[0].type = PARAM_TYPE_STRING;
+	leaf->command->params[0].value.str_val = strdup(entry->entry_id);
+	leaf->command->params[1].name = "version_id";
+	leaf->command->params[1].type = PARAM_TYPE_STRING;
+	leaf->command->params[1].value.str_val = strdup(entry->version_id);
+	return leaf;
+}
+
+void menu_populate_netzschleuder_static(MenuNode *root)
+{
+	int count = 0;
+	const StaticNetEntry *entries = netzschleuder_static_entries(&count);
+	if (count == 0)
 		return;
-	fprintf(stderr, "[Netzschleuder] Loaded %d entries, %d tags\n", cat->num_entries, cat->tag_index.num_tags);
 
 	MenuNode *netz_branch = find_or_create_path(root, "Repository/Netzschleuder");
-	if (!netz_branch) {
-		netzschleuder_catalog_free(cat);
+	if (!netz_branch)
 		return;
-	}
 
-	for (int t = 0; t < cat->tag_index.num_tags; t++) {
-		NetzschleuderTag *tag = &cat->tag_index.tags[t];
-		fprintf(stderr, "[Netzschleuder] Tag %d/%d: '%s' (%d entries)\n", t, cat->tag_index.num_tags, tag->name, tag->num_entries);
-		MenuNode *tag_branch = create_menu_node(tag->name, NODE_BRANCH);
+	// --- Phase 1: count how many entries each tag has ---
+	int tag_max = count < 100 ? 200 : count * 2;
+	char **tag_names = malloc(sizeof(char *) * (size_t)tag_max);
+	int *tag_counts = calloc((size_t)tag_max, sizeof(int));
+	int num_tags = 0;
+	char tag_buf[512];
 
-		for (int e = 0; e < tag->num_entries; e++) {
-			int entry_idx = tag->entry_indices[e];
-			NetzschleuderEntry *entry = &cat->entries[entry_idx];
-
-			const char *version_id = (entry->num_nets > 0) ? entry->nets[0] : entry->id;
-
-			MenuNode *leaf = create_menu_node(entry->title, NODE_LEAF_COMMAND);
-			leaf->command = create_command(netzschleuder_download_def.command_id, entry->title, NULL, 2);
-			leaf->command->cmd_def = &netzschleuder_download_def;
-
-			leaf->command->params[0].name = "entry_id";
-			leaf->command->params[0].type = PARAM_TYPE_STRING;
-			leaf->command->params[0].value.str_val = strdup(entry->id);
-
-			leaf->command->params[1].name = "version_id";
-			leaf->command->params[1].type = PARAM_TYPE_STRING;
-			leaf->command->params[1].value.str_val = strdup(version_id);
-
-			add_child(tag_branch, leaf);
+	for (int i = 0; i < count; i++) {
+		const char *tags = entries[i].tags;
+		if (!tags || tags[0] == '\0')
+			continue;
+		strncpy(tag_buf, tags, sizeof(tag_buf) - 1);
+		tag_buf[sizeof(tag_buf) - 1] = '\0';
+		char *t = strtok(tag_buf, ",");
+		while (t) {
+			while (*t == ' ')
+				t++;
+			if (*t == '\0') {
+				t = strtok(NULL, ",");
+				continue;
+			}
+			int idx = -1;
+			for (int j = 0; j < num_tags; j++) {
+				if (strcmp(tag_names[j], t) == 0) {
+					idx = j;
+					break;
+				}
+			}
+			if (idx < 0) {
+				idx = num_tags++;
+				tag_names[idx] = strdup(t);
+				tag_counts[idx] = 0;
+			}
+			tag_counts[idx]++;
+			t = strtok(NULL, ",");
 		}
-
-		add_child(netz_branch, tag_branch);
 	}
 
-	fprintf(stderr, "[Netzschleuder] Menu populated, freeing catalog\n");
-	netzschleuder_catalog_free(cat);
-	fprintf(stderr, "[Netzschleuder] Done\n");
+	// --- Phase 2: add entry under each of its qualifying tags (>1 count) ---
+	// Non-qualifying entries are collected for Phase 3.
+	int *other_indices = malloc(sizeof(int) * (size_t)count);
+	int num_other = 0;
+	char label[256];
+
+	for (int i = 0; i < count; i++) {
+		const StaticNetEntry *entry = &entries[i];
+		snprintf(label, sizeof(label), "%s (%d, %d)", entry->title, entry->num_nodes, entry->num_edges);
+
+		const char *tags = entry->tags;
+		if (!tags || tags[0] == '\0') {
+			other_indices[num_other++] = i;
+			continue;
+		}
+		strncpy(tag_buf, tags, sizeof(tag_buf) - 1);
+		tag_buf[sizeof(tag_buf) - 1] = '\0';
+
+		bool assigned = false;
+		char *t = strtok(tag_buf, ",");
+		while (t) {
+			while (*t == ' ')
+				t++;
+			if (*t == '\0') {
+				t = strtok(NULL, ",");
+				continue;
+			}
+			int tc = 0;
+			for (int j = 0; j < num_tags; j++) {
+				if (strcmp(tag_names[j], t) == 0) {
+					tc = tag_counts[j];
+					break;
+				}
+			}
+			if (tc > 1) {
+				MenuNode *leaf = create_netz_leaf(label, entry);
+				MenuNode *branch = find_or_create_branch(netz_branch, t);
+				if (branch)
+					add_child(branch, leaf);
+				assigned = true;
+			}
+			t = strtok(NULL, ",");
+		}
+		if (!assigned)
+			other_indices[num_other++] = i;
+	}
+
+	// --- Phase 3: unassigned entries go to "Other" (last) ---
+	if (num_other > 0) {
+		MenuNode *other_branch = find_or_create_branch(netz_branch, "Other");
+		for (int k = 0; k < num_other; k++) {
+			const StaticNetEntry *entry = &entries[other_indices[k]];
+			snprintf(label, sizeof(label), "%s (%d, %d)", entry->title, entry->num_nodes, entry->num_edges);
+			MenuNode *leaf = create_netz_leaf(label, entry);
+			if (other_branch)
+				add_child(other_branch, leaf);
+		}
+	}
+
+	free(other_indices);
+	for (int i = 0; i < num_tags; i++)
+		free(tag_names[i]);
+	free(tag_names);
+	free(tag_counts);
 }

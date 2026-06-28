@@ -254,9 +254,22 @@ Mimic existing patterns strictly. Run `clang-format` after edits.
 | File | Role |
 |------|------|
 | `src/graph/repo.c` | Shared repo utilities (cache dir, curl write callback) |
-| `include/graph/repo.h` | `NetzschleuderNetStats`, `NetzschleuderCatalogEntry`, `NetzschleuderCatalog` types |
-| `src/graph/repo_netzschleuder.c` | Netzschleuder catalog download, parsing, refresh |
-| `include/graph/repo_netzschleuder.h` | Netzschleuder refresh/catalog API |
+| `include/graph/repo.h` | `repo_cache_dir`, `repo_curl_write_cb` |
+| `src/graph/repo_netzschleuder.c` | Static Netzschleuder catalog, download stub |
+| `include/graph/repo_netzschleuder.h` | `StaticNetEntry`, catalog accessor, download API |
+| `src/graph/netzschleuder_data.inc` | Auto-generated C initializers for 286 networks |
+
+#### Regenerating the network catalog
+
+The static catalog in `netzschleuder_data.inc` is generated from the Netzschleuder API:
+
+```bash
+curl -s 'https://networks.skewed.de/api/nets?full=True' \
+| jq -r 'to_entries[]|(.key|@json)as$eid|(.value.title//.key|@json)as$title|(.value.nets[0]//.key|@json)as$ver|(.value.tags|join(",")|@json)as$tags|(if.value.analyses|type=="object"then if.value.analyses|has("num_vertices")then[.value.analyses.num_vertices,.value.analyses.num_edges]elif.value.nets[0]and.value.analyses[.value.nets[0]]then[.value.analyses[.value.nets[0]].num_vertices,.value.analyses[.value.nets[0]].num_edges]else[null,null]end else[null,null]end)as$stats|"\t{\($eid), \($title), \($ver), \($tags), \($stats[0]//0), \($stats[1]//0)},"' \
+> src/graph/netzschleuder_data.inc
+```
+
+Requires `curl` and `jq`. Handles both single-version (flat `analyses`) and multi-version (keyed `analyses`) networks.
 
 ### Vulkan Renderer
 
