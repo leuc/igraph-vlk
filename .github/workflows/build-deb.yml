@@ -43,7 +43,8 @@ jobs:
           sudo apt-get install -y \
             build-essential cmake ninja-build \
             libvulkan-dev libglfw3-dev libcglm-dev libomp-dev \
-            glslang-tools fonts-inconsolata
+            glslang-tools fonts-inconsolata \
+            libcurl4-openssl-dev libzstd-dev
           sudo apt-get install -y libopenxr-dev || true
           sudo apt-get install -y libstb-dev 2>/dev/null || \
             sudo sh -c 'mkdir -p /usr/include/stb && \
