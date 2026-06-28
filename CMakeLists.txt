@@ -16,6 +16,8 @@ find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(igraph REQUIRED)
 find_package(OpenMP)
+find_package(CURL REQUIRED)
+find_package(cJSON REQUIRED)
 find_path(CGLM_INCLUDE_DIR cglm/cglm.h)
 find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
 
@@ -130,6 +132,8 @@ add_executable(
 	src/graph/wrappers_paths.c
 	src/graph/wrappers_structural.c
 	src/graph/wrappers_cycles.c
+	src/graph/repo.c
+	src/graph/repo_netzschleuder.c
 	src/graph/worker_thread.c
 	src/graph/command_registry.c
 	# Interaction modules
@@ -148,7 +152,7 @@ add_executable(
 
 target_include_directories(igraph-vlk PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include/graph ${Vulkan_INCLUDE_DIRS} ${CGLM_INCLUDE_DIR} ${IGRAPH_INCLUDE_DIRS} ${CMAKE_BINARY_DIR})
 
-target_link_libraries(igraph-vlk PRIVATE Vulkan::Vulkan glfw igraph::igraph)
+target_link_libraries(igraph-vlk PRIVATE Vulkan::Vulkan glfw igraph::igraph CURL::libcurl cjson)
 if(OpenMP_C_FOUND)
 	target_link_libraries(igraph-vlk PRIVATE OpenMP::OpenMP_C)
 endif()
@@ -196,7 +200,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 			set(_openmp_deb_pkg "libomp5,")
 		endif()
 	endif()
-	set(CPACK_DEBIAN_PACKAGE_DEPENDS "libvulkan1, libglfw3, ${_openmp_deb_pkg} fonts-inconsolata")
+	set(CPACK_DEBIAN_PACKAGE_DEPENDS "libvulkan1, libglfw3, ${_openmp_deb_pkg} fonts-inconsolata, libcjson1")
 	set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "libopenxr-loader1")
 	set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
 	include(CPack)
