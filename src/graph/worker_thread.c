@@ -310,6 +310,24 @@ double worker_thread_get_job_elapsed_ms(WorkerJob *job)
 	return atomic_load_explicit(&job->elapsed_ms, memory_order_acquire);
 }
 
+// Set progress on the current running job (call from worker thread only)
+void worker_thread_set_progress(float progress)
+{
+	if (tls_current_job) {
+		atomic_store_explicit(&tls_current_job->progress, progress, memory_order_release);
+	}
+}
+
+// Set status message on the current running job (call from worker thread only)
+void worker_thread_set_status_message(const char *message)
+{
+	if (tls_current_job && message) {
+		pthread_mutex_lock(&tls_current_job->mutex);
+		snprintf(tls_current_job->status_message, sizeof(tls_current_job->status_message), "%s", message);
+		pthread_mutex_unlock(&tls_current_job->mutex);
+	}
+}
+
 // Poll a real-time layout snapshot from the worker thread (non-blocking)
 bool worker_thread_poll_snapshot(WorkerJob *job, igraph_matrix_t *out_matrix)
 {

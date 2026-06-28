@@ -76,6 +76,12 @@ const char *worker_thread_get_job_status_message(WorkerJob *job);
 // Get elapsed job time in milliseconds (0 if not yet started)
 double worker_thread_get_job_elapsed_ms(WorkerJob *job);
 
+// Set progress on the current running job (call from worker thread only)
+void worker_thread_set_progress(float progress);
+
+// Set status message on the current running job (call from worker thread only)
+void worker_thread_set_status_message(const char *message);
+
 // Poll a new real-time snapshot from the worker thread (non-blocking)
 // Returns true if a new snapshot was available and copied into out_matrix
 bool worker_thread_poll_snapshot(WorkerJob *job, igraph_matrix_t *out_matrix);
