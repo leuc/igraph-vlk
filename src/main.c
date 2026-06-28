@@ -241,7 +241,6 @@ int main(int argc, char **argv)
 				if (snap.nrow == app.current_graph.node_count && snap.nrow > 0) {
 					ExecutionContext ec = {0};
 					ec.app_state = &app;
-					ec.current_graph = &app.current_graph.g;
 					apply_layout_matrix(&ec, &snap);
 				}
 			}

@@ -108,7 +108,7 @@ void *compute_splc_animation(igraph_t *graph)
 // ============================================================================
 void apply_splc_animation(ExecutionContext *ctx, void *result_data)
 {
-	if (!ctx || !ctx->app_state || !ctx->current_graph || !result_data)
+	if (!ctx || !ctx->app_state || !result_data)
 		return;
 	(void)result_data;
 

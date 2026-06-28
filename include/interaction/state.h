@@ -45,7 +45,6 @@ typedef struct
 // --- Generic Command Execution Context ---
 typedef struct
 {
-	igraph_t *current_graph;
 	CommandParameter *params;
 	int num_params;
 	// Callbacks for UI updates

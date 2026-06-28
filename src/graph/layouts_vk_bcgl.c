@@ -84,7 +84,7 @@ static void debug_print_bcgl_stats(Renderer *r, uint32_t current_iter, uint32_t 
 // ============================================================================
 void apply_layout_bcgl(ExecutionContext *ctx, void *result_data)
 {
-	if (!ctx || !ctx->app_state || !ctx->current_graph || !result_data)
+	if (!ctx || !ctx->app_state || !result_data)
 		return;
 
 	AppState *state = ctx->app_state;

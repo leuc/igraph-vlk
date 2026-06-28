@@ -4,6 +4,7 @@
  */
 
 #include "graph/worker_thread.h"
+#include "app_state.h"
 #include "graph/command_registry.h"
 #include <igraph.h>
 #include <igraph_step.h>
@@ -117,7 +118,7 @@ static void *worker_thread_func(void *arg)
 		// Execute the job
 		if (job->worker_func) {
 			clock_gettime(CLOCK_MONOTONIC, &job->start_time);
-			job->result_data = job->worker_func(job->ctx->current_graph);
+			job->result_data = job->worker_func(&job->ctx->app_state->current_graph.g);
 			struct timespec end_time;
 			clock_gettime(CLOCK_MONOTONIC, &end_time);
 			double elapsed = (end_time.tv_sec - job->start_time.tv_sec) * 1000.0 + (end_time.tv_nsec - job->start_time.tv_nsec) / 1e6;

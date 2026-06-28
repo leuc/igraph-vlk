@@ -363,7 +363,7 @@ void *compute_igraph_community_fluid_communities(igraph_t *graph)
 
 void apply_community_membership(ExecutionContext *ctx, void *result_data)
 {
-	if (!ctx || !ctx->app_state || !ctx->current_graph || !result_data) {
+	if (!ctx || !ctx->app_state || !result_data) {
 		fprintf(stderr, "[apply_community_membership] Error: Invalid parameters\n");
 		return;
 	}

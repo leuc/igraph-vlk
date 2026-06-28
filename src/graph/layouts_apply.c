@@ -83,7 +83,7 @@ void free_layout_matrix(void *result_data)
 // ============================================================================
 void apply_layout_matrix(ExecutionContext *ctx, void *result_data)
 {
-	if (!ctx || !ctx->app_state || !ctx->current_graph || !result_data) {
+	if (!ctx || !ctx->app_state || !result_data) {
 		fprintf(stderr, "[apply_layout_matrix] Error: Invalid parameters\n");
 		return;
 	}

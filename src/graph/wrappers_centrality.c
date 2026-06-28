@@ -263,7 +263,7 @@ void *compute_igraph_constraint(igraph_t *graph)
 
 void apply_centrality_scores(ExecutionContext *ctx, void *result_data)
 {
-	if (!ctx || !ctx->app_state || !ctx->current_graph || !result_data) {
+	if (!ctx || !ctx->app_state || !result_data) {
 		fprintf(stderr, "[apply_centrality_scores] Error: Invalid parameters\n");
 		return;
 	}

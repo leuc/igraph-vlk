@@ -410,7 +410,7 @@ void *compute_igraph_gabriel_graph(igraph_t *graph)
 
 void apply_new_graph(ExecutionContext *ctx, void *result_data)
 {
-	if (!ctx || !ctx->app_state || !ctx->current_graph || !result_data) {
+	if (!ctx || !ctx->app_state || !result_data) {
 		fprintf(stderr, "[apply_new_graph] Error: Invalid parameters\n");
 		return;
 	}

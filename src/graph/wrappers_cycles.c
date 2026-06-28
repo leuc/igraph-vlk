@@ -38,7 +38,7 @@ void *compute_remove_feedback_arc_set(igraph_t *graph)
 // ============================================================================
 void apply_remove_feedback_arc_set(ExecutionContext *ctx, void *result_data)
 {
-	if (!ctx || !ctx->app_state || !ctx->current_graph || !result_data)
+	if (!ctx || !ctx->app_state || !result_data)
 		return;
 	(void)result_data;
 
