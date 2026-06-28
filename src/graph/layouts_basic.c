@@ -5,6 +5,7 @@
 
 #define _GNU_SOURCE
 
+#include "app_state.h"
 #include "graph/wrappers_layout.h"
 #include <igraph.h>
 #include <igraph_constants.h>
@@ -15,8 +16,9 @@
 // ============================================================================
 // CIRCLE LAYOUT (3D with Z=0)
 // ============================================================================
-void *compute_igraph_layout_circle(igraph_t *graph)
+void *compute_igraph_layout_circle(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
@@ -54,8 +56,9 @@ void *compute_igraph_layout_circle(igraph_t *graph)
 // ============================================================================
 // CIRCLE LAYOUT (2D only)
 // ============================================================================
-void *compute_igraph_layout_circle_2d(igraph_t *graph)
+void *compute_igraph_layout_circle_2d(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
@@ -80,8 +83,9 @@ void *compute_igraph_layout_circle_2d(igraph_t *graph)
 // ============================================================================
 // STAR LAYOUT
 // ============================================================================
-void *compute_igraph_layout_star(igraph_t *graph)
+void *compute_igraph_layout_star(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
@@ -134,8 +138,9 @@ void *compute_igraph_layout_star(igraph_t *graph)
 // ============================================================================
 // GRID LAYOUT (3D)
 // ============================================================================
-void *compute_igraph_layout_grid_3d(igraph_t *graph)
+void *compute_igraph_layout_grid_3d(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
@@ -170,8 +175,9 @@ void *compute_igraph_layout_grid_3d(igraph_t *graph)
 // ============================================================================
 // GRID LAYOUT (2D)
 // ============================================================================
-void *compute_igraph_layout_grid(igraph_t *graph)
+void *compute_igraph_layout_grid(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
@@ -207,8 +213,9 @@ void *compute_igraph_layout_grid(igraph_t *graph)
 // Reference: Saff, E.B. and Kuijlaars, A.B.J. (1997):
 // "Distributing many points on a sphere."
 // Mathematical Intelligencer 19(1):5-11.
-void *compute_igraph_layout_sphere(igraph_t *graph)
+void *compute_igraph_layout_sphere(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
@@ -237,8 +244,9 @@ void *compute_igraph_layout_sphere(igraph_t *graph)
 // ============================================================================
 // RANDOM LAYOUT (3D)
 // ============================================================================
-void *compute_igraph_layout_random_3d(igraph_t *graph)
+void *compute_igraph_layout_random_3d(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
@@ -267,8 +275,9 @@ void *compute_igraph_layout_random_3d(igraph_t *graph)
 // ============================================================================
 // RANDOM LAYOUT (2D)
 // ============================================================================
-void *compute_igraph_layout_random(igraph_t *graph)
+void *compute_igraph_layout_random(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {

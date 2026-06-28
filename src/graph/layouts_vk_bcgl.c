@@ -15,8 +15,9 @@
 // ============================================================================
 // Worker: Seed random 3D layout for BCGL starting positions
 // ============================================================================
-void *compute_layout_bcgl(igraph_t *graph)
+void *compute_layout_bcgl(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	if (!graph || igraph_vcount(graph) == 0)
 		return NULL;
 

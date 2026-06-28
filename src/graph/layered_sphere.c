@@ -4,6 +4,7 @@
  */
 
 #include "graph/layered_sphere.h"
+#include "app_state.h"
 
 #include <math.h>
 #ifdef _OPENMP
@@ -631,8 +632,9 @@ static bool layered_sphere_iterate(LayeredSphereContext *ctx, const igraph_t *ig
 	return (ctx->phase != PHASE_DONE);
 }
 
-void *compute_layout_layered_sphere(igraph_t *graph)
+void *compute_layout_layered_sphere(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
@@ -640,30 +642,30 @@ void *compute_layout_layered_sphere(igraph_t *graph)
 		return NULL;
 	}
 
-	LayeredSphereContext *ctx = calloc(1, sizeof(LayeredSphereContext));
-	ctx->vcount = vcount;
-	ctx->layout = result;
-	ctx->phase = PHASE_INIT;
-	ctx->current_iter = 0;
+	LayeredSphereContext *ls_ctx = calloc(1, sizeof(LayeredSphereContext));
+	ls_ctx->vcount = vcount;
+	ls_ctx->layout = result;
+	ls_ctx->phase = PHASE_INIT;
+	ls_ctx->current_iter = 0;
 
 	igraph_progress("Layered Sphere layout", 0.0, NULL);
 
 	const double intra_weight = 50.0;
 	const double inter_weight = 50.0;
 
-	while (layered_sphere_iterate(ctx, graph)) {
+	while (layered_sphere_iterate(ls_ctx, graph)) {
 		double pct = 0.0;
-		if (ctx->phase == PHASE_INTRA_SPHERE) {
-			pct = intra_weight * ((double)ctx->phase_iter / MAX_INTRA_ITERS);
-		} else if (ctx->phase == PHASE_INTER_SPHERE) {
-			pct = intra_weight + inter_weight * ((double)ctx->phase_iter / MAX_INTER_ITERS);
+		if (ls_ctx->phase == PHASE_INTRA_SPHERE) {
+			pct = intra_weight * ((double)ls_ctx->phase_iter / MAX_INTRA_ITERS);
+		} else if (ls_ctx->phase == PHASE_INTER_SPHERE) {
+			pct = intra_weight + inter_weight * ((double)ls_ctx->phase_iter / MAX_INTER_ITERS);
 		}
 		igraph_progress("Layered Sphere layout", pct, NULL);
 	}
 
 	igraph_progress("Layered Sphere layout", 100.0, NULL);
 
-	layered_sphere_cleanup(ctx);
+	layered_sphere_cleanup(ls_ctx);
 
 	return result;
 }

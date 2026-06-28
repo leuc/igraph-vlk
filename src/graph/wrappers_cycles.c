@@ -14,8 +14,9 @@
 // ============================================================================
 // Worker: Check if graph is acyclic, fail if not
 // ============================================================================
-void *compute_remove_feedback_arc_set(igraph_t *graph)
+void *compute_remove_feedback_arc_set(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	if (!graph || igraph_vcount(graph) == 0)
 		return NULL;
 

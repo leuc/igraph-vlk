@@ -20,8 +20,9 @@
 // ============================================================================
 
 // Multilevel (Louvain)
-void *compute_igraph_community_multilevel(igraph_t *graph)
+void *compute_igraph_community_multilevel(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -45,8 +46,9 @@ void *compute_igraph_community_multilevel(igraph_t *graph)
 }
 
 // Leiden
-void *compute_igraph_community_leiden(igraph_t *graph)
+void *compute_igraph_community_leiden(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -78,8 +80,9 @@ void *compute_igraph_community_leiden(igraph_t *graph)
 }
 
 // Walktrap
-void *compute_igraph_community_walktrap(igraph_t *graph)
+void *compute_igraph_community_walktrap(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -106,8 +109,9 @@ void *compute_igraph_community_walktrap(igraph_t *graph)
 }
 
 // Edge Betweenness (Girvan-Newman)
-void *compute_igraph_community_edge_betweenness(igraph_t *graph)
+void *compute_igraph_community_edge_betweenness(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -143,8 +147,9 @@ void *compute_igraph_community_edge_betweenness(igraph_t *graph)
 }
 
 // Fast Greedy
-void *compute_igraph_community_fastgreedy(igraph_t *graph)
+void *compute_igraph_community_fastgreedy(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -171,8 +176,9 @@ void *compute_igraph_community_fastgreedy(igraph_t *graph)
 }
 
 // Infomap
-void *compute_igraph_community_infomap(igraph_t *graph)
+void *compute_igraph_community_infomap(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -193,8 +199,9 @@ void *compute_igraph_community_infomap(igraph_t *graph)
 }
 
 // Label Propagation
-void *compute_igraph_community_label_propagation(igraph_t *graph)
+void *compute_igraph_community_label_propagation(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -213,8 +220,9 @@ void *compute_igraph_community_label_propagation(igraph_t *graph)
 }
 
 // Spinglass
-void *compute_igraph_community_spinglass(igraph_t *graph)
+void *compute_igraph_community_spinglass(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -243,8 +251,9 @@ void *compute_igraph_community_spinglass(igraph_t *graph)
 }
 
 // Leading Eigenvector
-void *compute_igraph_community_leading_eigenvector(igraph_t *graph)
+void *compute_igraph_community_leading_eigenvector(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -283,8 +292,9 @@ void *compute_igraph_community_leading_eigenvector(igraph_t *graph)
 }
 
 // Optimal Modularity
-void *compute_igraph_community_optimal_modularity(igraph_t *graph)
+void *compute_igraph_community_optimal_modularity(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -305,8 +315,9 @@ void *compute_igraph_community_optimal_modularity(igraph_t *graph)
 }
 
 // Voronoi
-void *compute_igraph_community_voronoi(igraph_t *graph)
+void *compute_igraph_community_voronoi(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -331,8 +342,9 @@ void *compute_igraph_community_voronoi(igraph_t *graph)
 }
 
 // Fluid Communities
-void *compute_igraph_community_fluid_communities(igraph_t *graph)
+void *compute_igraph_community_fluid_communities(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {

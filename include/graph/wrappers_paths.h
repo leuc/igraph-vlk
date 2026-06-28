@@ -9,9 +9,9 @@
 #include "interaction/state.h"
 #include <igraph.h>
 
-void *compute_igraph_diameter(igraph_t *graph);
-void *compute_igraph_radius(igraph_t *graph);
-void *compute_igraph_average_path_length(igraph_t *graph);
+void *compute_igraph_diameter(ExecutionContext *ctx);
+void *compute_igraph_radius(ExecutionContext *ctx);
+void *compute_igraph_average_path_length(ExecutionContext *ctx);
 void apply_info_card(ExecutionContext *ctx, void *result_data);
 void info_card_free(void *result_data);
 

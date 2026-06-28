@@ -5,6 +5,7 @@
 
 #define _GNU_SOURCE
 
+#include "app_state.h"
 #include "graph/wrappers_layout.h"
 #include <igraph.h>
 #include <igraph_constants.h>
@@ -18,8 +19,9 @@
 // "Tidier drawing of trees."
 // IEEE Trans. Softw. Eng., SE-7(2):223-228, 1981.
 // https://doi.org/10.1109/TSE.1981.234519
-void *compute_igraph_layout_reingold_tilford(igraph_t *graph)
+void *compute_igraph_layout_reingold_tilford(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {

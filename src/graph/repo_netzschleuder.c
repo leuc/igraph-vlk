@@ -31,9 +31,9 @@ static int download_progress_cb(void *clientp, curl_off_t dltotal, curl_off_t dl
 	return 0;
 }
 
-void *netzschleuder_refresh(igraph_t *graph)
+void *netzschleuder_refresh(ExecutionContext *ctx)
 {
-	(void)graph;
+	(void)ctx;
 
 	const char *dir = repo_cache_dir();
 	char path[4096];

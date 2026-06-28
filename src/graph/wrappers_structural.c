@@ -9,8 +9,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-void *compute_igraph_density(igraph_t *graph)
+void *compute_igraph_density(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
 	if (!data)
 		return NULL;
@@ -33,8 +34,9 @@ void *compute_igraph_density(igraph_t *graph)
 	return data;
 }
 
-void *compute_igraph_transitivity_undirected(igraph_t *graph)
+void *compute_igraph_transitivity_undirected(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
 	if (!data)
 		return NULL;
@@ -57,8 +59,9 @@ void *compute_igraph_transitivity_undirected(igraph_t *graph)
 	return data;
 }
 
-void *compute_igraph_assortativity_degree(igraph_t *graph)
+void *compute_igraph_assortativity_degree(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
 	if (!data)
 		return NULL;

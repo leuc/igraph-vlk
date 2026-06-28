@@ -5,6 +5,7 @@
 
 #define _GNU_SOURCE
 
+#include "app_state.h"
 #include "graph/wrappers_layout.h"
 #include <igraph.h>
 #include <igraph_constants.h>
@@ -14,8 +15,9 @@
 // ============================================================================
 // MDS LAYOUT (Multidimensional Scaling)
 // ============================================================================
-void *compute_igraph_layout_mds(igraph_t *graph)
+void *compute_igraph_layout_mds(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
@@ -71,8 +73,9 @@ void *compute_igraph_layout_mds(igraph_t *graph)
 	return result;
 }
 
-void *compute_igraph_layout_mds_3d(igraph_t *graph)
+void *compute_igraph_layout_mds_3d(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
@@ -128,8 +131,9 @@ void *compute_igraph_layout_mds_3d(igraph_t *graph)
 	return result;
 }
 
-void *compute_igraph_layout_mds_spherical(igraph_t *graph)
+void *compute_igraph_layout_mds_spherical(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {

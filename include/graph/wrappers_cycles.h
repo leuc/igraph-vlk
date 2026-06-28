@@ -10,7 +10,7 @@
 #include <igraph.h>
 
 // Cycle analysis: remove feedback arc set to make graph acyclic
-void *compute_remove_feedback_arc_set(igraph_t *graph);
+void *compute_remove_feedback_arc_set(ExecutionContext *ctx);
 void apply_remove_feedback_arc_set(ExecutionContext *ctx, void *result_data);
 void free_noop(void *result_data);
 

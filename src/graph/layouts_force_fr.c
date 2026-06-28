@@ -49,8 +49,9 @@
 //
 // Force-directed layout using attractive forces between connected vertices
 // and repulsive forces between all vertex pairs.
-void *compute_igraph_layout_fruchterman_reingold(igraph_t *graph)
+void *compute_igraph_layout_fruchterman_reingold(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
@@ -100,8 +101,9 @@ void *compute_igraph_layout_fruchterman_reingold(igraph_t *graph)
 // ============================================================================
 // FRUCHTERMAN-REINGOLD LAYOUT (3D)
 // ============================================================================
-void *compute_igraph_layout_fruchterman_reingold_3d(igraph_t *graph)
+void *compute_igraph_layout_fruchterman_reingold_3d(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
@@ -145,8 +147,9 @@ void *compute_igraph_layout_fruchterman_reingold_3d(igraph_t *graph)
 // "An Algorithm for Drawing General Undirected Graphs."
 // Information Processing Letters, 31/1, 7--15, 1989.
 // https://doi.org/10.1016/0020-0190(89)90102-6
-void *compute_igraph_layout_kamada_kawai(igraph_t *graph)
+void *compute_igraph_layout_kamada_kawai(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
@@ -195,8 +198,9 @@ void *compute_igraph_layout_kamada_kawai(igraph_t *graph)
 // ============================================================================
 // KAMADA-KAWAI LAYOUT (3D)
 // ============================================================================
-void *compute_igraph_layout_kamada_kawai_3d(igraph_t *graph)
+void *compute_igraph_layout_kamada_kawai_3d(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {

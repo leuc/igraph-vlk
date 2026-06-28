@@ -5,6 +5,7 @@
 
 #define _GNU_SOURCE
 
+#include "app_state.h"
 #include "graph/wrappers_layout.h"
 #include <igraph.h>
 #include <igraph_constants.h>
@@ -14,8 +15,9 @@
 // ============================================================================
 // GRAPHOPT LAYOUT
 // ============================================================================
-void *compute_igraph_layout_graphopt(igraph_t *graph)
+void *compute_igraph_layout_graphopt(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
@@ -60,8 +62,9 @@ void *compute_igraph_layout_graphopt(igraph_t *graph)
 // ============================================================================
 // LGL LAYOUT (Large Graph Layout)
 // ============================================================================
-void *compute_igraph_layout_lgl(igraph_t *graph)
+void *compute_igraph_layout_lgl(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {

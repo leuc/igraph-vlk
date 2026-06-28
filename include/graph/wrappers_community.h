@@ -13,40 +13,40 @@
 // All return igraph_vector_int_t* (membership vector) on success, NULL on failure
 
 // Multilevel (Louvain)
-void *compute_igraph_community_multilevel(igraph_t *graph);
+void *compute_igraph_community_multilevel(ExecutionContext *ctx);
 
 // Leiden
-void *compute_igraph_community_leiden(igraph_t *graph);
+void *compute_igraph_community_leiden(ExecutionContext *ctx);
 
 // Walktrap
-void *compute_igraph_community_walktrap(igraph_t *graph);
+void *compute_igraph_community_walktrap(ExecutionContext *ctx);
 
 // Edge Betweenness (Girvan-Newman)
-void *compute_igraph_community_edge_betweenness(igraph_t *graph);
+void *compute_igraph_community_edge_betweenness(ExecutionContext *ctx);
 
 // Fast Greedy
-void *compute_igraph_community_fastgreedy(igraph_t *graph);
+void *compute_igraph_community_fastgreedy(ExecutionContext *ctx);
 
 // Infomap
-void *compute_igraph_community_infomap(igraph_t *graph);
+void *compute_igraph_community_infomap(ExecutionContext *ctx);
 
 // Label Propagation
-void *compute_igraph_community_label_propagation(igraph_t *graph);
+void *compute_igraph_community_label_propagation(ExecutionContext *ctx);
 
 // Spinglass
-void *compute_igraph_community_spinglass(igraph_t *graph);
+void *compute_igraph_community_spinglass(ExecutionContext *ctx);
 
 // Leading Eigenvector
-void *compute_igraph_community_leading_eigenvector(igraph_t *graph);
+void *compute_igraph_community_leading_eigenvector(ExecutionContext *ctx);
 
 // Optimal Modularity
-void *compute_igraph_community_optimal_modularity(igraph_t *graph);
+void *compute_igraph_community_optimal_modularity(ExecutionContext *ctx);
 
 // Voronoi
-void *compute_igraph_community_voronoi(igraph_t *graph);
+void *compute_igraph_community_voronoi(ExecutionContext *ctx);
 
 // Fluid Communities
-void *compute_igraph_community_fluid_communities(igraph_t *graph);
+void *compute_igraph_community_fluid_communities(ExecutionContext *ctx);
 
 // Standard apply and free functions for community membership
 void apply_community_membership(ExecutionContext *ctx, void *result_data);

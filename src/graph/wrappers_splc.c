@@ -74,8 +74,9 @@ igraph_integer_t calculate_dag_levels(const igraph_t *graph, igraph_vector_int_t
 // Worker: Prepare graph for SPLC animation
 // Checks directed, makes acyclic if needed (in-place), returns graph on success
 // ============================================================================
-void *compute_splc_animation(igraph_t *graph)
+void *compute_splc_animation(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	if (!graph || igraph_vcount(graph) == 0)
 		return NULL;
 

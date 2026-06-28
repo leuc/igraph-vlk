@@ -9,8 +9,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-void *compute_igraph_diameter(igraph_t *graph)
+void *compute_igraph_diameter(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
 	if (!data)
 		return NULL;
@@ -29,8 +30,9 @@ void *compute_igraph_diameter(igraph_t *graph)
 	return data;
 }
 
-void *compute_igraph_radius(igraph_t *graph)
+void *compute_igraph_radius(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
 	if (!data)
 		return NULL;
@@ -55,8 +57,9 @@ void *compute_igraph_radius(igraph_t *graph)
 	return data;
 }
 
-void *compute_igraph_average_path_length(igraph_t *graph)
+void *compute_igraph_average_path_length(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
 	if (!data)
 		return NULL;

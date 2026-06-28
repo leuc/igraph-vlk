@@ -5,6 +5,7 @@
 
 #define _GNU_SOURCE
 
+#include "app_state.h"
 #include "graph/wrappers_layout.h"
 #include <igraph.h>
 #include <igraph_constants.h>
@@ -17,8 +18,9 @@
 // Yan, Zhao & Yang (2022) — IEICE Trans. Inf. & Syst. E105.D(9), 1610-1619
 // https://doi.org/10.1587/transinf.2021EDP7260
 // ============================================================================
-void *compute_igraph_layout_bcgl(igraph_t *graph)
+void *compute_igraph_layout_bcgl(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {
@@ -64,8 +66,9 @@ void *compute_igraph_layout_bcgl(igraph_t *graph)
 // Yan, Zhao & Yang (2022) — IEICE Trans. Inf. & Syst. E105.D(9), 1610-1619
 // https://doi.org/10.1587/transinf.2021EDP7260
 // ============================================================================
-void *compute_igraph_layout_bcgl_3d(igraph_t *graph)
+void *compute_igraph_layout_bcgl_3d(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {

@@ -18,8 +18,9 @@
 // ============================================================================
 
 // Degree centrality
-void *compute_igraph_degree(igraph_t *graph)
+void *compute_igraph_degree(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -40,8 +41,9 @@ void *compute_igraph_degree(igraph_t *graph)
 }
 
 // Closeness centrality
-void *compute_igraph_closeness_cutoff(igraph_t *graph)
+void *compute_igraph_closeness_cutoff(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -61,8 +63,9 @@ void *compute_igraph_closeness_cutoff(igraph_t *graph)
 }
 
 // Betweenness centrality
-void *compute_igraph_betweenness(igraph_t *graph)
+void *compute_igraph_betweenness(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -81,8 +84,9 @@ void *compute_igraph_betweenness(igraph_t *graph)
 }
 
 // Eigenvector centrality
-void *compute_igraph_eigenvector_centrality(igraph_t *graph)
+void *compute_igraph_eigenvector_centrality(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -101,8 +105,9 @@ void *compute_igraph_eigenvector_centrality(igraph_t *graph)
 }
 
 // PageRank
-void *compute_igraph_pagerank(igraph_t *graph)
+void *compute_igraph_pagerank(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -123,8 +128,9 @@ void *compute_igraph_pagerank(igraph_t *graph)
 // HITS (Hub and Authority scores)
 // Returns a combined score: average of hub and authority, or just hub?
 // For simplicity, we'll return hub scores as the centrality measure
-void *compute_igraph_hub_and_authority_scores(igraph_t *graph)
+void *compute_igraph_hub_and_authority_scores(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -169,8 +175,9 @@ void *compute_igraph_hub_and_authority_scores(igraph_t *graph)
 }
 
 // Harmonic centrality
-void *compute_igraph_harmonic_centrality(igraph_t *graph)
+void *compute_igraph_harmonic_centrality(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -189,8 +196,9 @@ void *compute_igraph_harmonic_centrality(igraph_t *graph)
 }
 
 // Strength (weighted degree sum)
-void *compute_igraph_strength(igraph_t *graph)
+void *compute_igraph_strength(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -209,8 +217,9 @@ void *compute_igraph_strength(igraph_t *graph)
 }
 
 // Coreness (k-core decomposition)
-void *compute_igraph_coreness(igraph_t *graph)
+void *compute_igraph_coreness(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -238,8 +247,9 @@ void *compute_igraph_coreness(igraph_t *graph)
 }
 
 // Constraint (structural holes)
-void *compute_igraph_constraint(igraph_t *graph)
+void *compute_igraph_constraint(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {

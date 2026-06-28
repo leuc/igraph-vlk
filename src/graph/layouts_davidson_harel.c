@@ -5,6 +5,7 @@
 
 #define _GNU_SOURCE
 
+#include "app_state.h"
 #include "graph/wrappers_layout.h"
 #include <igraph.h>
 #include <igraph_constants.h>
@@ -19,8 +20,9 @@
 // "Drawing Graphs Nicely Using Simulated Annealing."
 // ACM Transactions on Graphics 15(4), pp. 301-331, 1996.
 // https://doi.org/10.1145/234535.234538
-void *compute_igraph_layout_davidson_harel(igraph_t *graph)
+void *compute_igraph_layout_davidson_harel(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_integer_t ecount = igraph_ecount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));

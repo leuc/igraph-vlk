@@ -11,7 +11,7 @@
 #include <igraph.h>
 
 // Download worker (runs on background thread)
-void *netzschleuder_refresh(igraph_t *graph);
+void *netzschleuder_refresh(ExecutionContext *ctx);
 void netzschleuder_refresh_apply(ExecutionContext *ctx, void *result_data);
 void netzschleuder_refresh_free(void *result_data);
 

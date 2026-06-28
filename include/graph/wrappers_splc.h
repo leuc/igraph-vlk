@@ -19,7 +19,7 @@
 igraph_integer_t calculate_dag_levels(const igraph_t *graph, igraph_vector_int_t *levels);
 
 // SPLC animation command (menu-triggered with background worker)
-void *compute_splc_animation(igraph_t *graph);
+void *compute_splc_animation(ExecutionContext *ctx);
 void apply_splc_animation(ExecutionContext *ctx, void *result_data);
 bool poll_splc_gpu(ExecutionContext *ctx);
 

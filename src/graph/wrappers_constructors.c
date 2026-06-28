@@ -20,8 +20,9 @@
 // ============================================================================
 
 // Ring graph
-void *compute_igraph_ring(igraph_t *graph)
+void *compute_igraph_ring(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -38,8 +39,9 @@ void *compute_igraph_ring(igraph_t *graph)
 }
 
 // Star graph
-void *compute_igraph_star(igraph_t *graph)
+void *compute_igraph_star(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -56,8 +58,9 @@ void *compute_igraph_star(igraph_t *graph)
 }
 
 // Tree (k-ary tree, binary by default)
-void *compute_igraph_kary_tree(igraph_t *graph)
+void *compute_igraph_kary_tree(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -74,8 +77,9 @@ void *compute_igraph_kary_tree(igraph_t *graph)
 }
 
 // Square lattice
-void *compute_igraph_square_lattice(igraph_t *graph)
+void *compute_igraph_square_lattice(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -100,8 +104,9 @@ void *compute_igraph_square_lattice(igraph_t *graph)
 }
 
 // Full graph (clique)
-void *compute_igraph_full(igraph_t *graph)
+void *compute_igraph_full(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -118,8 +123,9 @@ void *compute_igraph_full(igraph_t *graph)
 }
 
 // Cycle graph (circle)
-void *compute_igraph_cycle_graph(igraph_t *graph)
+void *compute_igraph_cycle_graph(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -136,8 +142,9 @@ void *compute_igraph_cycle_graph(igraph_t *graph)
 }
 
 // Famous graph (Zachary's karate club)
-void *compute_igraph_famous(igraph_t *graph)
+void *compute_igraph_famous(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -154,8 +161,9 @@ void *compute_igraph_famous(igraph_t *graph)
 }
 
 // Erdős-Rényi G(n,p) random graph
-void *compute_igraph_erdos_renyi_game_gnp(igraph_t *graph)
+void *compute_igraph_erdos_renyi_game_gnp(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -172,8 +180,9 @@ void *compute_igraph_erdos_renyi_game_gnp(igraph_t *graph)
 }
 
 // Barabási-Albert preferential attachment
-void *compute_igraph_barabasi_game(igraph_t *graph)
+void *compute_igraph_barabasi_game(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -190,8 +199,9 @@ void *compute_igraph_barabasi_game(igraph_t *graph)
 }
 
 // Watts-Strogatz small-world graph
-void *compute_igraph_watts_strogatz_game(igraph_t *graph)
+void *compute_igraph_watts_strogatz_game(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -208,8 +218,9 @@ void *compute_igraph_watts_strogatz_game(igraph_t *graph)
 }
 
 // Forest fire model
-void *compute_igraph_forest_fire_game(igraph_t *graph)
+void *compute_igraph_forest_fire_game(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -226,8 +237,9 @@ void *compute_igraph_forest_fire_game(igraph_t *graph)
 }
 
 // Random tree
-void *compute_igraph_tree_game(igraph_t *graph)
+void *compute_igraph_tree_game(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -244,8 +256,9 @@ void *compute_igraph_tree_game(igraph_t *graph)
 }
 
 // Degree sequence game (regular graph: all degrees = 4)
-void *compute_igraph_degree_sequence_game(igraph_t *graph)
+void *compute_igraph_degree_sequence_game(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -271,8 +284,9 @@ void *compute_igraph_degree_sequence_game(igraph_t *graph)
 }
 
 // Random bipartite graph (G(n1, n2, m))
-void *compute_igraph_bipartite_game_gnm(igraph_t *graph)
+void *compute_igraph_bipartite_game_gnm(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -291,8 +305,9 @@ void *compute_igraph_bipartite_game_gnm(igraph_t *graph)
 
 // Bipartite projection - transforms current bipartite graph to two unipartite projections
 // This is special: it operates on the current graph and returns a projection
-void *compute_igraph_bipartite_projection(igraph_t *graph)
+void *compute_igraph_bipartite_projection(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	// First, check if the graph is bipartite and get the vertex types
 	igraph_bool_t is_bipartite;
 	igraph_vector_bool_t *types = IGRAPH_MALLOC(sizeof(igraph_vector_bool_t));
@@ -349,8 +364,9 @@ void *compute_igraph_bipartite_projection(igraph_t *graph)
 }
 
 // Geometric random graph
-void *compute_igraph_nearest_neighbor_graph(igraph_t *graph)
+void *compute_igraph_nearest_neighbor_graph(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
@@ -377,8 +393,9 @@ void *compute_igraph_nearest_neighbor_graph(igraph_t *graph)
 }
 
 // Gabriel graph
-void *compute_igraph_gabriel_graph(igraph_t *graph)
+void *compute_igraph_gabriel_graph(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;

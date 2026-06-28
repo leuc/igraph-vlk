@@ -6,8 +6,9 @@
 #ifndef LAYERED_SPHERE_H
 #define LAYERED_SPHERE_H
 
+#include "interaction/state.h"
 #include <igraph.h>
 
-void *compute_layout_layered_sphere(igraph_t *graph);
+void *compute_layout_layered_sphere(ExecutionContext *ctx);
 
 #endif

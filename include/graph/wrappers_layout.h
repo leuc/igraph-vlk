@@ -12,57 +12,57 @@
 // Pure worker functions - no UI or state dependencies
 
 // Force-directed layouts
-void *compute_igraph_layout_fruchterman_reingold_3d(igraph_t *graph);
-void *compute_igraph_layout_fruchterman_reingold(igraph_t *graph);
-void *compute_igraph_layout_kamada_kawai_3d(igraph_t *graph);
-void *compute_igraph_layout_kamada_kawai(igraph_t *graph);
-void *compute_igraph_layout_drl_3d(igraph_t *graph);
-void *compute_igraph_layout_drl(igraph_t *graph);
-void *compute_igraph_layout_davidson_harel(igraph_t *graph);
-void *compute_igraph_layout_graphopt(igraph_t *graph);
-void *compute_igraph_layout_gem(igraph_t *graph);
-void *compute_igraph_layout_forceatlas2_3d(igraph_t *graph);
-void *compute_igraph_layout_yifan_hu(igraph_t *graph);
-void *compute_igraph_layout_yifan_hu_3d(igraph_t *graph);
-void *compute_igraph_layout_lgl(igraph_t *graph);
+void *compute_igraph_layout_fruchterman_reingold_3d(ExecutionContext *ctx);
+void *compute_igraph_layout_fruchterman_reingold(ExecutionContext *ctx);
+void *compute_igraph_layout_kamada_kawai_3d(ExecutionContext *ctx);
+void *compute_igraph_layout_kamada_kawai(ExecutionContext *ctx);
+void *compute_igraph_layout_drl_3d(ExecutionContext *ctx);
+void *compute_igraph_layout_drl(ExecutionContext *ctx);
+void *compute_igraph_layout_davidson_harel(ExecutionContext *ctx);
+void *compute_igraph_layout_graphopt(ExecutionContext *ctx);
+void *compute_igraph_layout_gem(ExecutionContext *ctx);
+void *compute_igraph_layout_forceatlas2_3d(ExecutionContext *ctx);
+void *compute_igraph_layout_yifan_hu(ExecutionContext *ctx);
+void *compute_igraph_layout_yifan_hu_3d(ExecutionContext *ctx);
+void *compute_igraph_layout_lgl(ExecutionContext *ctx);
 
 // Binary classification-based graph layouts (BCGL)
-void *compute_igraph_layout_bcgl(igraph_t *graph);
-void *compute_igraph_layout_bcgl_3d(igraph_t *graph);
+void *compute_igraph_layout_bcgl(ExecutionContext *ctx);
+void *compute_igraph_layout_bcgl_3d(ExecutionContext *ctx);
 
 // Tree layouts
-void *compute_igraph_layout_reingold_tilford(igraph_t *graph);
-void *compute_igraph_layout_sugiyama(igraph_t *graph);
-void *compute_igraph_layout_sugiyama_radial(igraph_t *graph);
+void *compute_igraph_layout_reingold_tilford(ExecutionContext *ctx);
+void *compute_igraph_layout_sugiyama(ExecutionContext *ctx);
+void *compute_igraph_layout_sugiyama_radial(ExecutionContext *ctx);
 
 // Geometric layouts
-void *compute_igraph_layout_circle(igraph_t *graph);
-void *compute_igraph_layout_circle_2d(igraph_t *graph);
-void *compute_igraph_layout_star(igraph_t *graph);
-void *compute_igraph_layout_grid_3d(igraph_t *graph);
-void *compute_igraph_layout_grid(igraph_t *graph);
-void *compute_igraph_layout_sphere(igraph_t *graph);
-void *compute_igraph_layout_random_3d(igraph_t *graph);
-void *compute_igraph_layout_random(igraph_t *graph);
+void *compute_igraph_layout_circle(ExecutionContext *ctx);
+void *compute_igraph_layout_circle_2d(ExecutionContext *ctx);
+void *compute_igraph_layout_star(ExecutionContext *ctx);
+void *compute_igraph_layout_grid_3d(ExecutionContext *ctx);
+void *compute_igraph_layout_grid(ExecutionContext *ctx);
+void *compute_igraph_layout_sphere(ExecutionContext *ctx);
+void *compute_igraph_layout_random_3d(ExecutionContext *ctx);
+void *compute_igraph_layout_random(ExecutionContext *ctx);
 
 // Bipartite layouts
-void *compute_igraph_layout_mds(igraph_t *graph);
-void *compute_igraph_layout_mds_3d(igraph_t *graph);
-void *compute_igraph_layout_mds_spherical(igraph_t *graph);
-void *compute_igraph_layout_bipartite(igraph_t *graph);
-void *compute_igraph_layout_bipartite_simple(igraph_t *graph);
+void *compute_igraph_layout_mds(ExecutionContext *ctx);
+void *compute_igraph_layout_mds_3d(ExecutionContext *ctx);
+void *compute_igraph_layout_mds_spherical(ExecutionContext *ctx);
+void *compute_igraph_layout_bipartite(ExecutionContext *ctx);
+void *compute_igraph_layout_bipartite_simple(ExecutionContext *ctx);
 
 // Dimensionality reduction / Embedding
-void *compute_igraph_layout_umap_3d(igraph_t *graph);
-void *compute_igraph_layout_umap(igraph_t *graph);
-void *compute_igraph_layout_bhtsne_3d(igraph_t *graph);
-void *compute_igraph_layout_bhtsne(igraph_t *graph);
+void *compute_igraph_layout_umap_3d(ExecutionContext *ctx);
+void *compute_igraph_layout_umap(ExecutionContext *ctx);
+void *compute_igraph_layout_bhtsne_3d(ExecutionContext *ctx);
+void *compute_igraph_layout_bhtsne(ExecutionContext *ctx);
 
 // Community-based layouts
-void *compute_layout_layered_sphere(igraph_t *graph);
+void *compute_layout_layered_sphere(ExecutionContext *ctx);
 
 // GPU-accelerated layouts
-void *compute_layout_bcgl(igraph_t *graph);
+void *compute_layout_bcgl(ExecutionContext *ctx);
 
 // Layout post-processing: center at origin + auto-scale (no rotation)
 void layout_center_and_autoscale(igraph_matrix_t *mat);

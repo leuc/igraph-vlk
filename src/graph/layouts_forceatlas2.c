@@ -5,6 +5,7 @@
 
 #define _GNU_SOURCE
 
+#include "app_state.h"
 #include "graph/wrappers_layout.h"
 #include <igraph.h>
 #include <igraph_constants.h>
@@ -21,8 +22,9 @@
 // ============================================================================
 // Reference: Jacomy, M., Venturini, T., Heymann, S., and Bastian, M. (2014):
 // "ForceAtlas2, a Continuous Graph Layout Algorithm for Handy Network Visualization"
-void *compute_igraph_layout_forceatlas2_3d(igraph_t *graph)
+void *compute_igraph_layout_forceatlas2_3d(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	cpu_set_t cpuset;
 	CPU_ZERO(&cpuset);
 	for (int i = 0; i < 24; i++) {

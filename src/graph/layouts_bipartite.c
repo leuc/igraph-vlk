@@ -5,6 +5,7 @@
 
 #define _GNU_SOURCE
 
+#include "app_state.h"
 #include "graph/wrappers_layout.h"
 #include <igraph.h>
 #include <igraph_constants.h>
@@ -14,8 +15,9 @@
 // ============================================================================
 // BIPARTITE LAYOUT (3D)
 // ============================================================================
-void *compute_igraph_layout_bipartite(igraph_t *graph)
+void *compute_igraph_layout_bipartite(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
@@ -66,8 +68,9 @@ void *compute_igraph_layout_bipartite(igraph_t *graph)
 // ============================================================================
 // BIPARTITE LAYOUT (2D)
 // ============================================================================
-void *compute_igraph_layout_bipartite_simple(igraph_t *graph)
+void *compute_igraph_layout_bipartite_simple(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 2) != IGRAPH_SUCCESS) {

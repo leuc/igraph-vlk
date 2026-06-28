@@ -5,6 +5,7 @@
 
 #define _GNU_SOURCE
 
+#include "app_state.h"
 #include "graph/wrappers_layout.h"
 #include <igraph.h>
 #include <igraph_constants.h>
@@ -17,8 +18,9 @@
 // Reference: Sugiyama, K., Tagawa, S., and Toda, M.:
 // "Methods for Visual Understanding of Hierarchical Systems."
 // IEEE Transactions on Systems, Man and Cybernetics 11(2):109-125, 1981.
-void *compute_igraph_layout_sugiyama(igraph_t *graph)
+void *compute_igraph_layout_sugiyama(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {
@@ -103,8 +105,9 @@ void *compute_igraph_layout_sugiyama(igraph_t *graph)
 // Reference: Bachmaier, C. (2007):
 // "A Radial Adaptation of the Sugiyama Framework for Visualizing Hierarchical Information."
 // IEEE Transactions on Visualization and Computer Graphics 13(3):583-594.
-void *compute_igraph_layout_sugiyama_radial(igraph_t *graph)
+void *compute_igraph_layout_sugiyama_radial(ExecutionContext *ctx)
 {
+	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 	if (igraph_matrix_init(result, vcount, 3) != IGRAPH_SUCCESS) {

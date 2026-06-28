@@ -11,8 +11,8 @@
 
 // Global network properties: density, transitivity, assortativity
 
-void *compute_igraph_density(igraph_t *graph);
-void *compute_igraph_transitivity_undirected(igraph_t *graph);
-void *compute_igraph_assortativity_degree(igraph_t *graph);
+void *compute_igraph_density(ExecutionContext *ctx);
+void *compute_igraph_transitivity_undirected(ExecutionContext *ctx);
+void *compute_igraph_assortativity_degree(ExecutionContext *ctx);
 
 #endif

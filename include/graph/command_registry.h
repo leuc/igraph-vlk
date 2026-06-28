@@ -12,7 +12,8 @@
 struct AppContext;
 
 // 1. Pure math function. Returns allocated result (e.g., igraph_matrix_t*)
-typedef void *(*IgraphWorkerFunc)(igraph_t *graph);
+//    Receives ExecutionContext with graph access via ctx->app_state->current_graph.g
+typedef void *(*IgraphWorkerFunc)(ExecutionContext *ctx);
 
 // 2. Main thread function to sync result to the visualization state
 typedef void (*IgraphApplyFunc)(ExecutionContext *ctx, void *result_data);
