@@ -2,4 +2,7 @@ build/
 .cache/
 .clangd
 .zed/
+.opencode
 compile_commands.json
+gamecontrollerdb.txt
+docs/
