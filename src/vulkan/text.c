@@ -82,9 +82,37 @@ bool text_atlas_init(TextAtlas *ta, int width, int height)
 	ta->cursor_y = 0;
 	ta->row_height = 0;
 	ta->dirty = true;
+	ta->device = VK_NULL_HANDLE;
 	ta->image = VK_NULL_HANDLE;
 	ta->memory = VK_NULL_HANDLE;
 	ta->view = VK_NULL_HANDLE;
+	return true;
+}
+
+static bool text_atlas_grow(TextAtlas *ta, int needed_height)
+{
+	int new_height = ta->height;
+	while (new_height < needed_height)
+		new_height *= 2;
+
+	uint8_t *new_pixels = (uint8_t *)calloc(1, (size_t)ta->width * new_height);
+	if (!new_pixels)
+		return false;
+
+	memcpy(new_pixels, ta->pixels, (size_t)ta->width * ta->height);
+	free(ta->pixels);
+	ta->pixels = new_pixels;
+	ta->height = new_height;
+	ta->dirty = true;
+
+	if (ta->image != VK_NULL_HANDLE) {
+		vkDestroyImageView(ta->device, ta->view, NULL);
+		vkDestroyImage(ta->device, ta->image, NULL);
+		vkFreeMemory(ta->device, ta->memory, NULL);
+		ta->image = VK_NULL_HANDLE;
+		ta->memory = VK_NULL_HANDLE;
+		ta->view = VK_NULL_HANDLE;
+	}
 	return true;
 }
 
@@ -141,18 +169,20 @@ void text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, T
 	// Baseline offset: shift all glyphs down so negative y0 doesn't clip above the row
 	int baseline = (int)(-min_y);
 
-	// Advance to new row if needed
+	// Advance to new row / grow if needed
 	if (ta->cursor_x + (int)max_line_width + 1 > ta->width) {
 		ta->cursor_x = 0;
 		ta->cursor_y += ta->row_height + 1;
 		ta->row_height = 0;
 	}
 
-	// Check atlas overflow
+	// Grow atlas if it would overflow
 	if (ta->cursor_y + total_h > ta->height) {
-		out->u0 = out->v0 = out->u1 = out->v1 = 0;
-		out->width_px = out->height_px = 0;
-		return;
+		if (!text_atlas_grow(ta, ta->cursor_y + total_h)) {
+			out->u0 = out->v0 = out->u1 = out->v1 = 0;
+			out->width_px = out->height_px = 0;
+			return;
+		}
 	}
 
 	// Pass 2: blit each glyph into the atlas, handling \n as line breaks
@@ -212,6 +242,7 @@ void text_atlas_ensure_uploaded(TextAtlas *ta, VkDevice device, VkPhysicalDevice
 	if (!ta->dirty)
 		return;
 
+	ta->device = device;
 	VkDeviceSize imgSize = (VkDeviceSize)ta->width * ta->height;
 
 	if (ta->image == VK_NULL_HANDLE) {

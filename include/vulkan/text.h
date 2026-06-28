@@ -46,6 +46,7 @@ typedef struct
 	bool dirty; // Needs GPU upload
 
 	// GPU resources (lazy-created on first upload)
+	VkDevice device;
 	VkImage image;
 	VkDeviceMemory memory;
 	VkImageView view;
