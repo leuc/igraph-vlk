@@ -66,37 +66,64 @@ No unit/integration tests (no `test/` dir, no CTest targets).
 
 The menu is a 3D spherical UI built dynamically from `src/graph/command_registry.c:g_command_registry[]`.
 
+### CommandDef Struct
+```c
+typedef struct CommandDef {
+    const char *category_path;    // e.g. "Layout/Force-Directed"
+    const char *command_id;       // e.g. "lay_force_fr"
+    const char *display_name;     // e.g. "Fruchterman-Reingold"
+    IgraphWorkerFunc worker_func; // Pure compute: void* (*)(igraph_t*)
+    IgraphApplyFunc apply_func;   // Sync result to UI: void (*)(ExecutionContext*, void*)
+    IgraphFreeFunc free_func;     // Cleanup: void (*)(void*)
+    IgraphGpuPollFunc gpu_poll_func; // GPU poll: bool (*)(ExecutionContext*), NULL for CPU-only
+} CommandDef;
+```
+
 ### Process
-1. **Define Worker Function** (`src/graph/wrappers_layout.c` for layouts):
-   - `void* compute_new_lay(igraph_t *graph)`: Offloaded CPU compute. Return `igraph_matrix_t*` for layouts (positions), or other data. Check `igraph_error_t != IGRAPH_SUCCESS`, cleanup/free on fail, return NULL.
-   - Decl in `include/graph/wrappers_layout.h`.
+1. **Define Worker Function** (in appropriate `src/graph/wrappers_*.c`):
+   - `void* compute_new_lay(igraph_t *graph)`: Offloaded CPU compute. Return `igraph_matrix_t*` for layouts, `igraph_vector_t*` for centrality, `igraph_vector_int_t*` for community membership, `igraph_t*` for new graphs, or other data. Check `igraph_error_t != IGRAPH_SUCCESS`, cleanup/free on fail, return NULL.
+   - Declare in corresponding `include/graph/wrappers_*.h`.
    - Example: `igraph_layout_circle(graph, result, order);`
 
 2. **Define Apply/Free Functions**:
    - Use existing `apply_layout_matrix` (updates `GraphData.nodes` positions from matrix, calls `renderer_update_graph`).
+   - Use `apply_centrality_scores` / `centrality_scores_free` for centrality measures.
+   - Use `apply_community_membership` / `free_community_membership` for community detection.
+   - Use `apply_new_graph` / `free_new_graph` for graph generation.
+   - Use `apply_info_card` / `info_card_free` for scalar results (diameter, density, etc.).
    - `free_layout_matrix`: `igraph_matrix_destroy/free(ptr)`.
 
 3. **Register in `g_command_registry[]`** (`src/graph/command_registry.c`):
+   ```c
+   {"Category/Subcategory", "unique_id", "Display Name", compute_func, apply_func, free_func},
    ```
-   {\"Category/Subcategory\", \"unique_id\", \"Display Name\", compute_new_lay, apply_layout_matrix, free_layout_matrix},
-   ```
+   - For GPU-accelerated commands, add `gpu_poll_func` as 7th arg (e.g., `poll_bcgl_gpu`, `poll_splc_gpu`). Pass `NULL` for CPU-only.
    - `category_path`: / separated folders (creates tree).
    - `command_id`: Unique ID for lookup.
    - Auto-sorted by registry order.
 
-4. **Menu Auto-Builds** (`src/ui/menu.c:init_menu_tree`):
+4. **Menu Auto-Builds** (`src/ui/menu.c`):
    - Parses registry, creates `MenuNode` tree (branches/folders, leaves/commands).
    - Renders instanced quads + labels bill boarded to camera.
    - Hover/expand animation.
 
-5. **Execution Flow**:
+5. **Menu Interaction** (`src/interaction/menu.c`):
+   - `interaction_menu_toggle(AppState *state)`: Opens/closes the spherical menu.
+   - `interaction_pick_menu_node(AppState *state, mouse_x, mouse_y)`: Mouse picking.
+   - `raycast_menu_crosshair(AppState *state)`: VR/immersive crosshair picking.
+
+6. **Execution Flow**:
    - Select leaf -> `node->command->cmd_def` -> `worker_thread_submit_job` queues `worker_func` (compute).
    - Complete -> `apply_func` updates state -> renderer refresh.
+   - For GPU jobs: `gpu_poll_func` is called per-frame until it returns `true`.
    - Background thread prevents UI freeze.
 
 ### Examples
-- Layouts: `lay_force_fr` -> `compute_lay_force_fr`.
-- Analysis: Stub `NULL` for quick (no worker).
+- Layouts: `lay_force_fr` -> `compute_igraph_layout_fruchterman_reingold_3d` + `apply_layout_matrix`.
+- Centrality: `igraph_degree` -> `compute_igraph_degree` + `apply_centrality_scores`.
+- Communities: `igraph_community_leiden` -> `compute_igraph_community_leiden` + `apply_community_membership`.
+- Generation: `igraph_ring` -> `compute_igraph_ring` + `apply_new_graph`.
+- GPU: `lay_bcgl` -> `compute_layout_bcgl` + `apply_layout_bcgl` + `poll_bcgl_gpu`.
 
 Rebuild & run to see menu update.
 
@@ -141,39 +168,152 @@ Mimic existing patterns strictly. Run `clang-format` after edits.
 | File | Role |
 |------|------|
 | `src/main.c` | GLFW loop, state machine, file loading, input dispatch |
-| `include/app_state.h` | `AppState` struct, application state machine enum |
-| `src/app_state.c` | State transitions, command execution dispatch |
+| `include/app_state.h` | `AppState` struct (ties together Renderer, GraphData, Camera, WorkerThreadContext, AppContext) |
 
-### Graph Data & Wrappers
-
-| File | Role |
-|------|------|
-| `src/graph/graph_data.c` | `GraphData` struct (nodes, edges, layout, igraph_t), load/save GraphML, simplify, layout scale |
-| `include/graph/graph_data.h` | `Node`, `Edge`, `GraphData`, `GraphProperties` types |
-| `src/graph/command_registry.c` | `g_command_registry[]` — all ~80 command definitions |
-| `src/graph/wrappers_layout.c` | Worker functions for all 30+ layout algorithms |
-| `include/graph/wrappers_layout.h` | Layout wrapper declarations |
-| `src/graph/wrappers_analysis.c` | Centrality (10 measures), global properties (6 measures), community detection (12 algorithms), cycle analysis |
-| `include/graph/wrappers_analysis.h` | Analysis wrapper declarations |
-| `src/graph/wrappers_generate.c` | Graph generation (deterministic, stochastic, bipartite, spatial) |
-| `include/graph/wrappers_generate.h` | Generation wrapper declarations |
-
-### Rendering (Vulkan)
+### Graph Core & Data
 
 | File | Role |
 |------|------|
-| `src/renderer/renderer_core.c` | Vulkan instance, device, swapchain, pipelines, descriptor sets, buffers |
-| `src/renderer/renderer_node.c` | Node pipeline (instanced billboard quads, SDF shapes) |
-| `src/renderer/renderer_edge.c` | Edge pipeline (straight / spherical PCB curved) |
-| `src/renderer/renderer_label.c` | Label pipeline (LOD, dynamic atlas, billboarding) |
-| `src/renderer/renderer_ui.c` | UI pipeline (2D HUD overlay) |
-| `src/renderer/renderer_menu.c` | Menu pipeline (instanced quads, text quads, info cards) |
-| `src/renderer/renderer_dtl.c` | Detail card atlas (selected node attributes) |
-| `src/renderer/renderer_pick.c` | Ray-picking debug visualization |
-| `src/renderer/renderer_splc.c` | SPLC compute pipeline (GPU traffic animation) |
-| `src/renderer/renderer_atlas.c` | Font atlas (Inconsolata), text rendering helpers |
-| `src/renderer/renderer_xr.c` | XR framebuffers, depth buffers per view |
-| `include/renderer/renderer.h` | Public renderer API (init, draw, update, cleanup) |
+| `include/graph/graph_types.h` | `Node`, `Edge`, `GraphData`, `GraphProperties`, `FilterableAttr`, `FilterLookup`, `LayoutType` types |
+| `src/graph/graph_core.c` | `graph_free_data`, `graph_build_visualization`, `graph_rebuild_edges` lifecycle |
+| `include/graph/graph_core.h` | Graph lifecycle API |
+| `src/graph/graph_io.c` | GraphML file loading (`graph_load_graphml`) |
+| `include/graph/graph_io.h` | I/O API |
+| `src/graph/graph_actions.c` | High-level graph actions (filter, highlight) dispatched from AppState |
+| `include/graph/graph_actions.h` | Graph actions API |
+
+### Graph Filtering
+
+| File | Role |
+|------|------|
+| `src/graph/graph_filter.c` | Node filtering by degree, coreness; infrastructure highlighting |
+| `include/graph/graph_filter.h` | Filter API |
+| `src/graph/graph_filter_visibility.c` | Attribute-based visibility filtering (show/hide by vertex attribute) |
+| `include/graph/graph_filter_visibility.h` | `FilterContext` type, visibility filter API |
+
+### Command Registry & Worker Thread
+
+| File | Role |
+|------|------|
+| `src/graph/command_registry.c` | `g_command_registry[]` — all ~80 command definitions (`CommandDef` structs) |
+| `include/graph/command_registry.h` | `CommandDef`, `IgraphWorkerFunc`, `IgraphApplyFunc`, `IgraphFreeFunc`, `IgraphGpuPollFunc` types |
+| `src/graph/worker_thread.c` | Pthread job queue: submit, poll, cancel, progress/status/step handlers; igraph progress/status callbacks |
+| `include/graph/worker_thread.h` | `WorkerJob`, `WorkerJobStatus`, `WorkerThreadContext` types, queue API |
+
+### Layout Wrappers
+
+| File | Role |
+|------|------|
+| `src/graph/wrappers_layout.c` | Worker functions for all 30+ layout algorithms (force-directed, tree, geometric, bipartite, MDS, dimension reduction, BCGL) |
+| `include/graph/wrappers_layout.h` | Layout wrapper declarations, `apply_layout_matrix`, `free_layout_matrix`, `layout_center_and_autoscale` |
+| `src/graph/layouts_force_fr.c` | Fruchterman-Reingold, Kamada-Kawai implementations |
+| `src/graph/layouts_drl.c` | DrL (Distributed Recursive Layout) |
+| `src/graph/layouts_davidson_harel.c` | Davidson-Harel |
+| `src/graph/layouts_graphopt.c` | GraphOpt |
+| `src/graph/layouts_gem.c` | GEM |
+| `src/graph/layouts_forceatlas2.c` | ForceAtlas2 |
+| `src/graph/layouts_yifan_hu.c` | Yifan Hu |
+| `src/graph/layouts_bcgl.c` | BCGL (Binary Classification Graph Layout) CPU |
+| `src/graph/layouts_vk_bcgl.c` | BCGL GPU compute wrapper |
+| `src/graph/layouts_tree.c` | Reingold-Tilford, Sugiyama, Radial Sugiyama |
+| `src/graph/layouts_basic.c` | Circle, Star, Grid, Sphere, Random |
+| `src/graph/layouts_bipartite.c` | Bipartite layouts |
+| `src/graph/layouts_mds.c` | Multidimensional Scaling (Torgerson, Spherical) |
+| `src/graph/layouts_umap.c` | UMAP dimension reduction |
+| `src/graph/layouts_tsne.c` | t-SNE (Barnes-Hut) |
+| `src/graph/layouts_sugiyama.c` | Sugiyama layered layout |
+| `src/graph/layouts_apply.c` | Layout application utilities |
+| `src/graph/layered_sphere.c` | Layered Sphere custom layout |
+
+### Analysis Wrappers
+
+| File | Role |
+|------|------|
+| `src/graph/wrappers_centrality.c` | Centrality measures: degree, closeness, betweenness, eigenvector, PageRank, HITS, harmonic, strength, constraint, coreness |
+| `include/graph/wrappers_centrality.h` | Centrality wrapper declarations, `apply_centrality_scores`, `centrality_scores_free` |
+| `src/graph/wrappers_structural.c` | Global properties: density, transitivity, assortativity |
+| `include/graph/wrappers_structural.h` | Structural wrapper declarations |
+| `src/graph/wrappers_paths.c` | Path-based measures: diameter, radius, average path length |
+| `include/graph/wrappers_paths.h` | Path wrapper declarations, `apply_info_card`, `info_card_free` |
+| `src/graph/wrappers_community.c` | Community detection: Louvain, Leiden, Walktrap, Edge Betweenness, Fast Greedy, Infomap, Label Propagation, Spinglass, Leading Eigenvector, Optimal Modularity, Voronoi, Fluid Communities |
+| `include/graph/wrappers_community.h` | Community wrapper declarations, `apply_community_membership`, `free_community_membership` |
+| `src/graph/wrappers_cycles.c` | Cycle analysis: feedback arc set removal |
+| `include/graph/wrappers_cycles.h` | Cycles wrapper declarations, `free_noop` |
+| `src/graph/wrappers_splc.c` | SPLC (Search Path Link Count) animation + DAG level calculation |
+| `include/graph/wrappers_splc.h` | SPLC declarations, `poll_splc_gpu` |
+
+### Graph Generation Wrappers
+
+| File | Role |
+|------|------|
+| `src/graph/wrappers_constructors.c` | Graph generation: deterministic (ring, star, tree, lattice, full, cycle, famous), stochastic (Erdos-Renyi, Barabasi, Watts-Strogatz, forest fire, random tree, degree sequence), bipartite, spatial |
+| `include/graph/wrappers_constructors.h` | Constructor wrapper declarations, `apply_new_graph`, `free_new_graph` |
+
+### Graph Repository
+
+| File | Role |
+|------|------|
+| `src/graph/repo.c` | Shared repo utilities (cache dir, curl write callback) |
+| `include/graph/repo.h` | `NetzschleuderNetStats`, `NetzschleuderCatalogEntry`, `NetzschleuderCatalog` types |
+| `src/graph/repo_netzschleuder.c` | Netzschleuder catalog download, parsing, refresh |
+| `include/graph/repo_netzschleuder.h` | Netzschleuder refresh/catalog API |
+
+### Vulkan Renderer
+
+| File | Role |
+|------|------|
+| `include/vulkan/renderer.h` | Public renderer API (`renderer_update_graph`, `renderer_render_ray`) |
+| `include/vulkan/vulkan_types.h` | `Renderer`, `SPLCNode`, `SPLCEdge`, `BCGLNodeData`, `BCGLPushConstants`, `EdgeRoutingMode` types; all Vulkan struct definitions |
+| `src/vulkan/renderer_lifecycle.c` | Renderer init, cleanup, window resize recreation |
+| `include/vulkan/renderer_lifecycle.h` | Lifecycle API |
+| `src/vulkan/renderer_draw.c` | Main draw loop, frame submission |
+| `include/vulkan/renderer_draw.h` | Draw API |
+| `src/vulkan/renderer_pipelines.c` | Pipeline creation for all render passes |
+| `include/vulkan/renderer_pipelines.h` | Pipeline creation API |
+| `src/vulkan/renderer_geometry.c` | Node/edge geometry buffer updates |
+| `include/vulkan/renderer_geometry.h` | Geometry update API |
+| `src/vulkan/renderer_labels.c` | Label rendering (atlas-based text) |
+| `include/vulkan/renderer_labels.h` | Label rendering API |
+| `src/vulkan/renderer_ui.c` | 2D HUD overlay rendering |
+| `include/vulkan/renderer_ui.h` | UI rendering API |
+| `src/vulkan/renderer_camera.c` | Camera uniform buffer updates |
+| `include/vulkan/renderer_camera.h` | Camera rendering API |
+| `src/vulkan/renderer_compute.c` | Compute dispatch (SPLC, routing, BCGL) |
+| `include/vulkan/renderer_compute.h` | Compute dispatch API |
+| `src/vulkan/renderer_init_splc_buffers.c` | SPLC compute buffer initialization |
+| `include/vulkan/renderer_init_splc_buffers.h` | SPLC buffer init API |
+| `src/vulkan/renderer_update_node_labels.c` | Dynamic node label updates |
+| `include/vulkan/renderer_update_node_labels.h` | Label update API |
+| `src/vulkan/renderer_xr.c` | XR framebuffers, depth buffers per view |
+| `include/vulkan/renderer_xr.h` | XR rendering API |
+| `src/vulkan/renderer_bcgl.c` | BCGL GPU compute pipeline |
+| `include/vulkan/renderer_bcgl.h` | BCGL rendering API |
+| `src/vulkan/device.c` | Vulkan physical/logical device selection, queue families |
+| `include/vulkan/device.h` | Device API |
+| `src/vulkan/swapchain.c` | Swapchain creation, image acquisition |
+| `include/vulkan/swapchain.h` | Swapchain API |
+| `src/vulkan/buffers.c` | Buffer creation, memory allocation, staging |
+| `include/vulkan/buffers.h` | Buffer API |
+| `src/vulkan/images.c` | Image creation, view creation, format utilities |
+| `include/vulkan/images.h` | Image API |
+| `src/vulkan/commands.c` | Command pool/buffer allocation, one-shot commands |
+| `include/vulkan/commands.h` | Command API |
+| `src/vulkan/render_pass.c` | Render pass creation |
+| `include/vulkan/render_pass.h` | Render pass API |
+| `src/vulkan/pipeline_graphics.c` | Graphics pipeline creation helpers |
+| `include/vulkan/pipeline_graphics.h` | Graphics pipeline API |
+| `src/vulkan/pipeline_compute.c` | Compute pipeline creation |
+| `include/vulkan/pipeline_compute.h` | Compute pipeline API |
+| `src/vulkan/pipeline_ui.c` | UI overlay pipeline |
+| `include/vulkan/pipeline_ui.h` | UI pipeline API |
+| `src/vulkan/menu.c` | Menu GPU buffer management (instanced quads, text) |
+| `include/vulkan/menu.h` | Menu GPU API |
+| `src/vulkan/text.c` | Font atlas (Inconsolata), text rendering helpers |
+| `include/vulkan/text.h` | `TextRegion` type, text API |
+| `src/vulkan/utils.c` | Vulkan utility functions |
+| `include/vulkan/utils.h` | Utility API |
+| `src/vulkan/app_path.c` | Application path resolution (XDG, installed) |
+| `include/vulkan/app_path.h` | App path API |
 
 ### Shaders
 
@@ -188,26 +328,47 @@ Mimic existing patterns strictly. Run `clang-format` after edits.
 | `shaders/ray.vert` / `ray.frag` | Debug ray visualization |
 | `shaders/routing.comp` | Spherical PCB edge routing (GPU compute) |
 | `shaders/splc.comp` | SPLC traffic simulation (GPU compute) |
+| `shaders/bcgl.comp` | BCGL binary classification graph layout (GPU compute) |
 
-### UI & Interaction
-
-| File | Role |
-|------|------|
-| `src/ui/camera.c` | FPS camera (yaw/pitch, WASD, movement speed) |
-| `include/ui/camera.h` | Camera struct + API |
-| `src/ui/input.c` | Keyboard, mouse, gamepad input dispatch |
-| `include/ui/input.h` | Key mapping, gamepad deadzone, button state |
-| `src/ui/menu.c` | 3D spherical menu tree (build from registry, render, hover, expand) |
-| `include/ui/menu.h` | `MenuNode`, `MenuContext` types, menu API |
-| `src/ui/pick.c` | Ray-picking (node sphere, edge segment, menu quad intersection) |
-| `include/ui/pick.h` | Pick result types, pick API |
-
-### Background Worker Thread
+### Interaction & Input
 
 | File | Role |
 |------|------|
-| `src/ui/queue.c` | Pthread job queue: submit, poll, cancel, progress/status/step handlers |
-| `include/ui/queue.h` | `WorkerJob`, job status enum, queue API |
+| `src/interaction/camera.c` | FPS camera (yaw/pitch, WASD, movement speed) |
+| `include/interaction/camera.h` | `Camera` struct + API |
+| `src/interaction/input.c` | Keyboard, mouse, gamepad input dispatch |
+| `include/interaction/input.h` | Key mapping, gamepad deadzone, button state |
+| `src/interaction/picking.c` | Ray-picking (node sphere, edge segment intersection) |
+| `include/interaction/picking.h` | Pick result types, pick API |
+| `src/interaction/gamepad.c` | Gamepad axis/button handling |
+| `include/interaction/gamepad.h` | Gamepad API |
+| `src/interaction/spatial.c` | Spatial basis calculation for menu spawning |
+| `include/interaction/spatial.h` | `SpatialBasis` type, spatial API |
+| `src/interaction/filter.c` | Filter UI interaction (attribute filter dispatch) |
+| `include/interaction/filter.h` | Filter interaction API |
+
+### Menu System
+
+| File | Role |
+|------|------|
+| `src/interaction/menu.c` | Menu toggle, mouse/crosshair picking, hover clear |
+| `include/interaction/menu.h` | `interaction_menu_toggle`, `interaction_pick_menu_node`, `raycast_menu_crosshair` |
+| `src/ui/menu.c` | Menu tree construction from registry, 3D layout, rendering data |
+| `include/ui/menu.h` | Menu tree API |
+
+### Application State Machine
+
+| File | Role |
+|------|------|
+| `src/interaction/state.c` | State transitions (`update_app_state`), command execution dispatch, menu selection handling |
+| `include/interaction/state.h` | `AppContext`, `AppInteractionState`, `ExecutionContext`, `IgraphCommand`, `MenuNode`, `InfoCardData` types |
+
+### UI Overlays
+
+| File | Role |
+|------|------|
+| `src/ui/hud.c` | Heads-up display (FPS, job status, graph info) |
+| `include/ui/hud.h` | HUD API |
 
 ### VR / XR (OpenXR)
 
@@ -219,6 +380,8 @@ Mimic existing patterns strictly. Run `clang-format` after edits.
 | `src/xr/openxr_input.c` | VR controller input, actions |
 | `src/xr/openxr_view.c` | View configuration (eye poses) |
 | `src/xr/openxr_frame.c` | Frame loop, predicted display times |
+| `include/xr/openxr_context.h` | `XrContext` type, XR context API |
+| `include/xr/openxr_frame.h` | XR frame API |
 
 ### Build System
 
