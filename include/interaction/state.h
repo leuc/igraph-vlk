@@ -170,8 +170,6 @@ typedef struct AppContext
 	IgraphCommand *pending_command;
 	int selection_step; // How many nodes have we picked so far?
 
-	igraph_t *target_graph;
-
 	// Results display state
 	bool has_visual_results;
 	void *results_data; // Optional: pointer to results for overlay rendering
@@ -186,7 +184,7 @@ typedef struct AppContext
 // Function declarations
 typedef struct AppState AppState;
 void update_app_state(AppState *state);
-void app_context_init(AppContext *ctx, igraph_t *graph, MenuNode *root_menu);
+void app_context_init(AppContext *ctx, MenuNode *root_menu);
 void app_context_destroy(AppContext *ctx);
 void handle_menu_selection(AppContext *app, MenuNode *selected_node);
 void check_pending_command_requirements(AppContext *app);

@@ -15,14 +15,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-void app_context_init(AppContext *ctx, igraph_t *graph, MenuNode *root_menu)
+void app_context_init(AppContext *ctx, MenuNode *root_menu)
 {
 	ctx->current_state = STATE_GRAPH_VIEW;
 	ctx->root_menu = root_menu;
 	ctx->active_menu_level = root_menu;
 	ctx->pending_command = NULL;
 	ctx->selection_step = 0;
-	ctx->target_graph = graph;
 }
 
 void app_context_destroy(AppContext *ctx)
@@ -91,7 +90,7 @@ void update_app_state(AppState *state)
 
 				// Create execution context
 				ExecutionContext exec_ctx;
-				exec_ctx.current_graph = app->target_graph;
+				exec_ctx.current_graph = &state->current_graph.g;
 				exec_ctx.params = app->pending_command->params;
 				exec_ctx.num_params = app->pending_command->num_params;
 				exec_ctx.update_visuals_callback = NULL;
@@ -124,7 +123,7 @@ void update_app_state(AppState *state)
 
 				// Create execution context
 				ExecutionContext exec_ctx;
-				exec_ctx.current_graph = app->target_graph;
+				exec_ctx.current_graph = &state->current_graph.g;
 				exec_ctx.params = app->pending_command->params;
 				exec_ctx.num_params = app->pending_command->num_params;
 				exec_ctx.update_visuals_callback = NULL;
