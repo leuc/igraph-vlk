@@ -167,7 +167,9 @@ target_compile_definitions(igraph-vlk PRIVATE FONT_PATH="${MONOSPACE_FONT}" NODE
 
 install(TARGETS igraph-vlk DESTINATION bin)
 install(DIRECTORY ${CMAKE_BINARY_DIR}/shaders/ DESTINATION share/igraph-vlk/shaders FILES_MATCHING PATTERN "*.spv")
-install(FILES ${CMAKE_SOURCE_DIR}/gamecontrollerdb.txt DESTINATION share/igraph-vlk)
+if(EXISTS ${CMAKE_SOURCE_DIR}/gamecontrollerdb.txt)
+	install(FILES ${CMAKE_SOURCE_DIR}/gamecontrollerdb.txt DESTINATION share/igraph-vlk)
+endif()
 if(NOT WIN32 AND NOT APPLE)
 	install(FILES ${CMAKE_SOURCE_DIR}/packaging/igraph-vlk.desktop DESTINATION share/applications)
 	install(FILES ${CMAKE_SOURCE_DIR}/packaging/igraph-vlk.svg DESTINATION share/icons/hicolor/scalable/apps)
