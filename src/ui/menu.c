@@ -146,8 +146,13 @@ void menu_tree_destroy(MenuNode *node)
 			free((void *)node->command->id_name);
 		if (node->command->display_name)
 			free((void *)node->command->display_name);
-		if (node->command->params)
+		if (node->command->params) {
+			for (int i = 0; i < node->command->num_params; i++) {
+				if (node->command->params[i].type == PARAM_TYPE_STRING)
+					free((void *)node->command->params[i].value.str_val);
+			}
 			free(node->command->params);
+		}
 		if (node->command->user_data) {
 			FilterContext *fc = (FilterContext *)node->command->user_data;
 			free((void *)fc->attr_name);
@@ -560,11 +565,11 @@ void menu_populate_netzschleuder(MenuNode *root)
 
 			leaf->command->params[0].name = "entry_id";
 			leaf->command->params[0].type = PARAM_TYPE_STRING;
-			leaf->command->params[0].value.str_val = entry->id;
+			leaf->command->params[0].value.str_val = strdup(entry->id);
 
 			leaf->command->params[1].name = "version_id";
 			leaf->command->params[1].type = PARAM_TYPE_STRING;
-			leaf->command->params[1].value.str_val = version_id;
+			leaf->command->params[1].value.str_val = strdup(version_id);
 
 			add_child(tag_branch, leaf);
 		}

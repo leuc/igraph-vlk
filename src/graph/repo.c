@@ -4,6 +4,7 @@
  */
 
 #include "graph/repo.h"
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,11 +17,13 @@ static void mkdir_p(const char *path)
 	for (char *p = tmp + 1; *p; p++) {
 		if (*p == '/') {
 			*p = '\0';
-			mkdir(tmp, 0755);
+			if (mkdir(tmp, 0755) != 0 && errno != EEXIST)
+				fprintf(stderr, "[Repo] mkdir %s failed: %s\n", tmp, strerror(errno));
 			*p = '/';
 		}
 	}
-	mkdir(tmp, 0755);
+	if (mkdir(tmp, 0755) != 0 && errno != EEXIST)
+		fprintf(stderr, "[Repo] mkdir %s failed: %s\n", tmp, strerror(errno));
 }
 
 const char *repo_cache_dir(void)
@@ -30,9 +33,9 @@ const char *repo_cache_dir(void)
 		return path;
 
 	const char *xdg = getenv("XDG_CACHE_HOME");
-	if (xdg && xdg[0]) {
+	if (xdg && xdg[0])
 		snprintf(path, sizeof(path), "%s/igraph-vlk", xdg);
-	} else {
+	else {
 		const char *home = getenv("HOME");
 		if (!home)
 			home = ".";

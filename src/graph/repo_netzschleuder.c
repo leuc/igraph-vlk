@@ -7,15 +7,12 @@
 #include "graph/repo.h"
 #include "graph/worker_thread.h"
 #include <curl/curl.h>
-#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <yyjson.h>
 
 #define NETZSCHLEUDER_URL "https://networks.skewed.de/api/nets?full=True"
-
-static void netzschleuder_extract_index(void);
 
 // ---------------------------------------------------------------------------
 // Download worker
@@ -80,11 +77,116 @@ void *netzschleuder_refresh(ExecutionContext *ctx)
 	}
 
 	worker_thread_set_progress(1.0f);
-	worker_thread_set_status_message("Netzschleuder catalog updated, extracting index...");
+	worker_thread_set_status_message("Extracting index...");
 
-	netzschleuder_extract_index();
+	yyjson_read_err err;
+	yyjson_doc *doc = yyjson_read_file(path, YYJSON_READ_NOFLAG, NULL, &err);
+	if (!doc) {
+		fprintf(stderr, "[Repo] Failed to parse downloaded catalog: %s\n", err.msg);
+		worker_thread_set_status_message("Index extraction failed");
+		return NULL;
+	}
+
+	yyjson_mut_doc *out = yyjson_mut_doc_new(NULL);
+	if (!out) {
+		yyjson_doc_free(doc);
+		worker_thread_set_status_message("Index extraction failed");
+		return NULL;
+	}
+	yyjson_mut_val *arr = yyjson_mut_arr(out);
+	yyjson_mut_doc_set_root(out, arr);
+
+	yyjson_val *root = yyjson_doc_get_root(doc);
+	yyjson_val *key, *val;
+	yyjson_obj_iter iter = yyjson_obj_iter_with(root);
+	while ((key = yyjson_obj_iter_next(&iter))) {
+		const char *entry_id = yyjson_get_str(key);
+		if (!entry_id)
+			continue;
+		val = yyjson_obj_iter_get_val(key);
+
+		yyjson_val *v_title = yyjson_obj_get(val, "title");
+		yyjson_val *v_tags = yyjson_obj_get(val, "tags");
+		yyjson_val *v_nets = yyjson_obj_get(val, "nets");
+		yyjson_val *v_analyses = yyjson_obj_get(val, "analyses");
+
+		const char *title = v_title && yyjson_is_str(v_title) ? yyjson_get_str(v_title) : entry_id;
+		const char *version_id = entry_id;
+		int64_t num_vertices = 0, num_edges = 0;
+
+		if (v_nets && yyjson_is_arr(v_nets) && yyjson_arr_size(v_nets) > 0) {
+			yyjson_val *v_ver = yyjson_arr_get(v_nets, 0);
+			if (v_ver && yyjson_is_str(v_ver))
+				version_id = yyjson_get_str(v_ver);
+		}
+
+		if (v_analyses && yyjson_is_obj(v_analyses)) {
+			yyjson_val *stats = yyjson_obj_get(v_analyses, version_id);
+			if (!stats)
+				stats = yyjson_obj_get(v_analyses, entry_id);
+			if (stats && yyjson_is_obj(stats)) {
+				yyjson_val *vv = yyjson_obj_get(stats, "num_vertices");
+				yyjson_val *ve = yyjson_obj_get(stats, "num_edges");
+				if (vv && yyjson_is_num(vv))
+					num_vertices = yyjson_get_sint(vv);
+				if (ve && yyjson_is_num(ve))
+					num_edges = yyjson_get_sint(ve);
+			}
+		}
+
+		yyjson_mut_val *obj = yyjson_mut_obj(out);
+		yyjson_mut_obj_add_str(out, obj, "id", entry_id);
+		yyjson_mut_obj_add_str(out, obj, "title", title);
+		yyjson_mut_obj_add_str(out, obj, "version", version_id);
+		yyjson_mut_obj_add_int(out, obj, "nodes", num_vertices);
+		yyjson_mut_obj_add_int(out, obj, "edges", num_edges);
+
+		if (v_tags && yyjson_is_arr(v_tags) && yyjson_arr_size(v_tags) > 0) {
+			yyjson_mut_val *tags_arr = yyjson_mut_arr(out);
+			yyjson_val *t;
+			yyjson_arr_iter t_iter = yyjson_arr_iter_with(v_tags);
+			while ((t = yyjson_arr_iter_next(&t_iter))) {
+				if (yyjson_is_str(t))
+					yyjson_mut_arr_append(tags_arr, yyjson_mut_strcpy(out, yyjson_get_str(t)));
+			}
+			if (yyjson_mut_arr_size(tags_arr) > 0)
+				yyjson_mut_obj_add_val(out, obj, "tags", tags_arr);
+		}
+
+		yyjson_mut_arr_append(arr, obj);
+	}
+
+	// Keep immutable doc alive during write (string refs in mut doc may still reference it)
+	char index_path[4096];
+	snprintf(index_path, sizeof(index_path), "%s/netzschleuder_index.json", dir);
+
+	size_t json_len = 0;
+	char *json_str = yyjson_mut_write(out, YYJSON_WRITE_PRETTY, &json_len);
+	yyjson_mut_doc_free(out);
+
+	if (!json_str) {
+		yyjson_doc_free(doc);
+		fprintf(stderr, "[Repo] Failed to serialize index\n");
+		worker_thread_set_status_message("Index extraction failed");
+		return NULL;
+	}
+
+	FILE *ofp = fopen(index_path, "w");
+	if (!ofp) {
+		yyjson_doc_free(doc);
+		free(json_str);
+		fprintf(stderr, "[Repo] Failed to open %s for writing\n", index_path);
+		worker_thread_set_status_message("Index extraction failed");
+		return NULL;
+	}
+	fwrite(json_str, 1, json_len, ofp);
+	fclose(ofp);
+	free(json_str);
+	yyjson_doc_free(doc);
 
 	worker_thread_set_status_message("Netzschleuder catalog ready");
+	fprintf(stderr, "[Repo] Index written to %s\n", index_path);
+
 	char *ok = malloc(1);
 	if (ok)
 		ok[0] = '\0';
@@ -100,95 +202,6 @@ void netzschleuder_refresh_apply(ExecutionContext *ctx, void *result_data)
 void netzschleuder_refresh_free(void *result_data)
 {
 	free(result_data);
-}
-
-// ---------------------------------------------------------------------------
-// Index extraction: parse full catalog, write small summary JSON
-// ---------------------------------------------------------------------------
-
-void netzschleuder_extract_index(void)
-{
-	const char *dir = repo_cache_dir();
-	char big_path[4096], small_path[4096];
-	snprintf(big_path, sizeof(big_path), "%s/netzschleuder.json", dir);
-	snprintf(small_path, sizeof(small_path), "%s/netzschleuder_index.json", dir);
-
-	fprintf(stderr, "[Index] Reading %s...\n", big_path);
-	yyjson_read_err err;
-	yyjson_doc *doc = yyjson_read_file(big_path, YYJSON_READ_NOFLAG, NULL, &err);
-	if (!doc) {
-		fprintf(stderr, "[Index] Cannot extract index: %s\n", err.msg);
-		return;
-	}
-
-	yyjson_val *root = yyjson_doc_get_root(doc);
-	size_t count = yyjson_obj_size(root);
-	fprintf(stderr, "[Index] Root has %zu entries, writing...\n", count);
-
-	FILE *fp = fopen(small_path, "w");
-	if (!fp) {
-		fprintf(stderr, "[Index] Cannot write %s\n", small_path);
-		yyjson_doc_free(doc);
-		return;
-	}
-
-	fprintf(fp, "[\n");
-	size_t idx = 0;
-	yyjson_val *key, *val;
-	yyjson_obj_iter iter = yyjson_obj_iter_with(root);
-	while ((key = yyjson_obj_iter_next(&iter))) {
-		const char *entry_id = yyjson_get_str(key);
-		val = yyjson_obj_iter_get_val(key);
-
-		yyjson_val *v_title = yyjson_obj_get(val, "title");
-		yyjson_val *v_tags = yyjson_obj_get(val, "tags");
-		yyjson_val *v_nets = yyjson_obj_get(val, "nets");
-		yyjson_val *v_analyses = yyjson_obj_get(val, "analyses");
-
-		const char *title = v_title ? yyjson_get_str(v_title) : entry_id;
-		const char *version_id = entry_id;
-		int64_t num_vertices = 0, num_edges = 0;
-
-		if (v_nets && yyjson_arr_size(v_nets) > 0) {
-			version_id = yyjson_get_str(yyjson_arr_get(v_nets, 0));
-		}
-
-		if (v_analyses && yyjson_is_obj(v_analyses)) {
-			yyjson_val *stats = yyjson_obj_get(v_analyses, version_id);
-			if (!stats && v_nets && yyjson_arr_size(v_nets) > 0) {
-				stats = yyjson_obj_get(v_analyses, entry_id);
-			}
-			if (stats) {
-				yyjson_val *vv = yyjson_obj_get(stats, "num_vertices");
-				yyjson_val *ve = yyjson_obj_get(stats, "num_edges");
-				if (vv)
-					num_vertices = yyjson_get_sint(vv);
-				if (ve)
-					num_edges = yyjson_get_sint(ve);
-			}
-		}
-
-		fprintf(fp, "%s{\"id\":\"%s\",\"title\":\"%s\",\"version\":\"%s\",\"nodes\":%" PRId64 ",\"edges\":%" PRId64, idx > 0 ? "," : "", entry_id, title, version_id, num_vertices, num_edges);
-
-		if (v_tags && yyjson_arr_size(v_tags) > 0) {
-			fprintf(fp, ",\"tags\":[");
-			size_t ti = 0;
-			yyjson_val *t;
-			yyjson_arr_iter t_iter = yyjson_arr_iter_with(v_tags);
-			while ((t = yyjson_arr_iter_next(&t_iter))) {
-				fprintf(fp, "%s\"%s\"", ti > 0 ? "," : "", yyjson_get_str(t));
-				ti++;
-			}
-			fprintf(fp, "]");
-		}
-		fprintf(fp, "}\n");
-		idx++;
-	}
-	fprintf(fp, "]\n");
-	fclose(fp);
-
-	yyjson_doc_free(doc);
-	fprintf(stderr, "[Index] Extracted %zu entries to %s\n", idx, small_path);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,34 +232,17 @@ void free_netzschleuder_download(void *result_data)
 }
 
 // ---------------------------------------------------------------------------
-// Catalog parser (yyjson)
+// Catalog index loader (reads the compact index file)
 // ---------------------------------------------------------------------------
 
-static char **yyjson_str_array(yyjson_val *arr, int *out_count)
-{
-	size_t count = yyjson_arr_size(arr);
-	char **result = malloc(sizeof(char *) * count);
-	size_t idx = 0;
-	yyjson_val *val;
-	yyjson_arr_iter iter = yyjson_arr_iter_with(arr);
-	while ((val = yyjson_arr_iter_next(&iter))) {
-		result[idx++] = strdup(yyjson_get_str(val));
-	}
-	*out_count = (int)count;
-	return result;
-}
-
-// ---------------------------------------------------------------------------
-// Tag index
-// ---------------------------------------------------------------------------
-
-static int cmp_str(const void *a, const void *b)
+static int str_cmp(const void *a, const void *b)
 {
 	return strcmp(*(const char **)a, *(const char **)b);
 }
 
 static void build_tag_index(NetzschleuderCatalog *cat)
 {
+	// Count unique tags via linear scan (tiny dataset: 65 tags, 286 entries)
 	int total = 0;
 	for (int i = 0; i < cat->num_entries; i++)
 		total += cat->entries[i].num_tags;
@@ -260,7 +256,7 @@ static void build_tag_index(NetzschleuderCatalog *cat)
 		for (int j = 0; j < cat->entries[i].num_tags; j++)
 			all_tags[n++] = cat->entries[i].tags[j];
 
-	qsort(all_tags, n, sizeof(char *), cmp_str);
+	qsort(all_tags, n, sizeof(char *), str_cmp);
 
 	int num_unique = 0;
 	for (int i = 0; i < n; i++) {
@@ -269,7 +265,6 @@ static void build_tag_index(NetzschleuderCatalog *cat)
 	}
 
 	NetzschleuderTag *tags = calloc(num_unique, sizeof(NetzschleuderTag));
-
 	int t = 0;
 	for (int i = 0; i < n; i++) {
 		if (i == 0 || strcmp(all_tags[i], all_tags[i - 1]) != 0) {
@@ -279,20 +274,16 @@ static void build_tag_index(NetzschleuderCatalog *cat)
 		}
 	}
 
+	free(all_tags);
+
+	// Count entries per tag
 	for (int i = 0; i < cat->num_entries; i++) {
 		for (int j = 0; j < cat->entries[i].num_tags; j++) {
-			const char *tag = cat->entries[i].tags[j];
-			int lo = 0, hi = num_unique - 1;
-			while (lo <= hi) {
-				int mid = (lo + hi) / 2;
-				int cmp = strcmp(tag, tags[mid].name);
-				if (cmp == 0) {
-					tags[mid].num_entries++;
+			for (int k = 0; k < num_unique; k++) {
+				if (strcmp(cat->entries[i].tags[j], tags[k].name) == 0) {
+					tags[k].num_entries++;
 					break;
-				} else if (cmp < 0)
-					hi = mid - 1;
-				else
-					lo = mid + 1;
+				}
 			}
 		}
 	}
@@ -304,25 +295,17 @@ static void build_tag_index(NetzschleuderCatalog *cat)
 	int *cursors = calloc(num_unique, sizeof(int));
 	for (int i = 0; i < cat->num_entries; i++) {
 		for (int j = 0; j < cat->entries[i].num_tags; j++) {
-			const char *tag = cat->entries[i].tags[j];
-			int lo = 0, hi = num_unique - 1;
-			while (lo <= hi) {
-				int mid = (lo + hi) / 2;
-				int cmp = strcmp(tag, tags[mid].name);
-				if (cmp == 0) {
-					tags[mid].entry_indices[cursors[mid]] = i;
-					cursors[mid]++;
+			for (int k = 0; k < num_unique; k++) {
+				if (strcmp(cat->entries[i].tags[j], tags[k].name) == 0) {
+					tags[k].entry_indices[cursors[k]] = i;
+					cursors[k]++;
 					break;
-				} else if (cmp < 0)
-					hi = mid - 1;
-				else
-					lo = mid + 1;
+				}
 			}
 		}
 	}
 
 	free(cursors);
-	free(all_tags);
 
 	cat->tag_index.num_tags = num_unique;
 	cat->tag_index.tags = tags;
@@ -332,67 +315,11 @@ const NetzschleuderTag *netzschleuder_catalog_find_tag(const NetzschleuderCatalo
 {
 	if (!cat || !tag_name)
 		return NULL;
-
-	int lo = 0, hi = cat->tag_index.num_tags - 1;
-	while (lo <= hi) {
-		int mid = (lo + hi) / 2;
-		int cmp = strcmp(tag_name, cat->tag_index.tags[mid].name);
-		if (cmp == 0)
-			return &cat->tag_index.tags[mid];
-		else if (cmp < 0)
-			hi = mid - 1;
-		else
-			lo = mid + 1;
+	for (int i = 0; i < cat->tag_index.num_tags; i++) {
+		if (strcmp(tag_name, cat->tag_index.tags[i].name) == 0)
+			return &cat->tag_index.tags[i];
 	}
 	return NULL;
-}
-
-static void parse_stats(yyjson_val *obj, NetzschleuderNetStats *stats)
-{
-	yyjson_val *v;
-	v = yyjson_obj_get(obj, "num_vertices");
-	stats->num_vertices = v ? yyjson_get_int(v) : 0;
-	v = yyjson_obj_get(obj, "num_edges");
-	stats->num_edges = v ? yyjson_get_int(v) : 0;
-	v = yyjson_obj_get(obj, "is_directed");
-	stats->is_directed = v && yyjson_is_true(v);
-	v = yyjson_obj_get(obj, "is_bipartite");
-	stats->is_bipartite = v && yyjson_is_true(v);
-	v = yyjson_obj_get(obj, "average_degree");
-	stats->average_degree = v ? (float)yyjson_get_real(v) : 0.0f;
-}
-
-static void parse_entry(yyjson_val *entry_obj, NetzschleuderEntry *entry)
-{
-	yyjson_val *v;
-
-	v = yyjson_obj_get(entry_obj, "title");
-	entry->title = v ? strdup(yyjson_get_str(v)) : strdup("");
-
-	v = yyjson_obj_get(entry_obj, "restricted");
-	entry->restricted = v && yyjson_is_true(v);
-
-	v = yyjson_obj_get(entry_obj, "tags");
-	entry->tags = v ? yyjson_str_array(v, &entry->num_tags) : NULL;
-
-	v = yyjson_obj_get(entry_obj, "nets");
-	entry->nets = v ? yyjson_str_array(v, &entry->num_nets) : NULL;
-
-	v = yyjson_obj_get(entry_obj, "analyses");
-	entry->stats = NULL;
-	if (v && entry->num_nets > 0) {
-		entry->stats = calloc(entry->num_nets, sizeof(NetzschleuderNetStats));
-
-		if (yyjson_is_obj(v)) {
-			for (int i = 0; i < entry->num_nets; i++) {
-				yyjson_val *version_obj = yyjson_obj_get(v, entry->nets[i]);
-				if (version_obj)
-					parse_stats(version_obj, &entry->stats[i]);
-			}
-		} else if (yyjson_is_obj(v) == false && yyjson_arr_size(v) > 0) {
-			parse_stats(v, &entry->stats[0]);
-		}
-	}
 }
 
 NetzschleuderCatalog *netzschleuder_catalog_load(void)
@@ -416,51 +343,65 @@ NetzschleuderCatalog *netzschleuder_catalog_load(void)
 	}
 
 	NetzschleuderCatalog *cat = malloc(sizeof(NetzschleuderCatalog));
+	if (!cat) {
+		yyjson_doc_free(doc);
+		return NULL;
+	}
 	cat->num_entries = (int)count;
 	cat->entries = calloc(count, sizeof(NetzschleuderEntry));
+	if (!cat->entries) {
+		free(cat);
+		yyjson_doc_free(doc);
+		return NULL;
+	}
 
 	yyjson_val *val;
 	size_t idx = 0;
 	yyjson_arr_iter iter = yyjson_arr_iter_with(root);
 	while ((val = yyjson_arr_iter_next(&iter))) {
+		NetzschleuderEntry *e = &cat->entries[idx];
 		yyjson_val *v;
 
 		v = yyjson_obj_get(val, "id");
-		cat->entries[idx].id = strdup(yyjson_get_str(v));
+		e->id = v && yyjson_is_str(v) ? strdup(yyjson_get_str(v)) : strdup("");
 
 		v = yyjson_obj_get(val, "title");
-		cat->entries[idx].title = v ? strdup(yyjson_get_str(v)) : strdup("");
+		e->title = v && yyjson_is_str(v) ? strdup(yyjson_get_str(v)) : strdup("");
 
 		v = yyjson_obj_get(val, "version");
-		const char *ver = v ? yyjson_get_str(v) : cat->entries[idx].id;
-		cat->entries[idx].num_nets = 1;
-		cat->entries[idx].nets = malloc(sizeof(char *));
-		cat->entries[idx].nets[0] = strdup(ver);
+		const char *ver = v && yyjson_is_str(v) ? yyjson_get_str(v) : e->id;
+		e->num_nets = 1;
+		e->nets = malloc(sizeof(char *));
+		e->nets[0] = strdup(ver);
 
 		v = yyjson_obj_get(val, "tags");
-		if (v && yyjson_arr_size(v) > 0) {
-			cat->entries[idx].num_tags = (int)yyjson_arr_size(v);
-			cat->entries[idx].tags = malloc(sizeof(char *) * cat->entries[idx].num_tags);
-			size_t ti = 0;
-			yyjson_val *t;
-			yyjson_arr_iter t_iter = yyjson_arr_iter_with(v);
-			while ((t = yyjson_arr_iter_next(&t_iter))) {
-				cat->entries[idx].tags[ti++] = strdup(yyjson_get_str(t));
+		if (v && yyjson_is_arr(v) && yyjson_arr_size(v) > 0) {
+			e->num_tags = (int)yyjson_arr_size(v);
+			e->tags = malloc(sizeof(char *) * e->num_tags);
+			if (e->tags) {
+				size_t ti = 0;
+				yyjson_val *t;
+				yyjson_arr_iter t_iter = yyjson_arr_iter_with(v);
+				while ((t = yyjson_arr_iter_next(&t_iter))) {
+					e->tags[ti++] = yyjson_is_str(t) ? strdup(yyjson_get_str(t)) : strdup("");
+				}
 			}
 		} else {
-			cat->entries[idx].num_tags = 0;
-			cat->entries[idx].tags = NULL;
+			e->num_tags = 0;
+			e->tags = NULL;
 		}
 
 		v = yyjson_obj_get(val, "nodes");
-		int nv = v ? yyjson_get_int(v) : 0;
+		int64_t nv = v && yyjson_is_num(v) ? yyjson_get_sint(v) : 0;
 		v = yyjson_obj_get(val, "edges");
-		int ne = v ? yyjson_get_int(v) : 0;
+		int64_t ne = v && yyjson_is_num(v) ? yyjson_get_sint(v) : 0;
 
-		cat->entries[idx].stats = calloc(1, sizeof(NetzschleuderNetStats));
-		cat->entries[idx].stats[0].num_vertices = nv;
-		cat->entries[idx].stats[0].num_edges = ne;
-		cat->entries[idx].restricted = false;
+		e->stats = calloc(1, sizeof(NetzschleuderNetStats));
+		if (e->stats) {
+			e->stats[0].num_vertices = (int)nv;
+			e->stats[0].num_edges = (int)ne;
+		}
+		e->restricted = false;
 
 		idx++;
 	}
@@ -469,7 +410,6 @@ NetzschleuderCatalog *netzschleuder_catalog_load(void)
 
 	build_tag_index(cat);
 
-	fprintf(stderr, "[Catalog] Loaded %d entries (%d tags) from %s\n", cat->num_entries, cat->tag_index.num_tags, path);
 	return cat;
 }
 
