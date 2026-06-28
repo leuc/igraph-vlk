@@ -7,6 +7,7 @@
 #include "graph/command_registry.h"
 #include "graph/graph_filter_visibility.h"
 #include "graph/graph_types.h"
+#include "graph/repo_netzschleuder.h"
 #include "vulkan/text.h"
 #include <igraph.h>
 #include <math.h>
@@ -470,4 +471,108 @@ void menu_clear_attribute_filters(MenuNode *root, GraphData *data)
 	if (!filter_branch)
 		return;
 	menu_clear_children(filter_branch);
+}
+
+// ============================================================================
+// Netzschleuder Catalog Menu Population
+// ============================================================================
+
+extern const CommandDef g_command_registry[];
+extern const int g_command_registry_size;
+
+static const CommandDef netzschleuder_download_def = {
+	"Repository/Netzschleuder", "netzschleuder_download", "Download Network", run_netzschleuder_download, apply_netzschleuder_download, free_netzschleuder_download, NULL, (const CommandParamDef[]){{"entry_id", PARAM_TYPE_STRING, 0, 0, NULL, 0}, {"version_id", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 2,
+};
+
+static MenuNode *find_or_create_branch(MenuNode *parent, const char *label)
+{
+	for (int i = 0; i < parent->num_children; i++) {
+		if (parent->children[i]->type == NODE_BRANCH && strcmp(parent->children[i]->label, label) == 0)
+			return parent->children[i];
+	}
+	MenuNode *branch = create_menu_node(label, NODE_BRANCH);
+	MenuNode **tmp = (MenuNode **)realloc(parent->children, sizeof(MenuNode *) * (parent->num_children + 1));
+	if (!tmp) {
+		menu_tree_destroy(branch);
+		return NULL;
+	}
+	parent->children = tmp;
+	parent->children[parent->num_children++] = branch;
+	return branch;
+}
+
+static void add_child(MenuNode *parent, MenuNode *child)
+{
+	MenuNode **tmp = (MenuNode **)realloc(parent->children, sizeof(MenuNode *) * (parent->num_children + 1));
+	if (!tmp) {
+		menu_tree_destroy(child);
+		return;
+	}
+	parent->children = tmp;
+	parent->children[parent->num_children++] = child;
+}
+
+static MenuNode *find_or_create_path(MenuNode *root, const char *path)
+{
+	char path_copy[256];
+	strncpy(path_copy, path, sizeof(path_copy) - 1);
+	path_copy[255] = '\0';
+
+	MenuNode *current = root;
+	char *token = strtok(path_copy, "/");
+	while (token != NULL) {
+		current = find_or_create_branch(current, token);
+		if (!current)
+			return NULL;
+		token = strtok(NULL, "/");
+	}
+	return current;
+}
+
+void menu_populate_netzschleuder(MenuNode *root)
+{
+	fprintf(stderr, "[Netzschleuder] Loading catalog...\n");
+	NetzschleuderCatalog *cat = netzschleuder_catalog_load();
+	if (!cat)
+		return;
+	fprintf(stderr, "[Netzschleuder] Loaded %d entries, %d tags\n", cat->num_entries, cat->tag_index.num_tags);
+
+	MenuNode *netz_branch = find_or_create_path(root, "Repository/Netzschleuder");
+	if (!netz_branch) {
+		netzschleuder_catalog_free(cat);
+		return;
+	}
+
+	for (int t = 0; t < cat->tag_index.num_tags; t++) {
+		NetzschleuderTag *tag = &cat->tag_index.tags[t];
+		fprintf(stderr, "[Netzschleuder] Tag %d/%d: '%s' (%d entries)\n", t, cat->tag_index.num_tags, tag->name, tag->num_entries);
+		MenuNode *tag_branch = create_menu_node(tag->name, NODE_BRANCH);
+
+		for (int e = 0; e < tag->num_entries; e++) {
+			int entry_idx = tag->entry_indices[e];
+			NetzschleuderEntry *entry = &cat->entries[entry_idx];
+
+			const char *version_id = (entry->num_nets > 0) ? entry->nets[0] : entry->id;
+
+			MenuNode *leaf = create_menu_node(entry->title, NODE_LEAF_COMMAND);
+			leaf->command = create_command(netzschleuder_download_def.command_id, entry->title, NULL, 2);
+			leaf->command->cmd_def = &netzschleuder_download_def;
+
+			leaf->command->params[0].name = "entry_id";
+			leaf->command->params[0].type = PARAM_TYPE_STRING;
+			leaf->command->params[0].value.str_val = entry->id;
+
+			leaf->command->params[1].name = "version_id";
+			leaf->command->params[1].type = PARAM_TYPE_STRING;
+			leaf->command->params[1].value.str_val = version_id;
+
+			add_child(tag_branch, leaf);
+		}
+
+		add_child(netz_branch, tag_branch);
+	}
+
+	fprintf(stderr, "[Netzschleuder] Menu populated, freeing catalog\n");
+	netzschleuder_catalog_free(cat);
+	fprintf(stderr, "[Netzschleuder] Done\n");
 }

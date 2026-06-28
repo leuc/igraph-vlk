@@ -18,15 +18,15 @@ const CommandDef g_command_registry[] = {
 	// =========================================================================
 	// File menu
 	// =========================================================================
-	{"File", "file_new", "New Graph", NULL, NULL, NULL},
-	{"File", "file_open", "Open Graph", NULL, NULL, NULL},
-	{"File", "file_save", "Save Graph", NULL, NULL, NULL},
-	{"File", "app_exit", "Exit", NULL, NULL, NULL},
+	{"File", "file_new", "New Graph", NULL, NULL, NULL, NULL, NULL, 0},
+	{"File", "file_open", "Open Graph", NULL, NULL, NULL, NULL, NULL, 0},
+	{"File", "file_save", "Save Graph", NULL, NULL, NULL, NULL, NULL, 0},
+	{"File", "app_exit", "Exit", NULL, NULL, NULL, NULL, NULL, 0},
 
 	// =========================================================================
 	// Repository menu - Netzschleuder
 	// =========================================================================
-	{"Repository/Netzschleuder", "netzschleuder_refresh", "Refresh", netzschleuder_refresh, netzschleuder_refresh_apply, netzschleuder_refresh_free},
+	{"Repository/Netzschleuder", "netzschleuder_refresh", "Refresh", netzschleuder_refresh, netzschleuder_refresh_apply, netzschleuder_refresh_free, NULL, NULL, 0},
 
 	// =========================================================================
 	// Generate menu - Deterministic Graphs

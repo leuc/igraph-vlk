@@ -15,6 +15,11 @@ void *netzschleuder_refresh(ExecutionContext *ctx);
 void netzschleuder_refresh_apply(ExecutionContext *ctx, void *result_data);
 void netzschleuder_refresh_free(void *result_data);
 
+// Network download (runs on background thread)
+void *run_netzschleuder_download(ExecutionContext *ctx);
+void apply_netzschleuder_download(ExecutionContext *ctx, void *result_data);
+void free_netzschleuder_download(void *result_data);
+
 // Catalog parsing
 NetzschleuderCatalog *netzschleuder_catalog_load(void);
 void netzschleuder_catalog_free(NetzschleuderCatalog *cat);

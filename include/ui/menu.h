@@ -54,4 +54,14 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data);
  */
 void menu_clear_attribute_filters(MenuNode *root, GraphData *data);
 
+// ============================================================================
+// Netzschleuder Catalog Menu
+// ============================================================================
+
+/**
+ * Populate the "Repository/Netzschleuder" submenu with entries from the catalog.
+ * @param root Root menu node
+ */
+void menu_populate_netzschleuder(MenuNode *root);
+
 #endif // UI_MENU_H

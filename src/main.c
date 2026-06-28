@@ -7,6 +7,7 @@
 #include "graph/graph_actions.h"
 #include "graph/graph_filter_visibility.h"
 #include "graph/graph_io.h"
+#include "graph/repo_netzschleuder.h"
 #include "graph/wrappers_layout.h"
 #include "interaction/camera.h"
 #include "interaction/input.h"
@@ -177,6 +178,7 @@ int main(int argc, char **argv)
 	MenuNode *root_menu = (MenuNode *)malloc(sizeof(MenuNode));
 	init_menu_tree(root_menu);
 	menu_populate_attribute_filters(root_menu, &app.current_graph);
+	menu_populate_netzschleuder(root_menu);
 	app_context_init(&app.app_ctx, root_menu);
 
 	// Initialize worker thread for long-running operations

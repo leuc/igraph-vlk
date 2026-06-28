@@ -33,11 +33,23 @@ static float calculate_text_width(const char *text)
 	return x_cursor * world_text_scale;
 }
 
+static int count_menu_nodes(MenuNode *node)
+{
+	if (!node)
+		return 1;
+	int count = 1;
+	for (int i = 0; i < node->num_children; i++)
+		count += count_menu_nodes(node->children[i]);
+	return count;
+}
+
 void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 {
 	MenuNode *node = ctx->root_menu;
 	if (node == NULL)
 		return;
+
+	int total_nodes = count_menu_nodes(node);
 
 	int capacity = 128;
 	MenuInstance *instances = (MenuInstance *)malloc(sizeof(MenuInstance) * capacity);
@@ -54,7 +66,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 
 	// Reset cached text regions so they get re-rendered into the fresh atlas
 	{
-		MenuNode **reset_stack = (MenuNode **)malloc(sizeof(MenuNode *) * 256);
+		MenuNode **reset_stack = (MenuNode **)malloc(sizeof(MenuNode *) * total_nodes);
 		int reset_top = 0;
 		reset_stack[reset_top++] = node;
 		while (reset_top > 0) {
@@ -72,7 +84,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 		free(reset_stack);
 	}
 
-	MenuNode **stack = (MenuNode **)malloc(sizeof(MenuNode *) * 256);
+	MenuNode **stack = (MenuNode **)malloc(sizeof(MenuNode *) * total_nodes);
 	int stack_top = 0;
 	stack[stack_top++] = node;
 

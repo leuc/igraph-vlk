@@ -23,7 +23,8 @@ typedef enum {
 	PARAM_TYPE_BOOL,
 	PARAM_TYPE_NODE_SELECTION, // Requires 3D raycast picking
 	PARAM_TYPE_EDGE_SELECTION, // Requires 3D raycast picking
-	PARAM_TYPE_ENUM			   // E.g., choosing a layout algorithm
+	PARAM_TYPE_ENUM,		   // E.g., choosing a layout algorithm
+	PARAM_TYPE_STRING		   // String parameter (e.g., network ID)
 } ParameterType;
 
 // --- Definition of a single input parameter ---
@@ -36,6 +37,7 @@ typedef struct
 		igraph_real_t f_val;
 		bool b_val;
 		igraph_integer_t selection_id; // Stores the picked igraph_integer_t vertex/edge ID
+		const char *str_val;		   // String parameter (owned by caller, not by CommandParameter)
 	} value;
 	// Limits for UI sliders/forms
 	igraph_real_t min_val;
