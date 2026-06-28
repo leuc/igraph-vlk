@@ -7,6 +7,7 @@
 #include "graph/repo.h"
 #include "graph/worker_thread.h"
 #include <curl/curl.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -112,18 +113,27 @@ void netzschleuder_extract_index(void)
 	snprintf(big_path, sizeof(big_path), "%s/netzschleuder.json", dir);
 	snprintf(small_path, sizeof(small_path), "%s/netzschleuder_index.json", dir);
 
+	fprintf(stderr, "[Index] Reading %s...\n", big_path);
 	yyjson_read_err err;
 	yyjson_doc *doc = yyjson_read_file(big_path, YYJSON_READ_NOFLAG, NULL, &err);
 	if (!doc) {
-		fprintf(stderr, "[Catalog] Cannot extract index: %s\n", err.msg);
+		fprintf(stderr, "[Index] Cannot extract index: %s\n", err.msg);
 		return;
 	}
 
-	yyjson_mut_doc *out = yyjson_mut_doc_new(NULL);
-	yyjson_mut_val *arr = yyjson_mut_arr(out);
-	yyjson_mut_doc_set_root(out, arr);
-
 	yyjson_val *root = yyjson_doc_get_root(doc);
+	size_t count = yyjson_obj_size(root);
+	fprintf(stderr, "[Index] Root has %zu entries, writing...\n", count);
+
+	FILE *fp = fopen(small_path, "w");
+	if (!fp) {
+		fprintf(stderr, "[Index] Cannot write %s\n", small_path);
+		yyjson_doc_free(doc);
+		return;
+	}
+
+	fprintf(fp, "[\n");
+	size_t idx = 0;
 	yyjson_val *key, *val;
 	yyjson_obj_iter iter = yyjson_obj_iter_with(root);
 	while ((key = yyjson_obj_iter_next(&iter))) {
@@ -136,9 +146,8 @@ void netzschleuder_extract_index(void)
 		yyjson_val *v_analyses = yyjson_obj_get(val, "analyses");
 
 		const char *title = v_title ? yyjson_get_str(v_title) : entry_id;
-
 		const char *version_id = entry_id;
-		int num_vertices = 0, num_edges = 0;
+		int64_t num_vertices = 0, num_edges = 0;
 
 		if (v_nets && yyjson_arr_size(v_nets) > 0) {
 			version_id = yyjson_get_str(yyjson_arr_get(v_nets, 0));
@@ -153,47 +162,33 @@ void netzschleuder_extract_index(void)
 				yyjson_val *vv = yyjson_obj_get(stats, "num_vertices");
 				yyjson_val *ve = yyjson_obj_get(stats, "num_edges");
 				if (vv)
-					num_vertices = yyjson_get_int(vv);
+					num_vertices = yyjson_get_sint(vv);
 				if (ve)
-					num_edges = yyjson_get_int(ve);
+					num_edges = yyjson_get_sint(ve);
 			}
 		}
 
-		yyjson_mut_val *obj = yyjson_mut_obj(out);
-		yyjson_mut_obj_add_str(out, obj, "id", entry_id);
-		yyjson_mut_obj_add_str(out, obj, "title", title);
-		yyjson_mut_obj_add_str(out, obj, "version", version_id);
-		yyjson_mut_obj_add_int(out, obj, "nodes", num_vertices);
-		yyjson_mut_obj_add_int(out, obj, "edges", num_edges);
+		fprintf(fp, "%s{\"id\":\"%s\",\"title\":\"%s\",\"version\":\"%s\",\"nodes\":%" PRId64 ",\"edges\":%" PRId64, idx > 0 ? "," : "", entry_id, title, version_id, num_vertices, num_edges);
 
 		if (v_tags && yyjson_arr_size(v_tags) > 0) {
-			yyjson_mut_val *tags_arr = yyjson_mut_arr(out);
+			fprintf(fp, ",\"tags\":[");
+			size_t ti = 0;
 			yyjson_val *t;
 			yyjson_arr_iter t_iter = yyjson_arr_iter_with(v_tags);
 			while ((t = yyjson_arr_iter_next(&t_iter))) {
-				yyjson_mut_arr_append(tags_arr, yyjson_mut_strcpy(out, yyjson_get_str(t)));
+				fprintf(fp, "%s\"%s\"", ti > 0 ? "," : "", yyjson_get_str(t));
+				ti++;
 			}
-			yyjson_mut_obj_add_val(out, obj, "tags", tags_arr);
+			fprintf(fp, "]");
 		}
-
-		yyjson_mut_arr_append(arr, obj);
+		fprintf(fp, "}\n");
+		idx++;
 	}
+	fprintf(fp, "]\n");
+	fclose(fp);
 
 	yyjson_doc_free(doc);
-
-	size_t json_len = 0;
-	char *json_str = yyjson_mut_write(out, YYJSON_WRITE_PRETTY, &json_len);
-	if (json_str) {
-		FILE *fp = fopen(small_path, "w");
-		if (fp) {
-			fputs(json_str, fp);
-			fclose(fp);
-			fprintf(stderr, "[Catalog] Extracted %zu entries to %s\n", yyjson_mut_arr_size(arr), small_path);
-		}
-		free(json_str);
-	}
-
-	yyjson_mut_doc_free(out);
+	fprintf(stderr, "[Index] Extracted %zu entries to %s\n", idx, small_path);
 }
 
 // ---------------------------------------------------------------------------
