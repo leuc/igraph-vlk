@@ -22,8 +22,17 @@ VkResult create_shader_module(VkDevice device, const char *rel, VkShaderModule *
 	long size = ftell(file);
 	fseek(file, 0, SEEK_SET);
 	uint32_t *code = malloc(size);
-	fread(code, 1, size, file);
+	if (!code) {
+		fclose(file);
+		return VK_ERROR_OUT_OF_HOST_MEMORY;
+	}
+	size_t read = fread(code, 1, size, file);
 	fclose(file);
+	if (read != (size_t)size) {
+		free(code);
+		fprintf(stderr, "Failed to read shader file: %s\n", path);
+		return VK_ERROR_INITIALIZATION_FAILED;
+	}
 	VkShaderModuleCreateInfo createInfo = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, .codeSize = size, .pCode = code};
 	VkResult result = vkCreateShaderModule(device, &createInfo, NULL, shaderModule);
 	free(code);
