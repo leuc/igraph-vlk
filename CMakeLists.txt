@@ -13,37 +13,35 @@ find_package(glfw3 REQUIRED)
 find_package(igraph REQUIRED)
 find_package(OpenMP)
 find_package(CURL REQUIRED)
-find_package(zstd REQUIRED)
 find_path(CGLM_INCLUDE_DIR cglm/cglm.h)
 find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
+find_package(zstd QUIET)
+
+# falling back to pkg-config
+if(NOT zstd_FOUND)
+    # cmake_pkg_config doesn't exist on cmake 3.22 Ubuntu 22.04
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(zstd QUIET libzstd)
+    endif()
+endif()
+
+if(NOT zstd_FOUND)
+    message(FATAL_ERROR "Could not find zstd package using CMake Config or PkgConfig.")
+endif()
 
 # zstd on Ubuntu 22.04 / 24.04
 if(TARGET zstd::libzstd_shared AND NOT TARGET zstd::libzstd)
     add_library(zstd::libzstd ALIAS zstd::libzstd_shared)
 elseif(TARGET zstd::libzstd_static AND NOT TARGET zstd::libzstd)
     add_library(zstd::libzstd ALIAS zstd::libzstd_static)
-endif()
-
-# pkg-config fallback
-find_package(PkgConfig QUIET)
-if(NOT Vulkan_FOUND AND PKG_CONFIG_FOUND)
-       pkg_check_modules(Vulkan REQUIRED vulkan)
-endif()
-
-if(NOT glfw3_FOUND AND PKG_CONFIG_FOUND)
-       pkg_check_modules(glfw3 REQUIRED glfw3)
-endif()
-
-if(NOT OpenMP_C_FOUND AND PKG_CONFIG_FOUND)
-       pkg_check_modules(OpenMP REQUIRED omp)
-endif()
-
-if(NOT CURL_FOUND AND PKG_CONFIG_FOUND)
-       pkg_check_modules(CURL REQUIRED libcurl)
-endif()
-
-if(NOT zstd_FOUND AND PKG_CONFIG_FOUND)
-       pkg_check_modules(zstd REQUIRED libzstd)
+elseif(NOT TARGET zstd::libzstd AND zstd_LINK_LIBRARIES)
+    # Fallback for pkg-config which creates variables rather than targets
+    add_library(zstd::libzstd UNKNOWN IMPORTED)
+    set_target_properties(zstd::libzstd PROPERTIES
+        IMPORTED_LOCATION "${zstd_LINK_LIBRARIES}"
+        INTERFACE_INCLUDE_DIRECTORIES "${zstd_INCLUDE_DIRS}"
+    )
 endif()
 
 set(OPENXR_SOURCES src/xr/openxr_context.c src/xr/openxr_vulkan.c src/xr/openxr_session.c src/xr/openxr_input.c src/xr/openxr_view.c src/xr/openxr_frame.c src/vulkan/renderer_xr.c)
