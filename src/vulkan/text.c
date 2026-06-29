@@ -106,6 +106,7 @@ static bool text_atlas_grow(TextAtlas *ta, int needed_height)
 	ta->dirty = true;
 
 	if (ta->image != VK_NULL_HANDLE) {
+		vkDeviceWaitIdle(ta->device);
 		vkDestroyImageView(ta->device, ta->view, NULL);
 		vkDestroyImage(ta->device, ta->image, NULL);
 		vkFreeMemory(ta->device, ta->memory, NULL);

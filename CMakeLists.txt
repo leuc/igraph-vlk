@@ -6,11 +6,7 @@ project(igraph-vlk VERSION 0.0.0 LANGUAGES C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# ---- Options ----
-
 option(USE_OPENXR "Enable OpenXR/VR support" ON)
-
-# ---- Dependencies ----
 
 find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
@@ -21,7 +17,27 @@ find_package(zstd REQUIRED)
 find_path(CGLM_INCLUDE_DIR cglm/cglm.h)
 find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
 
-# ---- OpenXR (optional) ----
+# pkg-config fallback
+find_package(PkgConfig QUIET)
+if(NOT Vulkan_FOUND AND PKG_CONFIG_FOUND)
+       pkg_check_modules(Vulkan REQUIRED vulkan)
+endif()
+
+if(NOT glfw3_FOUND AND PKG_CONFIG_FOUND)
+       pkg_check_modules(glfw3 REQUIRED glfw3)
+endif()
+
+if(NOT OpenMP_C_FOUND AND PKG_CONFIG_FOUND)
+       pkg_check_modules(OpenMP REQUIRED omp)
+endif()
+
+if(NOT CURL_FOUND AND PKG_CONFIG_FOUND)
+       pkg_check_modules(CURL REQUIRED libcurl)
+endif()
+
+if(NOT zstd_FOUND AND PKG_CONFIG_FOUND)
+       pkg_check_modules(zstd REQUIRED libzstd)
+endif()
 
 set(OPENXR_SOURCES src/xr/openxr_context.c src/xr/openxr_vulkan.c src/xr/openxr_session.c src/xr/openxr_input.c src/xr/openxr_view.c src/xr/openxr_frame.c src/vulkan/renderer_xr.c)
 
@@ -36,8 +52,6 @@ if(USE_OPENXR)
 	endif()
 endif()
 
-# ---- Shader compilation ----
-
 set(SHADERS shaders/node.vert shaders/node.frag shaders/edge.vert shaders/edge.frag shaders/label.vert shaders/label.frag shaders/ui.vert shaders/ui.frag shaders/menu.vert shaders/menu.frag shaders/textquad.vert shaders/textquad.frag shaders/routing.comp shaders/splc.comp shaders/bcgl.comp shaders/ray.vert shaders/ray.frag)
 
 foreach(shader ${SHADERS})
@@ -47,8 +61,6 @@ foreach(shader ${SHADERS})
 	add_custom_command(OUTPUT ${_spirv} COMMAND ${GLSL_COMPILER} -V ${CMAKE_CURRENT_SOURCE_DIR}/${shader} -o ${_spirv} DEPENDS ${shader} COMMENT "Compiling ${shader_name} to SPIR-V")
 	list(APPEND SPIRV_SHADERS ${_spirv})
 endforeach()
-
-# ---- Font discovery ----
 
 if(WIN32)
 	set(_font_names "Inconsolata.otf" "consola.ttf" "cour.ttf")
@@ -66,8 +78,6 @@ if(MONOSPACE_FONT)
 else()
 	message(FATAL_ERROR "No monospace font found — install Inconsolata, DejaVu Sans Mono, or Liberation Mono")
 endif()
-
-# ---- Source files ----
 
 add_executable(
 	igraph-vlk
@@ -167,8 +177,6 @@ endif()
 
 target_compile_definitions(igraph-vlk PRIVATE FONT_PATH="${MONOSPACE_FONT}" NODE_VERT_SHADER_PATH="shaders/node.vert.spv" NODE_FRAG_SHADER_PATH="shaders/node.frag.spv" EDGE_VERT_SHADER_PATH="shaders/edge.vert.spv" EDGE_FRAG_SHADER_PATH="shaders/edge.frag.spv" LABEL_VERT_SHADER_PATH="shaders/label.vert.spv" LABEL_FRAG_SHADER_PATH="shaders/label.frag.spv" UI_VERT_SHADER_PATH="shaders/ui.vert.spv" UI_FRAG_SHADER_PATH="shaders/ui.frag.spv" MENU_VERT_SHADER_PATH="shaders/menu.vert.spv" MENU_FRAG_SHADER_PATH="shaders/menu.frag.spv" TEXTQUAD_VERT_SHADER_PATH="shaders/textquad.vert.spv" TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv" ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv" SPLC_COMP_SHADER_PATH="shaders/splc.comp.spv" BCGL_COMP_SHADER_PATH="shaders/bcgl.comp.spv" RAY_VERT_SHADER_PATH="shaders/ray.vert.spv" RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv")
 
-# ---- Install rules ----
-
 install(TARGETS igraph-vlk DESTINATION bin)
 install(DIRECTORY ${CMAKE_BINARY_DIR}/shaders/ DESTINATION share/igraph-vlk/shaders FILES_MATCHING PATTERN "*.spv")
 if(EXISTS ${CMAKE_SOURCE_DIR}/gamecontrollerdb.txt)
@@ -178,8 +186,6 @@ if(NOT WIN32 AND NOT APPLE)
 	install(FILES ${CMAKE_SOURCE_DIR}/packaging/igraph-vlk.desktop DESTINATION share/applications)
 	install(FILES ${CMAKE_SOURCE_DIR}/packaging/igraph-vlk.svg DESTINATION share/icons/hicolor/scalable/apps)
 endif()
-
-# ---- CPack (.deb packaging) ----
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	execute_process(COMMAND dpkg --print-architecture OUTPUT_VARIABLE CPACK_DEBIAN_PACKAGE_ARCHITECTURE OUTPUT_STRIP_TRAILING_WHITESPACE)
