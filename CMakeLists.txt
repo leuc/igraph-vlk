@@ -17,6 +17,13 @@ find_package(zstd REQUIRED)
 find_path(CGLM_INCLUDE_DIR cglm/cglm.h)
 find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
 
+# zstd on Ubuntu 22.04 / 24.04
+if(TARGET zstd::libzstd_shared AND NOT TARGET zstd::libzstd)
+    add_library(zstd::libzstd ALIAS zstd::libzstd_shared)
+elseif(TARGET zstd::libzstd_static AND NOT TARGET zstd::libzstd)
+    add_library(zstd::libzstd ALIAS zstd::libzstd_static)
+endif()
+
 # pkg-config fallback
 find_package(PkgConfig QUIET)
 if(NOT Vulkan_FOUND AND PKG_CONFIG_FOUND)
