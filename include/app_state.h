@@ -40,7 +40,10 @@ typedef struct AppState
 	/* Window / System State */
 	GLFWwindow *window;
 	bool is_fullscreen;
+	bool can_position;
 	int win_x, win_y, win_w, win_h;
+	float win_content_scale_x;
+	float win_content_scale_y;
 
 	/* Application Logic State */
 	char *current_filename;

@@ -5,6 +5,19 @@
 
 #include "interaction/window.h"
 #include <limits.h>
+#include <stdio.h>
+
+/* Default window size fraction of monitor work area */
+#define WINDOW_FRACTION 0.80f
+#define WINDOW_MIN_W 640
+#define WINDOW_MIN_H 480
+
+static const char *glfw_error_desc = NULL;
+static void glfw_error_cb(int code, const char *desc)
+{
+	glfw_error_desc = desc;
+	fprintf(stderr, "[GLFW Error %d] %s\n", code, desc);
+}
 
 static void window_focus_callback(GLFWwindow *window, int focused)
 {
@@ -30,10 +43,99 @@ static void window_framebuffer_size_callback(GLFWwindow *window, int width, int 
 	state->renderer.framebufferResized = true;
 }
 
-void window_init_callbacks(GLFWwindow *window)
+static void window_content_scale_callback(GLFWwindow *window, float xscale, float yscale)
+{
+	AppState *state = (AppState *)glfwGetWindowUserPointer(window);
+	if (!state)
+		return;
+	state->win_content_scale_x = xscale;
+	state->win_content_scale_y = yscale;
+}
+
+static void window_init_callbacks(GLFWwindow *window)
 {
 	glfwSetWindowFocusCallback(window, window_focus_callback);
 	glfwSetFramebufferSizeCallback(window, window_framebuffer_size_callback);
+	glfwSetWindowContentScaleCallback(window, window_content_scale_callback);
+}
+
+bool window_create(AppState *state)
+{
+	glfwSetErrorCallback(glfw_error_cb);
+	if (!glfwInit()) {
+		fprintf(stderr, "Failed to initialize GLFW%s%s\n", glfw_error_desc ? ": " : "", glfw_error_desc ? glfw_error_desc : "");
+		return false;
+	}
+
+	/* Query monitor work area — Wayland returns 0,0 for position */
+	GLFWmonitor *primary = glfwGetPrimaryMonitor();
+	if (!primary) {
+		fprintf(stderr, "No primary monitor found\n");
+		return false;
+	}
+
+	int wx = 0, wy = 0, ww, wh;
+	glfwGetMonitorWorkarea(primary, &wx, &wy, &ww, &wh);
+
+	ww = (int)((float)ww * WINDOW_FRACTION);
+	wh = (int)((float)wh * WINDOW_FRACTION);
+	if (ww < WINDOW_MIN_W)
+		ww = WINDOW_MIN_W;
+	if (wh < WINDOW_MIN_H)
+		wh = WINDOW_MIN_H;
+
+	/* Only compute center position on platforms that support window positioning (not Wayland) */
+	int cx = 0, cy = 0;
+	bool can_position = (wx != 0 || wy != 0);
+	if (can_position) {
+		const GLFWvidmode *mode = glfwGetVideoMode(primary);
+		cx = wx + ((int)((float)(mode->width - ww) * 0.5f));
+		cy = wy + ((int)((float)(mode->height - wh) * 0.5f));
+	}
+
+	/* Platform-specific GLFW window hints */
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+
+#if defined(_GLFW_COCOA)
+	glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
+	glfwWindowHint(GLFW_COCOA_GRAPHICS_SWITCHING, GLFW_TRUE);
+#elif defined(_GLFW_WIN32)
+	glfwWindowHint(GLFW_WIN32_KEYBOARD_MENU, GLFW_TRUE);
+#elif defined(_GLFW_X11) || defined(_GLFW_WAYLAND)
+	glfwWindowHint(GLFW_SCALE_FRAMEBUFFER, GLFW_TRUE);
+#endif
+
+	state->window = glfwCreateWindow(ww, wh, "igraph-vlk", NULL, NULL);
+	if (!state->window) {
+		fprintf(stderr, "Failed to create GLFW window\n");
+		return false;
+	}
+
+	glfwSetWindowUserPointer(state->window, state);
+
+	/* Query actual window size — compositors may clamp */
+	glfwGetWindowSize(state->window, &state->win_w, &state->win_h);
+
+	/* Query initial content scale */
+	float xscale = 1.0f, yscale = 1.0f;
+	glfwGetWindowContentScale(state->window, &xscale, &yscale);
+	state->win_content_scale_x = xscale;
+	state->win_content_scale_y = yscale;
+
+	/* Save windowed position for fullscreen restore */
+	state->win_x = cx;
+	state->win_y = cy;
+	state->is_fullscreen = false;
+	state->can_position = can_position;
+
+	/* Register callbacks and show */
+	window_init_callbacks(state->window);
+	if (can_position)
+		glfwSetWindowPos(state->window, cx, cy);
+	glfwShowWindow(state->window);
+
+	return true;
 }
 
 void window_toggle_fullscreen(AppState *state)
@@ -42,7 +144,8 @@ void window_toggle_fullscreen(AppState *state)
 	state->is_fullscreen = !state->is_fullscreen;
 
 	if (state->is_fullscreen) {
-		glfwGetWindowPos(window, &state->win_x, &state->win_y);
+		if (state->can_position)
+			glfwGetWindowPos(window, &state->win_x, &state->win_y);
 		glfwGetWindowSize(window, &state->win_w, &state->win_h);
 		GLFWmonitor *monitor = glfwGetWindowMonitor(window);
 		if (!monitor)

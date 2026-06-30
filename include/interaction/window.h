@@ -8,11 +8,13 @@
 #include "app_state.h"
 
 /**
- * Register window-related GLFW callbacks (focus, framebuffer resize).
- * Called once during interaction_init.
- * @param window GLFW window to register callbacks for
+ * Create the GLFW window with platform-appropriate defaults.
+ * Sizes the window to 80% of the primary monitor work area, centers it,
+ * and applies platform-specific hints for Wayland/X11/macOS/Win32.
+ * @param state Pointer to the application state (window field is set on success)
+ * @return true on success, false on failure
  */
-void window_init_callbacks(GLFWwindow *window);
+bool window_create(AppState *state);
 
 /**
  * Toggle between fullscreen and windowed mode.

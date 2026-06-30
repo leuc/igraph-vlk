@@ -13,6 +13,7 @@
 #include "interaction/input.h"
 #include "interaction/menu.h"
 #include "interaction/state.h"
+#include "interaction/window.h"
 #include "ui/hud.h"
 #include "ui/menu.h"
 #include "vulkan/app_path.h"
@@ -32,13 +33,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-static const char *glfw_error_desc = NULL;
-static void glfw_error_cb(int code, const char *desc)
-{
-	glfw_error_desc = desc;
-	fprintf(stderr, "[GLFW Error %d] %s\n", code, desc);
-}
 
 /**
  * igraph-vlk: Vulkan-based 3D graph visualization
@@ -90,30 +84,13 @@ int main(int argc, char **argv)
 		}
 	}
 
-	// Initialize GLFW
-	glfwSetErrorCallback(glfw_error_cb);
-	if (!glfwInit()) {
-		fprintf(stderr, "Failed to initialize GLFW%s%s\n", glfw_error_desc ? ": " : "", glfw_error_desc ? glfw_error_desc : "");
-		graph_free_data(&app.current_graph);
-		return EXIT_FAILURE;
-	}
-
-	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
-	// Create window (initial size; query actual after creation)
-	app.window = glfwCreateWindow(3440, 1440, "Graph Sphere", NULL, NULL);
-	if (!app.window) {
-		fprintf(stderr, "Failed to create GLFW window\n");
+	// Create window (platform-aware sizing, hints, and callbacks)
+	if (!window_create(&app)) {
+		fprintf(stderr, "Failed to create window\n");
 		graph_free_data(&app.current_graph);
 		glfwTerminate();
 		return EXIT_FAILURE;
 	}
-
-	// Store user pointer for callbacks
-	glfwSetWindowUserPointer(app.window, &app);
-
-	// Query actual window size (may differ from requested on some compositors)
-	glfwGetWindowSize(app.window, &app.win_w, &app.win_h);
 
 	// Initialize input handling (registers GLFW callbacks)
 	interaction_init(app.window);

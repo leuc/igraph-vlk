@@ -52,7 +52,6 @@ void interaction_init(GLFWwindow *window)
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetMouseButtonCallback(window, mouse_button_callback);
 	glfwSetCursorPosCallback(window, mouse_callback);
-	window_init_callbacks(window);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	// Load mappings before scanning — GLFW won't fire CONNECTED

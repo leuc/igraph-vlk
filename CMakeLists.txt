@@ -46,6 +46,15 @@ endif()
 
 set(OPENXR_SOURCES src/xr/openxr_context.c src/xr/openxr_vulkan.c src/xr/openxr_session.c src/xr/openxr_input.c src/xr/openxr_view.c src/xr/openxr_frame.c src/vulkan/renderer_xr.c)
 
+# Platform detection for GLFW-specific window hints
+if(APPLE)
+	add_compile_definitions(_GLFW_COCOA=1)
+elseif(WIN32)
+	add_compile_definitions(_GLFW_WIN32=1)
+elseif(UNIX)
+	add_compile_definitions(_GLFW_X11=1 _GLFW_WAYLAND=1)
+endif()
+
 if(USE_OPENXR)
 	find_package(OpenXR)
 	if(OpenXR_FOUND)
