@@ -6,7 +6,9 @@
 #include "interaction/gamepad.h"
 #include "app_state.h"
 #include "interaction/menu.h"
+#include "interaction/picking.h"
 #include "interaction/state.h"
+#include "vulkan/renderer_update_node_labels.h"
 #include <GLFW/glfw3.h>
 #include <math.h>
 #include <stdbool.h>
@@ -76,7 +78,9 @@ static bool process_axes_and_buttons(AppState *state, float lx, float ly, float 
 	}
 
 	if (!first_frame && a_idx < max_btn && buttons[a_idx] == GLFW_PRESS && (is_gamepad ? prev_state.buttons[a_idx] : raw_prev_buttons[a_idx]) == GLFW_RELEASE) {
-		if (app->crosshair_hovered_node) {
+		if (app->current_state == STATE_GRAPH_VIEW) {
+			interaction_pick_object(state, false);
+		} else if (app->crosshair_hovered_node) {
 			printf("[GAMEPAD] A pressed, activating: %s\n", app->crosshair_hovered_node->label);
 			handle_menu_selection(app, app->crosshair_hovered_node);
 		}
@@ -97,11 +101,13 @@ static bool process_axes_and_buttons(AppState *state, float lx, float ly, float 
 		if (trigger_r && !prev_trigger_r) {
 			state->renderer.layoutScale *= 1.2f;
 			renderer_update_graph(&state->renderer, &state->current_graph);
+			detail_card_update_position(&state->renderer, &state->current_graph);
 			state->renderer.label.tree_needs_rebuild = true;
 		}
 		if (trigger_l && !prev_trigger_l) {
 			state->renderer.layoutScale /= 1.2f;
 			renderer_update_graph(&state->renderer, &state->current_graph);
+			detail_card_update_position(&state->renderer, &state->current_graph);
 			state->renderer.label.tree_needs_rebuild = true;
 		}
 	}

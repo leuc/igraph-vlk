@@ -188,6 +188,36 @@ void detail_card_update(Renderer *r, GraphData *graph, int selected_node)
 	free(detail);
 }
 
+void detail_card_update_position(Renderer *r, GraphData *graph)
+{
+	if (!r->detail.visible || r->detail.node < 0 || r->detail.node >= (int)graph->node_count)
+		return;
+
+	int selected_node = r->detail.node;
+
+	vec3 normal, upGuide = {0.0f, 1.0f, 0.0f};
+	glm_vec3_normalize_to(graph->nodes[selected_node].position, normal);
+	if (fabsf(normal[1]) > 0.999f)
+		upGuide[0] = 1.0f;
+	vec3 right, up;
+	glm_vec3_cross(upGuide, normal, right);
+	glm_vec3_normalize(right);
+	glm_vec3_cross(normal, right, up);
+
+	float fixed_offset = 0.4f;
+	vec3 label_pos;
+	glm_vec3_scale(normal, fixed_offset + 0.3f, label_pos);
+	glm_vec3_add(graph->nodes[selected_node].position, label_pos, label_pos);
+	glm_vec3_scale(label_pos, r->layoutScale, label_pos);
+
+	NodeLabelInstance *inst = &r->detail.instance_data;
+	glm_vec3_copy(label_pos, inst->worldPos);
+	glm_vec3_copy(right, inst->right);
+	glm_vec3_copy(up, inst->up);
+
+	update_buffer(r->core.device, r->detail.instance_memory, sizeof(NodeLabelInstance), &r->detail.instance_data);
+}
+
 void label_upload_and_update_descriptors(Renderer *r, uint32_t inst_count, NodeLabelInstance *instances)
 {
 	text_atlas_ensure_uploaded(&r->label.atlas, r->core.device, r->core.physicalDevice, r->commands.commandPool, r->core.graphicsQueue);

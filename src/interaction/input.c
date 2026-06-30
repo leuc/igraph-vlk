@@ -11,6 +11,7 @@
 #include "interaction/picking.h"
 #include "interaction/spatial.h"
 #include "vulkan/app_path.h"
+#include "vulkan/renderer_update_node_labels.h"
 #include <GLFW/glfw3.h>
 #include <getopt.h>
 #include <stdio.h>
@@ -289,12 +290,14 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 	case GLFW_KEY_EQUAL:
 		state->renderer.layoutScale *= 1.2f;
 		renderer_update_graph(&state->renderer, &state->current_graph);
+		detail_card_update_position(&state->renderer, &state->current_graph);
 		state->renderer.label.tree_needs_rebuild = true;
 		break;
 	case GLFW_KEY_KP_SUBTRACT:
 	case GLFW_KEY_MINUS:
 		state->renderer.layoutScale /= 1.2f;
 		renderer_update_graph(&state->renderer, &state->current_graph);
+		detail_card_update_position(&state->renderer, &state->current_graph);
 		state->renderer.label.tree_needs_rebuild = true;
 		break;
 	}
