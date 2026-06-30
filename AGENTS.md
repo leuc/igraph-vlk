@@ -174,7 +174,7 @@ Mimic existing patterns strictly. Run `clang-format` after edits.
 
 | File | Role |
 |------|------|
-| `include/graph/graph_types.h` | `Node`, `Edge`, `GraphData`, `GraphProperties`, `FilterableAttr`, `FilterLookup`, `LayoutType` types |
+| `include/graph/graph_types.h` | `Node`, `Edge`, `GraphData`, `GraphProperties`, `FilterableAttr`, `FilterLookup` |
 | `src/graph/graph_core.c` | `graph_free_data`, `graph_build_visualization`, `graph_rebuild_edges` lifecycle |
 | `include/graph/graph_core.h` | Graph lifecycle API |
 | `src/graph/graph_io.c` | GraphML file loading (`graph_load_graphml`) |

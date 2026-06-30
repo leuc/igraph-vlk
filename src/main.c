@@ -78,7 +78,7 @@ int main(int argc, char **argv)
 	app.current_graph.graph_initialized = false;
 
 	if (filename) {
-		if (!graph_load_graphml(filename, &app.current_graph, LAYOUT_GRID_3D, NULL, NULL)) {
+		if (!graph_load_graphml(filename, &app.current_graph, NULL, NULL)) {
 			fprintf(stderr, "Failed to load graph: %s\n", filename);
 			return EXIT_FAILURE;
 		}

@@ -13,7 +13,7 @@
 
 #include "graph/graph_core.h"
 
-bool graph_load_graphml(const char *filename, GraphData *data, LayoutType layout_type, const char *node_attr, const char *edge_attr)
+bool graph_load_graphml(const char *filename, GraphData *data, const char *node_attr, const char *edge_attr)
 {
 	igraph_set_attribute_table(&igraph_cattribute_table);
 	FILE *fp = fopen(filename, "r");
@@ -35,12 +35,8 @@ bool graph_load_graphml(const char *filename, GraphData *data, LayoutType layout
 	igraph_integer_t vcount = igraph_vcount(&data->g);
 	if (!graph_import_layout_pos(data)) {
 		igraph_matrix_init(&data->current_layout, 0, 0);
-		if (layout_type == LAYOUT_RANDOM_3D) {
-			igraph_layout_random_3d(&data->g, &data->current_layout);
-		} else {
-			int side = (int)ceil(pow((double)vcount, 1.0 / 3.0));
-			igraph_layout_grid_3d(&data->g, &data->current_layout, side, side);
-		}
+		int side = (int)ceil(pow((double)vcount, 1.0 / 3.0));
+		igraph_layout_grid_3d(&data->g, &data->current_layout, side, side);
 	}
 
 	graph_build_visualization(data);
