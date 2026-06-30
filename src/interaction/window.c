@@ -97,6 +97,7 @@ bool window_create(AppState *state)
 	/* Platform-specific GLFW window hints */
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+	glfwWindowHintString(GLFW_WAYLAND_APP_ID, "igraph-vlk");
 
 #if defined(_GLFW_COCOA)
 	glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
