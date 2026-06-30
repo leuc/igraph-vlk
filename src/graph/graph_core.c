@@ -85,7 +85,7 @@ void graph_build_visualization(GraphData *data)
 		data->num_filterable_attrs = 0;
 	}
 	{
-		igraph_error_handler_t *prev_handler = igraph_set_error_handler(igraph_error_handler_ignore);
+		igraph_error_handler_t *prev_handler = igraph_set_error_handler(igraph_error_handler_printignore);
 		igraph_strvector_t vnames;
 		igraph_vector_int_t vtypes;
 		bool vnames_ok = igraph_strvector_init(&vnames, 0) == IGRAPH_SUCCESS;

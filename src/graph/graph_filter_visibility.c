@@ -35,7 +35,7 @@ void graph_filter_by_attribute(GraphData *data, const char *attr_name, const cha
 	igraph_strvector_init(&vnames, 0);
 	igraph_vector_int_init(&vtypes, 0);
 	igraph_attribute_type_t attr_type = IGRAPH_ATTRIBUTE_NUMERIC;
-	igraph_error_handler_t *prev = igraph_set_error_handler(igraph_error_handler_ignore);
+	igraph_error_handler_t *prev = igraph_set_error_handler(igraph_error_handler_printignore);
 	igraph_error_t err = igraph_cattribute_list(&data->g, NULL, NULL, &vnames, &vtypes, NULL, NULL);
 	if (err == IGRAPH_SUCCESS) {
 		for (int i = 0; i < igraph_strvector_size(&vnames); i++) {

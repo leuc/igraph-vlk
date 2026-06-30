@@ -33,6 +33,8 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 
 	// Pre-allocate or grow node buffers (split: position + attribute)
 	if (r->node.capacity < graph->node_count) {
+		// Wait for all in-flight draw frames — command buffers may still reference these buffers
+		vkWaitForFences(r->core.device, MAX_FRAMES_IN_FLIGHT, r->commands.inFlightFences, VK_TRUE, UINT64_MAX);
 		VK_DESTROY_BUFFER(r->core.device, r->node.position, r->node.position_memory);
 		VK_DESTROY_BUFFER(r->core.device, r->node.attribute, r->node.attribute_memory);
 		VK_DESTROY_BUFFER(r->core.device, r->node.staging, r->node.staging_memory);
@@ -52,6 +54,8 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	r->edge.vertex_count = graph->edge_count * segments * 2;
 	uint32_t neededEdgeVerts = r->edge.vertex_count;
 	if (r->edge.capacity < neededEdgeVerts) {
+		// Wait for all in-flight draw frames — command buffers may still reference these buffers
+		vkWaitForFences(r->core.device, MAX_FRAMES_IN_FLIGHT, r->commands.inFlightFences, VK_TRUE, UINT64_MAX);
 		VK_DESTROY_BUFFER(r->core.device, r->edge.position, r->edge.position_memory);
 		VK_DESTROY_BUFFER(r->core.device, r->edge.attribute, r->edge.attribute_memory);
 		VK_DESTROY_BUFFER(r->core.device, r->edge.staging, r->edge.staging_memory);

@@ -27,7 +27,7 @@ static char *build_detail_card_text(igraph_t *g, int node, size_t *out_len)
 		return NULL;
 	size_t pos = 0;
 
-	igraph_error_handler_t *prev_handler = igraph_set_error_handler(igraph_error_handler_ignore);
+	igraph_error_handler_t *prev_handler = igraph_set_error_handler(igraph_error_handler_printignore);
 
 	igraph_strvector_t vnames;
 	igraph_vector_int_t vtypes;

@@ -157,7 +157,9 @@ static igraph_t *load_graphml_from_zst(const char *path)
 		return NULL;
 	}
 
+	igraph_error_handler_t *prev_handler = igraph_set_error_handler(igraph_error_handler_printignore);
 	igraph_error_t ret = igraph_read_graph_gml(graph, mfp);
+	igraph_set_error_handler(prev_handler);
 	fclose(mfp);
 	free(dst);
 

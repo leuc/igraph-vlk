@@ -494,6 +494,12 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 	}
 
 	// --- Upload MenuInstance buffer (background-only quads) ---
+	// Wait for all in-flight frames before destroying — a command buffer from
+	// the other slot may still reference the old buffer as a vertex buffer.
+	if (instance_count > 0 || tq_count > 0) {
+		vkWaitForFences(r->core.device, MAX_FRAMES_IN_FLIGHT, r->commands.inFlightFences, VK_TRUE, UINT64_MAX);
+	}
+
 	if (instance_count > 0) {
 		VkDeviceSize bufferSize = sizeof(MenuInstance) * instance_count;
 		VK_DESTROY_BUFFER(r->core.device, r->menu.instance, r->menu.instance_memory);
