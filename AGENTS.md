@@ -168,7 +168,7 @@ Mimic existing patterns strictly. Run `clang-format` after edits.
 | File | Role |
 |------|------|
 | `src/main.c` | GLFW loop, state machine, file loading, input dispatch |
-| `include/app_state.h` | `AppState` struct (ties together Renderer, GraphData, Camera, WorkerThreadContext, AppContext) |
+| `include/app_state.h` | `AppState` struct (ties together Renderer, GraphData, Camera, WindowState, WorkerThreadContext, AppContext) |
 
 ### Graph Core & Data
 
@@ -347,6 +347,8 @@ Requires `curl` and `jq`. Handles both single-version (flat `analyses`) and mult
 
 | File | Role |
 |------|------|
+| `src/interaction/window.c` | GLFW window lifecycle, fullscreen toggle, monitor cycling |
+| `include/interaction/window.h` | `WindowState` struct, window creation and management API |
 | `src/interaction/camera.c` | FPS camera (yaw/pitch, WASD, movement speed) |
 | `include/interaction/camera.h` | `Camera` struct + API |
 | `src/interaction/input.c` | Keyboard, mouse, gamepad input dispatch |

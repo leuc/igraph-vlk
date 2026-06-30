@@ -44,7 +44,7 @@ void update_app_state(AppState *state)
 		app->crosshair_hovered_node = hovered;
 
 		// Check for activation trigger (left mouse button press)
-		int current_left_button = glfwGetMouseButton(state->window, GLFW_MOUSE_BUTTON_LEFT);
+		int current_left_button = glfwGetMouseButton(state->win.handle, GLFW_MOUSE_BUTTON_LEFT);
 		bool mouse_just_pressed = (current_left_button == GLFW_PRESS && state->prev_left_mouse_button == GLFW_RELEASE);
 
 		if (hovered && mouse_just_pressed) {
@@ -224,7 +224,7 @@ void update_app_state(AppState *state)
 
 	case STATE_DISPLAY_RESULTS: {
 		// Dismiss on left click or Escape key
-		if (glfwGetMouseButton(state->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS || glfwGetKey(state->window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+		if (glfwGetMouseButton(state->win.handle, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS || glfwGetKey(state->win.handle, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
 			app->has_visual_results = false;
 			app->pending_command = NULL;
 			app->current_state = STATE_GRAPH_VIEW;

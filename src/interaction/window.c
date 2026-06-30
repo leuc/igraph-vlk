@@ -4,6 +4,7 @@
  */
 
 #include "interaction/window.h"
+#include "app_state.h"
 #include <limits.h>
 #include <stdio.h>
 
@@ -38,8 +39,8 @@ static void window_framebuffer_size_callback(GLFWwindow *window, int width, int 
 	AppState *state = (AppState *)glfwGetWindowUserPointer(window);
 	if (!state)
 		return;
-	state->win_w = width;
-	state->win_h = height;
+	state->win.w = width;
+	state->win.h = height;
 	state->renderer.framebufferResized = true;
 }
 
@@ -48,8 +49,8 @@ static void window_content_scale_callback(GLFWwindow *window, float xscale, floa
 	AppState *state = (AppState *)glfwGetWindowUserPointer(window);
 	if (!state)
 		return;
-	state->win_content_scale_x = xscale;
-	state->win_content_scale_y = yscale;
+	state->win.content_scale_x = xscale;
+	state->win.content_scale_y = yscale;
 }
 
 static void window_init_callbacks(GLFWwindow *window)
@@ -106,62 +107,62 @@ bool window_create(AppState *state)
 	glfwWindowHint(GLFW_SCALE_FRAMEBUFFER, GLFW_TRUE);
 #endif
 
-	state->window = glfwCreateWindow(ww, wh, "igraph-vlk", NULL, NULL);
-	if (!state->window) {
+	state->win.handle = glfwCreateWindow(ww, wh, "igraph-vlk", NULL, NULL);
+	if (!state->win.handle) {
 		fprintf(stderr, "Failed to create GLFW window\n");
 		return false;
 	}
 
-	glfwSetWindowUserPointer(state->window, state);
+	glfwSetWindowUserPointer(state->win.handle, state);
 
 	/* Query actual window size — compositors may clamp */
-	glfwGetWindowSize(state->window, &state->win_w, &state->win_h);
+	glfwGetWindowSize(state->win.handle, &state->win.w, &state->win.h);
 
 	/* Query initial content scale */
 	float xscale = 1.0f, yscale = 1.0f;
-	glfwGetWindowContentScale(state->window, &xscale, &yscale);
-	state->win_content_scale_x = xscale;
-	state->win_content_scale_y = yscale;
+	glfwGetWindowContentScale(state->win.handle, &xscale, &yscale);
+	state->win.content_scale_x = xscale;
+	state->win.content_scale_y = yscale;
 
 	/* Save windowed position for fullscreen restore */
-	state->win_x = cx;
-	state->win_y = cy;
-	state->is_fullscreen = false;
-	state->can_position = can_position;
+	state->win.x = cx;
+	state->win.y = cy;
+	state->win.is_fullscreen = false;
+	state->win.can_position = can_position;
 
 	/* Register callbacks and show */
-	window_init_callbacks(state->window);
+	window_init_callbacks(state->win.handle);
 	if (can_position)
-		glfwSetWindowPos(state->window, cx, cy);
-	glfwShowWindow(state->window);
+		glfwSetWindowPos(state->win.handle, cx, cy);
+	glfwShowWindow(state->win.handle);
 
 	return true;
 }
 
-void window_toggle_fullscreen(AppState *state)
+void window_toggle_fullscreen(WindowState *win)
 {
-	GLFWwindow *window = state->window;
-	state->is_fullscreen = !state->is_fullscreen;
+	GLFWwindow *window = win->handle;
+	win->is_fullscreen = !win->is_fullscreen;
 
-	if (state->is_fullscreen) {
-		if (state->can_position)
-			glfwGetWindowPos(window, &state->win_x, &state->win_y);
-		glfwGetWindowSize(window, &state->win_w, &state->win_h);
+	if (win->is_fullscreen) {
+		if (win->can_position)
+			glfwGetWindowPos(window, &win->x, &win->y);
+		glfwGetWindowSize(window, &win->w, &win->h);
 		GLFWmonitor *monitor = glfwGetWindowMonitor(window);
 		if (!monitor)
 			monitor = glfwGetPrimaryMonitor();
 		const GLFWvidmode *mode = glfwGetVideoMode(monitor);
 		glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
 	} else {
-		glfwSetWindowMonitor(window, NULL, state->win_x, state->win_y, state->win_w, state->win_h, 0);
+		glfwSetWindowMonitor(window, NULL, win->x, win->y, win->w, win->h, 0);
 	}
 }
 
-void window_cycle_monitor(AppState *state, int direction)
+void window_cycle_monitor(WindowState *win, int direction)
 {
-	GLFWwindow *window = state->window;
+	GLFWwindow *window = win->handle;
 
-	if (!state->is_fullscreen)
+	if (!win->is_fullscreen)
 		return;
 
 	GLFWmonitor *current = glfwGetWindowMonitor(window);

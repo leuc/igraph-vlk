@@ -84,7 +84,7 @@ static void joystick_callback(int jid, int event)
 
 void interaction_process_continuous_input(AppState *state, float delta_time)
 {
-	GLFWwindow *window = state->window;
+	GLFWwindow *window = state->win.handle;
 
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
 		glfwSetWindowShouldClose(window, true);
@@ -130,19 +130,19 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 	switch (key) {
 	case GLFW_KEY_ENTER:
 		if (mods & GLFW_MOD_ALT) {
-			window_toggle_fullscreen(state);
+			window_toggle_fullscreen(&state->win);
 			break;
 		}
 		// fall through for unmodified Enter
 	case GLFW_KEY_LEFT:
-		if ((mods & GLFW_MOD_ALT) && state->is_fullscreen) {
-			window_cycle_monitor(state, -1);
+		if ((mods & GLFW_MOD_ALT) && state->win.is_fullscreen) {
+			window_cycle_monitor(&state->win, -1);
 			break;
 		}
 		break;
 	case GLFW_KEY_RIGHT:
-		if ((mods & GLFW_MOD_ALT) && state->is_fullscreen) {
-			window_cycle_monitor(state, 1);
+		if ((mods & GLFW_MOD_ALT) && state->win.is_fullscreen) {
+			window_cycle_monitor(&state->win, 1);
 			break;
 		}
 		break;

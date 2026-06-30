@@ -93,7 +93,7 @@ int main(int argc, char **argv)
 	}
 
 	// Initialize input handling (registers GLFW callbacks)
-	interaction_init(app.window);
+	interaction_init(app.win.handle);
 
 	// Initialize VR (only when --vr is explicitly requested)
 #ifdef USE_OPENXR
@@ -102,7 +102,7 @@ int main(int argc, char **argv)
 		if (!app.vr_enabled) {
 			fprintf(stderr, "Failed to initialize OpenXR context.\n");
 			graph_free_data(&app.current_graph);
-			glfwDestroyWindow(app.window);
+			glfwDestroyWindow(app.win.handle);
 			glfwTerminate();
 			return EXIT_FAILURE;
 		}
@@ -116,9 +116,9 @@ int main(int argc, char **argv)
 
 	// Initialize renderer
 #ifdef USE_OPENXR
-	if (!renderer_init(&app.renderer, app.window, &app.current_graph, app.vr_enabled ? (void *)&app.xr_ctx : NULL)) {
+	if (!renderer_init(&app.renderer, app.win.handle, &app.current_graph, app.vr_enabled ? (void *)&app.xr_ctx : NULL)) {
 #else
-	if (!renderer_init(&app.renderer, app.window, &app.current_graph, NULL)) {
+	if (!renderer_init(&app.renderer, app.win.handle, &app.current_graph, NULL)) {
 #endif
 		fprintf(stderr, "Failed to initialize renderer\n");
 		graph_free_data(&app.current_graph);
@@ -126,7 +126,7 @@ int main(int argc, char **argv)
 		if (app.vr_enabled)
 			xr_context_cleanup(&app.xr_ctx);
 #endif
-		glfwDestroyWindow(app.window);
+		glfwDestroyWindow(app.win.handle);
 		glfwTerminate();
 		return EXIT_FAILURE;
 	}
@@ -138,7 +138,7 @@ int main(int argc, char **argv)
 			xr_context_cleanup(&app.xr_ctx);
 			graph_free_data(&app.current_graph);
 			renderer_cleanup(&app.renderer);
-			glfwDestroyWindow(app.window);
+			glfwDestroyWindow(app.win.handle);
 			glfwTerminate();
 			return EXIT_FAILURE;
 		}
@@ -167,7 +167,7 @@ int main(int argc, char **argv)
 #ifdef USE_OPENXR
 		xr_context_cleanup(&app.xr_ctx);
 #endif
-		glfwDestroyWindow(app.window);
+		glfwDestroyWindow(app.win.handle);
 		glfwTerminate();
 		return EXIT_FAILURE;
 	}
@@ -188,7 +188,7 @@ int main(int argc, char **argv)
 #endif
 
 	// Main loop
-	while (!glfwWindowShouldClose(app.window)) {
+	while (!glfwWindowShouldClose(app.win.handle)) {
 		float currentFrame = (float)glfwGetTime();
 		float deltaTime = currentFrame - lastFrame;
 		lastFrame = currentFrame;
@@ -273,7 +273,7 @@ int main(int argc, char **argv)
 #ifdef USE_OPENXR
 	xr_context_cleanup(&app.xr_ctx);
 #endif
-	glfwDestroyWindow(app.window);
+	glfwDestroyWindow(app.win.handle);
 	glfwTerminate();
 
 	return 0;

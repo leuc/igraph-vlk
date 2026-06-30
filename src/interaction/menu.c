@@ -41,14 +41,14 @@ void interaction_menu_toggle(AppState *state)
 		}
 #endif
 
-		if (state->window) {
-			glfwSetInputMode(state->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		if (state->win.handle) {
+			glfwSetInputMode(state->win.handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 		}
 	} else if (state->app_ctx.current_state == STATE_MENU_OPEN || state->app_ctx.root_menu->current_radius > 0.99f) {
 		state->app_ctx.current_state = STATE_GRAPH_VIEW;
 		state->app_ctx.root_menu->target_radius = 0.0f;
-		if (state->window) {
-			glfwSetInputMode(state->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		if (state->win.handle) {
+			glfwSetInputMode(state->win.handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 		}
 	}
 }
@@ -114,8 +114,8 @@ MenuNode *raycast_menu_vr(AppState *state, vec3 ray_ori, vec3 ray_dir)
 
 MenuNode *interaction_pick_menu_node(AppState *state, double mouse_x, double mouse_y)
 {
-	float x = (2.0f * (float)mouse_x) / state->win_w - 1.0f;
-	float y = 1.0f - (2.0f * (float)mouse_y) / state->win_h;
+	float x = (2.0f * (float)mouse_x) / state->win.w - 1.0f;
+	float y = 1.0f - (2.0f * (float)mouse_y) / state->win.h;
 
 	vec3 ray_dir;
 	vec3 right, up;

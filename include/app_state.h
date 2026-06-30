@@ -16,6 +16,7 @@
 #include "graph/worker_thread.h"
 #include "interaction/camera.h"
 #include "interaction/state.h"
+#include "interaction/window.h"
 #include "vulkan/renderer.h"
 
 #ifdef USE_OPENXR
@@ -38,12 +39,7 @@ typedef struct AppState
 	Camera camera;
 
 	/* Window / System State */
-	GLFWwindow *window;
-	bool is_fullscreen;
-	bool can_position;
-	int win_x, win_y, win_w, win_h;
-	float win_content_scale_x;
-	float win_content_scale_y;
+	WindowState win;
 
 	/* Application Logic State */
 	char *current_filename;
