@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 /* Default window size fraction of monitor work area */
-#define WINDOW_FRACTION 0.80f
+#define WINDOW_FRACTION 0.95f
 #define WINDOW_MIN_W 640
 #define WINDOW_MIN_H 480
 
@@ -97,6 +97,7 @@ bool window_create(AppState *state)
 	/* Platform-specific GLFW window hints */
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+	glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
 	glfwWindowHintString(GLFW_WAYLAND_APP_ID, "igraph-vlk");
 
 #if defined(_GLFW_COCOA)
