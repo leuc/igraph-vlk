@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "graph/wrappers_layout.h"
+
 // ============================================================================
 // Build the entire visualization arrays for a new graph.
 // Caller intention: "I have a completely new graph — build everything."
@@ -281,4 +283,31 @@ void graph_free_data(GraphData *data)
 		free(data->edges);
 		data->edges = NULL;
 	}
+}
+
+// ============================================================================
+// Import node positions from _pos vertex attribute (GraphML/GML convention)
+// Returns true if _pos was found and current_layout was populated.
+// ============================================================================
+bool graph_import_layout_pos(GraphData *data)
+{
+	if (!igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, "_pos"))
+		return false;
+
+	igraph_integer_t n = igraph_vcount(&data->g);
+	if (n == 0)
+		return false;
+
+	igraph_matrix_init(&data->current_layout, n, 3);
+	for (igraph_integer_t i = 0; i < n; i++) {
+		const char *s = VAS(&data->g, "_pos", i);
+		double x = 0.0, y = 0.0, z = 0.0;
+		if (s)
+			sscanf(s, "%lf, %lf, %lf", &x, &y, &z);
+		MATRIX(data->current_layout, i, 0) = x;
+		MATRIX(data->current_layout, i, 1) = y;
+		MATRIX(data->current_layout, i, 2) = z;
+	}
+	layout_center_and_autoscale(&data->current_layout);
+	return true;
 }

@@ -280,13 +280,19 @@ void apply_netzschleuder_download(ExecutionContext *ctx, void *result_data)
 
 	int n = igraph_vcount(&data->g);
 	if (n > 0) {
-		igraph_matrix_t *layout = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
-		if (igraph_matrix_init(layout, n, 3) == IGRAPH_SUCCESS) {
-			if (igraph_layout_sphere(&data->g, layout) != IGRAPH_SUCCESS)
-				igraph_layout_grid(&data->g, layout, 0);
-			igraph_matrix_init_copy(&data->current_layout, layout);
-			igraph_matrix_destroy(layout);
-			IGRAPH_FREE(layout);
+		if (!graph_import_layout_pos(data)) {
+			igraph_matrix_t *layout = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
+			if (igraph_matrix_init(layout, n, 3) == IGRAPH_SUCCESS) {
+				if (igraph_layout_sphere(&data->g, layout) != IGRAPH_SUCCESS)
+					igraph_layout_grid(&data->g, layout, 0);
+				igraph_matrix_init_copy(&data->current_layout, layout);
+				igraph_matrix_destroy(layout);
+			} else {
+				IGRAPH_FREE(layout);
+				layout = NULL;
+			}
+			if (layout)
+				IGRAPH_FREE(layout);
 		}
 	} else {
 		igraph_matrix_init(&data->current_layout, 1, 3);

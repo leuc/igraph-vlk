@@ -83,7 +83,6 @@ typedef struct
 	bool graph_initialized;
 	char *node_attr_name;
 	GraphProperties props;
-	LayoutType active_layout;
 	Hub *hubs;
 	int hub_count;
 

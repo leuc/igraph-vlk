@@ -33,4 +33,13 @@ void graph_build_visualization(GraphData *data);
  */
 void graph_rebuild_edges(GraphData *data);
 
+/**
+ * Try to populate current_layout from _pos vertex attributes.
+ * Parses "x,y" or "x,y,z" strings into a 3-column layout matrix,
+ * centers and autoscales.
+ * @param data Pointer to GraphData to populate
+ * @return true if _pos was found and layout populated, false otherwise
+ */
+bool graph_import_layout_pos(GraphData *data);
+
 #endif // GRAPH_CORE_H

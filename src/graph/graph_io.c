@@ -32,15 +32,16 @@ bool graph_load_graphml(const char *filename, GraphData *data, LayoutType layout
 	data->hubs = NULL;
 	data->hub_count = 0;
 
-	igraph_matrix_init(&data->current_layout, 0, 0);
-	if (layout_type == LAYOUT_RANDOM_3D) {
-		igraph_layout_random_3d(&data->g, &data->current_layout);
-	} else {
-		// Use grid layout as default
-		int side = (int)ceil(pow(igraph_vcount(&data->g), 1.0 / 3.0));
-		igraph_layout_grid_3d(&data->g, &data->current_layout, side, side);
+	igraph_integer_t vcount = igraph_vcount(&data->g);
+	if (!graph_import_layout_pos(data)) {
+		igraph_matrix_init(&data->current_layout, 0, 0);
+		if (layout_type == LAYOUT_RANDOM_3D) {
+			igraph_layout_random_3d(&data->g, &data->current_layout);
+		} else {
+			int side = (int)ceil(pow((double)vcount, 1.0 / 3.0));
+			igraph_layout_grid_3d(&data->g, &data->current_layout, side, side);
+		}
 	}
-	data->active_layout = layout_type;
 
 	graph_build_visualization(data);
 	return true;
