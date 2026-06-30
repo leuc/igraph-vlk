@@ -57,7 +57,10 @@ int gamepad_get_first_active(void)
 	return -1;
 }
 
-static bool process_axes_and_buttons(AppState *state, float lx, float ly, float rx, float ry, const unsigned char *buttons, bool is_gamepad, float delta_time)
+static bool prev_trigger_l = false;
+static bool prev_trigger_r = false;
+
+static bool process_axes_and_buttons(AppState *state, float lx, float ly, float rx, float ry, float lt, float rt, const unsigned char *buttons, bool is_gamepad, float delta_time)
 {
 	Camera *camera = &state->camera;
 	AppContext *app = &state->app_ctx;
@@ -86,6 +89,24 @@ static bool process_axes_and_buttons(AppState *state, float lx, float ly, float 
 			printf("[GAMEPAD] %s (%d) pressed\n", button_names[i], i);
 		}
 	}
+
+	// L2/R2 triggers — scale layout like GLFW_KEY_MINUS / GLFW_KEY_EQUAL
+	bool trigger_l = lt > 0.5f;
+	bool trigger_r = rt > 0.5f;
+	if (!first_frame) {
+		if (trigger_r && !prev_trigger_r) {
+			state->renderer.layoutScale *= 1.2f;
+			renderer_update_graph(&state->renderer, &state->current_graph);
+			state->renderer.label.tree_needs_rebuild = true;
+		}
+		if (trigger_l && !prev_trigger_l) {
+			state->renderer.layoutScale /= 1.2f;
+			renderer_update_graph(&state->renderer, &state->current_graph);
+			state->renderer.label.tree_needs_rebuild = true;
+		}
+	}
+	prev_trigger_l = trigger_l;
+	prev_trigger_r = trigger_r;
 
 	if (app->current_state == STATE_GRAPH_VIEW || app->current_state == STATE_MENU_OPEN || app->current_state == STATE_AWAITING_SELECTION || app->current_state == STATE_EXECUTING || app->current_state == STATE_DISPLAY_RESULTS || app->current_state == STATE_JOB_IN_PROGRESS) {
 		float look_x = apply_deadzone(rx);
@@ -143,7 +164,7 @@ bool process_gamepad_input(int joystick_id, void *app_state_ptr, float delta_tim
 			printf("[GAMEPAD] Gamepad %d: %s (%s)\n", joystick_id, name ? name : "Unknown", gamepad_map ? gamepad_map : "no mapping");
 		}
 
-		process_axes_and_buttons(state, gp_state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], gp_state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y], gp_state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], gp_state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y], gp_state.buttons, true, delta_time);
+		process_axes_and_buttons(state, gp_state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], gp_state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y], gp_state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], gp_state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y], gp_state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER], gp_state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER], gp_state.buttons, true, delta_time);
 
 		prev_state = gp_state;
 		first_frame = false;
@@ -163,18 +184,20 @@ bool process_gamepad_input(int joystick_id, void *app_state_ptr, float delta_tim
 	}
 
 	// Assume standard Xbox axis layout for raw joysticks:
-	//   0=left X, 1=left Y, 3=right X, 4=right Y
+	//   0=left X, 1=left Y, 2=left trigger, 3=right X, 4=right Y, 5=right trigger
 	float lx = (axis_count > 0) ? axes[0] : 0.0f;
 	float ly = (axis_count > 1) ? axes[1] : 0.0f;
+	float lt = (axis_count > 2) ? axes[2] : 0.0f;
 	float rx = (axis_count > 3) ? axes[3] : 0.0f;
 	float ry = (axis_count > 4) ? axes[4] : 0.0f;
+	float rt = (axis_count > 5) ? axes[5] : 0.0f;
 
 	unsigned char mapped_buttons[15] = {0};
 	int max_btn = button_count < 15 ? button_count : 15;
 	for (int i = 0; i < max_btn; i++)
 		mapped_buttons[i] = buttons[i];
 
-	process_axes_and_buttons(state, lx, ly, rx, ry, mapped_buttons, false, delta_time);
+	process_axes_and_buttons(state, lx, ly, rx, ry, lt, rt, mapped_buttons, false, delta_time);
 
 	memcpy(raw_prev_buttons, buttons, button_count < MAX_RAW_BUTTONS ? button_count : MAX_RAW_BUTTONS);
 	first_frame = false;
