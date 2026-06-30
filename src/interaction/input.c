@@ -10,29 +10,22 @@
 #include "interaction/menu.h"
 #include "interaction/picking.h"
 #include "interaction/spatial.h"
+#include "interaction/window.h"
 #include "vulkan/app_path.h"
 #include "vulkan/renderer_update_node_labels.h"
 #include <GLFW/glfw3.h>
-#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-// Define min/max macros since we're using integers
-#define min(a, b) ((a) < (b) ? (a) : (b))
-#define max(a, b) ((a) > (b) ? (a) : (b))
 
 // Edge routing mode count (must match renderer.h enum count)
 #define EDGE_ROUTING_COUNT 2
 
-static bool window_focused = true;
 static int gamepad_id = -1;
 
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 static void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
 static void mouse_callback(GLFWwindow *window, double xpos, double ypos);
-static void focus_callback(GLFWwindow *window, int focused);
 static void joystick_callback(int jid, int event);
-static void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 
 static void load_gamepad_mappings(void)
 {
@@ -59,8 +52,7 @@ void interaction_init(GLFWwindow *window)
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetMouseButtonCallback(window, mouse_button_callback);
 	glfwSetCursorPosCallback(window, mouse_callback);
-	glfwSetWindowFocusCallback(window, focus_callback);
-	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+	window_init_callbacks(window);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	// Load mappings before scanning — GLFW won't fire CONNECTED
@@ -88,19 +80,6 @@ static void joystick_callback(int jid, int event)
 	} else if (event == GLFW_DISCONNECTED && jid == gamepad_id) {
 		printf("[INPUT] Gamepad %d disconnected\n", jid);
 		gamepad_id = -1;
-	}
-}
-
-static void focus_callback(GLFWwindow *window, int focused)
-{
-	window_focused = focused;
-	if (focused) {
-		AppState *state = (AppState *)glfwGetWindowUserPointer(window);
-		if (state)
-			state->camera.first_mouse = true;
-		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	} else {
-		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	}
 }
 
@@ -152,88 +131,19 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 	switch (key) {
 	case GLFW_KEY_ENTER:
 		if (mods & GLFW_MOD_ALT) {
-			state->is_fullscreen = !state->is_fullscreen;
-			if (state->is_fullscreen) {
-				glfwGetWindowPos(window, &state->win_x, &state->win_y);
-				glfwGetWindowSize(window, &state->win_w, &state->win_h);
-				GLFWmonitor *monitor = glfwGetWindowMonitor(window);
-				if (!monitor)
-					monitor = glfwGetPrimaryMonitor();
-				const GLFWvidmode *mode = glfwGetVideoMode(monitor);
-				glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
-			} else {
-				glfwSetWindowMonitor(window, NULL, state->win_x, state->win_y, state->win_w, state->win_h, 0);
-			}
+			window_toggle_fullscreen(state);
 			break;
 		}
 		// fall through for unmodified Enter
 	case GLFW_KEY_LEFT:
 		if ((mods & GLFW_MOD_ALT) && state->is_fullscreen) {
-			GLFWmonitor *current = glfwGetWindowMonitor(window);
-			if (!current)
-				break;
-			int count;
-			GLFWmonitor **monitors = glfwGetMonitors(&count);
-			int cx, cy;
-			glfwGetMonitorPos(current, &cx, &cy);
-			const GLFWvidmode *cmode = glfwGetVideoMode(current);
-			int ccx = cx + cmode->width / 2;
-			int best = -1;
-			int best_dist = INT32_MAX;
-			for (int i = 0; i < count; i++) {
-				if (monitors[i] == current)
-					continue;
-				int mx, my;
-				glfwGetMonitorPos(monitors[i], &mx, &my);
-				const GLFWvidmode *m = glfwGetVideoMode(monitors[i]);
-				int mcx = mx + m->width / 2;
-				if (mcx < ccx) {
-					int dist = ccx - mcx;
-					if (dist < best_dist) {
-						best_dist = dist;
-						best = i;
-					}
-				}
-			}
-			if (best >= 0) {
-				const GLFWvidmode *mode = glfwGetVideoMode(monitors[best]);
-				glfwSetWindowMonitor(window, monitors[best], 0, 0, mode->width, mode->height, mode->refreshRate);
-			}
+			window_cycle_monitor(state, -1);
 			break;
 		}
 		break;
 	case GLFW_KEY_RIGHT:
 		if ((mods & GLFW_MOD_ALT) && state->is_fullscreen) {
-			GLFWmonitor *current = glfwGetWindowMonitor(window);
-			if (!current)
-				break;
-			int count;
-			GLFWmonitor **monitors = glfwGetMonitors(&count);
-			int cx, cy;
-			glfwGetMonitorPos(current, &cx, &cy);
-			const GLFWvidmode *cmode = glfwGetVideoMode(current);
-			int ccx = cx + cmode->width / 2;
-			int best = -1;
-			int best_dist = INT32_MAX;
-			for (int i = 0; i < count; i++) {
-				if (monitors[i] == current)
-					continue;
-				int mx, my;
-				glfwGetMonitorPos(monitors[i], &mx, &my);
-				const GLFWvidmode *m = glfwGetVideoMode(monitors[i]);
-				int mcx = mx + m->width / 2;
-				if (mcx > ccx) {
-					int dist = mcx - ccx;
-					if (dist < best_dist) {
-						best_dist = dist;
-						best = i;
-					}
-				}
-			}
-			if (best >= 0) {
-				const GLFWvidmode *mode = glfwGetVideoMode(monitors[best]);
-				glfwSetWindowMonitor(window, monitors[best], 0, 0, mode->width, mode->height, mode->refreshRate);
-			}
+			window_cycle_monitor(state, 1);
 			break;
 		}
 		break;
@@ -331,7 +241,7 @@ static void mouse_button_callback(GLFWwindow *window, int button, int action, in
 
 static void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 {
-	if (!window_focused)
+	if (!glfwGetWindowAttrib(window, GLFW_FOCUSED))
 		return;
 
 	AppState *state = (AppState *)glfwGetWindowUserPointer(window);
@@ -363,14 +273,4 @@ static void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 		cam->pitch = -89.0f;
 
 	camera_update_vectors(cam);
-}
-
-static void framebuffer_size_callback(GLFWwindow *window, int width, int height)
-{
-	AppState *state = (AppState *)glfwGetWindowUserPointer(window);
-	if (!state)
-		return;
-	state->win_w = width;
-	state->win_h = height;
-	state->renderer.framebufferResized = true;
 }

@@ -160,6 +160,7 @@ add_executable(
 	src/interaction/state.c
 	src/interaction/gamepad.c
 	src/interaction/filter.c
+	src/interaction/window.c
 	# UI modules
 	src/ui/hud.c
 	src/ui/menu.c
