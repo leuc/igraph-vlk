@@ -25,6 +25,7 @@ static int gamepad_id = -1;
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 static void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
 static void mouse_callback(GLFWwindow *window, double xpos, double ypos);
+static void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 static void joystick_callback(int jid, int event);
 
 static void load_gamepad_mappings(void)
@@ -51,6 +52,7 @@ void interaction_init(GLFWwindow *window)
 {
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetMouseButtonCallback(window, mouse_button_callback);
+	glfwSetScrollCallback(window, scroll_callback);
 	glfwSetCursorPosCallback(window, mouse_callback);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
@@ -210,6 +212,23 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 		state->renderer.label.tree_needs_rebuild = true;
 		break;
 	}
+}
+
+static void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
+{
+	(void)xoffset;
+	if (yoffset == 0.0)
+		return;
+	AppState *state = (AppState *)glfwGetWindowUserPointer(window);
+	if (!state)
+		return;
+	if (yoffset > 0.0)
+		state->renderer.layoutScale *= 1.2f;
+	else
+		state->renderer.layoutScale /= 1.2f;
+	renderer_update_graph(&state->renderer, &state->current_graph);
+	detail_card_update_position(&state->renderer, &state->current_graph);
+	state->renderer.label.tree_needs_rebuild = true;
 }
 
 static void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
