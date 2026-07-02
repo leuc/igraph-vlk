@@ -98,7 +98,9 @@ bool window_create(AppState *state)
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 	glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
+#ifdef GLFW_WAYLAND_APP_ID
 	glfwWindowHintString(GLFW_WAYLAND_APP_ID, "igraph-vlk");
+#endif
 
 #if defined(_GLFW_COCOA)
 	glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
@@ -106,7 +108,9 @@ bool window_create(AppState *state)
 #elif defined(_GLFW_WIN32)
 	glfwWindowHint(GLFW_WIN32_KEYBOARD_MENU, GLFW_TRUE);
 #elif defined(_GLFW_X11) || defined(_GLFW_WAYLAND)
+#ifdef GLFW_SCALE_FRAMEBUFFER
 	glfwWindowHint(GLFW_SCALE_FRAMEBUFFER, GLFW_TRUE);
+#endif
 #endif
 
 	state->win.handle = glfwCreateWindow(ww, wh, "igraph-vlk", NULL, NULL);
