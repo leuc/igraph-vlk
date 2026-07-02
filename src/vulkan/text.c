@@ -24,7 +24,7 @@ int text_generate_atlas(const char *fontPath, FontAtlas *atlas)
 	long size = ftell(fp);
 	fseek(fp, 0, SEEK_SET);
 	unsigned char *fontBuffer = malloc(size);
-	fread(fontBuffer, 1, size, fp);
+	(void)fread(fontBuffer, 1, size, fp);
 	fclose(fp);
 
 	atlas->width = 512;

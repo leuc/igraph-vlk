@@ -228,7 +228,7 @@ const char *os_find_monospace_font(void)
 	};
 #endif
 
-	static char found[4096];
+	static char found[PATH_MAX + 256];
 
 	// Also search user-local font directories from env
 	const char *xdg_data = getenv("XDG_DATA_HOME");
