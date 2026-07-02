@@ -11,7 +11,7 @@
 #include "interaction/picking.h"
 #include "interaction/spatial.h"
 #include "interaction/window.h"
-#include "vulkan/app_path.h"
+#include "os/path.h"
 #include "vulkan/renderer_update_node_labels.h"
 #include <GLFW/glfw3.h>
 #include <stdio.h>
@@ -30,7 +30,7 @@ static void joystick_callback(int jid, int event);
 
 static void load_gamepad_mappings(void)
 {
-	const char *path = app_path_resolve("gamecontrollerdb.txt");
+	const char *path = os_resolve_path("gamecontrollerdb.txt");
 	FILE *fp = fopen(path, "rb");
 	if (!fp)
 		return;

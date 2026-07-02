@@ -12,6 +12,7 @@
 #include "graph/graph_core.h"
 #include "graph/repo.h"
 #include "graph/worker_thread.h"
+#include "os/path.h"
 #include "vulkan/renderer.h"
 #include <curl/curl.h>
 #include <igraph.h>
@@ -185,7 +186,7 @@ void *run_netzschleuder_download(ExecutionContext *ctx)
 	char file_path[4096];
 	char url[4096];
 	char tmp_path[4096 + 16];
-	const char *cache = repo_cache_dir();
+	const char *cache = os_cache_dir("igraph-vlk");
 
 	snprintf(file_path, sizeof(file_path), "%s/netzschleuder/%s/%s.gml.zst", cache, entry_id, version_id);
 	snprintf(url, sizeof(url), "https://networks.skewed.de/net/%s/files/%s.gml.zst", entry_id, version_id);

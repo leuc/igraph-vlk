@@ -14,9 +14,9 @@
 #include "interaction/menu.h"
 #include "interaction/state.h"
 #include "interaction/window.h"
+#include "os/path.h"
 #include "ui/hud.h"
 #include "ui/menu.h"
-#include "vulkan/app_path.h"
 #include "vulkan/menu.h"
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_camera.h"
@@ -43,7 +43,7 @@
 
 int main(int argc, char **argv)
 {
-	app_path_init();
+	os_path_init();
 
 	AppState app = {0};
 

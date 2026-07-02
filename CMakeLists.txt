@@ -76,23 +76,6 @@ foreach(shader ${SHADERS})
 	list(APPEND SPIRV_SHADERS ${_spirv})
 endforeach()
 
-if(WIN32)
-	set(_font_names "Inconsolata.otf" "consola.ttf" "cour.ttf")
-	set(_font_paths "C:/Windows/Fonts" "$ENV{LOCALAPPDATA}/Microsoft/Windows/Fonts")
-elseif(APPLE)
-	set(_font_names "Inconsolata.otf" "Monaco.ttf" "Menlo.ttc" "Courier New.ttf")
-	set(_font_paths "/System/Library/Fonts" "/Library/Fonts" "$ENV{HOME}/Library/Fonts")
-else()
-	set(_font_names "Inconsolata.otf" "Inconsolata-Regular.otf" "Inconsolata-Regular.ttf" "Inconsolata.ttf" "DejaVuSansMono.ttf" "LiberationMono-Regular.ttf")
-	set(_font_paths "/usr/share/fonts/truetype/inconsolata" "/usr/share/fonts/opentype/inconsolata" "/app/share/fonts/truetype/inconsolata" "/usr/share/fonts/truetype/dejavu" "/usr/share/fonts/truetype/liberation" "/usr/local/share/fonts")
-endif()
-find_file(MONOSPACE_FONT NAMES ${_font_names} PATHS ${_font_paths})
-if(MONOSPACE_FONT)
-	message(STATUS "Found monospace font: ${MONOSPACE_FONT}")
-else()
-	message(FATAL_ERROR "No monospace font found — install Inconsolata, DejaVu Sans Mono, or Liberation Mono")
-endif()
-
 add_executable(
 	igraph-vlk
 	src/main.c
@@ -117,7 +100,7 @@ add_executable(
 	src/vulkan/buffers.c
 	src/vulkan/images.c
 	src/vulkan/utils.c
-	src/vulkan/app_path.c
+	src/os/path.c
 	src/vulkan/text.c
 	# Extracted refactor modules
 	src/vulkan/renderer_cleanup.c
@@ -190,7 +173,7 @@ if(USE_OPENXR)
 	target_link_libraries(igraph-vlk PRIVATE OpenXR::openxr_loader)
 endif()
 
-target_compile_definitions(igraph-vlk PRIVATE FONT_PATH="${MONOSPACE_FONT}" NODE_VERT_SHADER_PATH="shaders/node.vert.spv" NODE_FRAG_SHADER_PATH="shaders/node.frag.spv" EDGE_VERT_SHADER_PATH="shaders/edge.vert.spv" EDGE_FRAG_SHADER_PATH="shaders/edge.frag.spv" LABEL_VERT_SHADER_PATH="shaders/label.vert.spv" LABEL_FRAG_SHADER_PATH="shaders/label.frag.spv" UI_VERT_SHADER_PATH="shaders/ui.vert.spv" UI_FRAG_SHADER_PATH="shaders/ui.frag.spv" MENU_VERT_SHADER_PATH="shaders/menu.vert.spv" MENU_FRAG_SHADER_PATH="shaders/menu.frag.spv" TEXTQUAD_VERT_SHADER_PATH="shaders/textquad.vert.spv" TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv" ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv" SPLC_COMP_SHADER_PATH="shaders/splc.comp.spv" BCGL_COMP_SHADER_PATH="shaders/bcgl.comp.spv" RAY_VERT_SHADER_PATH="shaders/ray.vert.spv" RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv")
+target_compile_definitions(igraph-vlk PRIVATE NODE_VERT_SHADER_PATH="shaders/node.vert.spv" NODE_FRAG_SHADER_PATH="shaders/node.frag.spv" EDGE_VERT_SHADER_PATH="shaders/edge.vert.spv" EDGE_FRAG_SHADER_PATH="shaders/edge.frag.spv" LABEL_VERT_SHADER_PATH="shaders/label.vert.spv" LABEL_FRAG_SHADER_PATH="shaders/label.frag.spv" UI_VERT_SHADER_PATH="shaders/ui.vert.spv" UI_FRAG_SHADER_PATH="shaders/ui.frag.spv" MENU_VERT_SHADER_PATH="shaders/menu.vert.spv" MENU_FRAG_SHADER_PATH="shaders/menu.frag.spv" TEXTQUAD_VERT_SHADER_PATH="shaders/textquad.vert.spv" TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv" ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv" SPLC_COMP_SHADER_PATH="shaders/splc.comp.spv" BCGL_COMP_SHADER_PATH="shaders/bcgl.comp.spv" RAY_VERT_SHADER_PATH="shaders/ray.vert.spv" RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv")
 
 install(TARGETS igraph-vlk DESTINATION bin)
 install(DIRECTORY ${CMAKE_BINARY_DIR}/shaders/ DESTINATION share/igraph-vlk/shaders FILES_MATCHING PATTERN "*.spv")

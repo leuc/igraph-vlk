@@ -8,8 +8,6 @@
 
 #include <stddef.h>
 
-// Shared repo utilities
-const char *repo_cache_dir(void);
 size_t repo_curl_write_cb(char *ptr, size_t size, size_t nmemb, void *userdata);
 
 #endif

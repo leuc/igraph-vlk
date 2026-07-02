@@ -8,11 +8,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "vulkan/app_path.h"
+#include "os/path.h"
 
 VkResult create_shader_module(VkDevice device, const char *rel, VkShaderModule *shaderModule)
 {
-	const char *path = app_path_resolve(rel);
+	const char *path = os_resolve_path(rel);
 	FILE *file = fopen(path, "rb");
 	if (!file) {
 		fprintf(stderr, "Failed to open shader: %s\n", path);
