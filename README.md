@@ -244,9 +244,15 @@ cmake -S . -B build -Digraph_ROOT=../igraph/local_install/ -DCMAKE_EXPORT_COMPIL
 cmake --build build/ --parallel
 ```
 
+## Create .deb
+```sh
+cd build
+cpack -R 0.0.1
+```
+
 ## Run with OpenMP
 ```sh
-OMP_NUM_THREADS=$(nproc) build/igraph-vlk /path/to/example.graphml
+OMP_NUM_THREADS=$(nproc) igraph-vlk /path/to/example.graphml
 ```
 
 ### Dependencies
@@ -259,10 +265,11 @@ OMP_NUM_THREADS=$(nproc) build/igraph-vlk /path/to/example.graphml
 | cglm | 3D math |
 | stb_truetype.h | Font render |
 | curl | Graph Repository Download |
-| zstd | |
+| zstd | Compressed Graphs |
 | OpenMP (optional) | Parallelization |
 | OpenXR (optional) | VR support |
 | glslangValidator / glslc | SPIR-V shader compilation |
+| gamecontrollerdb.txt | Gamepad Mapping |
 
 ## Architecture
 
