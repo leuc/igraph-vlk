@@ -10,6 +10,7 @@
 #include "graph/repo_netzschleuder.h"
 #include "app_state.h"
 #include "graph/graph_core.h"
+#include "graph/graph_io.h"
 #include "graph/repo.h"
 #include "graph/worker_thread.h"
 #include "os/path.h"
@@ -159,13 +160,13 @@ static igraph_t *load_graphml_from_zst(const char *path)
 	}
 
 	igraph_error_handler_t *prev_handler = igraph_set_error_handler(igraph_error_handler_printignore);
-	igraph_error_t ret = igraph_read_graph_gml(graph, mfp);
+	bool ok = graph_read_gml(graph, mfp);
 	igraph_set_error_handler(prev_handler);
 	fclose(mfp);
 	free(dst);
 
-	if (ret != IGRAPH_SUCCESS) {
-		fprintf(stderr, "[Netzschleuder] igraph_read_graph_gml failed for %s\n", path);
+	if (!ok) {
+		fprintf(stderr, "[Netzschleuder] graph_read_gml failed for %s\n", path);
 		free(graph);
 		return NULL;
 	}

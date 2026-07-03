@@ -190,7 +190,7 @@ Mimic existing patterns strictly. Run `clang-format` after edits.
 | `include/graph/graph_types.h` | `Node`, `Edge`, `GraphData`, `GraphProperties`, `FilterableAttr`, `FilterLookup` |
 | `src/graph/graph_core.c` | `graph_free_data`, `graph_build_visualization`, `graph_rebuild_edges` lifecycle |
 | `include/graph/graph_core.h` | Graph lifecycle API |
-| `src/graph/graph_io.c` | GraphML file loading (`graph_load_graphml`) |
+| `src/graph/graph_io.c` | Graph file loading: `graph_load` (auto-detect .graphml/.gml), `graph_load_graphml`, `graph_load_gml` |
 | `include/graph/graph_io.h` | I/O API |
 | `src/graph/graph_actions.c` | High-level graph actions (filter, highlight) dispatched from AppState |
 | `include/graph/graph_actions.h` | Graph actions API |

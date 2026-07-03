@@ -38,7 +38,7 @@ void graph_action_reset(AppState *state)
 	state->renderer.layoutScale = 1.0f;
 	state->current_graph.props.coreness_filter = 0;
 
-	if (graph_load_graphml(state->current_filename, &state->current_graph, NULL, NULL)) {
+	if (graph_load(state->current_filename, &state->current_graph, NULL, NULL)) {
 		renderer_update_graph(&state->renderer, &state->current_graph);
 		state->renderer.label.tree_needs_rebuild = true;
 	}
