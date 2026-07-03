@@ -90,8 +90,7 @@ Efforts are made to:
 | Right stick | Camera look |
 | Start | Toggle menu |
 | A | Activate crosshair-hovered menu item |
-| Auto-detection | Hotplug support via GLFW Gamepad + raw joystick APIs |
-| Deadzone | 0.2 with scaled response curve |
+| L2 / R2 | Layout Scale |
 
 ### Graph Filtering
 
@@ -112,9 +111,16 @@ A typical workflow for large graphs:
 2. Rank by Degree or PageRank
 2. Layout: try one of UMAP, Force Atlas 2, Yifan Hu, BCGL-t or t-SNE (in order of scale)
 
-The experimental **layered sphere** layout can very quickly render very large graphs.
-It provides a quick **initial** data exploration with visual clustering and centered coreness.
-It works best with graphs that have many communities. However, it is not a general layout method that works with any graph.
+Except UMAP all use Barnes & Hut and can run in parallel on CPU with OpenMP.
+
+BCGL-t has a GPU only variant, but it can stall the GPU and lower FPS.
+
+For 500k+ nodes/edges and above the app remains usable when the CPU computes and the GPU renders.
+
+### Layered Spheres
+
+The experimental **layered spheres** layout can very quickly render very large graphs.
+It provides a quick **initial** data exploration with visual clustering and centered k-core order. It works best with graphs that have many communities. However, it is _not_ a general layout method that works with any graph.
 
 ## Features
 
