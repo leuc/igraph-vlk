@@ -284,8 +284,7 @@ void apply_netzschleuder_download(ExecutionContext *ctx, void *result_data)
 		if (!graph_import_layout_pos(data)) {
 			igraph_matrix_t *layout = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 			if (igraph_matrix_init(layout, n, 3) == IGRAPH_SUCCESS) {
-				if (igraph_layout_sphere(&data->g, layout) != IGRAPH_SUCCESS)
-					igraph_layout_grid(&data->g, layout, 0);
+				igraph_layout_grid_3d(&data->g, layout, 0, 0);
 				igraph_matrix_init_copy(&data->current_layout, layout);
 				igraph_matrix_destroy(layout);
 			} else {

@@ -8,6 +8,7 @@
 #include "graph/graph_filter_visibility.h"
 #include "graph/graph_types.h"
 #include "graph/repo_netzschleuder.h"
+#include "graph/wrappers_constructors.h"
 #include "vulkan/text.h"
 #include <igraph.h>
 #include <math.h>
@@ -661,4 +662,35 @@ void menu_populate_netzschleuder_static(MenuNode *root)
 		free(tag_names[i]);
 	free(tag_names);
 	free(tag_counts);
+}
+
+// ============================================================================
+// Famous Graphs Menu
+// ============================================================================
+
+static const char *famous_graph_names[] = {
+	"Bull", "Chvatal", "Coxeter", "Cubical", "Diamond", "Dodecahedral", "Folkman", "Franklin", "Frucht", "Grotzsch", "Heawood", "Herschel", "House", "HouseX", "Icosahedral", "Krackhardt_Kite", "Levi", "McGee", "Meredith", "Noperfectmatching", "Nonline", "Octahedral", "Petersen", "Robertson", "Smallestcyclicgroup", "Tetrahedral", "Thomassen", "Tutte", "Uniquely3colorable", "Walther", "Zachary",
+};
+static const int num_famous_graphs = sizeof(famous_graph_names) / sizeof(famous_graph_names[0]);
+
+static const CommandDef famous_graph_def = {
+	"Data/Famous", "igraph_famous", NULL, compute_igraph_famous, apply_new_graph, free_new_graph, NULL, (const CommandParamDef[]){{"name", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 1,
+};
+
+void menu_populate_famous_graphs(MenuNode *root)
+{
+	MenuNode *famous_branch = find_or_create_path(root, "Data/Famous");
+	if (!famous_branch)
+		return;
+
+	for (int i = 0; i < num_famous_graphs; i++) {
+		const char *name = famous_graph_names[i];
+		MenuNode *leaf = create_menu_node(name, NODE_LEAF_COMMAND);
+		leaf->command = create_command("igraph_famous", name, NULL, 1);
+		leaf->command->cmd_def = &famous_graph_def;
+		leaf->command->params[0].name = "name";
+		leaf->command->params[0].type = PARAM_TYPE_STRING;
+		leaf->command->params[0].value.str_val = strdup(name);
+		add_child(famous_branch, leaf);
+	}
 }

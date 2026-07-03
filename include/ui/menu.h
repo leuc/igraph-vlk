@@ -64,4 +64,16 @@ void menu_clear_attribute_filters(MenuNode *root, GraphData *data);
  */
 void menu_populate_netzschleuder_static(MenuNode *root);
 
+// ============================================================================
+// Famous Graphs Menu
+// ============================================================================
+
+/**
+ * Populate the "Data/Patterns" submenu with individual famous graph entries
+ * (Bull, Chvatal, Coxeter, Petersen, Zachary, etc.).
+ * Each entry sets params[0] to the graph name for compute_igraph_famous.
+ * @param root Root menu node
+ */
+void menu_populate_famous_graphs(MenuNode *root);
+
 #endif // UI_MENU_H

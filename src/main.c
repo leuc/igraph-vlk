@@ -156,6 +156,7 @@ int main(int argc, char **argv)
 	init_menu_tree(root_menu);
 	menu_populate_attribute_filters(root_menu, &app.current_graph);
 	menu_populate_netzschleuder_static(root_menu);
+	menu_populate_famous_graphs(root_menu);
 	app_context_init(&app.app_ctx, root_menu);
 
 	// Initialize worker thread for long-running operations

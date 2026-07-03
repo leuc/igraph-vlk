@@ -23,7 +23,6 @@ const CommandDef g_command_registry[] = {
 	{"Data/Patterns", "igraph_square_lattice", "Lattice", compute_igraph_square_lattice, apply_new_graph, free_new_graph},
 	{"Data/Patterns", "igraph_full", "Full Graph (Clique)", compute_igraph_full, apply_new_graph, free_new_graph},
 	{"Data/Patterns", "igraph_cycle_graph", "Circle", compute_igraph_cycle_graph, apply_new_graph, free_new_graph},
-	{"Data/Patterns", "igraph_famous", "Notable Graphs", compute_igraph_famous, apply_new_graph, free_new_graph},
 
 	// =========================================================================
 	// Data menu - Random

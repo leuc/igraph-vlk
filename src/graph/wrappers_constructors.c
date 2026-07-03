@@ -9,7 +9,6 @@
 #include "interaction/state.h"
 #include "vulkan/renderer.h"
 #include <igraph.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -141,16 +140,16 @@ void *compute_igraph_cycle_graph(ExecutionContext *ctx)
 	return new_graph;
 }
 
-// Famous graph (Zachary's karate club)
+// Famous graph — reads graph name from params[0], defaults to Zachary
 void *compute_igraph_famous(ExecutionContext *ctx)
 {
-	igraph_t *graph = &ctx->app_state->current_graph.g;
 	igraph_t *new_graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!new_graph)
 		return NULL;
 
-	// Parameters: "zachary" - the famous karate club network
-	igraph_error_t code = igraph_famous(new_graph, "zachary");
+	const char *name = (ctx->num_params > 0 && ctx->params[0].value.str_val) ? ctx->params[0].value.str_val : "zachary";
+
+	igraph_error_t code = igraph_famous(new_graph, name);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_destroy(new_graph);
@@ -456,13 +455,12 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 	}
 	data->graph_initialized = true;
 
-	// Compute a sphere layout for the new graph BEFORE refreshing data
+	// Compute a 3D grid layout for the new graph (matching graph_io.c)
 	int n = igraph_vcount(&data->g);
 	if (n > 0) {
 		igraph_matrix_t *layout = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
 		if (igraph_matrix_init(layout, n, 3) == IGRAPH_SUCCESS) {
-			if (igraph_layout_sphere(&data->g, layout) != IGRAPH_SUCCESS)
-				igraph_layout_grid(&data->g, layout, 0);
+			igraph_layout_grid_3d(&data->g, layout, 0, 0);
 			igraph_matrix_init_copy(&data->current_layout, layout);
 			igraph_matrix_destroy(layout);
 			IGRAPH_FREE(layout);
