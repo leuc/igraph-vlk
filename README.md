@@ -228,29 +228,31 @@ igraph-vlk builds against a patched `igraph` testing branch that includes experi
 
 Build has been tested on Ubuntu, Arch and macOS
 
+### Build igraph testing branch
 ```sh
-# Build igraph testing branch
 git clone https://github.com/leuc/igraph
 cd igraph
 git checkout testing
 cmake -S . -B build -DCMAKE_INSTALL_PREFIX=local_install -DIGRAPH_ENABLE_TLS=ON -DCMAKE_C_FLAGS="-O3 -march=native" -DCMAKE_CXX_FLAGS="-O3 -march=native"
 cmake --build build/ --parallel --target install
 cd ..
+```
 
-# Build igraph-vlk
+### Build igraph-vlk
+```sh
 git clone https://github.com/leuc/igraph-vlk
 cd igraph-vlk
 cmake -S . -B build -Digraph_ROOT=../igraph/local_install/ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build build/ --parallel
 ```
 
-## Create .deb
+### Create .deb
 ```sh
 cd build
-cpack -R 0.0.1
+cpack -G DEB -R ${VERSION}
 ```
 
-## Run with OpenMP
+### Run with OpenMP
 ```sh
 OMP_NUM_THREADS=$(nproc) igraph-vlk /path/to/example.graphml
 ```
