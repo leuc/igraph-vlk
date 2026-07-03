@@ -2,7 +2,19 @@
 
 3D network viewer based on [igraph](https://igraph.org/) and Vulkan, written in C.
 
-Interactive graph visualization with 35+ layout algorithms, 12 community detection methods, 10 centrality measures, real-time GPU-accelerated animations, VR support, and a 3D spherical menu system.
+Interactive graph visualization with 
+ - 35+ layout algorithms 2D & 3D
+ - 12 community detection methods
+ - 10 centrality measures
+ - Realtime layout progression
+ - Animated main path SPLC
+ - Scales to very large graphs
+ - Fast Barnes & Hut
+ - VR support
+ - 3D menu system
+ - WASD + Gamepad navigation
+ - Directly load graphs from Netzschleuder Repository
+ - Runs on Steam Deck
 
 ## EXPERIMENTAL
 
@@ -306,6 +318,9 @@ igraph-vlk is built on igraph, which implements a vast body of network science a
 
 igraph core:
 > Csardi, G., & Nepusz, T. (2006). The igraph software package for complex network research. *InterJournal*, Complex Systems, 1695.
+
+**Graph Repositories:**
+- Tiago P. Peixoto, "The Netzschleuder network catalogue and repository", https://networks.skewed.de/ (2020).
 
 **Layout:**
 - Fruchterman, T.M.J. & Reingold, E.M. (1991). Graph Drawing by Force-directed Placement. *Software — Practice and Experience*, 21/11, 1129–1164.
