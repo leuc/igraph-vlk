@@ -28,9 +28,15 @@ Efforts are made to:
   - [UI & Interaction](#ui--interaction)
   - [VR / XR (OpenXR)](#vr--xr-openxr)
   - [Background Worker Thread](#background-worker-thread)
-- [Build & Run](#build--run)
+- [Build Source](#build-source)
 - [Architecture](#architecture)
 - [Selected Scientific References](#selected-scientific-references)
+
+## Install
+
+- [Ubuntu Packages](https://github.com/leuc/igraph-vlk/releases)
+- [Flatpak Bundle](https://github.com/leuc/io.github.leuc.igraph-vlk/releases)
+- Arch AUR soon™
 
 ## Usage
 
@@ -88,9 +94,8 @@ Efforts are made to:
 
 | Feature | Details |
 |---|---|
-| **GraphML import** | Load graphs via CLI argument with custom node/edge attribute mapping for sizing |
+| **GraphML import** | Load graphs via CLI argument |
 | **Graph generation** | 7 deterministic (Ring, Star, K-ary Tree, Lattice, Clique, Cycle, Famous/Notable), 6 stochastic (Erdos-Renyi, Barabasi-Albert, Watts-Strogatz, Forest Fire, Random Tree, Degree Sequence), 2 bipartite (Random Bipartite, Bipartite Projection), 2 spatial (Geometric Random, Gabriel) |
-| **Auto-simplify** | Loops and multi-edges removed on load |
 
 ### Graph Analysis
 
@@ -200,35 +205,26 @@ Layouts run on a background thread with real-time snapshot polling for interacti
 
 ### UI & Interaction
 
-- **3D spherical menu system**: NeXTSTEP-style card layout auto-generated from data-driven command registry (~80 registered commands). Categories organized into nested submenus with animated card expansion.
+- **3D spherical menu system**: NeXTSTEP-style
 - **Info cards**: Side-by-side key-value panels for global network property display
 - **HUD overlay**: Node/edge count, degree filter, k-core filter, FPS, job progress, menu state
-- **Crosshair**: Screen-center reticle for immersive menu interaction
-- **Ray picking**: Sphere intersection (nodes), segment distance (edges), quad intersection (menu billboards)
 
 ### VR / XR (OpenXR)
 
 - Optional OpenXR integration (compile-time `USE_OPENXR`)
-- CLI `--vr` flag to enable VR mode
-- Separate source modules: context, Vulkan interop, session lifecycle, controller input, view config, frame loop
-- Multi-view rendering (up to 3 views)
-- VR-aware menu spawning (relative to headset pose)
-- Depth buffers per XR view
+- CLI `--vr` flag to enable VR
 
 ### Background Worker Thread
 
 All graph operations run on a dedicated pthread with a circular job queue. Features:
-- igraph progress handler → atomic job progress (0.0–1.0) shown in HUD
+- igraph progress handler
 - igraph status handler → job status messages
 - igraph step handler → real-time layout snapshot polling
-- Thread-local MT19937 RNG
-- Graceful shutdown with queue draining
 
-## Build & Run
+## Build Source
 
 igraph-vlk builds against a patched `igraph` testing branch that includes experimental layout implementations (ForceAtlas2 2D/3D, Yifan Hu 2D/3D, Barnes-Hut t-SNE 2D/3D, Radial Sugiyama, Layered Sphere, Spherical MDS, BCGL-t).
 
-Flatpak builds are available at [github.com/leuc/io.github.leuc.igraph-vlk/releases](https://github.com/leuc/io.github.leuc.igraph-vlk/releases).
 
 ```sh
 # Build igraph testing branch
@@ -244,6 +240,10 @@ git clone https://github.com/leuc/igraph-vlk
 cd igraph-vlk
 cmake -S . -B build -Digraph_ROOT=../igraph/local_install/ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build build/ --parallel
+```
+
+## Run with OpenMP
+```sh
 OMP_NUM_THREADS=$(nproc) build/igraph-vlk /path/to/example.graphml
 ```
 
