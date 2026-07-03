@@ -4,6 +4,7 @@
  */
 
 #include "command_registry.h"
+#include "graph/repo_netzschleuder.h"
 #include "graph/wrappers_centrality.h"
 #include "graph/wrappers_community.h"
 #include "graph/wrappers_constructors.h"
@@ -12,6 +13,7 @@
 #include "graph/wrappers_paths.h"
 #include "graph/wrappers_splc.h"
 #include "graph/wrappers_structural.h"
+#include "interaction/filter.h"
 
 const CommandDef g_command_registry[] = {
 	// =========================================================================
@@ -160,9 +162,20 @@ const CommandDef g_command_registry[] = {
 	{"Alter/Clean Up", "remove_feedback_arc_set", "Remove feedback arc set", compute_remove_feedback_arc_set, apply_remove_feedback_arc_set, free_noop},
 
 	// =========================================================================
-	// Show menu — populated dynamically (filters, visibility, highlight)
-	// No static registry entries.
+	// Data menu — Repository (display_name=NULL: built by dynamic population)
 	// =========================================================================
+	{"Data/Repository", "netzschleuder_download", NULL, run_netzschleuder_download, apply_netzschleuder_download, free_netzschleuder_download, NULL, (const CommandParamDef[]){{"entry_id", PARAM_TYPE_STRING, 0, 0, NULL, 0}, {"version_id", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 2},
+
+	// =========================================================================
+	// Data menu — Famous (display_name=NULL: built by dynamic population)
+	// =========================================================================
+	{"Data/Famous", "igraph_famous", NULL, compute_igraph_famous, apply_new_graph, free_new_graph, NULL, (const CommandParamDef[]){{"name", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 1},
+
+	// =========================================================================
+	// Show menu — Filter (display_name=NULL: built by dynamic population)
+	// =========================================================================
+	{"Show", "filter_show_all", NULL, compute_inline_pass, apply_filter_reset, free_noop},
+	{"Show", "filter_by_attr", NULL, compute_filter_by_attr, apply_filter_by_attr, free_filter_params, NULL, (const CommandParamDef[]){{"attr_name", PARAM_TYPE_STRING, 0, 0, NULL, 0}, {"attr_value", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 2},
 
 };
 const int g_command_registry_size = sizeof(g_command_registry) / sizeof(g_command_registry[0]);

@@ -57,26 +57,14 @@ typedef struct
 	bool running;
 } ExecutionContext;
 
-// Typedef for the generic wrapper function
-typedef void (*IgraphWrapperFunc)(ExecutionContext *ctx);
-
 // --- The Action Node (Leaf in the menu) ---
 typedef struct
 {
 	const char *id_name;
 	const char *display_name;
 	int num_params;
-	CommandParameter *params; // Array of required parameters
-
-	// Old execution method
-	IgraphWrapperFunc execute; // The actual C function that calls igraph
-
-	// New data-driven method
+	CommandParameter *params;		  // Array of required parameters
 	const struct CommandDef *cmd_def; // Pointer to command definition in registry
-
-	bool produces_visual_output; // If true, shows results overlay before returning to graph
-
-	void *user_data; // Optional context (e.g., FilterContext for attribute filters)
 } IgraphCommand;
 
 // --- 3D Spherical Menu Tree Structure ---

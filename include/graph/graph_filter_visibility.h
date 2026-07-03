@@ -8,13 +8,6 @@
 
 #include "graph/graph_types.h"
 
-// Context passed through IgraphCommand.user_data for attribute filter operations
-typedef struct
-{
-	char *attr_name;
-	char *attr_value;
-} FilterContext;
-
 /**
  * Reset all nodes to visible (visible = 1.0f).
  * @param data Pointer to GraphData

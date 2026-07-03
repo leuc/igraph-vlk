@@ -151,7 +151,7 @@ static igraph_t *load_graphml_from_zst(const char *path)
 		return NULL;
 	}
 
-	igraph_t *graph = malloc(sizeof(igraph_t));
+	igraph_t *graph = IGRAPH_MALLOC(sizeof(igraph_t));
 	if (!graph) {
 		fclose(mfp);
 		free(dst);

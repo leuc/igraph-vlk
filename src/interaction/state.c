@@ -116,22 +116,6 @@ void update_app_state(AppState *state)
 					app->pending_command = NULL;
 					app->current_state = STATE_MENU_OPEN;
 				}
-			} else if (app->pending_command->execute) {
-				// Instant main-thread UI action (File > Open, Save, Exit, etc.)
-				printf("[State] Executing instant UI action: %s\n", app->pending_command->display_name);
-
-				// Create execution context
-				ExecutionContext exec_ctx;
-				exec_ctx.params = app->pending_command->params;
-				exec_ctx.num_params = app->pending_command->num_params;
-				exec_ctx.update_visuals_callback = NULL;
-				exec_ctx.app_state = state;
-				// Execute immediately on main thread
-				app->pending_command->execute(&exec_ctx);
-
-				// Reset and return to menu
-				app->pending_command = NULL;
-				app->current_state = STATE_MENU_OPEN;
 			} else {
 				printf("[State] Command '%s' has no implementation.\n", app->pending_command->display_name);
 				app->pending_command = NULL;
@@ -161,14 +145,8 @@ void update_app_state(AppState *state)
 					state->current_worker_job = NULL;
 					state->gpu_polling = false;
 					state->job_in_progress = false;
-
-					if (app->pending_command && app->pending_command->produces_visual_output) {
-						app->has_visual_results = true;
-						app->current_state = STATE_DISPLAY_RESULTS;
-					} else {
-						app->pending_command = NULL;
-						app->current_state = STATE_MENU_OPEN;
-					}
+					app->pending_command = NULL;
+					app->current_state = STATE_MENU_OPEN;
 				}
 				break;
 			}
@@ -202,18 +180,16 @@ void update_app_state(AppState *state)
 					worker_job_free(&state->worker_ctx, job);
 					state->current_worker_job = NULL;
 					state->job_in_progress = false;
-
-					if (app->pending_command && app->pending_command->produces_visual_output) {
-						app->has_visual_results = true;
-						app->current_state = STATE_DISPLAY_RESULTS;
-					} else {
-						app->pending_command = NULL;
-						app->current_state = STATE_MENU_OPEN;
-					}
+					app->pending_command = NULL;
+					app->current_state = STATE_MENU_OPEN;
 				}
 			} else if (status == JOB_STATUS_FAILED || status == JOB_STATUS_CANCELLED) {
 				printf("[State] Job failed or was cancelled\n");
-				worker_job_free(&state->worker_ctx, state->current_worker_job);
+				WorkerJob *failed_job = state->current_worker_job;
+				if (failed_job->free_func && failed_job->result_data) {
+					failed_job->free_func(failed_job->result_data);
+				}
+				worker_job_free(&state->worker_ctx, failed_job);
 				state->current_worker_job = NULL;
 				state->job_in_progress = false;
 				app->pending_command = NULL;

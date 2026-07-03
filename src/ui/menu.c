@@ -45,17 +45,14 @@ static MenuNode *create_menu_node(const char *label, MenuNodeType type)
 	return node;
 }
 
-static IgraphCommand *create_command(const char *id_name, const char *display_name, IgraphWrapperFunc execute, int num_params)
+static IgraphCommand *create_command(const char *id_name, const char *display_name, int num_params)
 {
 	IgraphCommand *cmd = (IgraphCommand *)malloc(sizeof(IgraphCommand));
 	cmd->id_name = strdup(id_name);
 	cmd->display_name = strdup(display_name);
-	cmd->execute = execute;
 	cmd->num_params = num_params;
-	cmd->params = (CommandParameter *)malloc(sizeof(CommandParameter) * num_params);
-	cmd->produces_visual_output = false;
+	cmd->params = num_params > 0 ? (CommandParameter *)malloc(sizeof(CommandParameter) * num_params) : NULL;
 	cmd->cmd_def = NULL;
-	cmd->user_data = NULL;
 	return cmd;
 }
 
@@ -77,6 +74,11 @@ void init_menu_tree(MenuNode *root)
 
 	for (int i = 0; i < g_command_registry_size; i++) {
 		const CommandDef *cmd_def = &g_command_registry[i];
+
+		// Skip entries with NULL display_name — they are populated dynamically
+		if (cmd_def->display_name == NULL)
+			continue;
+
 		MenuNode *current_parent = root;
 
 		if (cmd_def->category_path && strlen(cmd_def->category_path) > 0) {
@@ -113,9 +115,17 @@ void init_menu_tree(MenuNode *root)
 		}
 
 		MenuNode *leaf = create_menu_node(cmd_def->display_name, NODE_LEAF_COMMAND);
-// TODO this drop parameters
-		leaf->command = create_command(cmd_def->command_id, cmd_def->display_name, NULL, 0);
+		leaf->command = create_command(cmd_def->command_id, cmd_def->display_name, cmd_def->num_params);
 		leaf->command->cmd_def = cmd_def;
+
+		// Copy parameter metadata from CommandDef.param_defs
+		for (int p = 0; p < cmd_def->num_params; p++) {
+			leaf->command->params[p].name = cmd_def->param_defs[p].name;
+			leaf->command->params[p].type = cmd_def->param_defs[p].type;
+			leaf->command->params[p].min_val = cmd_def->param_defs[p].min_val;
+			leaf->command->params[p].max_val = cmd_def->param_defs[p].max_val;
+			leaf->command->params[p].value.i_val = 0;
+		}
 
 		MenuNode **tmp = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode *) * (current_parent->num_children + 1));
 		if (!tmp) {
@@ -154,12 +164,6 @@ void menu_tree_destroy(MenuNode *node)
 					free((void *)node->command->params[i].value.str_val);
 			}
 			free(node->command->params);
-		}
-		if (node->command->user_data) {
-			FilterContext *fc = (FilterContext *)node->command->user_data;
-			free((void *)fc->attr_name);
-			free((void *)fc->attr_value);
-			free(node->command->user_data);
 		}
 		free(node->command);
 	}
@@ -303,29 +307,6 @@ void update_menu_transforms(MenuNode *node, const SpatialBasis *basis)
 // Dynamic Attribute Filter Menu
 // ============================================================================
 
-// Get the command ID for a filter entry (static buffer, call within same scope)
-static void filter_make_command_id(char *buf, size_t buf_size, const char *attr_name, const char *attr_value)
-{
-	snprintf(buf, buf_size, "filter_%s_%s", attr_name, attr_value);
-}
-
-// Register a filter in the lookup table
-static void filter_register(GraphData *data, const char *command_id, const char *attr_name, const char *attr_value)
-{
-	if (data->filter_lookup_count >= data->filter_lookup_capacity) {
-		int new_cap = data->filter_lookup_capacity ? data->filter_lookup_capacity * 2 : 64;
-		FilterLookup *tmp = realloc(data->filter_lookup, sizeof(FilterLookup) * new_cap);
-		if (!tmp)
-			return;
-		data->filter_lookup = tmp;
-		data->filter_lookup_capacity = new_cap;
-	}
-	FilterLookup *entry = &data->filter_lookup[data->filter_lookup_count++];
-	entry->command_id = strdup(command_id);
-	entry->attr_name = strdup(attr_name);
-	entry->attr_value = strdup(attr_value);
-}
-
 // Find a branch by label in a parent's children (searches all children)
 static MenuNode *find_child_branch(MenuNode *parent, const char *label)
 {
@@ -338,9 +319,15 @@ static MenuNode *find_child_branch(MenuNode *parent, const char *label)
 	return NULL;
 }
 
-// Declare the filter execute function (implemented in interaction/filter.c)
-extern void execute_filter_reset(ExecutionContext *ctx);
-extern void execute_filter_by_attr(ExecutionContext *ctx);
+// Look up a CommandDef by command_id from g_command_registry
+static const CommandDef *find_command_def(const char *command_id)
+{
+	for (int i = 0; i < g_command_registry_size; i++) {
+		if (strcmp(g_command_registry[i].command_id, command_id) == 0)
+			return &g_command_registry[i];
+	}
+	return NULL;
+}
 
 void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 {
@@ -376,10 +363,11 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 		node_branch->children[node_branch->num_children++] = filter_branch;
 	}
 
-	// Add "Show All" leaf
+	// Add "Show All" leaf using registry CommandDef
+	const CommandDef *show_all_def = find_command_def("filter_show_all");
 	MenuNode *show_all = create_menu_node("Show All", NODE_LEAF_COMMAND);
-	show_all->command = create_command("filter_show_all", "Show All", execute_filter_reset, 0);
-	show_all->command->cmd_def = NULL;
+	show_all->command = create_command("filter_show_all", "Show All", 0);
+	show_all->command->cmd_def = show_all_def;
 	{
 		MenuNode **tmp = realloc(filter_branch->children, sizeof(MenuNode *) * (filter_branch->num_children + 1));
 		if (!tmp) {
@@ -394,37 +382,33 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 		return;
 
 	// Add attribute name sub-branches with value leaves
+	const CommandDef *filter_def = find_command_def("filter_by_attr");
+	if (!filter_def)
+		return;
+
 	for (int a = 0; a < data->num_filterable_attrs; a++) {
 		FilterableAttr *fa = &data->filterable_attrs[a];
 
 		MenuNode *attr_branch = create_menu_node(fa->name, NODE_BRANCH);
 
 		for (int v = 0; v < fa->num_values; v++) {
-			char cmd_id[256];
-			filter_make_command_id(cmd_id, sizeof(cmd_id), fa->name, fa->values[v]);
-
 			MenuNode *val_leaf = create_menu_node(fa->values[v], NODE_LEAF_COMMAND);
-			val_leaf->command = create_command(cmd_id, fa->values[v], execute_filter_by_attr, 0);
-			val_leaf->command->cmd_def = NULL;
-
-			// Store attr name/value in user_data
-			FilterContext *fc = malloc(sizeof(FilterContext));
-			fc->attr_name = strdup(fa->name);
-			fc->attr_value = strdup(fa->values[v]);
-			val_leaf->command->user_data = fc;
+			val_leaf->command = create_command("filter_by_attr", fa->values[v], 2);
+			val_leaf->command->cmd_def = filter_def;
+			val_leaf->command->params[0].name = "attr_name";
+			val_leaf->command->params[0].type = PARAM_TYPE_STRING;
+			val_leaf->command->params[0].value.str_val = strdup(fa->name);
+			val_leaf->command->params[1].name = "attr_value";
+			val_leaf->command->params[1].type = PARAM_TYPE_STRING;
+			val_leaf->command->params[1].value.str_val = strdup(fa->values[v]);
 
 			MenuNode **tmp = realloc(attr_branch->children, sizeof(MenuNode *) * (attr_branch->num_children + 1));
 			if (!tmp) {
 				menu_tree_destroy(val_leaf);
-				free(fc->attr_name);
-				free(fc->attr_value);
-				free(fc);
 				continue;
 			}
 			attr_branch->children = tmp;
 			attr_branch->children[attr_branch->num_children++] = val_leaf;
-
-			filter_register(data, cmd_id, fa->name, fa->values[v]);
 		}
 
 		{
@@ -456,19 +440,7 @@ void menu_clear_attribute_filters(MenuNode *root, GraphData *data)
 {
 	if (!root)
 		return;
-
-	// Free the filter lookup table
-	if (data) {
-		for (int i = 0; i < data->filter_lookup_count; i++) {
-			free(data->filter_lookup[i].command_id);
-			free(data->filter_lookup[i].attr_name);
-			free(data->filter_lookup[i].attr_value);
-		}
-		free(data->filter_lookup);
-		data->filter_lookup = NULL;
-		data->filter_lookup_count = 0;
-		data->filter_lookup_capacity = 0;
-	}
+	(void)data;
 
 	// Find "Node" branch, then "Filter" sub-branch, clear its children
 	MenuNode *node_branch = find_child_branch(root, "Node");
@@ -486,10 +458,6 @@ void menu_clear_attribute_filters(MenuNode *root, GraphData *data)
 
 extern const CommandDef g_command_registry[];
 extern const int g_command_registry_size;
-
-static const CommandDef netzschleuder_download_def = {
-	"Data/Repository", "netzschleuder_download", "Download Network", run_netzschleuder_download, apply_netzschleuder_download, free_netzschleuder_download, NULL, (const CommandParamDef[]){{"entry_id", PARAM_TYPE_STRING, 0, 0, NULL, 0}, {"version_id", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 2,
-};
 
 static MenuNode *find_or_create_branch(MenuNode *parent, const char *label)
 {
@@ -538,9 +506,12 @@ static MenuNode *find_or_create_path(MenuNode *root, const char *path)
 
 static MenuNode *create_netz_leaf(const char *label, const StaticNetEntry *entry)
 {
+	const CommandDef *cmd_def = find_command_def("netzschleuder_download");
+	if (!cmd_def)
+		return NULL;
 	MenuNode *leaf = create_menu_node(label, NODE_LEAF_COMMAND);
-	leaf->command = create_command(netzschleuder_download_def.command_id, label, NULL, 2);
-	leaf->command->cmd_def = &netzschleuder_download_def;
+	leaf->command = create_command("netzschleuder_download", label, 2);
+	leaf->command->cmd_def = cmd_def;
 	leaf->command->params[0].name = "entry_id";
 	leaf->command->params[0].type = PARAM_TYPE_STRING;
 	leaf->command->params[0].value.str_val = strdup(entry->entry_id);
@@ -674,12 +645,12 @@ static const char *famous_graph_names[] = {
 };
 static const int num_famous_graphs = sizeof(famous_graph_names) / sizeof(famous_graph_names[0]);
 
-static const CommandDef famous_graph_def = {
-	"Data/Famous", "igraph_famous", NULL, compute_igraph_famous, apply_new_graph, free_new_graph, NULL, (const CommandParamDef[]){{"name", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 1,
-};
-
 void menu_populate_famous_graphs(MenuNode *root)
 {
+	const CommandDef *cmd_def = find_command_def("igraph_famous");
+	if (!cmd_def)
+		return;
+
 	MenuNode *famous_branch = find_or_create_path(root, "Data/Famous");
 	if (!famous_branch)
 		return;
@@ -687,8 +658,8 @@ void menu_populate_famous_graphs(MenuNode *root)
 	for (int i = 0; i < num_famous_graphs; i++) {
 		const char *name = famous_graph_names[i];
 		MenuNode *leaf = create_menu_node(name, NODE_LEAF_COMMAND);
-		leaf->command = create_command("igraph_famous", name, NULL, 1);
-		leaf->command->cmd_def = &famous_graph_def;
+		leaf->command = create_command("igraph_famous", name, 1);
+		leaf->command->cmd_def = cmd_def;
 		leaf->command->params[0].name = "name";
 		leaf->command->params[0].type = PARAM_TYPE_STRING;
 		leaf->command->params[0].value.str_val = strdup(name);

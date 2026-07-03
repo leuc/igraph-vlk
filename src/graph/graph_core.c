@@ -261,17 +261,6 @@ void graph_free_data(GraphData *data)
 		data->filterable_attrs = NULL;
 		data->num_filterable_attrs = 0;
 	}
-	if (data->filter_lookup) {
-		for (int i = 0; i < data->filter_lookup_count; i++) {
-			free(data->filter_lookup[i].command_id);
-			free(data->filter_lookup[i].attr_name);
-			free(data->filter_lookup[i].attr_value);
-		}
-		free(data->filter_lookup);
-		data->filter_lookup = NULL;
-		data->filter_lookup_count = 0;
-		data->filter_lookup_capacity = 0;
-	}
 	if (data->nodes) {
 		for (uint32_t i = 0; i < data->node_count; i++)
 			if (data->nodes[i].label)

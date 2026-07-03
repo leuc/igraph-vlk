@@ -8,16 +8,19 @@
 
 #include "interaction/state.h"
 
-/**
- * Execute function for "Show All" filter command.
- * Resets all node visibility to 1.0f.
- */
-void execute_filter_reset(ExecutionContext *ctx);
+// Worker: returns a dummy pointer to signal "apply me"
+void *compute_inline_pass(ExecutionContext *ctx);
 
-/**
- * Execute function for attribute filter commands.
- * Reads attr_name/attr_value from IgraphCommand.user_data (FilterContext).
- */
-void execute_filter_by_attr(ExecutionContext *ctx);
+// Worker: copies command params into a heap FilterParams struct
+void *compute_filter_by_attr(ExecutionContext *ctx);
+
+// Apply: reset all nodes to visible
+void apply_filter_reset(ExecutionContext *ctx, void *result_data);
+
+// Apply: filter by attribute (reads FilterParams from result_data)
+void apply_filter_by_attr(ExecutionContext *ctx, void *result_data);
+
+// Free: frees FilterParams
+void free_filter_params(void *result_data);
 
 #endif // INTERACTION_FILTER_H

@@ -26,13 +26,6 @@ typedef struct
 	char **values;
 } FilterableAttr;
 
-typedef struct
-{
-	char *command_id;
-	char *attr_name;
-	char *attr_value;
-} FilterLookup;
-
 /* ============================================================================
  * Core Data Structures
  * ============================================================================ */
@@ -85,10 +78,6 @@ typedef struct
 
 	FilterableAttr *filterable_attrs;
 	int num_filterable_attrs;
-
-	FilterLookup *filter_lookup;
-	int filter_lookup_count;
-	int filter_lookup_capacity;
 } GraphData;
 
 #endif // GRAPH_TYPES_H
