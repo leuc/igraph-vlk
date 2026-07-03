@@ -20,6 +20,7 @@ Efforts are made to:
 ## Index
 
 - [Usage](#usage)
+- [Inatall](#install)
 - [Features](#features)
   - [Graph I/O & Generation](#graph-io--generation)
   - [Graph Analysis](#graph-analysis)
@@ -225,6 +226,7 @@ All graph operations run on a dedicated pthread with a circular job queue. Featu
 
 igraph-vlk builds against a patched `igraph` testing branch that includes experimental layout implementations (ForceAtlas2 2D/3D, Yifan Hu 2D/3D, Barnes-Hut t-SNE 2D/3D, Radial Sugiyama, Layered Sphere, Spherical MDS, BCGL-t).
 
+Build has been tested on Ubuntu, Arch and macOS
 
 ```sh
 # Build igraph testing branch
@@ -255,7 +257,10 @@ OMP_NUM_THREADS=$(nproc) build/igraph-vlk /path/to/example.graphml
 | GLFW | Window, input, OpenXR platform |
 | igraph | Graph algorithms |
 | cglm | 3D math |
-| OpenMP | Parallelization |
+| stb_truetype.h | Font render |
+| curl | Graph Repository Download |
+| zstd | |
+| OpenMP (optional) | Parallelization |
 | OpenXR (optional) | VR support |
 | glslangValidator / glslc | SPIR-V shader compilation |
 
