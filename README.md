@@ -31,8 +31,8 @@ Efforts are made to:
 
 ## Index
 
-- [Usage](#usage)
 - [Inatall](#install)
+- [Usage](#usage)
 - [Features](#features)
   - [Graph I/O & Generation](#graph-io--generation)
   - [Graph Analysis](#graph-analysis)
@@ -100,6 +100,21 @@ Efforts are made to:
 | `1`–`9` | Remove nodes with degree < N and re-layout |
 | `K` | Increment k-core threshold, remove nodes below it |
 | `J` | Color articulation points red, bridge endpoints orange |
+
+### Large Graphs
+
+Vulkan itself can easily render 500k+ nodes/edges at 60fps even on moderate hardware. 
+However, not all graph methods and layouts scale to large graphs.
+
+A typical workflow for large graphs:
+
+1. Group with Leiden or Infomap
+2. Rank by Degree or PageRank
+2. Layout: try one of UMAP, Force Atlas 2, Yifan Hu, BCGL-t or t-SNE (in order of scale)
+
+The experimental **layered sphere** layout can very quickly render very large graphs.
+It provides a quick **initial** data exploration with visual clustering and centered coreness.
+It works best with graphs that have many communities. However, it is not a general layout method that works with any graph.
 
 ## Features
 
