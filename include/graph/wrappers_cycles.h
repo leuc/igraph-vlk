@@ -12,6 +12,11 @@
 // Cycle analysis: remove feedback arc set to make graph acyclic
 void *compute_remove_feedback_arc_set(ExecutionContext *ctx);
 void apply_remove_feedback_arc_set(ExecutionContext *ctx, void *result_data);
+
+// Graph simplification: remove multi-edges and loops
+void *compute_igraph_simplify(ExecutionContext *ctx);
+void apply_igraph_simplify(ExecutionContext *ctx, void *result_data);
+
 void free_noop(void *result_data);
 
 #endif

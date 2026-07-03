@@ -23,7 +23,6 @@ bool graph_load_graphml(const char *filename, GraphData *data, const char *node_
 		return false;
 	}
 	fclose(fp);
-	igraph_simplify(&data->g, 1, 1, NULL);
 	data->graph_initialized = true;
 	data->node_attr_name = node_attr ? strdup(node_attr) : strdup("pagerank");
 	data->nodes = NULL;

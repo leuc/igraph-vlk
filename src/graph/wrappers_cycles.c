@@ -77,6 +77,51 @@ void apply_remove_feedback_arc_set(ExecutionContext *ctx, void *result_data)
 }
 
 // ============================================================================
+// Worker: Simplify graph by removing multi-edges and loops.
+// Modifies graph in-place.
+// Returns graph pointer on success, NULL on failure.
+// ============================================================================
+void *compute_igraph_simplify(ExecutionContext *ctx)
+{
+	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!graph || igraph_vcount(graph) == 0)
+		return NULL;
+
+	igraph_integer_t before_v = igraph_vcount(graph);
+	igraph_integer_t before_e = igraph_ecount(graph);
+
+	igraph_error_t ret = igraph_simplify(graph, 1, 1, NULL);
+	if (ret != IGRAPH_SUCCESS) {
+		fprintf(stderr, "igraph_simplify failed\n");
+		return NULL;
+	}
+
+	igraph_integer_t after_e = igraph_ecount(graph);
+	printf("Simplified graph: %d vertices, %d edges -> %d edges (%d removed)\n", (int)before_v, (int)before_e, (int)after_e, (int)(before_e - after_e));
+
+	return graph;
+}
+
+// ============================================================================
+// Apply: Refresh visualization after in-place graph modification.
+// ============================================================================
+void apply_igraph_simplify(ExecutionContext *ctx, void *result_data)
+{
+	if (!ctx || !ctx->app_state)
+		return;
+	(void)result_data;
+
+	AppState *state = ctx->app_state;
+	GraphData *data = &state->current_graph;
+
+	graph_rebuild_edges(data);
+	renderer_update_graph(&state->renderer, data);
+	state->renderer.label.tree_needs_rebuild = true;
+
+	printf("[apply] Simplify processed - %d vertices, %d edges\n", data->node_count, data->edge_count);
+}
+
+// ============================================================================
 // Free: No-op — graph is owned by GraphData, not the result
 // ============================================================================
 void free_noop(void *result_data)
