@@ -486,7 +486,7 @@ extern const CommandDef g_command_registry[];
 extern const int g_command_registry_size;
 
 static const CommandDef netzschleuder_download_def = {
-	"Repository/Netzschleuder", "netzschleuder_download", "Download Network", run_netzschleuder_download, apply_netzschleuder_download, free_netzschleuder_download, NULL, (const CommandParamDef[]){{"entry_id", PARAM_TYPE_STRING, 0, 0, NULL, 0}, {"version_id", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 2,
+	"Data/Repository", "netzschleuder_download", "Download Network", run_netzschleuder_download, apply_netzschleuder_download, free_netzschleuder_download, NULL, (const CommandParamDef[]){{"entry_id", PARAM_TYPE_STRING, 0, 0, NULL, 0}, {"version_id", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 2,
 };
 
 static MenuNode *find_or_create_branch(MenuNode *parent, const char *label)
@@ -555,7 +555,7 @@ void menu_populate_netzschleuder_static(MenuNode *root)
 	if (count == 0)
 		return;
 
-	MenuNode *netz_branch = find_or_create_path(root, "Repository/Netzschleuder");
+	MenuNode *netz_branch = find_or_create_path(root, "Data/Repository");
 	if (!netz_branch)
 		return;
 

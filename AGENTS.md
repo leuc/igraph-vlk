@@ -79,6 +79,19 @@ typedef struct CommandDef {
 } CommandDef;
 ```
 
+### Menu Structure (root categories in order)
+
+| Root | Sub-menus | Purpose |
+|------|-----------|---------|
+| `Data` | Patterns, Random, Bipartite, Spatial, Repository | Graph source (generate, import, browse) |
+| `Layout` | Force-Directed, Hierarchical, Geometric, Embedding, Bipartite, GPU | Node positioning |
+| `Rank` | *(flat)* | Per-node importance (degree, centrality, PageRank...) |
+| `Group` | *(flat)* | Community detection (Louvain, Leiden, Walktrap...) |
+| `Follow` | *(flat)* | Path/traversal exploration (shortest path, BFS, SPLC) |
+| `Structure` | *(flat)* | Global graph properties (density, diameter, transitivity...) |
+| `Show` | *(flat)* | Filter/highlight/visibility (by degree, by attribute, extract...) |
+| `Alter` | Clean Up | Graph transformation (feedback arc set, complement, MST...) |
+
 ### Process
 1. **Define Worker Function** (in appropriate `src/graph/wrappers_*.c`):
    - `void* compute_new_lay(igraph_t *graph)`: Offloaded CPU compute. Return `igraph_matrix_t*` for layouts, `igraph_vector_t*` for centrality, `igraph_vector_int_t*` for community membership, `igraph_t*` for new graphs, or other data. Check `igraph_error_t != IGRAPH_SUCCESS`, cleanup/free on fail, return NULL.
@@ -120,9 +133,9 @@ typedef struct CommandDef {
 
 ### Examples
 - Layouts: `lay_force_fr` -> `compute_igraph_layout_fruchterman_reingold_3d` + `apply_layout_matrix`.
-- Centrality: `igraph_degree` -> `compute_igraph_degree` + `apply_centrality_scores`.
-- Communities: `igraph_community_leiden` -> `compute_igraph_community_leiden` + `apply_community_membership`.
-- Generation: `igraph_ring` -> `compute_igraph_ring` + `apply_new_graph`.
+- Rank: `igraph_degree` -> `compute_igraph_degree` + `apply_centrality_scores`.
+- Group: `igraph_community_leiden` -> `compute_igraph_community_leiden` + `apply_community_membership`.
+- Data: `igraph_ring` -> `compute_igraph_ring` + `apply_new_graph`.
 - GPU: `lay_bcgl` -> `compute_layout_bcgl` + `apply_layout_bcgl` + `poll_bcgl_gpu`.
 
 Rebuild & run to see menu update.

@@ -15,45 +15,37 @@
 
 const CommandDef g_command_registry[] = {
 	// =========================================================================
-	// File menu
+	// Data menu - Patterns
 	// =========================================================================
-	{"File", "file_new", "New Graph", NULL, NULL, NULL, NULL, NULL, 0},
-	{"File", "file_open", "Open Graph", NULL, NULL, NULL, NULL, NULL, 0},
-	{"File", "file_save", "Save Graph", NULL, NULL, NULL, NULL, NULL, 0},
-	{"File", "app_exit", "Exit", NULL, NULL, NULL, NULL, NULL, 0},
+	{"Data/Patterns", "igraph_ring", "Ring", compute_igraph_ring, apply_new_graph, free_new_graph},
+	{"Data/Patterns", "igraph_star", "Star", compute_igraph_star, apply_new_graph, free_new_graph},
+	{"Data/Patterns", "igraph_kary_tree", "Tree", compute_igraph_kary_tree, apply_new_graph, free_new_graph},
+	{"Data/Patterns", "igraph_square_lattice", "Lattice", compute_igraph_square_lattice, apply_new_graph, free_new_graph},
+	{"Data/Patterns", "igraph_full", "Full Graph (Clique)", compute_igraph_full, apply_new_graph, free_new_graph},
+	{"Data/Patterns", "igraph_cycle_graph", "Circle", compute_igraph_cycle_graph, apply_new_graph, free_new_graph},
+	{"Data/Patterns", "igraph_famous", "Notable Graphs", compute_igraph_famous, apply_new_graph, free_new_graph},
 
 	// =========================================================================
-	// Generate menu - Deterministic Graphs
+	// Data menu - Random
 	// =========================================================================
-	{"Generate/Deterministic Graphs", "igraph_ring", "Ring", compute_igraph_ring, apply_new_graph, free_new_graph},
-	{"Generate/Deterministic Graphs", "igraph_star", "Star", compute_igraph_star, apply_new_graph, free_new_graph},
-	{"Generate/Deterministic Graphs", "igraph_kary_tree", "Tree", compute_igraph_kary_tree, apply_new_graph, free_new_graph},
-	{"Generate/Deterministic Graphs", "igraph_square_lattice", "Lattice", compute_igraph_square_lattice, apply_new_graph, free_new_graph},
-	{"Generate/Deterministic Graphs", "igraph_full", "Full Graph (Clique)", compute_igraph_full, apply_new_graph, free_new_graph},
-	{"Generate/Deterministic Graphs", "igraph_cycle_graph", "Circle", compute_igraph_cycle_graph, apply_new_graph, free_new_graph},
-	{"Generate/Deterministic Graphs", "igraph_famous", "Notable Graphs", compute_igraph_famous, apply_new_graph, free_new_graph},
+	{"Data/Random", "igraph_erdos_renyi_game_gnp", "Erdős-Rényi (GNP / GNM)", compute_igraph_erdos_renyi_game_gnp, apply_new_graph, free_new_graph},
+	{"Data/Random", "igraph_barabasi_game", "Barabási-Albert (Preferential attachment)", compute_igraph_barabasi_game, apply_new_graph, free_new_graph},
+	{"Data/Random", "igraph_watts_strogatz_game", "Watts-Strogatz (Small-world)", compute_igraph_watts_strogatz_game, apply_new_graph, free_new_graph},
+	{"Data/Random", "igraph_forest_fire_game", "Forest Fire", compute_igraph_forest_fire_game, apply_new_graph, free_new_graph},
+	{"Data/Random", "igraph_tree_game", "Random Tree", compute_igraph_tree_game, apply_new_graph, free_new_graph},
+	{"Data/Random", "igraph_degree_sequence_game", "Degree Sequence", compute_igraph_degree_sequence_game, apply_new_graph, free_new_graph},
 
 	// =========================================================================
-	// Generate menu - Stochastic Graphs
+	// Data menu - Bipartite
 	// =========================================================================
-	{"Generate/Stochastic Graphs", "igraph_erdos_renyi_game_gnp", "Erdős-Rényi (GNP / GNM)", compute_igraph_erdos_renyi_game_gnp, apply_new_graph, free_new_graph},
-	{"Generate/Stochastic Graphs", "igraph_barabasi_game", "Barabási-Albert (Preferential attachment)", compute_igraph_barabasi_game, apply_new_graph, free_new_graph},
-	{"Generate/Stochastic Graphs", "igraph_watts_strogatz_game", "Watts-Strogatz (Small-world)", compute_igraph_watts_strogatz_game, apply_new_graph, free_new_graph},
-	{"Generate/Stochastic Graphs", "igraph_forest_fire_game", "Forest Fire", compute_igraph_forest_fire_game, apply_new_graph, free_new_graph},
-	{"Generate/Stochastic Graphs", "igraph_tree_game", "Random Tree", compute_igraph_tree_game, apply_new_graph, free_new_graph},
-	{"Generate/Stochastic Graphs", "igraph_degree_sequence_game", "Degree Sequence", compute_igraph_degree_sequence_game, apply_new_graph, free_new_graph},
+	{"Data/Bipartite", "igraph_bipartite_game_gnm", "Generate Random Bipartite", compute_igraph_bipartite_game_gnm, apply_new_graph, free_new_graph},
+	{"Data/Bipartite", "igraph_bipartite_projection", "Create Bipartite Projections", compute_igraph_bipartite_projection, apply_new_graph, free_new_graph},
 
 	// =========================================================================
-	// Generate menu - Bipartite
+	// Data menu - Spatial
 	// =========================================================================
-	{"Generate/Bipartite Graphs", "igraph_bipartite_game_gnm", "Generate Random Bipartite", compute_igraph_bipartite_game_gnm, apply_new_graph, free_new_graph},
-	{"Generate/Bipartite Graphs", "igraph_bipartite_projection", "Create Bipartite Projections", compute_igraph_bipartite_projection, apply_new_graph, free_new_graph},
-
-	// =========================================================================
-	// Generate menu - Spatial
-	// =========================================================================
-	{"Generate/Spatial Graphs", "igraph_nearest_neighbor_graph", "Geometric random graphs", compute_igraph_nearest_neighbor_graph, apply_new_graph, free_new_graph},
-	{"Generate/Spatial Graphs", "igraph_gabriel_graph", "Gabriel graphs", compute_igraph_gabriel_graph, apply_new_graph, free_new_graph},
+	{"Data/Spatial", "igraph_nearest_neighbor_graph", "Geometric random graphs", compute_igraph_nearest_neighbor_graph, apply_new_graph, free_new_graph},
+	{"Data/Spatial", "igraph_gabriel_graph", "Gabriel graphs", compute_igraph_gabriel_graph, apply_new_graph, free_new_graph},
 
 	// =========================================================================
 	// Layout menu - Force-Directed
@@ -73,11 +65,11 @@ const CommandDef g_command_registry[] = {
 	{"Layout/Force-Directed", "igraph_layout_yifan_hu_3d", "Yifan Hu (3D)", compute_igraph_layout_yifan_hu_3d, apply_layout_matrix, free_layout_matrix},
 
 	// =========================================================================
-	// Layout menu - Tree & Hierarchical
+	// Layout menu - Hierarchical
 	// =========================================================================
-	{"Layout/Tree & Hierarchical", "igraph_layout_reingold_tilford", "Reingold-Tilford", compute_igraph_layout_reingold_tilford, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Tree & Hierarchical", "igraph_layout_sugiyama", "Sugiyama", compute_igraph_layout_sugiyama, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Tree & Hierarchical", "igraph_layout_sugiyama_radial", "Radial Sugiyama", compute_igraph_layout_sugiyama_radial, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Hierarchical", "igraph_layout_reingold_tilford", "Reingold-Tilford", compute_igraph_layout_reingold_tilford, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Hierarchical", "igraph_layout_sugiyama", "Sugiyama", compute_igraph_layout_sugiyama, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Hierarchical", "igraph_layout_sugiyama_radial", "Radial Sugiyama", compute_igraph_layout_sugiyama_radial, apply_layout_matrix, free_layout_matrix},
 
 	// Non-Igraph
 	{"Layout", "lay_layered_sphere", "Layered Sphere", compute_layout_layered_sphere, apply_layout_matrix, free_layout_matrix},
@@ -99,74 +91,79 @@ const CommandDef g_command_registry[] = {
 	{"Layout/Bipartite", "igraph_layout_bipartite", "Sugiyama (Bipartite)", compute_igraph_layout_bipartite, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Bipartite", "igraph_layout_bipartite_simple", "Bipartite (Simple)", compute_igraph_layout_bipartite_simple, apply_layout_matrix, free_layout_matrix},
 
-	// Multidimensional Scaling
-	{"Layout/Multidimensional Scaling", "igraph_layout_mds", "Torgerson MDS (2D)", compute_igraph_layout_mds, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Multidimensional Scaling", "igraph_layout_mds_3d", "Torgerson MDS (3D)", compute_igraph_layout_mds_3d, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Multidimensional Scaling", "igraph_layout_mds_spherical", "Spherical MDS (3D)", compute_igraph_layout_mds_spherical, apply_layout_matrix, free_layout_matrix},
 	// =========================================================================
-	// Layout menu - Graph Embedding
+	// Layout menu - Embedding
 	// =========================================================================
-	{"Layout/Dimension Reduction ", "igraph_layout_umap_2d", "UMAP (2D)", compute_igraph_layout_umap, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Dimension Reduction ", "igraph_layout_umap_3d", "UMAP (3D)", compute_igraph_layout_umap_3d, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Dimension Reduction ", "igraph_layout_bhtsne", "t-SNE (Barnes-Hut) (2D)", compute_igraph_layout_bhtsne, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Dimension Reduction ", "igraph_layout_bhtsne_3d", "t-SNE (Barnes-Hut) (3D)", compute_igraph_layout_bhtsne_3d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Embedding", "igraph_layout_mds", "Torgerson MDS (2D)", compute_igraph_layout_mds, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Embedding", "igraph_layout_mds_3d", "Torgerson MDS (3D)", compute_igraph_layout_mds_3d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Embedding", "igraph_layout_mds_spherical", "Spherical MDS (3D)", compute_igraph_layout_mds_spherical, apply_layout_matrix, free_layout_matrix},
+
+	{"Layout/Embedding", "igraph_layout_umap_2d", "UMAP (2D)", compute_igraph_layout_umap, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Embedding", "igraph_layout_umap_3d", "UMAP (3D)", compute_igraph_layout_umap_3d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Embedding", "igraph_layout_bhtsne", "t-SNE (Barnes-Hut) (2D)", compute_igraph_layout_bhtsne, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Embedding", "igraph_layout_bhtsne_3d", "t-SNE (Barnes-Hut) (3D)", compute_igraph_layout_bhtsne_3d, apply_layout_matrix, free_layout_matrix},
 
 	// =========================================================================
-	// Layout menu - Binary Classification (BCGL)
+	// Layout menu - GPU
 	// =========================================================================
-	{"Layout/Binary Classification", "igraph_layout_bcgl", "BCGL-t (2D)", compute_igraph_layout_bcgl, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Binary Classification", "igraph_layout_bcgl_3d", "BCGL-t (3D)", compute_igraph_layout_bcgl_3d, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Binary Classification", "lay_bcgl", "BCGL-t (3D GPU Compute)", compute_layout_bcgl, apply_layout_bcgl, free_layout_bcgl, poll_bcgl_gpu},
+	{"Layout/GPU", "igraph_layout_bcgl", "BCGL-t (2D)", compute_igraph_layout_bcgl, apply_layout_matrix, free_layout_matrix},
+	{"Layout/GPU", "igraph_layout_bcgl_3d", "BCGL-t (3D)", compute_igraph_layout_bcgl_3d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/GPU", "lay_bcgl", "BCGL-t (3D GPU Compute)", compute_layout_bcgl, apply_layout_bcgl, free_layout_bcgl, poll_bcgl_gpu},
 
 	// =========================================================================
-	// Analysis menu - Centrality & Roles
+	// Rank menu
 	// =========================================================================
-	{"Analysis/Centrality", "igraph_degree", "Degree", compute_igraph_degree, apply_centrality_scores, centrality_scores_free},
-	{"Analysis/Centrality", "igraph_closeness_cutoff", "Closeness", compute_igraph_closeness_cutoff, apply_centrality_scores, centrality_scores_free},
-	{"Analysis/Centrality", "igraph_betweenness", "Betweenness", compute_igraph_betweenness, apply_centrality_scores, centrality_scores_free},
-	{"Analysis/Centrality", "igraph_eigenvector_centrality", "Eigenvector Centrality", compute_igraph_eigenvector_centrality, apply_centrality_scores, centrality_scores_free},
-	{"Analysis/Centrality", "igraph_pagerank", "PageRank", compute_igraph_pagerank, apply_centrality_scores, centrality_scores_free},
-	{"Analysis/Centrality", "igraph_hub_and_authority_scores", "HITS (Hub)", compute_igraph_hub_and_authority_scores, apply_centrality_scores, centrality_scores_free},
-	{"Analysis/Centrality", "igraph_harmonic_centrality", "Harmonic", compute_igraph_harmonic_centrality, apply_centrality_scores, centrality_scores_free},
-	{"Analysis/Centrality", "igraph_strength", "Strength (Weighted Degree)", compute_igraph_strength, apply_centrality_scores, centrality_scores_free},
-	{"Analysis/Centrality", "igraph_constraint", "Constraint (Structural Holes)", compute_igraph_constraint, apply_centrality_scores, centrality_scores_free},
-	{"Analysis/Centrality", "igraph_coreness", "Coreness (k-Core)", compute_igraph_coreness, apply_centrality_scores, centrality_scores_free},
+	{"Rank", "igraph_degree", "Degree", compute_igraph_degree, apply_centrality_scores, centrality_scores_free},
+	{"Rank", "igraph_closeness_cutoff", "Closeness", compute_igraph_closeness_cutoff, apply_centrality_scores, centrality_scores_free},
+	{"Rank", "igraph_betweenness", "Betweenness", compute_igraph_betweenness, apply_centrality_scores, centrality_scores_free},
+	{"Rank", "igraph_eigenvector_centrality", "Eigenvector Centrality", compute_igraph_eigenvector_centrality, apply_centrality_scores, centrality_scores_free},
+	{"Rank", "igraph_pagerank", "PageRank", compute_igraph_pagerank, apply_centrality_scores, centrality_scores_free},
+	{"Rank", "igraph_hub_and_authority_scores", "HITS (Hub)", compute_igraph_hub_and_authority_scores, apply_centrality_scores, centrality_scores_free},
+	{"Rank", "igraph_harmonic_centrality", "Harmonic", compute_igraph_harmonic_centrality, apply_centrality_scores, centrality_scores_free},
+	{"Rank", "igraph_strength", "Strength (Weighted Degree)", compute_igraph_strength, apply_centrality_scores, centrality_scores_free},
+	{"Rank", "igraph_constraint", "Constraint (Structural Holes)", compute_igraph_constraint, apply_centrality_scores, centrality_scores_free},
+	{"Rank", "igraph_coreness", "Coreness (k-Core)", compute_igraph_coreness, apply_centrality_scores, centrality_scores_free},
 
 	// =========================================================================
-	// Analysis menu - Global Network Properties
+	// Group menu
 	// =========================================================================
-	{"Analysis/Global Properties", "igraph_diameter", "Diameter", compute_igraph_diameter, apply_info_card, info_card_free},
-	{"Analysis/Global Properties", "igraph_radius", "Radius", compute_igraph_radius, apply_info_card, info_card_free},
-	{"Analysis/Global Properties", "igraph_average_path_length", "Average Path Length", compute_igraph_average_path_length, apply_info_card, info_card_free},
-	{"Analysis/Global Properties", "igraph_assortativity_degree", "Assortativity", compute_igraph_assortativity_degree, apply_info_card, info_card_free},
-	{"Analysis/Global Properties", "igraph_density", "Density", compute_igraph_density, apply_info_card, info_card_free},
-	{"Analysis/Global Properties", "igraph_transitivity_undirected", "Transitivity (undirected)", compute_igraph_transitivity_undirected, apply_info_card, info_card_free},
+	{"Group", "igraph_community_multilevel", "Louvain Method (Multilevel)", compute_igraph_community_multilevel, apply_community_membership, free_community_membership},
+	{"Group", "igraph_community_leiden", "Leiden", compute_igraph_community_leiden, apply_community_membership, free_community_membership},
+	{"Group", "igraph_community_walktrap", "Walktrap (Random walks)", compute_igraph_community_walktrap, apply_community_membership, free_community_membership},
+	{"Group", "igraph_community_edge_betweenness", "Edge Betweenness (Girvan-Newman)", compute_igraph_community_edge_betweenness, apply_community_membership, free_community_membership},
+	{"Group", "igraph_community_fastgreedy", "Fast Greedy", compute_igraph_community_fastgreedy, apply_community_membership, free_community_membership},
+	{"Group", "igraph_community_infomap", "Infomap", compute_igraph_community_infomap, apply_community_membership, free_community_membership},
+	{"Group", "igraph_community_label_propagation", "Label Propagation", compute_igraph_community_label_propagation, apply_community_membership, free_community_membership},
+	{"Group", "igraph_community_spinglass", "Spinglass", compute_igraph_community_spinglass, apply_community_membership, free_community_membership},
+	{"Group", "igraph_community_leading_eigenvector", "Leading Eigenvector", compute_igraph_community_leading_eigenvector, apply_community_membership, free_community_membership},
+	{"Group", "igraph_community_optimal_modularity", "Optimal Modularity", compute_igraph_community_optimal_modularity, apply_community_membership, free_community_membership},
+	{"Group", "igraph_community_voronoi", "Voronoi", compute_igraph_community_voronoi, apply_community_membership, free_community_membership},
+	{"Group", "igraph_community_fluid_communities", "Fluid Communities", compute_igraph_community_fluid_communities, apply_community_membership, free_community_membership},
 
 	// =========================================================================
-	// Analysis menu - Cycles
+	// Follow menu
 	// =========================================================================
-	{"Analysis/Cycles", "remove_feedback_arc_set", "Remove feedback arc set", compute_remove_feedback_arc_set, apply_remove_feedback_arc_set, free_noop},
+	{"Follow", "splc_animation", "Search Path Link Count", compute_splc_animation, apply_splc_animation, free_noop, poll_splc_gpu},
 
 	// =========================================================================
-	// Analysis menu - Main Path
+	// Structure menu
 	// =========================================================================
-	{"Analysis/Main Path", "splc_animation", "Search Path Link Count", compute_splc_animation, apply_splc_animation, free_noop, poll_splc_gpu},
+	{"Structure", "igraph_diameter", "Diameter", compute_igraph_diameter, apply_info_card, info_card_free},
+	{"Structure", "igraph_radius", "Radius", compute_igraph_radius, apply_info_card, info_card_free},
+	{"Structure", "igraph_average_path_length", "Average Path Length", compute_igraph_average_path_length, apply_info_card, info_card_free},
+	{"Structure", "igraph_assortativity_degree", "Assortativity", compute_igraph_assortativity_degree, apply_info_card, info_card_free},
+	{"Structure", "igraph_density", "Density", compute_igraph_density, apply_info_card, info_card_free},
+	{"Structure", "igraph_transitivity_undirected", "Transitivity (undirected)", compute_igraph_transitivity_undirected, apply_info_card, info_card_free},
 
 	// =========================================================================
-	// Communities menu - Detection
+	// Alter menu
 	// =========================================================================
-	{"Communities/Detection", "igraph_community_multilevel", "Louvain Method (Multilevel)", compute_igraph_community_multilevel, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "igraph_community_leiden", "Leiden", compute_igraph_community_leiden, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "igraph_community_walktrap", "Walktrap (Random walks)", compute_igraph_community_walktrap, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "igraph_community_edge_betweenness", "Edge Betweenness (Girvan-Newman)", compute_igraph_community_edge_betweenness, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "igraph_community_fastgreedy", "Fast Greedy", compute_igraph_community_fastgreedy, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "igraph_community_infomap", "Infomap", compute_igraph_community_infomap, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "igraph_community_label_propagation", "Label Propagation", compute_igraph_community_label_propagation, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "igraph_community_spinglass", "Spinglass", compute_igraph_community_spinglass, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "igraph_community_leading_eigenvector", "Leading Eigenvector", compute_igraph_community_leading_eigenvector, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "igraph_community_optimal_modularity", "Optimal Modularity", compute_igraph_community_optimal_modularity, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "igraph_community_voronoi", "Voronoi", compute_igraph_community_voronoi, apply_community_membership, free_community_membership},
-	{"Communities/Detection", "igraph_community_fluid_communities", "Fluid Communities", compute_igraph_community_fluid_communities, apply_community_membership, free_community_membership},
+	{"Alter/Clean Up", "remove_feedback_arc_set", "Remove feedback arc set", compute_remove_feedback_arc_set, apply_remove_feedback_arc_set, free_noop},
+
+	// =========================================================================
+	// Show menu — populated dynamically (filters, visibility, highlight)
+	// No static registry entries.
+	// =========================================================================
 
 };
 const int g_command_registry_size = sizeof(g_command_registry) / sizeof(g_command_registry[0]);
