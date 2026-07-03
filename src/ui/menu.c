@@ -112,6 +112,7 @@ void init_menu_tree(MenuNode *root)
 		}
 
 		MenuNode *leaf = create_menu_node(cmd_def->display_name, NODE_LEAF_COMMAND);
+// TODO this drop parameters
 		leaf->command = create_command(cmd_def->command_id, cmd_def->display_name, NULL, 0);
 		leaf->command->cmd_def = cmd_def;
 
