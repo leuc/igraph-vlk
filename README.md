@@ -108,14 +108,14 @@ However, not all graph methods and layouts scale to large graphs.
 A typical workflow for large graphs:
 
 1. Group with Leiden or Infomap
-2. Rank by Degree or PageRank
+2. Rank by Degree, PageRank or K-core
 2. Layout: try one of UMAP, Force Atlas 2, Yifan Hu, BCGL-t or t-SNE (in order of scale)
 
-Except UMAP all use Barnes & Hut and can run in parallel on CPU with OpenMP.
+FA2, YH and t-SNE use Barnes & Hut and can run in parallel on CPU with OpenMP.
 
 BCGL-t has a GPU only variant, but it can stall the GPU and lower FPS.
 
-For 500k+ nodes/edges and above the app remains usable when the CPU computes and the GPU renders.
+For 500k+ nodes/edges the app remains usable when the CPU computes and the GPU renders.
 
 ### Layered Spheres
 
