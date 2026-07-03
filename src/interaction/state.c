@@ -134,6 +134,20 @@ void update_app_state(AppState *state)
 				ExecutionContext ec = {0};
 				ec.app_state = state;
 
+				// Check for cancellation during GPU polling
+				if (job->ctx && !job->ctx->running) {
+					if (job->free_func && job->result_data) {
+						job->free_func(job->result_data);
+					}
+					worker_job_free(&state->worker_ctx, job);
+					state->current_worker_job = NULL;
+					state->gpu_polling = false;
+					state->job_in_progress = false;
+					app->pending_command = NULL;
+					app->current_state = STATE_MENU_OPEN;
+					break;
+				}
+
 				bool done = job->gpu_poll_func(&ec);
 
 				if (done) {

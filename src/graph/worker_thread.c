@@ -17,6 +17,16 @@
 // Thread-local pointer to current job for progress reporting
 static _Thread_local WorkerJob *tls_current_job = NULL;
 
+// igraph interruption handler — called by igraph's IGRAPH_ALLOW_INTERRUPTION
+// Returns true if the job should be interrupted, false otherwise.
+static igraph_bool_t igraph_interruption_handler(void)
+{
+	if (tls_current_job && !tls_current_job->ctx->running) {
+		return true;
+	}
+	return false;
+}
+
 // igraph progress handler callback
 static igraph_error_t igraph_progress_handler(const char *message, igraph_real_t percent, void *data)
 {
@@ -84,9 +94,11 @@ static void *worker_thread_func(void *arg)
 	igraph_rng_set_default(&thread_rng);
 
 	// Set progress handler for this thread
+	igraph_set_error_handler(igraph_error_handler_printignore);
 	igraph_set_progress_handler(igraph_progress_handler);
 	igraph_set_status_handler(igraph_status_handler);
 	igraph_set_step_handler(worker_step_callback);
+	igraph_set_interruption_handler(igraph_interruption_handler);
 
 	while (context->running) {
 		pthread_mutex_lock(&context->queue_mutex);
@@ -123,7 +135,19 @@ static void *worker_thread_func(void *arg)
 			clock_gettime(CLOCK_MONOTONIC, &end_time);
 			double elapsed = (end_time.tv_sec - job->start_time.tv_sec) * 1000.0 + (end_time.tv_nsec - job->start_time.tv_nsec) / 1e6;
 			atomic_store_explicit(&job->elapsed_ms, elapsed, memory_order_release);
-			if (job->result_data) {
+			if (!tls_current_job->ctx->running) {
+				// Job was cancelled via interruption handler
+				atomic_store_explicit(&job->progress, 0.0f, memory_order_release);
+				atomic_store_explicit(&job->status, JOB_STATUS_CANCELLED, memory_order_release);
+				if (job->result_data && job->free_func) {
+					job->free_func(job->result_data);
+					job->result_data = NULL;
+				}
+				if (elapsed < 1000.0)
+					fprintf(stderr, "[Worker] Job cancelled after %.0fms\n", elapsed);
+				else
+					fprintf(stderr, "[Worker] Job cancelled after %.1fs\n", elapsed / 1000.0);
+			} else if (job->result_data) {
 				atomic_store_explicit(&job->progress, 1.0f, memory_order_release);
 				atomic_store_explicit(&job->status, JOB_STATUS_COMPLETED, memory_order_release);
 				if (elapsed < 1000.0)
@@ -309,6 +333,19 @@ double worker_thread_get_job_elapsed_ms(WorkerJob *job)
 	if (!job)
 		return 0.0;
 	return atomic_load_explicit(&job->elapsed_ms, memory_order_acquire);
+}
+
+// Cancel a running job from the main thread (thread-safe, non-blocking)
+void worker_thread_cancel_job(WorkerJob *job)
+{
+	if (!job) {
+		return;
+	}
+	// Signal the worker thread to stop — the interruption handler checks ctx->running
+	if (job->ctx) {
+		job->ctx->running = false;
+	}
+	fprintf(stderr, "[Worker] Cancel requested for job\n");
 }
 
 // Set progress on the current running job (call from worker thread only)

@@ -76,6 +76,9 @@ const char *worker_thread_get_job_status_message(WorkerJob *job);
 // Get elapsed job time in milliseconds (0 if not yet started)
 double worker_thread_get_job_elapsed_ms(WorkerJob *job);
 
+// Cancel a running job from the main thread (thread-safe, non-blocking)
+void worker_thread_cancel_job(WorkerJob *job);
+
 // Set progress on the current running job (call from worker thread only)
 void worker_thread_set_progress(float progress);
 

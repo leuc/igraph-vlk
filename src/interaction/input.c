@@ -88,7 +88,12 @@ void interaction_process_continuous_input(AppState *state, float delta_time)
 {
 	GLFWwindow *window = state->win.handle;
 
-	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+		if (state->job_in_progress && state->current_worker_job) {
+			worker_thread_cancel_job(state->current_worker_job);
+		}
+	}
+	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
 		glfwSetWindowShouldClose(window, true);
 	}
 
