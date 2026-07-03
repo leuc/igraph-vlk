@@ -266,6 +266,14 @@ void handle_menu_selection(AppContext *app, MenuNode *selected_node)
 	}
 }
 
+void apply_quit(ExecutionContext *ctx, void *result_data)
+{
+	(void)result_data;
+	if (ctx && ctx->app_state && ctx->app_state->win.handle) {
+		glfwSetWindowShouldClose(ctx->app_state->win.handle, GLFW_TRUE);
+	}
+}
+
 void check_pending_command_requirements(AppContext *app)
 {
 	if (!app->pending_command)

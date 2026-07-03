@@ -178,4 +178,7 @@ void app_context_destroy(AppContext *ctx);
 void handle_menu_selection(AppContext *app, MenuNode *selected_node);
 void check_pending_command_requirements(AppContext *app);
 
+// Apply/free for commands defined in state.c
+void apply_quit(ExecutionContext *ctx, void *result_data);
+
 #endif // INTERACTION_STATE_H

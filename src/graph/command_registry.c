@@ -177,5 +177,11 @@ const CommandDef g_command_registry[] = {
 	{"Show", "filter_show_all", NULL, compute_inline_pass, apply_filter_reset, free_noop},
 	{"Show", "filter_by_attr", NULL, compute_filter_by_attr, apply_filter_by_attr, free_filter_params, NULL, (const CommandParamDef[]){{"attr_name", PARAM_TYPE_STRING, 0, 0, NULL, 0}, {"attr_value", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 2},
 
+	// =========================================================================
+	// Root menu
+	// =========================================================================
+	{"", NULL, "Node", NULL, NULL, NULL}, // branch anchor
+	{"", "quit", "Quit", compute_inline_pass, apply_quit, free_noop},
+
 };
 const int g_command_registry_size = sizeof(g_command_registry) / sizeof(g_command_registry[0]);

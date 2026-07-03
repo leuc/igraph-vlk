@@ -114,27 +114,48 @@ void init_menu_tree(MenuNode *root)
 			}
 		}
 
-		MenuNode *leaf = create_menu_node(cmd_def->display_name, NODE_LEAF_COMMAND);
-		leaf->command = create_command(cmd_def->command_id, cmd_def->display_name, cmd_def->num_params);
-		leaf->command->cmd_def = cmd_def;
+		if (cmd_def->worker_func == NULL) {
+			// Branch anchor: find or create a branch node (no command attached)
+			MenuNode *branch = NULL;
+			for (int c = 0; c < current_parent->num_children; c++) {
+				if (current_parent->children[c]->type == NODE_BRANCH && strcmp(current_parent->children[c]->label, cmd_def->display_name) == 0) {
+					branch = current_parent->children[c];
+					break;
+				}
+			}
+			if (!branch) {
+				branch = create_menu_node(cmd_def->display_name, NODE_BRANCH);
+				MenuNode **tmp = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode *) * (current_parent->num_children + 1));
+				if (!tmp) {
+					menu_tree_destroy(branch);
+					return;
+				}
+				current_parent->children = tmp;
+				current_parent->children[current_parent->num_children++] = branch;
+			}
+		} else {
+			// Leaf: create an actionable command leaf
+			MenuNode *leaf = create_menu_node(cmd_def->display_name, NODE_LEAF_COMMAND);
+			leaf->command = create_command(cmd_def->command_id, cmd_def->display_name, cmd_def->num_params);
+			leaf->command->cmd_def = cmd_def;
 
-		// Copy parameter metadata from CommandDef.param_defs
-		for (int p = 0; p < cmd_def->num_params; p++) {
-			leaf->command->params[p].name = cmd_def->param_defs[p].name;
-			leaf->command->params[p].type = cmd_def->param_defs[p].type;
-			leaf->command->params[p].min_val = cmd_def->param_defs[p].min_val;
-			leaf->command->params[p].max_val = cmd_def->param_defs[p].max_val;
-			leaf->command->params[p].value.i_val = 0;
-		}
+			for (int p = 0; p < cmd_def->num_params; p++) {
+				leaf->command->params[p].name = cmd_def->param_defs[p].name;
+				leaf->command->params[p].type = cmd_def->param_defs[p].type;
+				leaf->command->params[p].min_val = cmd_def->param_defs[p].min_val;
+				leaf->command->params[p].max_val = cmd_def->param_defs[p].max_val;
+				leaf->command->params[p].value.i_val = 0;
+			}
 
-		MenuNode **tmp = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode *) * (current_parent->num_children + 1));
-		if (!tmp) {
-			menu_tree_destroy(leaf);
-			return;
+			MenuNode **tmp = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode *) * (current_parent->num_children + 1));
+			if (!tmp) {
+				menu_tree_destroy(leaf);
+				return;
+			}
+			current_parent->children = tmp;
+			current_parent->children[current_parent->num_children] = leaf;
+			current_parent->num_children++;
 		}
-		current_parent->children = tmp;
-		current_parent->children[current_parent->num_children] = leaf;
-		current_parent->num_children++;
 	}
 }
 
@@ -337,18 +358,10 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 	// Clear any existing filter entries to prevent duplicates
 	menu_clear_attribute_filters(root, data);
 
-	// Find or create "Node" branch
+	// Find "Node" branch (created by init_menu_tree from the branch anchor)
 	MenuNode *node_branch = find_child_branch(root, "Node");
-	if (!node_branch) {
-		node_branch = create_menu_node("Node", NODE_BRANCH);
-		MenuNode **tmp = realloc(root->children, sizeof(MenuNode *) * (root->num_children + 1));
-		if (!tmp) {
-			menu_tree_destroy(node_branch);
-			return;
-		}
-		root->children = tmp;
-		root->children[root->num_children++] = node_branch;
-	}
+	if (!node_branch)
+		return;
 
 	// Find or create "Filter" sub-branch
 	MenuNode *filter_branch = find_child_branch(node_branch, "Filter");
