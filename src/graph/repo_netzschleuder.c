@@ -225,6 +225,7 @@ void *run_netzschleuder_download(ExecutionContext *ctx)
 		curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
 		curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
 		curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
+		curl_easy_setopt(curl, CURLOPT_USERAGENT, "igraph-vlk");
 
 		CURLcode res = curl_easy_perform(curl);
 		long http_code = 0;
