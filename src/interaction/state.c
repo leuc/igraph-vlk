@@ -233,7 +233,7 @@ void update_app_state(AppState *state)
 	}
 	}
 }
-
+// TODO move
 static bool enforce_single_open_branch(MenuNode *node, MenuNode *target)
 {
 	if (!node)

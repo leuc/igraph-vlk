@@ -2,7 +2,19 @@
 
 3D network viewer based on [igraph](https://igraph.org/) and Vulkan, written in C.
 
-Interactive graph visualization with 35+ layout algorithms, 12 community detection methods, 10 centrality measures, real-time GPU-accelerated animations, VR support, and a 3D spherical menu system.
+Interactive graph visualization with 
+ - 35+ layout algorithms 2D & 3D
+ - 12 community detection methods
+ - 10 centrality measures
+ - Realtime layout progression
+ - Animated main path SPLC
+ - Scales to very large graphs
+ - Fast Barnes & Hut
+ - VR support
+ - 3D menu system
+ - WASD + Gamepad navigation
+ - Directly load graphs from Netzschleuder Repository
+ - Runs on Steam Deck
 
 ## EXPERIMENTAL
 
@@ -19,6 +31,7 @@ Efforts are made to:
 
 ## Index
 
+- [Inatall](#install)
 - [Usage](#usage)
 - [Features](#features)
   - [Graph I/O & Generation](#graph-io--generation)
@@ -28,9 +41,15 @@ Efforts are made to:
   - [UI & Interaction](#ui--interaction)
   - [VR / XR (OpenXR)](#vr--xr-openxr)
   - [Background Worker Thread](#background-worker-thread)
-- [Build & Run](#build--run)
+- [Build Source](#build-source)
 - [Architecture](#architecture)
 - [Selected Scientific References](#selected-scientific-references)
+
+## Install
+
+- [Ubuntu Packages](https://github.com/leuc/igraph-vlk/releases)
+- [Flatpak Bundle](https://github.com/leuc/io.github.leuc.igraph-vlk/releases)
+- Arch AUR soon™
 
 ## Usage
 
@@ -71,8 +90,7 @@ Efforts are made to:
 | Right stick | Camera look |
 | Start | Toggle menu |
 | A | Activate crosshair-hovered menu item |
-| Auto-detection | Hotplug support via GLFW Gamepad + raw joystick APIs |
-| Deadzone | 0.2 with scaled response curve |
+| L2 / R2 | Layout Scale |
 
 ### Graph Filtering
 
@@ -82,15 +100,36 @@ Efforts are made to:
 | `K` | Increment k-core threshold, remove nodes below it |
 | `J` | Color articulation points red, bridge endpoints orange |
 
+### Large Graphs
+
+Vulkan itself can easily render 500k+ nodes/edges at 60fps even on moderate hardware. 
+However, not all graph methods and layouts scale to large graphs.
+
+A typical workflow for large graphs:
+
+1. Group with Leiden or Infomap
+2. Rank by Degree, PageRank or K-core
+2. Layout: try one of UMAP, Force Atlas 2, Yifan Hu, BCGL-t or t-SNE (in order of scale)
+
+FA2, YH and t-SNE use Barnes & Hut and can run in parallel on CPU with OpenMP.
+
+BCGL-t has a GPU only variant, but it can stall the GPU and lower FPS.
+
+For 500k+ nodes/edges the app remains usable when the CPU computes and the GPU renders.
+
+### Layered Spheres
+
+The experimental **layered spheres** layout can very quickly render very large graphs.
+It provides a quick **initial** data exploration with visual clustering and centered k-core order. It works best with graphs that have many communities. However, it is _not_ a general layout method that works with any graph.
+
 ## Features
 
 ### Graph I/O & Generation
 
 | Feature | Details |
 |---|---|
-| **GraphML import** | Load graphs via CLI argument with custom node/edge attribute mapping for sizing |
+| **GraphML import** | Load graphs via CLI argument |
 | **Graph generation** | 7 deterministic (Ring, Star, K-ary Tree, Lattice, Clique, Cycle, Famous/Notable), 6 stochastic (Erdos-Renyi, Barabasi-Albert, Watts-Strogatz, Forest Fire, Random Tree, Degree Sequence), 2 bipartite (Random Bipartite, Bipartite Projection), 2 spatial (Geometric Random, Gabriel) |
-| **Auto-simplify** | Loops and multi-edges removed on load |
 
 ### Graph Analysis
 
@@ -200,51 +239,55 @@ Layouts run on a background thread with real-time snapshot polling for interacti
 
 ### UI & Interaction
 
-- **3D spherical menu system**: NeXTSTEP-style card layout auto-generated from data-driven command registry (~80 registered commands). Categories organized into nested submenus with animated card expansion.
+- **3D spherical menu system**: NeXTSTEP-style
 - **Info cards**: Side-by-side key-value panels for global network property display
 - **HUD overlay**: Node/edge count, degree filter, k-core filter, FPS, job progress, menu state
-- **Crosshair**: Screen-center reticle for immersive menu interaction
-- **Ray picking**: Sphere intersection (nodes), segment distance (edges), quad intersection (menu billboards)
 
 ### VR / XR (OpenXR)
 
 - Optional OpenXR integration (compile-time `USE_OPENXR`)
-- CLI `--vr` flag to enable VR mode
-- Separate source modules: context, Vulkan interop, session lifecycle, controller input, view config, frame loop
-- Multi-view rendering (up to 3 views)
-- VR-aware menu spawning (relative to headset pose)
-- Depth buffers per XR view
+- CLI `--vr` flag to enable VR
 
 ### Background Worker Thread
 
 All graph operations run on a dedicated pthread with a circular job queue. Features:
-- igraph progress handler → atomic job progress (0.0–1.0) shown in HUD
+- igraph progress handler
 - igraph status handler → job status messages
 - igraph step handler → real-time layout snapshot polling
-- Thread-local MT19937 RNG
-- Graceful shutdown with queue draining
 
-## Build & Run
+## Build Source
 
 igraph-vlk builds against a patched `igraph` testing branch that includes experimental layout implementations (ForceAtlas2 2D/3D, Yifan Hu 2D/3D, Barnes-Hut t-SNE 2D/3D, Radial Sugiyama, Layered Sphere, Spherical MDS, BCGL-t).
 
-Flatpak builds are available at [github.com/leuc/io.github.leuc.igraph-vlk/releases](https://github.com/leuc/io.github.leuc.igraph-vlk/releases).
+Build has been tested on Ubuntu, Arch and macOS
 
+### Build igraph testing branch
 ```sh
-# Build igraph testing branch
 git clone https://github.com/leuc/igraph
 cd igraph
 git checkout testing
 cmake -S . -B build -DCMAKE_INSTALL_PREFIX=local_install -DIGRAPH_ENABLE_TLS=ON -DCMAKE_C_FLAGS="-O3 -march=native" -DCMAKE_CXX_FLAGS="-O3 -march=native"
 cmake --build build/ --parallel --target install
 cd ..
+```
 
-# Build igraph-vlk
+### Build igraph-vlk
+```sh
 git clone https://github.com/leuc/igraph-vlk
 cd igraph-vlk
 cmake -S . -B build -Digraph_ROOT=../igraph/local_install/ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build build/ --parallel
-OMP_NUM_THREADS=$(nproc) build/igraph-vlk /path/to/example.graphml
+```
+
+### Create .deb
+```sh
+cd build
+cpack -G DEB -R ${VERSION}
+```
+
+### Run with OpenMP
+```sh
+OMP_NUM_THREADS=$(nproc) igraph-vlk /path/to/example.graphml
 ```
 
 ### Dependencies
@@ -255,9 +298,13 @@ OMP_NUM_THREADS=$(nproc) build/igraph-vlk /path/to/example.graphml
 | GLFW | Window, input, OpenXR platform |
 | igraph | Graph algorithms |
 | cglm | 3D math |
-| OpenMP | Parallelization |
+| stb_truetype.h | Font render |
+| curl | Graph Repository Download |
+| zstd | Compressed Graphs |
+| OpenMP (optional) | Parallelization |
 | OpenXR (optional) | VR support |
 | glslangValidator / glslc | SPIR-V shader compilation |
+| gamecontrollerdb.txt | Gamepad Mapping |
 
 ## Architecture
 
@@ -292,6 +339,9 @@ igraph-vlk is built on igraph, which implements a vast body of network science a
 
 igraph core:
 > Csardi, G., & Nepusz, T. (2006). The igraph software package for complex network research. *InterJournal*, Complex Systems, 1695.
+
+**Graph Repositories:**
+- Tiago P. Peixoto, "The Netzschleuder network catalogue and repository", https://networks.skewed.de/ (2020).
 
 **Layout:**
 - Fruchterman, T.M.J. & Reingold, E.M. (1991). Graph Drawing by Force-directed Placement. *Software — Practice and Experience*, 21/11, 1129–1164.
