@@ -320,7 +320,15 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 
 	// --- Info Card ---
 	if (ctx->info_card.is_visible && ctx->active_menu_level) {
-		float card_w = 0.8f;
+		float card_w = calculate_text_width(ctx->info_card.title);
+		for (int pi = 0; pi < ctx->info_card.num_pairs; pi++) {
+			char row_buf[128];
+			snprintf(row_buf, sizeof(row_buf), "%s: %s", ctx->info_card.pairs[pi].key, ctx->info_card.pairs[pi].value);
+			float row_w = calculate_text_width(row_buf);
+			if (row_w > card_w)
+				card_w = row_w;
+		}
+		card_w += 0.10f;
 		float card_h = 0.10f + (ctx->info_card.num_pairs * 0.09f);
 
 		// Info card background (MenuInstance)
@@ -428,11 +436,9 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 			glm_vec3_scale(node->up_vec, -(0.10f + i * 0.09f), row_down);
 			glm_vec3_add(row_pos, row_down, row_pos);
 
-			// Pre-render "key  value" as one string for this row
-			float key_w = calculate_text_width(ctx->info_card.pairs[i].key);
-			float space_w = calculate_text_width("   ");
+			// Render "key   value" as one string for this row
 			char combined[128];
-			snprintf(combined, sizeof(combined), "%s   %s", ctx->info_card.pairs[i].key, ctx->info_card.pairs[i].value);
+			snprintf(combined, sizeof(combined), "%s: %s", ctx->info_card.pairs[i].key, ctx->info_card.pairs[i].value);
 
 			TextRegion rowRegion;
 			text_atlas_render(&r->menu.text_atlas, &globalAtlas, combined, &rowRegion);
