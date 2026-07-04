@@ -38,11 +38,13 @@ void *compute_igraph_layout_bhtsne(ExecutionContext *ctx)
 	 * @param epochs    Number of iterations (default: 1000)
 	 * @param theta     Speed/accuracy trade-off (default: 0.5)
 	 */
+	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
+
 	igraph_error_t code = igraph_layout_bhtsne(graph, result,
-											   0,	 // use_seed: start from random positions
-											   NULL, // weights: NULL = unit weight
-											   1000, // epochs: default value
-											   0.5); // theta: default value
+											   use_seed, // use_seed
+											   NULL,	 // weights: NULL = unit weight
+											   1000,	 // epochs: default value
+											   0.5);	 // theta: default value
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);
@@ -74,11 +76,13 @@ void *compute_igraph_layout_bhtsne_3d(ExecutionContext *ctx)
 	 * @param epochs    Number of iterations (default: 1000)
 	 * @param theta     Speed/accuracy trade-off (default: 0.5)
 	 */
+	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
+
 	igraph_error_t code = igraph_layout_bhtsne_3d(graph, result,
-												  0,	// use_seed: start from random positions
-												  NULL, // weights: NULL = unit weight
-												  1000, // epochs: default value
-												  0.5); // theta: default value
+												  use_seed, // use_seed
+												  NULL,		// weights: NULL = unit weight
+												  1000,		// epochs: default value
+												  0.5);		// theta: default value
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);

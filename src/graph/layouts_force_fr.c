@@ -59,6 +59,8 @@ void *compute_igraph_layout_fruchterman_reingold(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
+
 	/*
 	 * igraph_layout_fruchterman_reingold() parameters:
 	 * @param graph           The graph to layout
@@ -79,7 +81,7 @@ void *compute_igraph_layout_fruchterman_reingold(ExecutionContext *ctx)
 	igraph_layout_grid_t grid = (vcount > 1000) ? IGRAPH_LAYOUT_GRID : IGRAPH_LAYOUT_AUTOGRID;
 
 	igraph_error_t code = igraph_layout_fruchterman_reingold(graph, result,
-															 0,			 // use_seed: start from random positions
+															 use_seed,	 // use_seed
 															 niter,		 // niter: more iterations for larger graphs
 															 start_temp, // start_temp: scaled to graph size
 															 grid,		 // grid: use grid optimization for large graphs
@@ -111,6 +113,8 @@ void *compute_igraph_layout_fruchterman_reingold_3d(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
+
 	/*
 	 * igraph_layout_fruchterman_reingold_3d() parameters:
 	 * @param graph           The graph to layout
@@ -125,7 +129,7 @@ void *compute_igraph_layout_fruchterman_reingold_3d(ExecutionContext *ctx)
 	igraph_int_t niter = (igraph_int_t)(300 + 10 * sqrt((double)vcount));
 
 	igraph_error_t code = igraph_layout_fruchterman_reingold_3d(graph, result,
-																0,								   // use_seed
+																use_seed,						   // use_seed
 																niter,							   // niter: scaled to graph size
 																start_temp,						   // start_temp: allows exploration
 																NULL,							   // weights: NULL = unit weight
@@ -157,6 +161,8 @@ void *compute_igraph_layout_kamada_kawai(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
+
 	/*
 	 * igraph_layout_kamada_kawai() parameters:
 	 * @param graph           The graph to layout
@@ -179,7 +185,7 @@ void *compute_igraph_layout_kamada_kawai(ExecutionContext *ctx)
 	igraph_real_t kkconst = (igraph_real_t)vcount;
 
 	igraph_error_t code = igraph_layout_kamada_kawai(graph, result,
-													 0,						// use_seed: start with circle layout
+													 use_seed,				// use_seed
 													 maxiter,				// maxiter: 10*vcount as per docs
 													 epsilon,				// epsilon: run all iterations
 													 kkconst,				// kkconst: typical value = vcount
@@ -208,6 +214,8 @@ void *compute_igraph_layout_kamada_kawai_3d(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
+
 	/*
 	 * igraph_layout_kamada_kawai_3d() parameters: same as 2D version but with:
 	 * @param res             Output matrix (will be resized to vcount x 3)
@@ -218,7 +226,7 @@ void *compute_igraph_layout_kamada_kawai_3d(ExecutionContext *ctx)
 	igraph_real_t kkconst = (igraph_real_t)vcount;
 
 	igraph_error_t code = igraph_layout_kamada_kawai_3d(graph, result,
-														0,								   // use_seed
+														use_seed,						   // use_seed
 														maxiter,						   // maxiter: 10*vcount
 														epsilon,						   // epsilon
 														kkconst,						   // kkconst: vcount

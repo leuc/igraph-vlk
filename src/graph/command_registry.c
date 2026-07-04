@@ -74,6 +74,12 @@ const CommandDef g_command_registry[] = {
 
 	// Non-Igraph
 	{"Layout", "lay_layered_sphere", "Layered Sphere", compute_layout_layered_sphere, apply_layout_matrix, free_layout_matrix},
+
+	// =========================================================================
+	// Layout menu - Seed
+	// =========================================================================
+	{"Layout/Seed", "use_current_positions_as_seed", "Use current positions as seed", compute_use_current_positions_as_seed, apply_use_current_positions_as_seed, free_noop},
+
 	// =========================================================================
 	// Layout menu - Geometric
 	// =========================================================================

@@ -25,6 +25,8 @@ void *compute_igraph_layout_graphopt(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
+
 	/*
 	 * igraph_layout_graphopt() parameters:
 	 * @param graph           The graph to layout
@@ -48,7 +50,7 @@ void *compute_igraph_layout_graphopt(ExecutionContext *ctx)
 	igraph_real_t max_sa_movement = 5.0;
 
 	igraph_error_t code = igraph_layout_graphopt(graph, result, niter, node_charge, node_mass, spring_length, spring_constant, max_sa_movement,
-												 0 // use_seed
+												 use_seed // use_seed
 	);
 
 	if (code != IGRAPH_SUCCESS) {

@@ -31,6 +31,8 @@ void *compute_igraph_layout_davidson_harel(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
+
 	/*
 	 * igraph_layout_davidson_harel() parameters:
 	 * @param graph           The graph to layout (edge directions ignored)
@@ -66,7 +68,7 @@ void *compute_igraph_layout_davidson_harel(ExecutionContext *ctx)
 	igraph_real_t w_node_edge = (1.0 - density) / 5.0;
 
 	igraph_error_t code = igraph_layout_davidson_harel(graph, result,
-													   0,			 // use_seed
+													   use_seed,	 // use_seed
 													   maxiter,		 // maxiter: 10 annealing iterations
 													   fineiter,	 // fineiter: log2(vcount) minimum 10
 													   coolfact,	 // coolfact: 0.75 as recommended

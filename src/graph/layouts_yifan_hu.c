@@ -26,6 +26,8 @@ void *compute_igraph_layout_yifan_hu(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
+
 	/*
 	 * igraph_layout_yifan_hu() parameters:
 	 * @param graph           The graph to layout
@@ -56,7 +58,7 @@ void *compute_igraph_layout_yifan_hu(ExecutionContext *ctx)
 	igraph_bool_t beautify_leaves = 0;
 
 	igraph_error_t code = igraph_layout_yifan_hu(graph, result,
-												 0,						// use_seed
+												 use_seed,				// use_seed
 												 maxiter,				// maxiter: 500
 												 repulsive_exponent,	// -1 = auto
 												 natural_length,		// -1 = auto
@@ -90,6 +92,8 @@ void *compute_igraph_layout_yifan_hu_3d(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
+
 	/*
 	 * igraph_layout_yifan_hu_3d() parameters: same as 2D with:
 	 * @param res             Output matrix (vcount x 3)
@@ -104,7 +108,7 @@ void *compute_igraph_layout_yifan_hu_3d(ExecutionContext *ctx)
 	igraph_quadtree_scheme_t quadtree_scheme = IGRAPH_QUADTREE_NORMAL;
 	igraph_bool_t beautify_leaves = 0;
 
-	igraph_error_t code = igraph_layout_yifan_hu_3d(graph, result, 0, maxiter, repulsive_exponent, natural_length, step, adaptive_cooling, tolerance, quadtree_scheme, beautify_leaves,
+	igraph_error_t code = igraph_layout_yifan_hu_3d(graph, result, use_seed, maxiter, repulsive_exponent, natural_length, step, adaptive_cooling, tolerance, quadtree_scheme, beautify_leaves,
 													NULL // weights
 	);
 

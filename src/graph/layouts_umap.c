@@ -25,6 +25,8 @@ void *compute_igraph_layout_umap(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
+
 	/*
 	 * igraph_layout_umap() parameters:
 	 * @param graph           The graph to layout
@@ -44,7 +46,7 @@ void *compute_igraph_layout_umap(ExecutionContext *ctx)
 	igraph_int_t epochs = 500;
 
 	igraph_error_t code = igraph_layout_umap(graph, result,
-											 0,		   // use_seed
+											 use_seed, // use_seed
 											 NULL,	   // distances: compute from graph
 											 min_dist, // min_dist: 0.5 default
 											 epochs,   // epochs: 500 default
@@ -72,10 +74,12 @@ void *compute_igraph_layout_umap_3d(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
+
 	igraph_real_t min_dist = 0.5;
 	igraph_int_t epochs = 500;
 
-	igraph_error_t code = igraph_layout_umap_3d(graph, result, 0, NULL, min_dist, epochs, 0);
+	igraph_error_t code = igraph_layout_umap_3d(graph, result, use_seed, NULL, min_dist, epochs, 0);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);

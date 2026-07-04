@@ -78,6 +78,8 @@ typedef struct
 
 	FilterableAttr *filterable_attrs;
 	int num_filterable_attrs;
+
+	bool use_as_seed;
 } GraphData;
 
 #endif // GRAPH_TYPES_H

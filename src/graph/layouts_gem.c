@@ -28,6 +28,8 @@ void *compute_igraph_layout_gem(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
+
 	/*
 	 * igraph_layout_gem() parameters:
 	 * @param graph           The graph to layout (edge directions ignored)
@@ -48,7 +50,7 @@ void *compute_igraph_layout_gem(ExecutionContext *ctx)
 	igraph_real_t temp_init = sqrt((igraph_real_t)vcount);
 
 	igraph_error_t code = igraph_layout_gem(graph, result,
-											0,		  // use_seed
+											use_seed, // use_seed
 											maxiter,  // maxiter: 40*vcount^2
 											temp_max, // temp_max: vcount
 											temp_min, // temp_min: 0.1

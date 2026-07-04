@@ -67,9 +67,16 @@ void *compute_layout_bcgl(ExecutionContext *ctx);
 // Layout post-processing: center at origin + auto-scale (no rotation)
 void layout_center_and_autoscale(igraph_matrix_t *mat);
 
+// Seed helper: copies current positions into result when use_as_seed is set
+igraph_bool_t layout_fill_seed(ExecutionContext *ctx, igraph_matrix_t *result, igraph_integer_t vcount);
+
 // Standard apply and free functions
 void free_layout_matrix(void *result_data);
 void apply_layout_matrix(ExecutionContext *ctx, void *result_data);
+
+// Seed toggle
+void *compute_use_current_positions_as_seed(ExecutionContext *ctx);
+void apply_use_current_positions_as_seed(ExecutionContext *ctx, void *result_data);
 
 // BCGL apply, free, and GPU poll
 void apply_layout_bcgl(ExecutionContext *ctx, void *result_data);
