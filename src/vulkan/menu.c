@@ -453,7 +453,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 			vec3 row_center;
 			glm_vec3_copy(card_pos, row_center);
 			vec3 rc_up, rc_right;
-			glm_vec3_scale(node->up_vec, card_h * 0.5f - 0.05f - (0.10f + i * 0.09f) - 0.045f, rc_up);
+			glm_vec3_scale(node->up_vec, card_h * 0.5f - 0.10f - i * 0.09f - 0.045f, rc_up);
 			glm_vec3_scale(node->right_vec, 0, rc_right);
 			glm_vec3_add(row_center, rc_up, row_center);
 			glm_vec3_add(row_center, rc_right, row_center);
