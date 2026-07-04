@@ -45,6 +45,8 @@ void *compute_igraph_layout_umap(ExecutionContext *ctx)
 	igraph_real_t min_dist = 0.5;
 	igraph_int_t epochs = 500;
 
+	igraph_simplify(graph, true, true, NULL);
+
 	igraph_error_t code = igraph_layout_umap(graph, result,
 											 use_seed, // use_seed
 											 NULL,	   // distances: compute from graph
@@ -78,6 +80,8 @@ void *compute_igraph_layout_umap_3d(ExecutionContext *ctx)
 
 	igraph_real_t min_dist = 0.5;
 	igraph_int_t epochs = 500;
+
+	igraph_simplify(graph, true, true, NULL);
 
 	igraph_error_t code = igraph_layout_umap_3d(graph, result, use_seed, NULL, min_dist, epochs, 0);
 
