@@ -474,7 +474,6 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 
 	// Refresh renderer
 	renderer_update_graph(renderer, data);
-	renderer_anim_compute_bfs(renderer, data);
 	renderer->label.tree_needs_rebuild = true;
 
 	printf("[apply_new_graph] New graph generated - %d vertices, %d edges\n", data->node_count, data->edge_count);

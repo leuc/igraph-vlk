@@ -225,8 +225,6 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 
 	renderer_anim_init(r);
 
-	renderer_anim_compute_bfs(r, graph);
-
 	// Create a dummy SPLC max weight buffer so binding 3 is always valid
 	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc.max_buffer, &r->splc.max_memory);
 	uint32_t zero = 0;

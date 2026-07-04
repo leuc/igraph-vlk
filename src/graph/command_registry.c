@@ -111,6 +111,8 @@ const CommandDef g_command_registry[] = {
 	{"Group", "igraph_community_fluid_communities", "Fluid Communities", compute_igraph_community_fluid_communities, apply_community_membership, free_community_membership},
 
 	{"Follow", "bfs_trigger", "Breadth-first search from single source", compute_inline_pass, apply_bfs_trigger, free_noop},
+	{"Follow", "dfs_trigger", "Depth-first search from single source", compute_inline_pass, apply_dfs_trigger, free_noop},
+	{"Follow", "topo_trigger", "Topological sort", compute_inline_pass, apply_topo_trigger, free_noop},
 	{"Follow", "splc_animation", "Search Path Link Count", compute_splc_animation, apply_splc_animation, free_noop, poll_splc_gpu},
 
 	{"", "graph_properties", "Properties", compute_graph_properties, apply_info_card, info_card_free},

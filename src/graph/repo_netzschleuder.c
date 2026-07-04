@@ -303,7 +303,6 @@ void apply_netzschleuder_download(ExecutionContext *ctx, void *result_data)
 
 	graph_build_visualization(data);
 	renderer_update_graph(renderer, data);
-	renderer_anim_compute_bfs(renderer, data);
 	renderer->label.tree_needs_rebuild = true;
 
 	printf("[Netzschleuder] Loaded graph: %d vertices, %d edges\n", data->node_count, data->edge_count);

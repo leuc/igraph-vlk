@@ -14,5 +14,7 @@ void renderer_anim_update(Renderer *r, float time, float delta_time, uint32_t fr
 void renderer_anim_upload(Renderer *r, uint32_t ubo_idx);
 void renderer_anim_cleanup(Renderer *r);
 void renderer_anim_compute_bfs(Renderer *r, GraphData *graph);
+void renderer_anim_compute_dfs(Renderer *r, GraphData *graph);
+void renderer_anim_compute_topo(Renderer *r, GraphData *graph);
 
 #endif
