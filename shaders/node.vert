@@ -16,6 +16,10 @@ layout(binding = 4) uniform GlobalAnimState
 }
 anim;
 
+layout(std430, binding = 5) readonly buffer BFSOrder {
+	int bfsRank[];
+};
+
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 instancePos;
 layout(location = 2) in vec3 instanceColor;
@@ -29,6 +33,7 @@ layout(location = 1) out vec3 fragColor;
 layout(location = 2) out flat int fragDegree;
 layout(location = 3) out float fragSelected;
 layout(location = 4) out float fragVisible;
+layout(location = 5) out flat int fragBfsRank;
 
 void main()
 {
@@ -57,4 +62,5 @@ void main()
 	fragDegree = instanceDegree;
 	fragSelected = instanceSelected;
 	fragVisible = instanceVisible;
+	fragBfsRank = bfsRank[gl_InstanceIndex];
 }

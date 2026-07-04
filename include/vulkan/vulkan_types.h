@@ -443,6 +443,16 @@ typedef struct Renderer
 	AnimStateBuffers anim;
 	Texture texture;
 
+	struct
+	{
+		VkBuffer rank_buf;
+		VkDeviceMemory rank_mem;
+		VkBuffer from_buf;
+		VkDeviceMemory from_mem;
+		uint32_t node_count;
+		uint32_t edge_count;
+	} bfs;
+
 	// XR-specific depth buffers (per view, separate from desktop)
 	uint32_t xr_view_count;
 	VkImage *xrDepthImages;				  // [view_index]

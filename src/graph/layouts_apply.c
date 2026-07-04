@@ -9,6 +9,7 @@
 #include "graph/wrappers_layout.h"
 #include "interaction/state.h"
 #include "vulkan/renderer.h"
+#include "vulkan/renderer_anim.h"
 #include <float.h>
 #include <igraph.h>
 #include <igraph_constants.h>
@@ -139,5 +140,6 @@ void apply_layout_matrix(ExecutionContext *ctx, void *result_data)
 	}
 
 	renderer_update_graph(renderer, data);
+	renderer_anim_compute_bfs(renderer, data);
 	// printf("[apply_layout_matrix] Layout applied and renderer refreshed\n");
 }

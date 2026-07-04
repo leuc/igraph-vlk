@@ -13,8 +13,17 @@ layout(binding = 4) uniform GlobalAnimState
 	float time;
 	float delta_time;
 	uint frame_count;
+	float _pad;
 }
 anim;
+
+layout(std430, binding = 5) readonly buffer BFSOrder {
+	int bfsRank[];
+};
+
+layout(std430, binding = 6) readonly buffer EdgeFrom {
+	uint edgeFrom[];
+};
 
 struct SPLCEdge
 {
@@ -56,11 +65,14 @@ void main()
 	float max_w = uintBitsToFloat(global_max_weight_uint);
 
 	fragColor = inColor;
+	uint edge_index = gl_VertexIndex / (splcPC.segmentsPerEdge * 2);
+	float reveal_t = smoothstep(0.0, 0.3, anim.time - float(bfsRank[edgeFrom[edge_index]]) * anim._pad);
 	if (max_w > 0.0) {
-		uint edge_index = gl_VertexIndex / (splcPC.segmentsPerEdge * 2);
 		float w = splc_edges[edge_index].weight;
 		float intensity = clamp(pow(log(w + 1.0) / log(max_w + 1.0), 0.3), 0.0, 1.0);
-		fragColor = inColor * (0.2 + 0.8 * intensity);
+		fragColor = inColor * (0.2 + 0.8 * intensity) * reveal_t;
+	} else {
+		fragColor = inColor * reveal_t;
 	}
 	fragSelected = inSelected;
 	fragNormalizedPos = inNormalizedPos;
