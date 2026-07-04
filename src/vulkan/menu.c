@@ -340,7 +340,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 		vec3 card_pos;
 		glm_vec3_copy(ctx->active_menu_level->card_bg_pos, card_pos);
 		vec3 right_shift, up_shift;
-		glm_vec3_scale(node->right_vec, (ctx->active_menu_level->card_width * 0.5f) + (card_w * 0.5f) + 0.05f, right_shift);
+		glm_vec3_scale(node->right_vec, (ctx->active_menu_level->card_width * 0.5f) + (card_w * 0.5f), right_shift);
 		float align_y = (ctx->active_menu_level->card_height * 0.5f) - (card_h * 0.5f);
 		glm_vec3_scale(node->up_vec, align_y, up_shift);
 		glm_vec3_add(card_pos, right_shift, card_pos);
