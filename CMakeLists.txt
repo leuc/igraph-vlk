@@ -83,6 +83,7 @@ add_executable(
 	src/vulkan/renderer_lifecycle.c
 	src/vulkan/renderer_draw.c
 	src/vulkan/renderer_camera.c
+	src/vulkan/renderer_anim.c
 	src/vulkan/renderer_labels.c
 	src/vulkan/renderer_geometry.c
 	src/vulkan/renderer_compute.c

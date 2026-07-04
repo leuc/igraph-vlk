@@ -21,6 +21,14 @@ layout(std140, set = 0, binding = 0) uniform UniformBufferObject
 }
 ubo;
 
+layout(std140, set = 0, binding = 4) uniform GlobalAnimState
+{
+	float time;
+	float delta_time;
+	uint frame_count;
+}
+anim;
+
 layout(location = 4) out vec2 fragTexCoord;
 layout(location = 5) out float fragTexId;
 layout(location = 6) out vec3 fragWorldPos;

@@ -8,6 +8,14 @@ layout(binding = 0) uniform UniformBufferObject
 }
 ubo;
 
+layout(binding = 4) uniform GlobalAnimState
+{
+	float time;
+	float delta_time;
+	uint frame_count;
+}
+anim;
+
 // Quad vertex attributes (unit quad, centered at origin)
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec2 inTexCoord;

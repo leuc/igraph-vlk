@@ -1,5 +1,13 @@
 #version 450
 
+layout(binding = 4) uniform GlobalAnimState
+{
+	float time;
+	float delta_time;
+	uint frame_count;
+}
+anim;
+
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in float fragSelected;
 layout(location = 2) in float fragNormalizedPos;

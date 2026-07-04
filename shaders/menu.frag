@@ -1,5 +1,13 @@
 #version 450
 
+layout(binding = 4) uniform GlobalAnimState
+{
+	float time;
+	float delta_time;
+	uint frame_count;
+}
+anim;
+
 layout(location = 0) out vec4 outColor;
 layout(location = 4) in vec2 fragTexCoord;
 layout(location = 5) in float fragTexId;

@@ -1,5 +1,13 @@
 #version 450
 
+layout(binding = 4) uniform GlobalAnimState
+{
+	float time;
+	float delta_time;
+	uint frame_count;
+}
+anim;
+
 layout(push_constant) uniform PushConstants
 {
 	mat4 view;

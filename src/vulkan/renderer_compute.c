@@ -361,7 +361,7 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	r->edge.count = graph->edge_count;
 	r->splc.active = true;
 	r->splc.current_level = 0;
-	r->splc.last_level_time = glfwGetTime();
+	r->splc.last_level_time = r->anim.data.time;
 }
 
 void renderer_dispatch_splc_level(Renderer *r, VkCommandBuffer cmd)
@@ -401,7 +401,7 @@ void renderer_dispatch_splc_level(Renderer *r, VkCommandBuffer cmd)
 
 advance:
 	r->splc.current_level++;
-	r->splc.last_level_time = glfwGetTime();
+	r->splc.last_level_time = r->anim.data.time;
 
 	// Barrier: synchronize compute writes (edges, traffic) with vertex shader reads
 	VkMemoryBarrier computeToVertexBarrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT};

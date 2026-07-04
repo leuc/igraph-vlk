@@ -8,6 +8,14 @@ layout(binding = 0) uniform UniformBufferObject
 }
 ubo;
 
+layout(binding = 4) uniform GlobalAnimState
+{
+	float time;
+	float delta_time;
+	uint frame_count;
+}
+anim;
+
 struct SPLCEdge
 {
 	uint target_node;

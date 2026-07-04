@@ -1,5 +1,13 @@
 #version 450
 
+layout(binding = 4) uniform GlobalAnimState
+{
+	float time;
+	float delta_time;
+	uint frame_count;
+}
+anim;
+
 layout(binding = 1) uniform sampler2D textAtlas;
 
 layout(location = 0) in vec2 fragQuadUV;

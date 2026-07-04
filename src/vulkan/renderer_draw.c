@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "vulkan/renderer.h"
+#include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_compute.h"
 #include "vulkan/renderer_lifecycle.h"
 #include "vulkan/utils.h"
@@ -21,6 +22,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	glm_mat4_copy(view, eye_ubo.view);
 	glm_mat4_copy(proj, eye_ubo.proj);
 	memcpy(r->ubo.mapped[ubo_idx], &eye_ubo, sizeof(UniformBufferObject));
+	renderer_anim_upload(r, ubo_idx);
 
 	VkClearValue cv[2];
 	cv[0].color = (VkClearColorValue){0.01f, 0.01f, 0.02f, 1.0f};
@@ -146,7 +148,7 @@ void renderer_draw_frame(Renderer *r, GraphData *graph)
 
 	// SPLC animation: advance one level every splc_level_interval seconds
 	if (r->splc.active) {
-		double now = glfwGetTime();
+		double now = (double)r->anim.data.time;
 		if (now - r->splc.last_level_time >= r->splc.level_interval) {
 			renderer_dispatch_splc_level(r, r->commands.commandBuffers[r->commands.currentFrame]);
 		}

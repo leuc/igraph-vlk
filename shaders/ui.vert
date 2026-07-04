@@ -1,5 +1,13 @@
 #version 450
 
+layout(binding = 4) uniform GlobalAnimState
+{
+	float time;
+	float delta_time;
+	uint frame_count;
+}
+anim;
+
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec2 inTexCoord;
 

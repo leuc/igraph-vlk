@@ -213,6 +213,22 @@ typedef struct
 
 typedef struct
 {
+	float time;
+	float delta_time;
+	uint32_t frame_count;
+	float _pad;
+} GlobalAnimState;
+
+typedef struct
+{
+	VkBuffer buffers[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
+	VkDeviceMemory memory[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
+	void *mapped[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
+	GlobalAnimState data;
+} AnimStateBuffers;
+
+typedef struct
+{
 	VkImage image;
 	VkDeviceMemory memory;
 	VkImageView view;
@@ -424,6 +440,7 @@ typedef struct Renderer
 	VkDeviceMemory nodeVertexBufferMemory;
 
 	UniformBuffers ubo;
+	AnimStateBuffers anim;
 	Texture texture;
 
 	// XR-specific depth buffers (per view, separate from desktop)

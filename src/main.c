@@ -19,6 +19,7 @@
 #include "ui/menu.h"
 #include "vulkan/menu.h"
 #include "vulkan/renderer.h"
+#include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_camera.h"
 #include "vulkan/renderer_draw.h"
 #include "vulkan/renderer_labels.h"
@@ -178,10 +179,11 @@ int main(int argc, char **argv)
 	strcpy(app.job_status_message, "Ready");
 
 	// Initialize timing
-	float lastFrame = 0.0f;
-	float fpsTimer = 0.0f;
-	int frameCount = 0;
-	float currentFps = 0.0f;
+	app.time = (float)glfwGetTime();
+	app.delta_time = 0.0f;
+	app.fps_timer = 0.0f;
+	app.frame_count = 0;
+	app.current_fps = 0.0f;
 
 #ifdef USE_OPENXR
 	XrTime last_predicted_display_time = 0;
@@ -191,23 +193,26 @@ int main(int argc, char **argv)
 	// Main loop
 	while (!glfwWindowShouldClose(app.win.handle)) {
 		float currentFrame = (float)glfwGetTime();
-		float deltaTime = currentFrame - lastFrame;
-		lastFrame = currentFrame;
+		app.delta_time = currentFrame - app.time;
+		app.time = currentFrame;
+
+		// Push timing to renderer — before update_app_state() so SPLC/BCGL init reads fresh time
+		renderer_anim_update(&app.renderer, app.time, app.delta_time, app.frame_count);
 
 		// FPS calculation
-		fpsTimer += deltaTime;
-		frameCount++;
-		if (fpsTimer >= 1.0f) {
-			currentFps = frameCount / fpsTimer;
-			frameCount = 0;
-			fpsTimer = 0.0f;
+		app.fps_timer += app.delta_time;
+		app.frame_count++;
+		if (app.fps_timer >= 1.0f) {
+			app.current_fps = app.frame_count / app.fps_timer;
+			app.frame_count = 0;
+			app.fps_timer = 0.0f;
 		}
 
 		// Process input (WASD movement)
-		interaction_process_continuous_input(&app, deltaTime);
+		interaction_process_continuous_input(&app, app.delta_time);
 
 		// Update HUD text
-		ui_hud_update(&app, currentFps);
+		ui_hud_update(&app, app.current_fps);
 
 		// Update App FSM and Menu transforms
 		update_app_state(&app);
@@ -237,7 +242,7 @@ int main(int argc, char **argv)
 
 #ifdef USE_OPENXR
 		if (app.vr_enabled) {
-			xr_process_input(&app, deltaTime);
+			xr_process_input(&app, app.delta_time);
 		}
 
 		if (app.vr_enabled && app.xr_ctx.session_running) {

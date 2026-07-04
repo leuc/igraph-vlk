@@ -54,7 +54,8 @@ typedef struct AppState
 #endif
 
 	/* Timing */
-	float last_frame_time;
+	float time;
+	float delta_time;
 	float fps_timer;
 	int frame_count;
 	float current_fps;
