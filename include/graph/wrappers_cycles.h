@@ -15,7 +15,14 @@ void apply_remove_feedback_arc_set(ExecutionContext *ctx, void *result_data);
 
 // Graph simplification: remove multi-edges and loops
 void *compute_igraph_simplify(ExecutionContext *ctx);
-void apply_igraph_simplify(ExecutionContext *ctx, void *result_data);
+
+// Graph direction conversion
+void *compute_to_directed(ExecutionContext *ctx);
+void *compute_to_undirected_collapse(ExecutionContext *ctx);
+void *compute_to_undirected_mutual(ExecutionContext *ctx);
+
+// Shared in-place apply for graph modifications (rebuild edges + update renderer)
+void apply_inplace_graph_update(ExecutionContext *ctx, void *result_data);
 
 void free_noop(void *result_data);
 

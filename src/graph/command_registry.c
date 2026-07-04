@@ -160,7 +160,10 @@ const CommandDef g_command_registry[] = {
 	// Alter menu
 	// =========================================================================
 	{"Alter", "remove_feedback_arc_set", "Remove feedback arc set", compute_remove_feedback_arc_set, apply_remove_feedback_arc_set, free_noop},
-	{"Alter", "igraph_simplify", "Simplify (remove multi-edges & loops)", compute_igraph_simplify, apply_igraph_simplify, free_noop},
+	{"Alter", "igraph_simplify", "Simplify (remove multi-edges & loops)", compute_igraph_simplify, apply_inplace_graph_update, free_noop},
+	{"Alter", "to_directed", "To directed", compute_to_directed, apply_inplace_graph_update, free_noop},
+	{"Alter", "to_undirected_collapse", "To undirected (collapse)", compute_to_undirected_collapse, apply_inplace_graph_update, free_noop},
+	{"Alter", "to_undirected_mutual", "To undirected (mutual)", compute_to_undirected_mutual, apply_inplace_graph_update, free_noop},
 
 	// =========================================================================
 	// Data menu — Repository (display_name=NULL: built by dynamic population)

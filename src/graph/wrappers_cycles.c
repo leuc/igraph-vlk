@@ -103,9 +103,87 @@ void *compute_igraph_simplify(ExecutionContext *ctx)
 }
 
 // ============================================================================
-// Apply: Refresh visualization after in-place graph modification.
+// Worker: Convert undirected graph to directed.
+// Modifies graph in-place.
 // ============================================================================
-void apply_igraph_simplify(ExecutionContext *ctx, void *result_data)
+void *compute_to_directed(ExecutionContext *ctx)
+{
+	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!graph || igraph_vcount(graph) == 0)
+		return NULL;
+
+	if (igraph_is_directed(graph)) {
+		printf("Graph is already directed\n");
+		return graph;
+	}
+
+	igraph_error_t ret = igraph_to_directed(graph, IGRAPH_TO_DIRECTED_ARBITRARY);
+	if (ret != IGRAPH_SUCCESS) {
+		fprintf(stderr, "igraph_to_directed failed\n");
+		return NULL;
+	}
+
+	printf("Converted graph to directed: %d vertices, %d edges\n", (int)igraph_vcount(graph), (int)igraph_ecount(graph));
+	return graph;
+}
+
+// ============================================================================
+// Worker: Convert directed graph to undirected (collapse mode).
+// One undirected edge per connected pair, no multi-edges.
+// ============================================================================
+void *compute_to_undirected_collapse(ExecutionContext *ctx)
+{
+	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!graph || igraph_vcount(graph) == 0)
+		return NULL;
+
+	if (!igraph_is_directed(graph)) {
+		printf("Graph is already undirected\n");
+		return graph;
+	}
+
+	igraph_error_t ret = igraph_to_undirected(graph, IGRAPH_TO_UNDIRECTED_COLLAPSE, NULL);
+	if (ret != IGRAPH_SUCCESS) {
+		fprintf(stderr, "igraph_to_undirected (collapse) failed\n");
+		return NULL;
+	}
+
+	printf("Converted graph to undirected (collapse): %d vertices, %d edges\n", (int)igraph_vcount(graph), (int)igraph_ecount(graph));
+	return graph;
+}
+
+// ============================================================================
+// Worker: Convert directed graph to undirected (mutual mode).
+// Only edges existing in both directions survive. No multi-edges.
+// ============================================================================
+void *compute_to_undirected_mutual(ExecutionContext *ctx)
+{
+	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!graph || igraph_vcount(graph) == 0)
+		return NULL;
+
+	if (!igraph_is_directed(graph)) {
+		printf("Graph is already undirected\n");
+		return graph;
+	}
+
+	igraph_integer_t before_e = igraph_ecount(graph);
+
+	igraph_error_t ret = igraph_to_undirected(graph, IGRAPH_TO_UNDIRECTED_MUTUAL, NULL);
+	if (ret != IGRAPH_SUCCESS) {
+		fprintf(stderr, "igraph_to_undirected (mutual) failed\n");
+		return NULL;
+	}
+
+	igraph_integer_t after_e = igraph_ecount(graph);
+	printf("Converted graph to undirected (mutual): %d vertices, %d edges -> %d edges (%d dropped)\n", (int)igraph_vcount(graph), (int)before_e, (int)after_e, (int)(before_e - after_e));
+	return graph;
+}
+
+// ============================================================================
+// Shared apply: Refresh visualization after any in-place graph modification.
+// ============================================================================
+void apply_inplace_graph_update(ExecutionContext *ctx, void *result_data)
 {
 	if (!ctx || !ctx->app_state)
 		return;
@@ -118,7 +196,7 @@ void apply_igraph_simplify(ExecutionContext *ctx, void *result_data)
 	renderer_update_graph(&state->renderer, data);
 	state->renderer.label.tree_needs_rebuild = true;
 
-	printf("[apply] Simplify processed - %d vertices, %d edges\n", data->node_count, data->edge_count);
+	printf("[apply] Graph updated - %d vertices, %d edges\n", data->node_count, data->edge_count);
 }
 
 // ============================================================================
