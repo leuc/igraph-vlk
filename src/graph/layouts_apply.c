@@ -71,6 +71,15 @@ void layout_center_and_autoscale(igraph_matrix_t *mat)
 // ============================================================================
 // FREE LAYOUT DATA
 // ============================================================================
+void apply_bfs_trigger(ExecutionContext *ctx, void *result_data)
+{
+	(void)result_data;
+	if (!ctx || !ctx->app_state)
+		return;
+	AppState *state = ctx->app_state;
+	renderer_anim_compute_bfs(&state->renderer, &state->current_graph);
+}
+
 void free_layout_matrix(void *result_data)
 {
 	if (result_data) {

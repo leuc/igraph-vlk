@@ -16,9 +16,6 @@
 #include "interaction/filter.h"
 
 const CommandDef g_command_registry[] = {
-	// =========================================================================
-	// Data menu - Patterns
-	// =========================================================================
 	{"Data/Patterns", "igraph_ring", "Ring", compute_igraph_ring, apply_new_graph, free_new_graph},
 	{"Data/Patterns", "igraph_star", "Star", compute_igraph_star, apply_new_graph, free_new_graph},
 	{"Data/Patterns", "igraph_kary_tree", "Tree", compute_igraph_kary_tree, apply_new_graph, free_new_graph},
@@ -26,9 +23,6 @@ const CommandDef g_command_registry[] = {
 	{"Data/Patterns", "igraph_full", "Full Graph (Clique)", compute_igraph_full, apply_new_graph, free_new_graph},
 	{"Data/Patterns", "igraph_cycle_graph", "Circle", compute_igraph_cycle_graph, apply_new_graph, free_new_graph},
 
-	// =========================================================================
-	// Data menu - Random
-	// =========================================================================
 	{"Data/Random", "igraph_erdos_renyi_game_gnp", "Erdős-Rényi (GNP / GNM)", compute_igraph_erdos_renyi_game_gnp, apply_new_graph, free_new_graph},
 	{"Data/Random", "igraph_barabasi_game", "Barabási-Albert (Preferential attachment)", compute_igraph_barabasi_game, apply_new_graph, free_new_graph},
 	{"Data/Random", "igraph_watts_strogatz_game", "Watts-Strogatz (Small-world)", compute_igraph_watts_strogatz_game, apply_new_graph, free_new_graph},
@@ -36,27 +30,23 @@ const CommandDef g_command_registry[] = {
 	{"Data/Random", "igraph_tree_game", "Random Tree", compute_igraph_tree_game, apply_new_graph, free_new_graph},
 	{"Data/Random", "igraph_degree_sequence_game", "Degree Sequence", compute_igraph_degree_sequence_game, apply_new_graph, free_new_graph},
 
-	// =========================================================================
-	// Data menu - Bipartite
-	// =========================================================================
 	{"Data/Bipartite", "igraph_bipartite_game_gnm", "Generate Random Bipartite", compute_igraph_bipartite_game_gnm, apply_new_graph, free_new_graph},
 	{"Data/Bipartite", "igraph_bipartite_projection", "Create Bipartite Projections", compute_igraph_bipartite_projection, apply_new_graph, free_new_graph},
 
-	// =========================================================================
-	// Data menu - Spatial
-	// =========================================================================
 	{"Data/Spatial", "igraph_nearest_neighbor_graph", "Geometric random graphs", compute_igraph_nearest_neighbor_graph, apply_new_graph, free_new_graph},
 	{"Data/Spatial", "igraph_gabriel_graph", "Gabriel graphs", compute_igraph_gabriel_graph, apply_new_graph, free_new_graph},
 
-	// =========================================================================
-	// Layout menu - Force-Directed
-	// =========================================================================
-	{"Layout/Force-Directed", "igraph_layout_fruchterman_reingold_3d", "Fruchterman-Reingold (3D)", compute_igraph_layout_fruchterman_reingold_3d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Seed", "use_current_positions_as_seed", "Use current positions as seed", compute_use_current_positions_as_seed, apply_use_current_positions_as_seed, free_noop},
+	{"Layout/Seed", "seed_random_uniform", "Random Uniform [-1, 1]", compute_seed_random_uniform, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Seed", "seed_random_bounded", "Random Bounded [-sqrt(n)/2]", compute_seed_random_bounded, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Seed", "seed_random_normal", "Random Normal N(0, 0.01)", compute_seed_random_normal, apply_layout_matrix, free_layout_matrix},
+
 	{"Layout/Force-Directed", "igraph_layout_fruchterman_reingold", "Fruchterman-Reingold (2D)", compute_igraph_layout_fruchterman_reingold, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Force-Directed", "igraph_layout_kamada_kawai_3d", "Kamada-Kawai (3D)", compute_igraph_layout_kamada_kawai_3d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Force-Directed", "igraph_layout_fruchterman_reingold_3d", "Fruchterman-Reingold (3D)", compute_igraph_layout_fruchterman_reingold_3d, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "igraph_layout_kamada_kawai", "Kamada-Kawai (2D)", compute_igraph_layout_kamada_kawai, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Force-Directed", "igraph_layout_drl_3d", "Distributed Recursive Layout (DrL) (3D)", compute_igraph_layout_drl_3d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Force-Directed", "igraph_layout_kamada_kawai_3d", "Kamada-Kawai (3D)", compute_igraph_layout_kamada_kawai_3d, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "igraph_layout_drl", "Distributed Recursive Layout (DrL) (2D)", compute_igraph_layout_drl, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Force-Directed", "igraph_layout_drl_3d", "Distributed Recursive Layout (DrL) (3D)", compute_igraph_layout_drl_3d, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "igraph_layout_davidson_harel", "Davidson-Harel", compute_igraph_layout_davidson_harel, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "igraph_layout_graphopt", "GraphOpt", compute_igraph_layout_graphopt, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "igraph_layout_lgl", "Large Graph Layout (LGL)", compute_igraph_layout_lgl, apply_layout_matrix, free_layout_matrix},
@@ -65,45 +55,22 @@ const CommandDef g_command_registry[] = {
 	{"Layout/Force-Directed", "igraph_layout_yifan_hu", "Yifan Hu (2D)", compute_igraph_layout_yifan_hu, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Force-Directed", "igraph_layout_yifan_hu_3d", "Yifan Hu (3D)", compute_igraph_layout_yifan_hu_3d, apply_layout_matrix, free_layout_matrix},
 
-	// =========================================================================
-	// Layout menu - Hierarchical
-	// =========================================================================
 	{"Layout/Hierarchical", "igraph_layout_reingold_tilford", "Reingold-Tilford", compute_igraph_layout_reingold_tilford, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Hierarchical", "igraph_layout_sugiyama", "Sugiyama", compute_igraph_layout_sugiyama, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Hierarchical", "igraph_layout_sugiyama_radial", "Radial Sugiyama", compute_igraph_layout_sugiyama_radial, apply_layout_matrix, free_layout_matrix},
 
-	// Non-Igraph
-	{"Layout", "lay_layered_sphere", "Layered Sphere", compute_layout_layered_sphere, apply_layout_matrix, free_layout_matrix},
-
-	// =========================================================================
-	// Layout menu - Seed
-	// =========================================================================
-	{"Layout/Seed", "use_current_positions_as_seed", "Use current positions as seed", compute_use_current_positions_as_seed, apply_use_current_positions_as_seed, free_noop},
-	{"Layout/Seed", "seed_random_uniform", "Random Uniform [-1, 1]", compute_seed_random_uniform, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Seed", "seed_random_bounded", "Random Bounded [-sqrt(n)/2]", compute_seed_random_bounded, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Seed", "seed_random_normal", "Random Normal N(0, 0.01)", compute_seed_random_normal, apply_layout_matrix, free_layout_matrix},
-
-	// =========================================================================
-	// Layout menu - Geometric
-	// =========================================================================
-	{"Layout/Geometric", "igraph_layout_circle", "Circle (3D)", compute_igraph_layout_circle, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Geometric", "igraph_layout_circle_2d", "Circle (2D)", compute_igraph_layout_circle_2d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Geometric", "igraph_layout_circle", "Circle (3D)", compute_igraph_layout_circle, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Geometric", "igraph_layout_star", "Star", compute_igraph_layout_star, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Geometric", "igraph_layout_grid_3d", "Grid (3D)", compute_igraph_layout_grid_3d, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Geometric", "igraph_layout_grid", "Grid (2D)", compute_igraph_layout_grid, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Geometric", "igraph_layout_grid_3d", "Grid (3D)", compute_igraph_layout_grid_3d, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Geometric", "igraph_layout_sphere", "Sphere", compute_igraph_layout_sphere, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Geometric", "igraph_layout_grid", "Grid (2D)", compute_igraph_layout_grid, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Geometric", "igraph_layout_random_3d", "Random (3D)", compute_igraph_layout_random_3d, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Geometric", "igraph_layout_random", "Random (2D)", compute_igraph_layout_random, apply_layout_matrix, free_layout_matrix},
 
-	// =========================================================================
-	// Layout menu - Bipartite Layouts
-	// =========================================================================
 	{"Layout/Bipartite", "igraph_layout_bipartite", "Sugiyama (Bipartite)", compute_igraph_layout_bipartite, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Bipartite", "igraph_layout_bipartite_simple", "Bipartite (Simple)", compute_igraph_layout_bipartite_simple, apply_layout_matrix, free_layout_matrix},
 
-	// =========================================================================
-	// Layout menu - Embedding
-	// =========================================================================
 	{"Layout/Embedding", "igraph_layout_mds", "Torgerson MDS (2D)", compute_igraph_layout_mds, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Embedding", "igraph_layout_mds_3d", "Torgerson MDS (3D)", compute_igraph_layout_mds_3d, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Embedding", "igraph_layout_mds_spherical", "Spherical MDS (3D)", compute_igraph_layout_mds_spherical, apply_layout_matrix, free_layout_matrix},
@@ -113,16 +80,12 @@ const CommandDef g_command_registry[] = {
 	{"Layout/Embedding", "igraph_layout_bhtsne", "t-SNE (Barnes-Hut) (2D)", compute_igraph_layout_bhtsne, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Embedding", "igraph_layout_bhtsne_3d", "t-SNE (Barnes-Hut) (3D)", compute_igraph_layout_bhtsne_3d, apply_layout_matrix, free_layout_matrix},
 
-	// =========================================================================
-	// Layout menu - GPU
-	// =========================================================================
-	{"Layout/GPU", "igraph_layout_bcgl", "BCGL-t (2D)", compute_igraph_layout_bcgl, apply_layout_matrix, free_layout_matrix},
-	{"Layout/GPU", "igraph_layout_bcgl_3d", "BCGL-t (3D)", compute_igraph_layout_bcgl_3d, apply_layout_matrix, free_layout_matrix},
-	{"Layout/GPU", "lay_bcgl", "BCGL-t (3D GPU Compute)", compute_layout_bcgl, apply_layout_bcgl, free_layout_bcgl, poll_bcgl_gpu},
+	{"Layout/Binary Classification", "igraph_layout_bcgl", "BCGL-t (2D)", compute_igraph_layout_bcgl, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Binary Classification", "igraph_layout_bcgl_3d", "BCGL-t (3D)", compute_igraph_layout_bcgl_3d, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Binary Classification", "lay_bcgl", "BCGL-t (3D GPU Compute)", compute_layout_bcgl, apply_layout_bcgl, free_layout_bcgl, poll_bcgl_gpu},
 
-	// =========================================================================
-	// Rank menu
-	// =========================================================================
+	{"Layout", "lay_layered_sphere", "Layered Sphere", compute_layout_layered_sphere, apply_layout_matrix, free_layout_matrix},
+
 	{"Rank", "igraph_degree", "Degree", compute_igraph_degree, apply_centrality_scores, centrality_scores_free},
 	{"Rank", "igraph_closeness_cutoff", "Closeness", compute_igraph_closeness_cutoff, apply_centrality_scores, centrality_scores_free},
 	{"Rank", "igraph_betweenness", "Betweenness", compute_igraph_betweenness, apply_centrality_scores, centrality_scores_free},
@@ -134,9 +97,6 @@ const CommandDef g_command_registry[] = {
 	{"Rank", "igraph_constraint", "Constraint (Structural Holes)", compute_igraph_constraint, apply_centrality_scores, centrality_scores_free},
 	{"Rank", "igraph_coreness", "Coreness (k-Core)", compute_igraph_coreness, apply_centrality_scores, centrality_scores_free},
 
-	// =========================================================================
-	// Group menu
-	// =========================================================================
 	{"Group", "igraph_community_multilevel", "Louvain Method (Multilevel)", compute_igraph_community_multilevel, apply_community_membership, free_community_membership},
 	{"Group", "igraph_community_leiden", "Leiden", compute_igraph_community_leiden, apply_community_membership, free_community_membership},
 	{"Group", "igraph_community_walktrap", "Walktrap (Random walks)", compute_igraph_community_walktrap, apply_community_membership, free_community_membership},
@@ -150,19 +110,11 @@ const CommandDef g_command_registry[] = {
 	{"Group", "igraph_community_voronoi", "Voronoi", compute_igraph_community_voronoi, apply_community_membership, free_community_membership},
 	{"Group", "igraph_community_fluid_communities", "Fluid Communities", compute_igraph_community_fluid_communities, apply_community_membership, free_community_membership},
 
-	// =========================================================================
-	// Follow menu
-	// =========================================================================
+	{"Follow", "bfs_trigger", "Breadth-first search from single source", compute_inline_pass, apply_bfs_trigger, free_noop},
 	{"Follow", "splc_animation", "Search Path Link Count", compute_splc_animation, apply_splc_animation, free_noop, poll_splc_gpu},
 
-	// =========================================================================
-	// Properties menu
-	// =========================================================================
 	{"", "graph_properties", "Properties", compute_graph_properties, apply_info_card, info_card_free},
 
-	// =========================================================================
-	// Structure menu
-	// =========================================================================
 	{"Structure", "igraph_diameter", "Diameter", compute_igraph_diameter, apply_info_card, info_card_free},
 	{"Structure", "igraph_radius", "Radius", compute_igraph_radius, apply_info_card, info_card_free},
 	{"Structure", "igraph_average_path_length", "Average Path Length", compute_igraph_average_path_length, apply_info_card, info_card_free},
@@ -170,34 +122,23 @@ const CommandDef g_command_registry[] = {
 	{"Structure", "igraph_density", "Density", compute_igraph_density, apply_info_card, info_card_free},
 	{"Structure", "igraph_transitivity_undirected", "Transitivity (undirected)", compute_igraph_transitivity_undirected, apply_info_card, info_card_free},
 
-	// =========================================================================
-	// Alter menu
-	// =========================================================================
 	{"Alter", "remove_feedback_arc_set", "Remove feedback arc set", compute_remove_feedback_arc_set, apply_remove_feedback_arc_set, free_noop},
 	{"Alter", "igraph_simplify", "Simplify (remove multi-edges & loops)", compute_igraph_simplify, apply_inplace_graph_update, free_noop},
 	{"Alter", "to_directed", "To directed", compute_to_directed, apply_inplace_graph_update, free_noop},
 	{"Alter", "to_undirected_collapse", "To undirected (collapse)", compute_to_undirected_collapse, apply_inplace_graph_update, free_noop},
 	{"Alter", "to_undirected_mutual", "To undirected (mutual)", compute_to_undirected_mutual, apply_inplace_graph_update, free_noop},
 
-	// =========================================================================
 	// Data menu — Repository (display_name=NULL: built by dynamic population)
-	// =========================================================================
 	{"Data/Repository", "netzschleuder_download", NULL, run_netzschleuder_download, apply_netzschleuder_download, free_netzschleuder_download, NULL, (const CommandParamDef[]){{"entry_id", PARAM_TYPE_STRING, 0, 0, NULL, 0}, {"version_id", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 2},
 
-	// =========================================================================
 	// Data menu — Famous (display_name=NULL: built by dynamic population)
-	// =========================================================================
 	{"Data/Famous", "igraph_famous", NULL, compute_igraph_famous, apply_new_graph, free_new_graph, NULL, (const CommandParamDef[]){{"name", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 1},
 
-	// =========================================================================
 	// Show menu — Filter (display_name=NULL: built by dynamic population)
-	// =========================================================================
 	{"Show", "filter_show_all", NULL, compute_inline_pass, apply_filter_reset, free_noop},
 	{"Show", "filter_by_attr", NULL, compute_filter_by_attr, apply_filter_by_attr, free_filter_params, NULL, (const CommandParamDef[]){{"attr_name", PARAM_TYPE_STRING, 0, 0, NULL, 0}, {"attr_value", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 2},
 
-	// =========================================================================
 	// Root menu
-	// =========================================================================
 	{"", NULL, "Node", NULL, NULL, NULL}, // branch anchor
 	{"", "quit", "Quit", compute_inline_pass, apply_quit, free_noop},
 

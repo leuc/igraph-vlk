@@ -74,6 +74,9 @@ igraph_bool_t layout_fill_seed(ExecutionContext *ctx, igraph_matrix_t *result, i
 void free_layout_matrix(void *result_data);
 void apply_layout_matrix(ExecutionContext *ctx, void *result_data);
 
+// BFS trigger (re-run BFS animation on current graph)
+void apply_bfs_trigger(ExecutionContext *ctx, void *result_data);
+
 // Seed toggle
 void *compute_use_current_positions_as_seed(ExecutionContext *ctx);
 void apply_use_current_positions_as_seed(ExecutionContext *ctx, void *result_data);
