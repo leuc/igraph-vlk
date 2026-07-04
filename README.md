@@ -2,7 +2,7 @@
 
 3D network viewer based on [igraph](https://igraph.org/) and Vulkan, written in C.
 
-Interactive graph visualization with 
+Interactive graph visualization with
  - 35+ layout algorithms 2D & 3D
  - 12 community detection methods
  - 10 centrality measures
@@ -102,7 +102,7 @@ Efforts are made to:
 
 ### Large Graphs
 
-Vulkan itself can easily render 500k+ nodes/edges at 60fps even on moderate hardware. 
+Vulkan itself can easily render 500k+ nodes/edges at 60fps even on moderate hardware.
 However, not all graph methods and layouts scale to large graphs.
 
 A typical workflow for large graphs:
@@ -121,6 +121,23 @@ For 500k+ nodes/edges the app remains usable when the CPU computes and the GPU r
 
 The experimental **layered spheres** layout can very quickly render very large graphs.
 It provides a quick **initial** data exploration with visual clustering and centered k-core order. It works best with graphs that have many communities. However, it is _not_ a general layout method that works with any graph.
+
+### Layout seed
+
+Most layout methods use a random initial placement of nodes.
+Some layouts can use a custom /seed/ (node positions) for the initial placement.
+`Menu/Layout/Seed/Use current node positions as seed` will enable the custom /seed/ for the following layouts.
+
+- Fruchterman-Reingold
+- Kamada-Kawai
+- Davidson-Harel
+- GEM
+- Graphopt
+- Yifan Hu
+- Barnes-Hut t-SNE
+- UMAP
+
+This allows the combination or refinement of resulting layout node positions.
 
 ## Features
 

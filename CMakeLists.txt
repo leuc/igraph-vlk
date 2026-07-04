@@ -132,6 +132,7 @@ add_executable(
 	src/graph/layouts_vk_bcgl.c
 	src/graph/layouts_bcgl.c
 	src/graph/layouts_apply.c
+	src/graph/layouts_seed.c
 	src/graph/wrappers_community.c
 	src/graph/wrappers_centrality.c
 	src/graph/wrappers_constructors.c

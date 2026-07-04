@@ -78,6 +78,11 @@ void apply_layout_matrix(ExecutionContext *ctx, void *result_data);
 void *compute_use_current_positions_as_seed(ExecutionContext *ctx);
 void apply_use_current_positions_as_seed(ExecutionContext *ctx, void *result_data);
 
+// Random seed initialization (replicates igraph internals)
+void *compute_seed_random_uniform(ExecutionContext *ctx);
+void *compute_seed_random_bounded(ExecutionContext *ctx);
+void *compute_seed_random_normal(ExecutionContext *ctx);
+
 // BCGL apply, free, and GPU poll
 void apply_layout_bcgl(ExecutionContext *ctx, void *result_data);
 void free_layout_bcgl(void *result_data);

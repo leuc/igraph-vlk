@@ -79,6 +79,9 @@ const CommandDef g_command_registry[] = {
 	// Layout menu - Seed
 	// =========================================================================
 	{"Layout/Seed", "use_current_positions_as_seed", "Use current positions as seed", compute_use_current_positions_as_seed, apply_use_current_positions_as_seed, free_noop},
+	{"Layout/Seed", "seed_random_uniform", "Random Uniform [-1, 1]", compute_seed_random_uniform, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Seed", "seed_random_bounded", "Random Bounded [-sqrt(n)/2]", compute_seed_random_bounded, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Seed", "seed_random_normal", "Random Normal N(0, 0.01)", compute_seed_random_normal, apply_layout_matrix, free_layout_matrix},
 
 	// =========================================================================
 	// Layout menu - Geometric

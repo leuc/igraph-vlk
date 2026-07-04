@@ -68,48 +68,6 @@ void layout_center_and_autoscale(igraph_matrix_t *mat)
 }
 
 // ============================================================================
-// USE CURRENT POSITIONS AS SEED (TOGGLE)
-// ============================================================================
-void *compute_use_current_positions_as_seed(ExecutionContext *ctx)
-{
-	(void)ctx;
-	return (void *)(uintptr_t)1;
-}
-
-void apply_use_current_positions_as_seed(ExecutionContext *ctx, void *result_data)
-{
-	(void)result_data;
-	if (!ctx || !ctx->app_state)
-		return;
-	GraphData *data = &ctx->app_state->current_graph;
-	data->use_as_seed = !data->use_as_seed;
-}
-
-// ============================================================================
-// SEED FILL HELPER
-// ============================================================================
-// Copies current layout positions into result matrix when use_as_seed is set.
-// Returns the igraph_bool_t value to pass as the use_seed parameter.
-igraph_bool_t layout_fill_seed(ExecutionContext *ctx, igraph_matrix_t *result, igraph_integer_t vcount)
-{
-	if (!ctx || !ctx->app_state)
-		return false;
-	GraphData *data = &ctx->app_state->current_graph;
-	if (!data->use_as_seed)
-		return false;
-	igraph_integer_t layout_nrow = igraph_matrix_nrow(&data->current_layout);
-	igraph_integer_t layout_ncol = igraph_matrix_ncol(&data->current_layout);
-	if (layout_nrow != vcount || layout_ncol < 2)
-		return false;
-	for (igraph_integer_t i = 0; i < vcount; i++) {
-		MATRIX(*result, i, 0) = MATRIX(data->current_layout, i, 0);
-		MATRIX(*result, i, 1) = MATRIX(data->current_layout, i, 1);
-		MATRIX(*result, i, 2) = (layout_ncol > 2) ? MATRIX(data->current_layout, i, 2) : 0.0;
-	}
-	return true;
-}
-
-// ============================================================================
 // FREE LAYOUT DATA
 // ============================================================================
 void free_layout_matrix(void *result_data)
