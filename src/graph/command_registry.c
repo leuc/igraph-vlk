@@ -61,11 +61,11 @@ const CommandDef g_command_registry[] = {
 
 	{"Layout/Geometric", "igraph_layout_circle_2d", "Circle (2D)", compute_igraph_layout_circle_2d, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Geometric", "igraph_layout_circle", "Circle (3D)", compute_igraph_layout_circle, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Geometric", "igraph_layout_sphere", "Sphere", compute_igraph_layout_sphere, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Geometric", "igraph_layout_star", "Star", compute_igraph_layout_star, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Geometric", "igraph_layout_grid", "Grid (2D)", compute_igraph_layout_grid, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Geometric", "igraph_layout_grid_3d", "Grid (3D)", compute_igraph_layout_grid_3d, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Geometric", "igraph_layout_sphere", "Sphere", compute_igraph_layout_sphere, apply_layout_matrix, free_layout_matrix},
-	{"Layout/Geometric", "igraph_layout_grid", "Grid (2D)", compute_igraph_layout_grid, apply_layout_matrix, free_layout_matrix},
+	{"Layout/Geometric", "igraph_layout_random", "Random (2D)", compute_igraph_layout_random, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Geometric", "igraph_layout_random_3d", "Random (3D)", compute_igraph_layout_random_3d, apply_layout_matrix, free_layout_matrix},
 
 	{"Layout/Bipartite", "igraph_layout_bipartite", "Sugiyama (Bipartite)", compute_igraph_layout_bipartite, apply_layout_matrix, free_layout_matrix},
