@@ -9,6 +9,9 @@
 #include "interaction/state.h"
 #include <igraph.h>
 
+// Summary properties card
+void *compute_graph_properties(ExecutionContext *ctx);
+
 // Global network properties: density, transitivity, assortativity
 
 void *compute_igraph_density(ExecutionContext *ctx);

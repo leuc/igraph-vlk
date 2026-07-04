@@ -9,6 +9,71 @@
 #include <stdlib.h>
 #include <string.h>
 
+void *compute_graph_properties(ExecutionContext *ctx)
+{
+	igraph_t *graph = &ctx->app_state->current_graph.g;
+	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
+	if (!data)
+		return NULL;
+	memset(data, 0, sizeof(InfoCardData));
+	strncpy(data->title, "Graph Properties", sizeof(data->title) - 1);
+
+	if (!graph || igraph_vcount(graph) == 0) {
+		data->num_pairs = 0;
+		return data;
+	}
+
+	igraph_bool_t directed = igraph_is_directed(graph);
+	igraph_integer_t n = igraph_vcount(graph);
+	igraph_integer_t e = igraph_ecount(graph);
+
+	// 1. Vertices
+	data->num_pairs = 0;
+	strncpy(data->pairs[0].key, "Vertices", 31);
+	snprintf(data->pairs[0].value, 63, "%d", (int)n);
+	data->num_pairs++;
+
+	// 2. Edges
+	strncpy(data->pairs[1].key, "Edges", 31);
+	snprintf(data->pairs[1].value, 63, "%d", (int)e);
+	data->num_pairs++;
+
+	// 3. Directed
+	strncpy(data->pairs[2].key, "Directed", 31);
+	strncpy(data->pairs[2].value, directed ? "Yes" : "No", 63);
+	data->num_pairs++;
+
+	// 4. DAG / Acyclic
+	igraph_bool_t bool_res = false;
+	strncpy(data->pairs[3].key, "DAG", 31);
+	if (directed) {
+		igraph_is_dag(graph, &bool_res);
+		strncpy(data->pairs[3].value, bool_res ? "Yes" : "No", 63);
+	} else {
+		igraph_is_acyclic(graph, &bool_res);
+		strncpy(data->pairs[3].value, bool_res ? "Yes" : "No", 63);
+	}
+	data->num_pairs++;
+
+	// 5. Connected
+	strncpy(data->pairs[4].key, "Connected", 31);
+	if (directed) {
+		igraph_is_connected(graph, &bool_res, IGRAPH_STRONG);
+	} else {
+		igraph_is_connected(graph, &bool_res, IGRAPH_WEAK);
+	}
+	strncpy(data->pairs[4].value, bool_res ? "Yes" : "No", 63);
+	data->num_pairs++;
+
+	// 6. Simple
+	igraph_is_simple(graph, &bool_res, IGRAPH_DIRECTED);
+	strncpy(data->pairs[5].key, "Simple", 31);
+	strncpy(data->pairs[5].value, bool_res ? "Yes" : "No", 63);
+	data->num_pairs++;
+
+	return data;
+}
+
 void *compute_igraph_density(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;

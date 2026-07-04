@@ -147,6 +147,11 @@ const CommandDef g_command_registry[] = {
 	{"Follow", "splc_animation", "Search Path Link Count", compute_splc_animation, apply_splc_animation, free_noop, poll_splc_gpu},
 
 	// =========================================================================
+	// Properties menu
+	// =========================================================================
+	{"", "graph_properties", "Properties", compute_graph_properties, apply_info_card, info_card_free},
+
+	// =========================================================================
 	// Structure menu
 	// =========================================================================
 	{"Structure", "igraph_diameter", "Diameter", compute_igraph_diameter, apply_info_card, info_card_free},
