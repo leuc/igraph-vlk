@@ -58,12 +58,16 @@ void graph_build_visualization(GraphData *data)
 		data->nodes[i].visible = 1.0f;
 	}
 	igraph_vector_int_t degrees;
-	igraph_vector_int_init(&degrees, data->node_count);
-	igraph_degree(&data->g, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS);
-	for (int i = 0; i < data->node_count; i++) {
-		data->nodes[i].degree = VECTOR(degrees)[i];
+	if (igraph_vector_int_init(&degrees, data->node_count) == IGRAPH_SUCCESS) {
+		igraph_degree(&data->g, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS);
+		for (int i = 0; i < data->node_count; i++) {
+			data->nodes[i].degree = VECTOR(degrees)[i];
+		}
+		igraph_vector_int_destroy(&degrees);
+	} else {
+		for (int i = 0; i < data->node_count; i++)
+			data->nodes[i].degree = 0;
 	}
-	igraph_vector_int_destroy(&degrees);
 
 	// Sync node positions from layout matrix
 	if (data->nodes) {
@@ -92,90 +96,96 @@ void graph_build_visualization(GraphData *data)
 		igraph_vector_int_t vtypes;
 		bool vnames_ok = igraph_strvector_init(&vnames, 0) == IGRAPH_SUCCESS;
 		bool vtypes_ok = igraph_vector_int_init(&vtypes, 0) == IGRAPH_SUCCESS;
-		igraph_error_t verr = igraph_cattribute_list(&data->g, NULL, NULL, &vnames, &vtypes, NULL, NULL);
-		if (verr == IGRAPH_SUCCESS && vnames_ok && vtypes_ok) {
-			int n_attrs = igraph_strvector_size(&vnames);
-			printf("[Filter] igraph_cattribute_list returned %d vertex attributes\n", n_attrs);
-			for (int a = 0; a < n_attrs; a++) {
-				const char *name = igraph_strvector_get(&vnames, a);
-				if (!name)
-					continue;
-				igraph_attribute_type_t atype = (igraph_attribute_type_t)VECTOR(vtypes)[a];
-				const char *type_str = (atype == IGRAPH_ATTRIBUTE_STRING) ? "string" : (atype == IGRAPH_ATTRIBUTE_BOOLEAN) ? "boolean" : "numeric";
-				if (atype != IGRAPH_ATTRIBUTE_STRING && atype != IGRAPH_ATTRIBUTE_BOOLEAN) {
-					printf("[Filter]   %s: %s (skipped - not string/boolean)\n", name, type_str);
-					continue;
-				}
-				// Collect distinct values, check every node has a value
-				char **values = NULL;
-				int num_values = 0;
-				int max_values = 20;
-				bool all_present = true;
-				for (int i = 0; i < data->node_count; i++) {
-					const char *val = NULL;
-					if (atype == IGRAPH_ATTRIBUTE_STRING) {
-						val = igraph_cattribute_VAS(&data->g, name, i);
-						if (!val)
-							all_present = false;
-					} else {
-						// Boolean — skip if any node lacks the attribute
-						if (!igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, name)) {
-							all_present = false;
-							break;
-						}
-						bool bv = igraph_cattribute_VAB(&data->g, name, i);
-						val = bv ? "true" : "false";
+		if (!vnames_ok || !vtypes_ok) {
+			if (vnames_ok)
+				igraph_strvector_destroy(&vnames);
+			if (vtypes_ok)
+				igraph_vector_int_destroy(&vtypes);
+			igraph_set_error_handler(prev_handler);
+		} else {
+			igraph_error_t verr = igraph_cattribute_list(&data->g, NULL, NULL, &vnames, &vtypes, NULL, NULL);
+			if (verr == IGRAPH_SUCCESS) {
+				int n_attrs = igraph_strvector_size(&vnames);
+				printf("[Filter] igraph_cattribute_list returned %d vertex attributes\n", n_attrs);
+				for (int a = 0; a < n_attrs; a++) {
+					const char *name = igraph_strvector_get(&vnames, a);
+					if (!name)
+						continue;
+					igraph_attribute_type_t atype = (igraph_attribute_type_t)VECTOR(vtypes)[a];
+					const char *type_str = (atype == IGRAPH_ATTRIBUTE_STRING) ? "string" : (atype == IGRAPH_ATTRIBUTE_BOOLEAN) ? "boolean" : "numeric";
+					if (atype != IGRAPH_ATTRIBUTE_STRING && atype != IGRAPH_ATTRIBUTE_BOOLEAN) {
+						printf("[Filter]   %s: %s (skipped - not string/boolean)\n", name, type_str);
+						continue;
 					}
-					// Deduplicate
-					bool found = false;
-					for (int v = 0; v < num_values; v++) {
-						if (strcmp(values[v], val) == 0) {
-							found = true;
-							break;
+					// Collect distinct values, check every node has a value
+					char **values = NULL;
+					int num_values = 0;
+					int max_values = 20;
+					bool all_present = true;
+					for (int i = 0; i < data->node_count; i++) {
+						const char *val = NULL;
+						if (atype == IGRAPH_ATTRIBUTE_STRING) {
+							val = igraph_cattribute_VAS(&data->g, name, i);
+							if (!val)
+								all_present = false;
+						} else {
+							// Boolean — skip if any node lacks the attribute
+							if (!igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, name)) {
+								all_present = false;
+								break;
+							}
+							bool bv = igraph_cattribute_VAB(&data->g, name, i);
+							val = bv ? "true" : "false";
+						}
+						// Deduplicate
+						bool found = false;
+						for (int v = 0; v < num_values; v++) {
+							if (strcmp(values[v], val) == 0) {
+								found = true;
+								break;
+							}
+						}
+						if (!found) {
+							if (num_values >= max_values) {
+								all_present = false;
+								break;
+							}
+							char **tmp = realloc(values, sizeof(char *) * (num_values + 1));
+							if (!tmp) {
+								all_present = false;
+								break;
+							}
+							values = tmp;
+							values[num_values] = strdup(val);
+							num_values++;
 						}
 					}
-					if (!found) {
-						if (num_values >= max_values) {
-							all_present = false;
-							break;
-						}
-						char **tmp = realloc(values, sizeof(char *) * (num_values + 1));
+					if (all_present && num_values > 1 && num_values <= max_values) {
+						printf("[Filter]   %s: %d distinct values (accepted)\n", name, num_values);
+						FilterableAttr *tmp = realloc(data->filterable_attrs, sizeof(FilterableAttr) * (data->num_filterable_attrs + 1));
 						if (!tmp) {
-							all_present = false;
-							break;
+							for (int v = 0; v < num_values; v++)
+								free(values[v]);
+							free(values);
+							continue;
 						}
-						values = tmp;
-						values[num_values] = strdup(val);
-						num_values++;
-					}
-				}
-				if (all_present && num_values > 1 && num_values <= max_values) {
-					printf("[Filter]   %s: %d distinct values (accepted)\n", name, num_values);
-					FilterableAttr *tmp = realloc(data->filterable_attrs, sizeof(FilterableAttr) * (data->num_filterable_attrs + 1));
-					if (!tmp) {
+						data->filterable_attrs = tmp;
+						data->filterable_attrs[data->num_filterable_attrs].name = strdup(name);
+						data->filterable_attrs[data->num_filterable_attrs].values = values;
+						data->filterable_attrs[data->num_filterable_attrs].num_values = num_values;
+						data->num_filterable_attrs++;
+					} else {
+						printf("[Filter]   %s: rejected (all_present=%d, num_values=%d)\n", name, all_present, num_values);
 						for (int v = 0; v < num_values; v++)
 							free(values[v]);
 						free(values);
-						continue;
 					}
-					data->filterable_attrs = tmp;
-					data->filterable_attrs[data->num_filterable_attrs].name = strdup(name);
-					data->filterable_attrs[data->num_filterable_attrs].values = values;
-					data->filterable_attrs[data->num_filterable_attrs].num_values = num_values;
-					data->num_filterable_attrs++;
-				} else {
-					printf("[Filter]   %s: rejected (all_present=%d, num_values=%d)\n", name, all_present, num_values);
-					for (int v = 0; v < num_values; v++)
-						free(values[v]);
-					free(values);
 				}
 			}
-		}
-		if (vnames_ok)
 			igraph_strvector_destroy(&vnames);
-		if (vtypes_ok)
 			igraph_vector_int_destroy(&vtypes);
-		igraph_set_error_handler(prev_handler);
+			igraph_set_error_handler(prev_handler);
+		}
 	}
 
 	if (data->num_filterable_attrs > 0) {
@@ -224,12 +234,13 @@ void graph_rebuild_edges(GraphData *data)
 
 	// Recompute degree on existing nodes — it affects node shape rendering
 	igraph_vector_int_t degrees;
-	igraph_vector_int_init(&degrees, data->node_count);
-	igraph_degree(&data->g, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS);
-	for (uint32_t i = 0; i < data->node_count; i++) {
-		data->nodes[i].degree = VECTOR(degrees)[i];
+	if (igraph_vector_int_init(&degrees, data->node_count) == IGRAPH_SUCCESS) {
+		igraph_degree(&data->g, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS);
+		for (uint32_t i = 0; i < data->node_count; i++) {
+			data->nodes[i].degree = VECTOR(degrees)[i];
+		}
+		igraph_vector_int_destroy(&degrees);
 	}
-	igraph_vector_int_destroy(&degrees);
 }
 
 // ============================================================================

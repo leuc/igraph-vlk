@@ -30,7 +30,10 @@ igraph_integer_t calculate_dag_levels(const igraph_t *graph, igraph_vector_int_t
 	}
 
 	igraph_vector_int_t topo_order;
-	igraph_vector_int_init(&topo_order, 0);
+	if (igraph_vector_int_init(&topo_order, 0) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "Failed to initialize topo_order vector\n");
+		return -1;
+	}
 
 	if (igraph_topological_sorting(graph, &topo_order, IGRAPH_OUT) != IGRAPH_SUCCESS) {
 		fprintf(stderr, "Graph is not a DAG (topological sort failed)\n");
@@ -42,7 +45,11 @@ igraph_integer_t calculate_dag_levels(const igraph_t *graph, igraph_vector_int_t
 	igraph_vector_int_null(levels);
 
 	igraph_vector_int_t out_neis;
-	igraph_vector_int_init(&out_neis, 0);
+	if (igraph_vector_int_init(&out_neis, 0) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "Failed to initialize out_neis vector\n");
+		igraph_vector_int_destroy(&topo_order);
+		return -1;
+	}
 
 	igraph_integer_t max_level = 0;
 
@@ -90,7 +97,10 @@ void *compute_splc_animation(ExecutionContext *ctx)
 
 	if (!is_dag) {
 		igraph_vector_int_t fas;
-		igraph_vector_int_init(&fas, 0);
+		if (igraph_vector_int_init(&fas, 0) != IGRAPH_SUCCESS) {
+			fprintf(stderr, "Failed to initialize fas vector\n");
+			return NULL;
+		}
 		if (igraph_feedback_arc_set(graph, &fas, NULL, IGRAPH_FAS_APPROX_EADES) == IGRAPH_SUCCESS) {
 			if (igraph_vector_int_size(&fas) > 0) {
 				igraph_es_t es = igraph_ess_vector(&fas);
@@ -126,8 +136,15 @@ void apply_splc_animation(ExecutionContext *ctx, void *result_data)
 
 	igraph_vector_int_t indeg, outdeg;
 	igraph_integer_t nv = igraph_vcount(&data->g);
-	igraph_vector_int_init(&indeg, nv);
-	igraph_vector_int_init(&outdeg, nv);
+	if (igraph_vector_int_init(&indeg, nv) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "Failed to initialize indeg vector\n");
+		return;
+	}
+	if (igraph_vector_int_init(&outdeg, nv) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "Failed to initialize outdeg vector\n");
+		igraph_vector_int_destroy(&indeg);
+		return;
+	}
 	igraph_degree(&data->g, &indeg, igraph_vss_all(), IGRAPH_IN, IGRAPH_LOOPS);
 	igraph_degree(&data->g, &outdeg, igraph_vss_all(), IGRAPH_OUT, IGRAPH_LOOPS);
 	igraph_integer_t sources = 0, sinks = 0;

@@ -46,7 +46,11 @@ void *compute_igraph_layout_reingold_tilford(ExecutionContext *ctx)
 	igraph_neimode_t mode = IGRAPH_ALL;
 
 	igraph_vector_int_t roots;
-	igraph_vector_int_init(&roots, 0);
+	if (igraph_vector_int_init(&roots, 0) != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
 	igraph_roots_for_tree_layout(graph, mode, &roots, IGRAPH_ROOT_CHOICE_DEGREE);
 
 	igraph_error_t code = igraph_layout_reingold_tilford(graph, result,

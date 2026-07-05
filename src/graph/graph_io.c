@@ -27,7 +27,10 @@ static bool graph_finish_load(GraphData *data, const char *node_attr, const char
 	data->hub_count = 0;
 
 	if (!graph_import_layout_pos(data)) {
-		igraph_matrix_init(&data->current_layout, 0, 0);
+		if (igraph_matrix_init(&data->current_layout, 0, 0) != IGRAPH_SUCCESS) {
+			fprintf(stderr, "graph_finish_load: igraph_matrix_init current_layout failed\n");
+			return false;
+		}
 		igraph_layout_grid_3d(&data->g, &data->current_layout, 0, 0);
 	}
 

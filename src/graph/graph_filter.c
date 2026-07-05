@@ -18,9 +18,13 @@ void graph_filter_degree(GraphData *data, int min_degree)
 	if (!data->graph_initialized)
 		return;
 	igraph_vector_int_t vids;
-	igraph_vector_int_init(&vids, 0);
+	if (igraph_vector_int_init(&vids, 0) != IGRAPH_SUCCESS)
+		return;
 	igraph_vector_int_t degrees;
-	igraph_vector_int_init(&degrees, 0);
+	if (igraph_vector_int_init(&degrees, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(&vids);
+		return;
+	}
 	igraph_degree(&data->g, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS);
 
 	for (int i = 0; i < igraph_vector_int_size(&degrees); i++) {
@@ -52,9 +56,13 @@ void graph_filter_coreness(GraphData *data, int min_coreness)
 	if (!data->graph_initialized)
 		return;
 	igraph_vector_int_t vids;
-	igraph_vector_int_init(&vids, 0);
+	if (igraph_vector_int_init(&vids, 0) != IGRAPH_SUCCESS)
+		return;
 	igraph_vector_int_t coreness;
-	igraph_vector_int_init(&coreness, 0);
+	if (igraph_vector_int_init(&coreness, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(&vids);
+		return;
+	}
 	igraph_coreness(&data->g, &coreness, IGRAPH_ALL);
 
 	for (int i = 0; i < igraph_vector_int_size(&coreness); i++) {
@@ -87,7 +95,8 @@ void graph_highlight_infrastructure(GraphData *data)
 
 	// Articulation points
 	igraph_vector_int_t ap;
-	igraph_vector_int_init(&ap, 0);
+	if (igraph_vector_int_init(&ap, 0) != IGRAPH_SUCCESS)
+		return;
 	igraph_articulation_points(&data->g, &ap);
 	for (int i = 0; i < igraph_vector_int_size(&ap); i++) {
 		int v_idx = VECTOR(ap)[i];
@@ -99,7 +108,10 @@ void graph_highlight_infrastructure(GraphData *data)
 
 	// Bridges
 	igraph_vector_int_t bridges;
-	igraph_vector_int_init(&bridges, 0);
+	if (igraph_vector_int_init(&bridges, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(&ap);
+		return;
+	}
 	igraph_bridges(&data->g, &bridges);
 	for (int i = 0; i < igraph_vector_int_size(&bridges); i++) {
 		igraph_integer_t from, to;

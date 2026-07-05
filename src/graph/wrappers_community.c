@@ -31,7 +31,11 @@ void *compute_igraph_community_multilevel(ExecutionContext *ctx)
 	}
 
 	igraph_vector_t modularity;
-	igraph_vector_init(&modularity, 0);
+	if (igraph_vector_init(&modularity, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 
 	igraph_error_t code = igraph_community_multilevel(graph, NULL, 1.0, membership, NULL, &modularity);
 
@@ -91,9 +95,18 @@ void *compute_igraph_community_walktrap(ExecutionContext *ctx)
 	}
 
 	igraph_matrix_int_t merges;
+	if (igraph_matrix_int_init(&merges, 0, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 	igraph_vector_t modularity;
-	igraph_matrix_int_init(&merges, 0, 0);
-	igraph_vector_init(&modularity, 0);
+	if (igraph_vector_init(&modularity, 0) != IGRAPH_SUCCESS) {
+		igraph_matrix_int_destroy(&merges);
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 
 	igraph_error_t code = igraph_community_walktrap(graph, NULL, 4, &merges, &modularity, membership);
 
@@ -120,15 +133,45 @@ void *compute_igraph_community_edge_betweenness(ExecutionContext *ctx)
 	}
 
 	igraph_vector_int_t removed_edges;
+	if (igraph_vector_int_init(&removed_edges, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 	igraph_vector_t edge_betweenness;
+	if (igraph_vector_init(&edge_betweenness, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(&removed_edges);
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 	igraph_matrix_int_t merges;
+	if (igraph_matrix_int_init(&merges, 0, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(&edge_betweenness);
+		igraph_vector_int_destroy(&removed_edges);
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 	igraph_vector_int_t bridges;
+	if (igraph_vector_int_init(&bridges, 0) != IGRAPH_SUCCESS) {
+		igraph_matrix_int_destroy(&merges);
+		igraph_vector_destroy(&edge_betweenness);
+		igraph_vector_int_destroy(&removed_edges);
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 	igraph_vector_t modularity;
-	igraph_vector_int_init(&removed_edges, 0);
-	igraph_vector_init(&edge_betweenness, 0);
-	igraph_matrix_int_init(&merges, 0, 0);
-	igraph_vector_int_init(&bridges, 0);
-	igraph_vector_init(&modularity, 0);
+	if (igraph_vector_init(&modularity, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(&bridges);
+		igraph_matrix_int_destroy(&merges);
+		igraph_vector_destroy(&edge_betweenness);
+		igraph_vector_int_destroy(&removed_edges);
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 
 	igraph_error_t code = igraph_community_edge_betweenness(graph, &removed_edges, &edge_betweenness, &merges, &bridges, &modularity, membership, igraph_is_directed(graph), NULL, NULL);
 
@@ -158,9 +201,18 @@ void *compute_igraph_community_fastgreedy(ExecutionContext *ctx)
 	}
 
 	igraph_matrix_int_t merges;
+	if (igraph_matrix_int_init(&merges, 0, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 	igraph_vector_t modularity;
-	igraph_matrix_int_init(&merges, 0, 0);
-	igraph_vector_init(&modularity, 0);
+	if (igraph_vector_init(&modularity, 0) != IGRAPH_SUCCESS) {
+		igraph_matrix_int_destroy(&merges);
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 
 	igraph_error_t code = igraph_community_fastgreedy(graph, NULL, &merges, &modularity, membership);
 
@@ -233,7 +285,11 @@ void *compute_igraph_community_spinglass(ExecutionContext *ctx)
 	igraph_real_t modularity;
 	igraph_real_t temperature;
 	igraph_vector_int_t csize;
-	igraph_vector_int_init(&csize, 0);
+	if (igraph_vector_int_init(&csize, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 
 	// Parameters: weights, modularity, temperature, membership, csize, spins, parupdate, starttemp, stoptemp, coolfact, update_rule, gamma, implementation, gamma_minus
 	// Use number of vertices as number of spins, must be at least 2
@@ -262,13 +318,35 @@ void *compute_igraph_community_leading_eigenvector(ExecutionContext *ctx)
 	}
 
 	igraph_matrix_int_t merges;
+	if (igraph_matrix_int_init(&merges, 0, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 	igraph_vector_t eigenvalues;
+	if (igraph_vector_init(&eigenvalues, 0) != IGRAPH_SUCCESS) {
+		igraph_matrix_int_destroy(&merges);
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 	igraph_vector_list_t eigenvectors;
+	if (igraph_vector_list_init(&eigenvectors, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(&eigenvalues);
+		igraph_matrix_int_destroy(&merges);
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 	igraph_vector_int_t history;
-	igraph_matrix_int_init(&merges, 0, 0);
-	igraph_vector_init(&eigenvalues, 0);
-	igraph_vector_list_init(&eigenvectors, 0);
-	igraph_vector_int_init(&history, 0);
+	if (igraph_vector_int_init(&history, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_list_destroy(&eigenvectors);
+		igraph_vector_destroy(&eigenvalues);
+		igraph_matrix_int_destroy(&merges);
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 
 	igraph_arpack_options_t options;
 	igraph_arpack_options_init(&options);
@@ -327,7 +405,11 @@ void *compute_igraph_community_voronoi(ExecutionContext *ctx)
 
 	igraph_vector_int_t generators;
 	igraph_real_t modularity;
-	igraph_vector_int_init(&generators, 0);
+	if (igraph_vector_int_init(&generators, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(membership);
+		IGRAPH_FREE(membership);
+		return NULL;
+	}
 
 	igraph_error_t code = igraph_community_voronoi(graph, membership, &generators, &modularity, NULL, NULL, IGRAPH_ALL, -1.0);
 

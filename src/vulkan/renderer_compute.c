@@ -219,7 +219,16 @@ static void splc_build_level_groups(Renderer *r, igraph_vector_int_t *levels, ig
 	r->splc.level_groups = calloc(r->splc.num_levels, sizeof(igraph_vector_int_t *));
 	for (int l = 0; l < r->splc.num_levels; l++) {
 		r->splc.level_groups[l] = malloc(sizeof(igraph_vector_int_t));
-		igraph_vector_int_init(r->splc.level_groups[l], 0);
+		if (igraph_vector_int_init(r->splc.level_groups[l], 0) != IGRAPH_SUCCESS) {
+			free(r->splc.level_groups[l]);
+			for (int k = 0; k < l; k++) {
+				igraph_vector_int_destroy(r->splc.level_groups[k]);
+				free(r->splc.level_groups[k]);
+			}
+			free(r->splc.level_groups);
+			r->splc.level_groups = NULL;
+			return;
+		}
 	}
 	for (igraph_integer_t i = 0; i < n; i++) {
 		int lvl = (int)VECTOR(*levels)[i];
@@ -232,7 +241,14 @@ static void splc_build_topology(const igraph_t *g, igraph_integer_t n, SPLCNode 
 {
 	SPLCNode *splc_nodes = calloc(n, sizeof(SPLCNode));
 	igraph_vector_int_t out_neis;
-	igraph_vector_int_init(&out_neis, 0);
+	if (igraph_vector_int_init(&out_neis, 0) != IGRAPH_SUCCESS) {
+		free(splc_nodes);
+		*out_nodes = NULL;
+		*out_edges = NULL;
+		*out_traffic = NULL;
+		*out_total_edges = 0;
+		return;
+	}
 	uint32_t edge_offset = 0;
 	for (igraph_integer_t i = 0; i < n; i++) {
 		splc_nodes[i].edge_offset = edge_offset;
@@ -255,7 +271,16 @@ static void splc_build_topology(const igraph_t *g, igraph_integer_t n, SPLCNode 
 	igraph_vector_int_destroy(&out_neis);
 
 	igraph_vector_int_t in_neis;
-	igraph_vector_int_init(&in_neis, 0);
+	if (igraph_vector_int_init(&in_neis, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(&out_neis);
+		free(splc_nodes);
+		free(splc_edges);
+		*out_nodes = NULL;
+		*out_edges = NULL;
+		*out_traffic = NULL;
+		*out_total_edges = 0;
+		return;
+	}
 	float *traffic = calloc(n, sizeof(float));
 	for (igraph_integer_t i = 0; i < n; i++) {
 		igraph_vector_int_clear(&in_neis);
@@ -322,7 +347,9 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 		return;
 
 	igraph_vector_int_t levels;
-	igraph_vector_int_init(&levels, 0);
+	if (igraph_vector_int_init(&levels, 0) != IGRAPH_SUCCESS) {
+		return;
+	}
 	igraph_integer_t max_level = calculate_dag_levels(&graph->g, &levels);
 	if (max_level < 0) {
 		igraph_vector_int_destroy(&levels);
@@ -424,7 +451,10 @@ void renderer_readback_splc_weights(Renderer *r, GraphData *graph)
 	vkUnmapMemory(r->core.device, r->splc.edges_memory);
 
 	igraph_vector_int_t out_neis;
-	igraph_vector_int_init(&out_neis, 0);
+	if (igraph_vector_int_init(&out_neis, 0) != IGRAPH_SUCCESS) {
+		free(splc_edges);
+		return;
+	}
 	uint32_t e_idx = 0;
 	float max_w = 0.0f;
 	double total_w = 0.0;

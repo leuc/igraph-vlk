@@ -32,8 +32,15 @@ void graph_filter_by_attribute(GraphData *data, const char *attr_name, const cha
 	// Determine attribute type
 	igraph_strvector_t vnames;
 	igraph_vector_int_t vtypes;
-	igraph_strvector_init(&vnames, 0);
-	igraph_vector_int_init(&vtypes, 0);
+	if (igraph_strvector_init(&vnames, 0) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "graph_filter_by_attribute: strvector init failed\n");
+		return;
+	}
+	if (igraph_vector_int_init(&vtypes, 0) != IGRAPH_SUCCESS) {
+		igraph_strvector_destroy(&vnames);
+		fprintf(stderr, "graph_filter_by_attribute: vector_int init failed\n");
+		return;
+	}
 	igraph_attribute_type_t attr_type = IGRAPH_ATTRIBUTE_NUMERIC;
 	igraph_error_handler_t *prev = igraph_set_error_handler(igraph_error_handler_printignore);
 	igraph_error_t err = igraph_cattribute_list(&data->g, NULL, NULL, &vnames, &vtypes, NULL, NULL);

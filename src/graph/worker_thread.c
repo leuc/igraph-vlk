@@ -283,7 +283,14 @@ WorkerJob *worker_thread_submit_job(WorkerThreadContext *context, CommandDef *cm
 	pthread_mutex_init(&job->snapshot_mutex, NULL);
 	job->snapshot_initialized = false;
 	job->has_new_snapshot = false;
-	igraph_matrix_init(&job->snapshot_matrix, 0, 0);
+	if (igraph_matrix_init(&job->snapshot_matrix, 0, 0) != IGRAPH_SUCCESS) {
+		pthread_mutex_destroy(&job->mutex);
+		pthread_mutex_destroy(&job->snapshot_mutex);
+		free(ctx_copy);
+		free(job);
+		pthread_mutex_unlock(&context->queue_mutex);
+		return NULL;
+	}
 
 	// Add job to queue
 	context->job_queue[context->queue_tail] = job;

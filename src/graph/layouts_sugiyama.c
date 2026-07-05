@@ -43,16 +43,38 @@ void *compute_igraph_layout_sugiyama(ExecutionContext *ctx)
 	 * Minimizes edge crossings while maintaining hierarchy
 	 */
 	igraph_matrix_list_t routing;
-	igraph_matrix_list_init(&routing, 0);
+	if (igraph_matrix_list_init(&routing, 0) != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
 
 	igraph_vector_int_t layers;
-	igraph_vector_int_init(&layers, vcount);
+	if (igraph_vector_int_init(&layers, vcount) != IGRAPH_SUCCESS) {
+		igraph_matrix_list_destroy(&routing);
+		igraph_matrix_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
 
 	if (vcount > 0) {
 		igraph_vector_int_t queue;
-		igraph_vector_int_init(&queue, vcount);
+		if (igraph_vector_int_init(&queue, vcount) != IGRAPH_SUCCESS) {
+			igraph_vector_int_destroy(&layers);
+			igraph_matrix_list_destroy(&routing);
+			igraph_matrix_destroy(result);
+			IGRAPH_FREE(result);
+			return NULL;
+		}
 		igraph_vector_bool_t visited;
-		igraph_vector_bool_init(&visited, vcount);
+		if (igraph_vector_bool_init(&visited, vcount) != IGRAPH_SUCCESS) {
+			igraph_vector_int_destroy(&queue);
+			igraph_vector_int_destroy(&layers);
+			igraph_matrix_list_destroy(&routing);
+			igraph_matrix_destroy(result);
+			IGRAPH_FREE(result);
+			return NULL;
+		}
 		igraph_vector_bool_fill(&visited, 0);
 
 		igraph_vector_int_push_back(&queue, 0);
@@ -62,7 +84,15 @@ void *compute_igraph_layout_sugiyama(ExecutionContext *ctx)
 		for (igraph_integer_t read_idx = 0; read_idx < igraph_vector_int_size(&queue); read_idx++) {
 			igraph_integer_t v = VECTOR(queue)[read_idx];
 			igraph_vector_int_t neigh;
-			igraph_vector_int_init(&neigh, 0);
+			if (igraph_vector_int_init(&neigh, 0) != IGRAPH_SUCCESS) {
+				igraph_vector_bool_destroy(&visited);
+				igraph_vector_int_destroy(&queue);
+				igraph_vector_int_destroy(&layers);
+				igraph_matrix_list_destroy(&routing);
+				igraph_matrix_destroy(result);
+				IGRAPH_FREE(result);
+				return NULL;
+			}
 			igraph_neighbors(graph, &neigh, v, IGRAPH_ALL, 0, 0);
 			for (igraph_integer_t i = 0; i < igraph_vector_int_size(&neigh); i++) {
 				igraph_integer_t u = VECTOR(neigh)[i];
@@ -120,16 +150,38 @@ void *compute_igraph_layout_sugiyama_radial(ExecutionContext *ctx)
 	 * but maps horizontal coords to concentric circles
 	 */
 	igraph_matrix_list_t routing;
-	igraph_matrix_list_init(&routing, 0);
+	if (igraph_matrix_list_init(&routing, 0) != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
 
 	igraph_vector_int_t layers;
-	igraph_vector_int_init(&layers, vcount);
+	if (igraph_vector_int_init(&layers, vcount) != IGRAPH_SUCCESS) {
+		igraph_matrix_list_destroy(&routing);
+		igraph_matrix_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
 
 	if (vcount > 0) {
 		igraph_vector_int_t queue;
-		igraph_vector_int_init(&queue, vcount);
+		if (igraph_vector_int_init(&queue, vcount) != IGRAPH_SUCCESS) {
+			igraph_vector_int_destroy(&layers);
+			igraph_matrix_list_destroy(&routing);
+			igraph_matrix_destroy(result);
+			IGRAPH_FREE(result);
+			return NULL;
+		}
 		igraph_vector_bool_t visited;
-		igraph_vector_bool_init(&visited, vcount);
+		if (igraph_vector_bool_init(&visited, vcount) != IGRAPH_SUCCESS) {
+			igraph_vector_int_destroy(&queue);
+			igraph_vector_int_destroy(&layers);
+			igraph_matrix_list_destroy(&routing);
+			igraph_matrix_destroy(result);
+			IGRAPH_FREE(result);
+			return NULL;
+		}
 		igraph_vector_bool_fill(&visited, 0);
 
 		igraph_vector_int_push_back(&queue, 0);
@@ -139,7 +191,15 @@ void *compute_igraph_layout_sugiyama_radial(ExecutionContext *ctx)
 		for (igraph_integer_t read_idx = 0; read_idx < igraph_vector_int_size(&queue); read_idx++) {
 			igraph_integer_t v = VECTOR(queue)[read_idx];
 			igraph_vector_int_t neigh;
-			igraph_vector_int_init(&neigh, 0);
+			if (igraph_vector_int_init(&neigh, 0) != IGRAPH_SUCCESS) {
+				igraph_vector_bool_destroy(&visited);
+				igraph_vector_int_destroy(&queue);
+				igraph_vector_int_destroy(&layers);
+				igraph_matrix_list_destroy(&routing);
+				igraph_matrix_destroy(result);
+				IGRAPH_FREE(result);
+				return NULL;
+			}
 			igraph_neighbors(graph, &neigh, v, IGRAPH_ALL, 0, 0);
 			for (igraph_integer_t i = 0; i < igraph_vector_int_size(&neigh); i++) {
 				igraph_integer_t u = VECTOR(neigh)[i];

@@ -221,15 +221,18 @@ int main(int argc, char **argv)
 		// Poll real-time layout snapshots from worker thread
 		if (app.current_worker_job && app.current_graph.graph_initialized) {
 			igraph_matrix_t snap;
-			igraph_matrix_init(&snap, 0, 0);
-			if (worker_thread_poll_snapshot(app.current_worker_job, &snap)) {
-				if (snap.nrow == app.current_graph.node_count && snap.nrow > 0) {
-					ExecutionContext ec = {0};
-					ec.app_state = &app;
-					apply_layout_matrix(&ec, &snap);
+			if (igraph_matrix_init(&snap, 0, 0) != IGRAPH_SUCCESS) {
+				fprintf(stderr, "Failed to initialize snapshot matrix\n");
+			} else {
+				if (worker_thread_poll_snapshot(app.current_worker_job, &snap)) {
+					if (snap.nrow == app.current_graph.node_count && snap.nrow > 0) {
+						ExecutionContext ec = {0};
+						ec.app_state = &app;
+						apply_layout_matrix(&ec, &snap);
+					}
 				}
+				igraph_matrix_destroy(&snap);
 			}
-			igraph_matrix_destroy(&snap);
 		}
 
 		// Generate menu buffers if menu is open or processing

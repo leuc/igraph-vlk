@@ -183,7 +183,8 @@ static double calculate_move_delta_intra(const igraph_t *ig, const igraph_matrix
 	double uz_n = uz / radius;
 
 	igraph_vector_int_t neis;
-	igraph_vector_int_init(&neis, 0);
+	if (igraph_vector_int_init(&neis, 0) != IGRAPH_SUCCESS)
+		return 0.0;
 	igraph_incident(ig, &neis, u, IGRAPH_ALL, IGRAPH_NO_LOOPS);
 	for (int i = 0; i < igraph_vector_int_size(&neis); i++) {
 		igraph_integer_t from, to;
@@ -205,7 +206,8 @@ static double calculate_move_delta_intra(const igraph_t *ig, const igraph_matrix
 	igraph_vector_int_destroy(&neis);
 
 	if (v != -1) {
-		igraph_vector_int_init(&neis, 0);
+		if (igraph_vector_int_init(&neis, 0) != IGRAPH_SUCCESS)
+			return 0.0;
 		igraph_incident(ig, &neis, v, IGRAPH_ALL, IGRAPH_NO_LOOPS);
 		for (int i = 0; i < igraph_vector_int_size(&neis); i++) {
 			igraph_integer_t from, to;
@@ -251,7 +253,8 @@ static double calculate_move_delta_inter(const igraph_t *ig, const igraph_matrix
 	double ux_n = ux / u_r, uy_n = uy / u_r, uz_n = uz / u_r;
 
 	igraph_vector_int_t neis;
-	igraph_vector_int_init(&neis, 0);
+	if (igraph_vector_int_init(&neis, 0) != IGRAPH_SUCCESS)
+		return 0.0;
 	igraph_incident(ig, &neis, u, IGRAPH_ALL, IGRAPH_NO_LOOPS);
 	for (int i = 0; i < igraph_vector_int_size(&neis); i++) {
 		igraph_integer_t from, to;
@@ -272,7 +275,8 @@ static double calculate_move_delta_inter(const igraph_t *ig, const igraph_matrix
 	igraph_vector_int_destroy(&neis);
 
 	if (v != -1) {
-		igraph_vector_int_init(&neis, 0);
+		if (igraph_vector_int_init(&neis, 0) != IGRAPH_SUCCESS)
+			return 0.0;
 		igraph_incident(ig, &neis, v, IGRAPH_ALL, IGRAPH_NO_LOOPS);
 		for (int i = 0; i < igraph_vector_int_size(&neis); i++) {
 			igraph_integer_t from, to;
@@ -330,11 +334,18 @@ static bool layered_sphere_iterate(LayeredSphereContext *ctx, const igraph_t *ig
 		igraph_to_undirected(&undirected_ig, IGRAPH_TO_UNDIRECTED_COLLAPSE, NULL);
 
 		igraph_vector_int_t coreness;
-		igraph_vector_int_init(&coreness, vcount);
+		if (igraph_vector_int_init(&coreness, vcount) != IGRAPH_SUCCESS) {
+			igraph_destroy(&undirected_ig);
+			return false;
+		}
 		igraph_coreness(&undirected_ig, &coreness, IGRAPH_ALL);
 
 		igraph_vector_int_t membership;
-		igraph_vector_int_init(&membership, vcount);
+		if (igraph_vector_int_init(&membership, vcount) != IGRAPH_SUCCESS) {
+			igraph_vector_int_destroy(&coreness);
+			igraph_destroy(&undirected_ig);
+			return false;
+		}
 
 		igraph_integer_t ecount = igraph_ecount(ig);
 		double graph_density = (vcount > 1) ? (2.0 * ecount) / ((double)vcount * (vcount - 1)) : 0.0;
@@ -400,7 +411,11 @@ static bool layered_sphere_iterate(LayeredSphereContext *ctx, const igraph_t *ig
 		igraph_vector_int_destroy(&coreness);
 
 		igraph_vector_t transitivity;
-		igraph_vector_init(&transitivity, vcount);
+		if (igraph_vector_init(&transitivity, vcount) != IGRAPH_SUCCESS) {
+			igraph_vector_int_destroy(&membership);
+			igraph_destroy(&undirected_ig);
+			return false;
+		}
 		igraph_transitivity_local_undirected(&undirected_ig, &transitivity, igraph_vss_all(), IGRAPH_TRANSITIVITY_ZERO);
 
 		int *intra_degree = calloc(vcount, sizeof(int));
@@ -516,7 +531,8 @@ static bool layered_sphere_iterate(LayeredSphereContext *ctx, const igraph_t *ig
 			int neighbor_count = 0;
 
 			igraph_vector_int_t neis;
-			igraph_vector_int_init(&neis, 0);
+			if (igraph_vector_int_init(&neis, 0) != IGRAPH_SUCCESS)
+				continue;
 			igraph_incident(ig, &neis, u, IGRAPH_ALL, IGRAPH_NO_LOOPS);
 
 			for (int j = 0; j < (int)igraph_vector_int_size(&neis); j++) {

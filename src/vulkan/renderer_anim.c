@@ -67,7 +67,10 @@ void renderer_anim_compute_bfs(Renderer *r, GraphData *graph)
 			source = i;
 
 	igraph_vector_int_t order;
-	igraph_vector_int_init(&order, 0);
+	if (igraph_vector_int_init(&order, 0) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "[BFS] Failed to init order vector\n");
+		return;
+	}
 	igraph_error_t bfs_ret = igraph_bfs_simple(&graph->g, source, IGRAPH_ALL, &order, NULL, NULL);
 	if (bfs_ret != IGRAPH_SUCCESS) {
 		fprintf(stderr, "[BFS] igraph_bfs_simple failed: %s\n", igraph_strerror(bfs_ret));
@@ -75,7 +78,7 @@ void renderer_anim_compute_bfs(Renderer *r, GraphData *graph)
 		return;
 	}
 
-	int *ranks = IGRAPH_MALLOC(sizeof(int) * graph->node_count);
+	int *ranks = malloc(sizeof(int) * graph->node_count);
 	for (int i = 0; i < (int)graph->node_count; i++)
 		ranks[i] = -5;
 
@@ -84,7 +87,7 @@ void renderer_anim_compute_bfs(Renderer *r, GraphData *graph)
 		ranks[VECTOR(order)[i]] = i;
 	igraph_vector_int_destroy(&order);
 
-	uint32_t *from = IGRAPH_MALLOC(sizeof(uint32_t) * graph->edge_count);
+	uint32_t *from = malloc(sizeof(uint32_t) * graph->edge_count);
 	for (int i = 0; i < (int)graph->edge_count; i++)
 		from[i] = graph->edges[i].from;
 
@@ -121,8 +124,8 @@ void renderer_anim_compute_bfs(Renderer *r, GraphData *graph)
 
 	g_bfs_start_time = r->anim.data.time;
 
-	IGRAPH_FREE(ranks);
-	IGRAPH_FREE(from);
+	free(ranks);
+	free(from);
 }
 
 void renderer_anim_compute_dfs(Renderer *r, GraphData *graph)
@@ -136,7 +139,10 @@ void renderer_anim_compute_dfs(Renderer *r, GraphData *graph)
 			source = i;
 
 	igraph_vector_int_t order;
-	igraph_vector_int_init(&order, 0);
+	if (igraph_vector_int_init(&order, 0) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "[DFS] Failed to init order vector\n");
+		return;
+	}
 	igraph_error_t dfs_ret = igraph_dfs(&graph->g, source, IGRAPH_ALL, true, &order, NULL, NULL, NULL, NULL, NULL, NULL);
 	if (dfs_ret != IGRAPH_SUCCESS) {
 		fprintf(stderr, "[DFS] igraph_dfs failed: %s\n", igraph_strerror(dfs_ret));
@@ -144,7 +150,7 @@ void renderer_anim_compute_dfs(Renderer *r, GraphData *graph)
 		return;
 	}
 
-	int *ranks = IGRAPH_MALLOC(sizeof(int) * graph->node_count);
+	int *ranks = malloc(sizeof(int) * graph->node_count);
 	for (int i = 0; i < (int)graph->node_count; i++)
 		ranks[i] = -5;
 
@@ -153,7 +159,7 @@ void renderer_anim_compute_dfs(Renderer *r, GraphData *graph)
 		ranks[VECTOR(order)[i]] = i;
 	igraph_vector_int_destroy(&order);
 
-	uint32_t *from = IGRAPH_MALLOC(sizeof(uint32_t) * graph->edge_count);
+	uint32_t *from = malloc(sizeof(uint32_t) * graph->edge_count);
 	for (int i = 0; i < (int)graph->edge_count; i++)
 		from[i] = graph->edges[i].from;
 
@@ -190,8 +196,8 @@ void renderer_anim_compute_dfs(Renderer *r, GraphData *graph)
 
 	g_bfs_start_time = r->anim.data.time;
 
-	IGRAPH_FREE(ranks);
-	IGRAPH_FREE(from);
+	free(ranks);
+	free(from);
 }
 
 void renderer_anim_compute_topo(Renderer *r, GraphData *graph)
@@ -200,7 +206,10 @@ void renderer_anim_compute_topo(Renderer *r, GraphData *graph)
 		return;
 
 	igraph_vector_int_t order;
-	igraph_vector_int_init(&order, 0);
+	if (igraph_vector_int_init(&order, 0) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "[Topo] Failed to init order vector\n");
+		return;
+	}
 	igraph_error_t topo_ret = igraph_topological_sorting(&graph->g, &order, IGRAPH_OUT);
 	if (topo_ret != IGRAPH_SUCCESS) {
 		fprintf(stderr, "[Topo] Graph is not a DAG (topological sort failed)\n");
@@ -208,7 +217,7 @@ void renderer_anim_compute_topo(Renderer *r, GraphData *graph)
 		return;
 	}
 
-	int *ranks = IGRAPH_MALLOC(sizeof(int) * graph->node_count);
+	int *ranks = malloc(sizeof(int) * graph->node_count);
 	for (int i = 0; i < (int)graph->node_count; i++)
 		ranks[i] = -5;
 
@@ -217,7 +226,7 @@ void renderer_anim_compute_topo(Renderer *r, GraphData *graph)
 		ranks[VECTOR(order)[i]] = i;
 	igraph_vector_int_destroy(&order);
 
-	uint32_t *from = IGRAPH_MALLOC(sizeof(uint32_t) * graph->edge_count);
+	uint32_t *from = malloc(sizeof(uint32_t) * graph->edge_count);
 	for (int i = 0; i < (int)graph->edge_count; i++)
 		from[i] = graph->edges[i].from;
 
@@ -254,6 +263,6 @@ void renderer_anim_compute_topo(Renderer *r, GraphData *graph)
 
 	g_bfs_start_time = r->anim.data.time;
 
-	IGRAPH_FREE(ranks);
-	IGRAPH_FREE(from);
+	free(ranks);
+	free(from);
 }

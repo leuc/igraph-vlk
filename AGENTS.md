@@ -167,9 +167,17 @@ Mimic existing patterns strictly. Run `clang-format` after edits.
 ### Memory and Error Handling
 - `int` 0=success/<0=fail; `fprintf(stderr)` + cleanup/return.
 - Vulkan: `VK_CHECK`.
-- igraph: `!= IGRAPH_SUCCESS`.
-- IGRAPH_MALLOC / IGRAPH_FREE for igraph objects
-= IGRAPH_CHECK
+- igraph: `!= IGRAPH_SUCCESS` (manual checks; `IGRAPH_CHECK` cannot be used in `void*` worker functions).
+- `IGRAPH_MALLOC` / `IGRAPH_FREE` for heap-allocated igraph objects only (igraph_t*, igraph_matrix_t*, igraph_vector_t*, igraph_vector_int_t*).
+- `malloc` / `free` for plain C arrays and non-igraph structs.
+- Every `igraph_*_init` call must be checked. Pattern:
+  ```c
+  if (igraph_vector_int_init(&temp, n) != IGRAPH_SUCCESS) {
+      /* cleanup previously allocated resources */
+      return NULL; /* or appropriate failure value */
+  }
+  ```
+- Early-exit pattern (`!= IGRAPH_SUCCESS` with cleanup) is preferred over positive-check (`== IGRAPH_SUCCESS` with nested body).
 
 ### When Editing
 - Mimic neighbors; lint/format/build; no regressions.

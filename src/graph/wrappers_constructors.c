@@ -86,7 +86,11 @@ void *compute_igraph_square_lattice(ExecutionContext *ctx)
 
 	// 2D lattice: 5x5 = 25 vertices
 	igraph_vector_int_t dimvector;
-	igraph_vector_int_init(&dimvector, 2);
+	if (igraph_vector_int_init(&dimvector, 2) != IGRAPH_SUCCESS) {
+		igraph_destroy(new_graph);
+		IGRAPH_FREE(new_graph);
+		return NULL;
+	}
 	igraph_vector_int_set(&dimvector, 0, 5);
 	igraph_vector_int_set(&dimvector, 1, 5);
 
@@ -265,7 +269,11 @@ void *compute_igraph_degree_sequence_game(ExecutionContext *ctx)
 
 	// Create a degree sequence: 20 vertices each with degree 4
 	igraph_vector_int_t degrees;
-	igraph_vector_int_init(&degrees, 20);
+	if (igraph_vector_int_init(&degrees, 20) != IGRAPH_SUCCESS) {
+		igraph_destroy(new_graph);
+		IGRAPH_FREE(new_graph);
+		return NULL;
+	}
 	for (int i = 0; i < 20; i++) {
 		igraph_vector_int_set(&degrees, i, 4);
 	}
@@ -373,7 +381,11 @@ void *compute_igraph_nearest_neighbor_graph(ExecutionContext *ctx)
 
 	// Generate random points: 25 vertices in 2D unit square
 	igraph_matrix_t points;
-	igraph_matrix_init(&points, 25, 2);
+	if (igraph_matrix_init(&points, 25, 2) != IGRAPH_SUCCESS) {
+		igraph_destroy(new_graph);
+		IGRAPH_FREE(new_graph);
+		return NULL;
+	}
 	for (int i = 0; i < 25; i++) {
 		igraph_matrix_set(&points, i, 0, (igraph_real_t)rand() / RAND_MAX);
 		igraph_matrix_set(&points, i, 1, (igraph_real_t)rand() / RAND_MAX);
@@ -402,7 +414,11 @@ void *compute_igraph_gabriel_graph(ExecutionContext *ctx)
 
 	// Generate random points: 20 vertices in 2D unit square
 	igraph_matrix_t points;
-	igraph_matrix_init(&points, 20, 2);
+	if (igraph_matrix_init(&points, 20, 2) != IGRAPH_SUCCESS) {
+		igraph_destroy(new_graph);
+		IGRAPH_FREE(new_graph);
+		return NULL;
+	}
 	for (int i = 0; i < 20; i++) {
 		igraph_matrix_set(&points, i, 0, (igraph_real_t)rand() / RAND_MAX);
 		igraph_matrix_set(&points, i, 1, (igraph_real_t)rand() / RAND_MAX);
@@ -460,14 +476,19 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 	int n = igraph_vcount(&data->g);
 	if (n > 0) {
 		igraph_matrix_t *layout = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
-		if (igraph_matrix_init(layout, n, 3) == IGRAPH_SUCCESS) {
-			igraph_layout_grid_3d(&data->g, layout, 0, 0);
-			igraph_matrix_init_copy(&data->current_layout, layout);
-			igraph_matrix_destroy(layout);
+		if (igraph_matrix_init(layout, n, 3) != IGRAPH_SUCCESS) {
 			IGRAPH_FREE(layout);
+			return;
 		}
+		igraph_layout_grid_3d(&data->g, layout, 0, 0);
+		igraph_matrix_init_copy(&data->current_layout, layout);
+		igraph_matrix_destroy(layout);
+		IGRAPH_FREE(layout);
 	} else {
-		igraph_matrix_init(&data->current_layout, 1, 3);
+		if (igraph_matrix_init(&data->current_layout, 1, 3) != IGRAPH_SUCCESS) {
+			fprintf(stderr, "[apply_new_graph] Failed to initialize current_layout\n");
+			return;
+		}
 	}
 
 	graph_build_visualization(data);

@@ -141,7 +141,10 @@ static void label_rebuild_tree(Renderer *r, GraphData *graph)
 	}
 
 	igraph_matrix_t coords;
-	igraph_matrix_init(&coords, n, 3);
+	if (igraph_matrix_init(&coords, n, 3) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "label_rebuild_tree: igraph_matrix_init coords failed\n");
+		return;
+	}
 	for (uint32_t i = 0; i < n; i++) {
 		igraph_matrix_set(&coords, i, 0, (igraph_real_t)(graph->nodes[i].position[0] * r->layoutScale));
 		igraph_matrix_set(&coords, i, 1, (igraph_real_t)(graph->nodes[i].position[1] * r->layoutScale));
@@ -149,7 +152,11 @@ static void label_rebuild_tree(Renderer *r, GraphData *graph)
 	}
 
 	igraph_vector_t masses;
-	igraph_vector_init(&masses, n);
+	if (igraph_vector_init(&masses, n) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "label_rebuild_tree: igraph_vector_init masses failed\n");
+		igraph_matrix_destroy(&coords);
+		return;
+	}
 	for (uint32_t i = 0; i < n; i++)
 		VECTOR(masses)[i] = 1.0;
 

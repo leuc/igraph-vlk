@@ -29,7 +29,11 @@ void *compute_igraph_degree(ExecutionContext *ctx)
 	}
 
 	igraph_vector_int_t degrees;
-	igraph_vector_int_init(&degrees, vcount);
+	if (igraph_vector_int_init(&degrees, vcount) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
 	igraph_degree(graph, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS);
 
 	for (igraph_integer_t i = 0; i < vcount; i++) {
@@ -228,7 +232,11 @@ void *compute_igraph_coreness(ExecutionContext *ctx)
 	}
 
 	igraph_vector_int_t coreness;
-	igraph_vector_int_init(&coreness, vcount);
+	if (igraph_vector_int_init(&coreness, vcount) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
 	igraph_error_t code = igraph_coreness(graph, &coreness, IGRAPH_ALL);
 
 	if (code != IGRAPH_SUCCESS) {

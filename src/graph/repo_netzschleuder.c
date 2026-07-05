@@ -286,16 +286,14 @@ void apply_netzschleuder_download(ExecutionContext *ctx, void *result_data)
 	if (n > 0) {
 		if (!graph_import_layout_pos(data)) {
 			igraph_matrix_t *layout = IGRAPH_MALLOC(sizeof(igraph_matrix_t));
-			if (igraph_matrix_init(layout, n, 3) == IGRAPH_SUCCESS) {
-				igraph_layout_grid_3d(&data->g, layout, 0, 0);
-				igraph_matrix_init_copy(&data->current_layout, layout);
-				igraph_matrix_destroy(layout);
-			} else {
+			if (igraph_matrix_init(layout, n, 3) != IGRAPH_SUCCESS) {
 				IGRAPH_FREE(layout);
-				layout = NULL;
+				return;
 			}
-			if (layout)
-				IGRAPH_FREE(layout);
+			igraph_layout_grid_3d(&data->g, layout, 0, 0);
+			igraph_matrix_init_copy(&data->current_layout, layout);
+			igraph_matrix_destroy(layout);
+			IGRAPH_FREE(layout);
 		}
 	} else {
 		igraph_matrix_init(&data->current_layout, 1, 3);

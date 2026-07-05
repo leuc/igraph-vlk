@@ -105,7 +105,11 @@ void *compute_igraph_layout_star(ExecutionContext *ctx)
 	igraph_integer_t center = 0;
 	if (vcount > 1) {
 		igraph_vector_int_t degrees;
-		igraph_vector_int_init(&degrees, vcount);
+		if (igraph_vector_int_init(&degrees, vcount) != IGRAPH_SUCCESS) {
+			igraph_matrix_destroy(result);
+			IGRAPH_FREE(result);
+			return NULL;
+		}
 		igraph_degree(graph, &degrees, igraph_vss_all(), IGRAPH_ALL, IGRAPH_NO_LOOPS);
 
 		igraph_real_t max_deg = -1;

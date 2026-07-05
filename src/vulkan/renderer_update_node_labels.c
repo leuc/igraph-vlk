@@ -93,11 +93,13 @@ static char *build_detail_card_text(igraph_t *g, int node, size_t *out_len)
 	igraph_set_error_handler(prev_handler);
 
 	igraph_vector_int_t degree_vec;
-	igraph_vector_int_init(&degree_vec, 1);
-	igraph_integer_t node_id = node;
-	igraph_degree(g, &degree_vec, igraph_vss_1(node_id), IGRAPH_ALL, IGRAPH_LOOPS);
-	int deg = (int)VECTOR(degree_vec)[0];
-	igraph_vector_int_destroy(&degree_vec);
+	int deg = 0;
+	if (igraph_vector_int_init(&degree_vec, 1) == IGRAPH_SUCCESS) {
+		igraph_integer_t node_id = node;
+		igraph_degree(g, &degree_vec, igraph_vss_1(node_id), IGRAPH_ALL, IGRAPH_LOOPS);
+		deg = (int)VECTOR(degree_vec)[0];
+		igraph_vector_int_destroy(&degree_vec);
+	}
 	{
 		int w = snprintf(buf + pos, cap - pos, "degree: %d\n", deg);
 		if (w > 0)

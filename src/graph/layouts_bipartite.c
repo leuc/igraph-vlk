@@ -37,7 +37,11 @@ void *compute_igraph_layout_bipartite(ExecutionContext *ctx)
 	 * We use alternating pattern as fallback when no type attribute available
 	 */
 	igraph_vector_bool_t types;
-	igraph_vector_bool_init(&types, vcount);
+	if (igraph_vector_bool_init(&types, vcount) != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
 
 	for (igraph_integer_t i = 0; i < vcount; i++) {
 		igraph_vector_bool_set(&types, i, (i % 2 == 0));
@@ -79,7 +83,11 @@ void *compute_igraph_layout_bipartite_simple(ExecutionContext *ctx)
 	}
 
 	igraph_vector_bool_t types;
-	igraph_vector_bool_init(&types, vcount);
+	if (igraph_vector_bool_init(&types, vcount) != IGRAPH_SUCCESS) {
+		igraph_matrix_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
 	for (igraph_integer_t i = 0; i < vcount; i++) {
 		igraph_vector_bool_set(&types, i, (i % 2 == 0));
 	}

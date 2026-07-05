@@ -26,7 +26,14 @@ static void bcgl_build_topology(const igraph_t *g, igraph_integer_t n, BCGLTopoN
 {
 	BCGLTopoNode *topo_nodes = calloc(n, sizeof(BCGLTopoNode));
 	igraph_vector_int_t out_neis;
-	igraph_vector_int_init(&out_neis, 0);
+	if (igraph_vector_int_init(&out_neis, 0) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "bcgl_build_topology: igraph_vector_int_init out_neis failed\n");
+		free(topo_nodes);
+		*out_nodes = NULL;
+		*out_edges = NULL;
+		*out_total_edges = 0;
+		return;
+	}
 
 	uint32_t edge_offset = 0;
 	for (igraph_integer_t i = 0; i < n; i++) {
@@ -372,7 +379,11 @@ void renderer_readback_bcgl_positions(Renderer *r, GraphData *graph)
 	// Update current_layout matrix
 	if (graph->current_layout.nrow != n || graph->current_layout.ncol < 3) {
 		igraph_matrix_destroy(&graph->current_layout);
-		igraph_matrix_init(&graph->current_layout, n, 3);
+		if (igraph_matrix_init(&graph->current_layout, n, 3) != IGRAPH_SUCCESS) {
+			fprintf(stderr, "renderer_readback_bcgl_positions: igraph_matrix_init current_layout failed\n");
+			vkUnmapMemory(r->core.device, ctx->node_mem);
+			return;
+		}
 	}
 
 	for (igraph_integer_t i = 0; i < n; i++) {
