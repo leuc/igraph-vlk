@@ -141,6 +141,7 @@ add_executable(
 	src/graph/wrappers_paths.c
 	src/graph/wrappers_structural.c
 	src/graph/wrappers_cycles.c
+	src/graph/wrappers_filter.c
 	src/graph/repo.c
 	src/graph/repo_netzschleuder.c
 	src/graph/worker_thread.c
@@ -153,7 +154,6 @@ add_executable(
 	src/interaction/spatial.c
 	src/interaction/state.c
 	src/interaction/gamepad.c
-	src/interaction/filter.c
 	src/interaction/window.c
 	# UI modules
 	src/ui/hud.c

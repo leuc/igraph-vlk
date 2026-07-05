@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#ifndef INTERACTION_FILTER_H
-#define INTERACTION_FILTER_H
+#ifndef WRAPPERS_FILTER_H
+#define WRAPPERS_FILTER_H
 
 #include "interaction/state.h"
 
@@ -23,4 +23,4 @@ void apply_filter_by_attr(ExecutionContext *ctx, void *result_data);
 // Free: frees FilterParams
 void free_filter_params(void *result_data);
 
-#endif // INTERACTION_FILTER_H
+#endif // WRAPPERS_FILTER_H

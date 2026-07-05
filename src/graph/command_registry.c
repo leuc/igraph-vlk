@@ -9,11 +9,11 @@
 #include "graph/wrappers_community.h"
 #include "graph/wrappers_constructors.h"
 #include "graph/wrappers_cycles.h"
+#include "graph/wrappers_filter.h"
 #include "graph/wrappers_layout.h"
 #include "graph/wrappers_paths.h"
 #include "graph/wrappers_splc.h"
 #include "graph/wrappers_structural.h"
-#include "interaction/filter.h"
 
 const CommandDef g_command_registry[] = {
 	{"Data/Patterns", "igraph_ring", "Ring", compute_igraph_ring, apply_new_graph, free_new_graph},

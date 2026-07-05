@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#include "interaction/filter.h"
+#include "graph/wrappers_filter.h"
 
 #include "app_state.h"
 #include "graph/graph_filter_visibility.h"
