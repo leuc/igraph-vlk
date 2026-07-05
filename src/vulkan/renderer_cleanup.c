@@ -21,8 +21,10 @@ void cleanup_uniform_buffers(Renderer *r)
 {
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++)
 		VK_DESTROY_BUFFER(r->core.device, r->ubo.buffers[i], r->ubo.memory[i]);
-	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++)
-		vkDestroyFence(r->core.device, r->graphUpdateFences[i], NULL);
+	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++) {
+		if (r->graphUpdateFences[i] != VK_NULL_HANDLE)
+			vkDestroyFence(r->core.device, r->graphUpdateFences[i], NULL);
+	}
 }
 
 void cleanup_compute_context(Renderer *r)
@@ -81,8 +83,10 @@ void cleanup_xr_resources(Renderer *r)
 			vkDestroyImage(r->core.device, r->xrDepthImages[i], NULL);
 		if (r->xrDepthImageMemories[i] != VK_NULL_HANDLE)
 			vkFreeMemory(r->core.device, r->xrDepthImageMemories[i], NULL);
-		for (uint32_t j = 0; j < r->xrFramebufferImageCount[i]; j++)
-			vkDestroyFramebuffer(r->core.device, r->xrFramebuffers[i][j], NULL);
+		for (uint32_t j = 0; j < r->xrFramebufferImageCount[i]; j++) {
+			if (r->xrFramebuffers[i][j] != VK_NULL_HANDLE)
+				vkDestroyFramebuffer(r->core.device, r->xrFramebuffers[i][j], NULL);
+		}
 		free(r->xrFramebuffers[i]);
 	}
 	free(r->xrFramebuffers);
@@ -116,24 +120,41 @@ void cleanup_splc_pipelines_core(Renderer *r)
 	if (r->descriptors.splc_compute_layout != VK_NULL_HANDLE)
 		vkDestroyDescriptorSetLayout(r->core.device, r->descriptors.splc_compute_layout, NULL);
 
-	vkDestroyDescriptorPool(r->core.device, r->descriptors.pool, NULL);
-	vkDestroySampler(r->core.device, r->texture.sampler, NULL);
-	vkDestroyImageView(r->core.device, r->texture.view, NULL);
-	vkDestroyImage(r->core.device, r->texture.image, NULL);
-	vkFreeMemory(r->core.device, r->texture.memory, NULL);
+	if (r->descriptors.pool != VK_NULL_HANDLE)
+		vkDestroyDescriptorPool(r->core.device, r->descriptors.pool, NULL);
+	if (r->texture.sampler != VK_NULL_HANDLE)
+		vkDestroySampler(r->core.device, r->texture.sampler, NULL);
+	if (r->texture.view != VK_NULL_HANDLE)
+		vkDestroyImageView(r->core.device, r->texture.view, NULL);
+	if (r->texture.image != VK_NULL_HANDLE)
+		vkDestroyImage(r->core.device, r->texture.image, NULL);
+	if (r->texture.memory != VK_NULL_HANDLE)
+		vkFreeMemory(r->core.device, r->texture.memory, NULL);
 
-	vkDestroyPipeline(r->core.device, r->pipelines.compute_spherical, NULL);
-	vkDestroyPipelineLayout(r->core.device, r->computePipelineLayout, NULL);
-	vkDestroyDescriptorSetLayout(r->core.device, r->descriptors.compute_layout, NULL);
-	vkDestroyPipeline(r->core.device, r->pipelines.ui, NULL);
-	vkDestroyPipeline(r->core.device, r->pipelines.label, NULL);
-	vkDestroyPipeline(r->core.device, r->pipelines.menu, NULL);
-	vkDestroyPipeline(r->core.device, r->pipelines.textQuad, NULL);
-	vkDestroyPipeline(r->core.device, r->pipelines.ray, NULL);
-	vkDestroyPipeline(r->core.device, r->pipelines.edge, NULL);
-	vkDestroyPipeline(r->core.device, r->pipelines.node, NULL);
-	vkDestroyPipelineLayout(r->core.device, r->pipelineLayout, NULL);
-	vkDestroyDescriptorSetLayout(r->core.device, r->descriptors.layout, NULL);
+	if (r->pipelines.compute_spherical != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->pipelines.compute_spherical, NULL);
+	if (r->computePipelineLayout != VK_NULL_HANDLE)
+		vkDestroyPipelineLayout(r->core.device, r->computePipelineLayout, NULL);
+	if (r->descriptors.compute_layout != VK_NULL_HANDLE)
+		vkDestroyDescriptorSetLayout(r->core.device, r->descriptors.compute_layout, NULL);
+	if (r->pipelines.ui != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->pipelines.ui, NULL);
+	if (r->pipelines.label != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->pipelines.label, NULL);
+	if (r->pipelines.menu != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->pipelines.menu, NULL);
+	if (r->pipelines.textQuad != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->pipelines.textQuad, NULL);
+	if (r->pipelines.ray != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->pipelines.ray, NULL);
+	if (r->pipelines.edge != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->pipelines.edge, NULL);
+	if (r->pipelines.node != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->pipelines.node, NULL);
+	if (r->pipelineLayout != VK_NULL_HANDLE)
+		vkDestroyPipelineLayout(r->core.device, r->pipelineLayout, NULL);
+	if (r->descriptors.layout != VK_NULL_HANDLE)
+		vkDestroyDescriptorSetLayout(r->core.device, r->descriptors.layout, NULL);
 
 	vulkan_render_pass_destroy(&r->renderPass, r->core.device);
 	if (r->renderPassXR != VK_NULL_HANDLE)
