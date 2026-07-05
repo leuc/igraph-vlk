@@ -316,6 +316,10 @@ void *compute_igraph_bipartite_game_gnm(ExecutionContext *ctx)
 void *compute_igraph_bipartite_projection(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	// First, check if the graph is bipartite and get the vertex types
 	igraph_bool_t is_bipartite;
 	igraph_vector_bool_t *types = IGRAPH_MALLOC(sizeof(igraph_vector_bool_t));

@@ -12,6 +12,10 @@
 void *compute_graph_properties(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
 	if (!data)
 		return NULL;
@@ -77,6 +81,10 @@ void *compute_graph_properties(ExecutionContext *ctx)
 void *compute_igraph_density(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
 	if (!data)
 		return NULL;
@@ -102,6 +110,10 @@ void *compute_igraph_density(ExecutionContext *ctx)
 void *compute_igraph_transitivity_undirected(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
 	if (!data)
 		return NULL;
@@ -127,6 +139,10 @@ void *compute_igraph_transitivity_undirected(ExecutionContext *ctx)
 void *compute_igraph_assortativity_degree(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
 	if (!data)
 		return NULL;

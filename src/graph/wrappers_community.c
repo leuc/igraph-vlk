@@ -23,6 +23,10 @@
 void *compute_igraph_community_multilevel(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -53,6 +57,10 @@ void *compute_igraph_community_multilevel(ExecutionContext *ctx)
 void *compute_igraph_community_leiden(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -87,6 +95,10 @@ void *compute_igraph_community_leiden(ExecutionContext *ctx)
 void *compute_igraph_community_walktrap(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -125,6 +137,10 @@ void *compute_igraph_community_walktrap(ExecutionContext *ctx)
 void *compute_igraph_community_edge_betweenness(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -193,6 +209,10 @@ void *compute_igraph_community_edge_betweenness(ExecutionContext *ctx)
 void *compute_igraph_community_fastgreedy(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -231,6 +251,10 @@ void *compute_igraph_community_fastgreedy(ExecutionContext *ctx)
 void *compute_igraph_community_infomap(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -254,6 +278,10 @@ void *compute_igraph_community_infomap(ExecutionContext *ctx)
 void *compute_igraph_community_label_propagation(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -275,6 +303,10 @@ void *compute_igraph_community_label_propagation(ExecutionContext *ctx)
 void *compute_igraph_community_spinglass(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -310,6 +342,10 @@ void *compute_igraph_community_spinglass(ExecutionContext *ctx)
 void *compute_igraph_community_leading_eigenvector(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -373,6 +409,10 @@ void *compute_igraph_community_leading_eigenvector(ExecutionContext *ctx)
 void *compute_igraph_community_optimal_modularity(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -396,6 +436,10 @@ void *compute_igraph_community_optimal_modularity(ExecutionContext *ctx)
 void *compute_igraph_community_voronoi(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {
@@ -427,6 +471,10 @@ void *compute_igraph_community_voronoi(ExecutionContext *ctx)
 void *compute_igraph_community_fluid_communities(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t *membership = IGRAPH_MALLOC(sizeof(igraph_vector_int_t));
 	if (igraph_vector_int_init(membership, vcount) != IGRAPH_SUCCESS) {

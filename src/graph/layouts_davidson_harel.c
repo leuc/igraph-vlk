@@ -23,6 +23,11 @@
 void *compute_igraph_layout_davidson_harel(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
+
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_integer_t ecount = igraph_ecount(graph);
 	igraph_matrix_t *result = IGRAPH_MALLOC(sizeof(igraph_matrix_t));

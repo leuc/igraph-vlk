@@ -84,6 +84,10 @@ igraph_integer_t calculate_dag_levels(const igraph_t *graph, igraph_vector_int_t
 void *compute_splc_animation(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	if (!graph || igraph_vcount(graph) == 0)
 		return NULL;
 

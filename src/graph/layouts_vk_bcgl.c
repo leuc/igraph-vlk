@@ -18,6 +18,10 @@
 void *compute_layout_bcgl(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	if (!graph || igraph_vcount(graph) == 0)
 		return NULL;
 

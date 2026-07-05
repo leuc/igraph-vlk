@@ -12,6 +12,10 @@
 void *compute_igraph_diameter(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
 	if (!data)
 		return NULL;
@@ -33,6 +37,10 @@ void *compute_igraph_diameter(ExecutionContext *ctx)
 void *compute_igraph_radius(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
 	if (!data)
 		return NULL;
@@ -60,6 +68,10 @@ void *compute_igraph_radius(ExecutionContext *ctx)
 void *compute_igraph_average_path_length(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
 	if (!data)
 		return NULL;

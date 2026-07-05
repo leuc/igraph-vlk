@@ -21,6 +21,10 @@
 void *compute_igraph_degree(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -48,6 +52,10 @@ void *compute_igraph_degree(ExecutionContext *ctx)
 void *compute_igraph_closeness_cutoff(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -70,6 +78,10 @@ void *compute_igraph_closeness_cutoff(ExecutionContext *ctx)
 void *compute_igraph_betweenness(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -91,6 +103,10 @@ void *compute_igraph_betweenness(ExecutionContext *ctx)
 void *compute_igraph_eigenvector_centrality(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -112,6 +128,10 @@ void *compute_igraph_eigenvector_centrality(ExecutionContext *ctx)
 void *compute_igraph_pagerank(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -135,6 +155,10 @@ void *compute_igraph_pagerank(ExecutionContext *ctx)
 void *compute_igraph_hub_and_authority_scores(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -182,6 +206,10 @@ void *compute_igraph_hub_and_authority_scores(ExecutionContext *ctx)
 void *compute_igraph_harmonic_centrality(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -203,6 +231,10 @@ void *compute_igraph_harmonic_centrality(ExecutionContext *ctx)
 void *compute_igraph_strength(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -224,6 +256,10 @@ void *compute_igraph_strength(ExecutionContext *ctx)
 void *compute_igraph_coreness(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
@@ -258,6 +294,10 @@ void *compute_igraph_coreness(ExecutionContext *ctx)
 void *compute_igraph_constraint(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
 	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {

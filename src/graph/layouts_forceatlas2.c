@@ -25,6 +25,11 @@
 void *compute_igraph_layout_forceatlas2_3d(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
+
 	cpu_set_t cpuset;
 	CPU_ZERO(&cpuset);
 	for (int i = 0; i < 24; i++) {

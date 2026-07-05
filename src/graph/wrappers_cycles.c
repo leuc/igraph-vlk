@@ -19,6 +19,10 @@
 void *compute_remove_feedback_arc_set(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	if (!graph || igraph_vcount(graph) == 0)
 		return NULL;
 
@@ -87,6 +91,10 @@ void apply_remove_feedback_arc_set(ExecutionContext *ctx, void *result_data)
 void *compute_igraph_simplify(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	if (!graph || igraph_vcount(graph) == 0)
 		return NULL;
 
@@ -112,6 +120,10 @@ void *compute_igraph_simplify(ExecutionContext *ctx)
 void *compute_to_directed(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	if (!graph || igraph_vcount(graph) == 0)
 		return NULL;
 
@@ -137,6 +149,10 @@ void *compute_to_directed(ExecutionContext *ctx)
 void *compute_to_undirected_collapse(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	if (!graph || igraph_vcount(graph) == 0)
 		return NULL;
 
@@ -162,6 +178,10 @@ void *compute_to_undirected_collapse(ExecutionContext *ctx)
 void *compute_to_undirected_mutual(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
 	if (!graph || igraph_vcount(graph) == 0)
 		return NULL;
 
