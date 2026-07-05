@@ -35,6 +35,7 @@ void init_menu_tree(MenuNode *root);
 void menu_tree_destroy(MenuNode *node);
 void update_menu_transforms(MenuNode *node, const SpatialBasis *basis);
 MenuNode *raycast_menu_vr(struct AppState *state, vec3 ray_ori, vec3 ray_dir);
+MenuNode *menu_find_node_by_command_id(MenuNode *node, const char *command_id);
 
 // ============================================================================
 // Dynamic Attribute Filter Menu

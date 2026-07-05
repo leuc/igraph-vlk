@@ -7,12 +7,14 @@
 
 #include "app_state.h"
 #include "graph/wrappers_layout.h"
+#include "ui/menu.h"
 #include <igraph.h>
 #include <igraph_constants.h>
 #include <igraph_random.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 // ============================================================================
 // USE CURRENT POSITIONS AS SEED (TOGGLE)
@@ -30,6 +32,17 @@ void apply_use_current_positions_as_seed(ExecutionContext *ctx, void *result_dat
 		return;
 	GraphData *data = &ctx->app_state->current_graph;
 	data->use_as_seed = !data->use_as_seed;
+
+	// Update menu label to reflect toggle state
+	MenuNode *node = menu_find_node_by_command_id(ctx->app_state->app_ctx.root_menu, "use_current_positions_as_seed");
+	if (node) {
+		free((void *)node->label);
+		node->label = strdup(data->use_as_seed ? "[x] Use current positions as seed" : "[ ] Use current positions as seed");
+		if (node->command) {
+			free((void *)node->command->display_name);
+			node->command->display_name = strdup(node->label);
+		}
+	}
 }
 
 // ============================================================================

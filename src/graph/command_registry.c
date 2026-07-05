@@ -36,7 +36,7 @@ const CommandDef g_command_registry[] = {
 	{"Data/Spatial", "igraph_nearest_neighbor_graph", "Geometric random graphs", compute_igraph_nearest_neighbor_graph, apply_new_graph, free_new_graph},
 	{"Data/Spatial", "igraph_gabriel_graph", "Gabriel graphs", compute_igraph_gabriel_graph, apply_new_graph, free_new_graph},
 
-	{"Layout/Seed", "use_current_positions_as_seed", "Use current positions as seed", compute_use_current_positions_as_seed, apply_use_current_positions_as_seed, free_noop},
+	{"Layout/Seed", "use_current_positions_as_seed", "[ ] Use current positions as seed", compute_use_current_positions_as_seed, apply_use_current_positions_as_seed, free_noop},
 	{"Layout/Seed", "seed_random_uniform", "Random Uniform [-1, 1]", compute_seed_random_uniform, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Seed", "seed_random_bounded", "Random Bounded [-sqrt(n)/2]", compute_seed_random_bounded, apply_layout_matrix, free_layout_matrix},
 	{"Layout/Seed", "seed_random_normal", "Random Normal N(0, 0.01)", compute_seed_random_normal, apply_layout_matrix, free_layout_matrix},

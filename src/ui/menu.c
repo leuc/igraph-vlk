@@ -350,6 +350,20 @@ static const CommandDef *find_command_def(const char *command_id)
 	return NULL;
 }
 
+MenuNode *menu_find_node_by_command_id(MenuNode *node, const char *command_id)
+{
+	if (!node)
+		return NULL;
+	if (node->type == NODE_LEAF_COMMAND && node->command && node->command->cmd_def && strcmp(node->command->cmd_def->command_id, command_id) == 0)
+		return node;
+	for (int i = 0; i < node->num_children; i++) {
+		MenuNode *found = menu_find_node_by_command_id(node->children[i], command_id);
+		if (found)
+			return found;
+	}
+	return NULL;
+}
+
 void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 {
 	if (!root || !data)
