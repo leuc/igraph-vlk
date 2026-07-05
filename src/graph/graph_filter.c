@@ -45,7 +45,9 @@ void graph_filter_degree(GraphData *data, int min_degree)
 		igraph_matrix_init(&data->current_layout, 0, 0);
 		int side = (int)ceil(pow(igraph_vcount(&data->g), 1.0 / 3.0));
 		igraph_layout_grid_3d(&data->g, &data->current_layout, side, side);
-		graph_build_visualization(data);
+		if (!graph_build_visualization(data)) {
+			fprintf(stderr, "[graph_filter_degree] graph_build_visualization failed\n");
+		}
 	}
 	igraph_vector_int_destroy(&vids);
 	igraph_vector_int_destroy(&degrees);
@@ -82,7 +84,9 @@ void graph_filter_coreness(GraphData *data, int min_coreness)
 		igraph_matrix_init(&data->current_layout, 0, 0);
 		int side = (int)ceil(pow(igraph_vcount(&data->g), 1.0 / 3.0));
 		igraph_layout_grid_3d(&data->g, &data->current_layout, side, side);
-		graph_build_visualization(data);
+		if (!graph_build_visualization(data)) {
+			fprintf(stderr, "[graph_filter_coreness] graph_build_visualization failed\n");
+		}
 	}
 	igraph_vector_int_destroy(&vids);
 	igraph_vector_int_destroy(&coreness);

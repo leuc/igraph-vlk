@@ -17,7 +17,7 @@
 // Build the entire visualization arrays for a new graph.
 // Caller intention: "I have a completely new graph — build everything."
 // ============================================================================
-void graph_build_visualization(GraphData *data)
+bool graph_build_visualization(GraphData *data)
 {
 	uint32_t old_node_count = data->node_count;
 
@@ -38,6 +38,8 @@ void graph_build_visualization(GraphData *data)
 
 	// Build nodes
 	data->nodes = malloc(sizeof(Node) * data->node_count);
+	if (!data->nodes && data->node_count > 0)
+		return false;
 	bool has_node_attr = data->node_attr_name && igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, data->node_attr_name);
 	bool has_label = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, "label");
 	float max_n_val = 0.0f;
@@ -202,6 +204,8 @@ void graph_build_visualization(GraphData *data)
 
 	// Build edges
 	data->edges = malloc(sizeof(Edge) * data->edge_count);
+	if (!data->edges && data->edge_count > 0)
+		return false;
 	for (int i = 0; i < data->edge_count; i++) {
 		igraph_integer_t from, to;
 		igraph_edge(&data->g, i, &from, &to);
@@ -209,13 +213,14 @@ void graph_build_visualization(GraphData *data)
 		data->edges[i].to = (uint32_t)to;
 		data->edges[i].weight = 0.0f;
 	}
+	return true;
 }
 
 // ============================================================================
 // Rebuild only the edge array and node degrees after in-place edge changes.
 // Caller intention: "Edges changed — update edges and degrees, leave nodes alone."
 // ============================================================================
-void graph_rebuild_edges(GraphData *data)
+bool graph_rebuild_edges(GraphData *data)
 {
 	data->edge_count = igraph_ecount(&data->g);
 	data->props.edge_count = (int)data->edge_count;
@@ -224,6 +229,8 @@ void graph_rebuild_edges(GraphData *data)
 		free(data->edges);
 
 	data->edges = malloc(sizeof(Edge) * data->edge_count);
+	if (!data->edges && data->edge_count > 0)
+		return false;
 	for (int i = 0; i < data->edge_count; i++) {
 		igraph_integer_t from, to;
 		igraph_edge(&data->g, i, &from, &to);
@@ -241,6 +248,7 @@ void graph_rebuild_edges(GraphData *data)
 		}
 		igraph_vector_int_destroy(&degrees);
 	}
+	return true;
 }
 
 // ============================================================================

@@ -69,7 +69,10 @@ void apply_remove_feedback_arc_set(ExecutionContext *ctx, void *result_data)
 	AppState *state = ctx->app_state;
 	GraphData *data = &state->current_graph;
 
-	graph_rebuild_edges(data);
+	if (!graph_rebuild_edges(data)) {
+		fprintf(stderr, "[apply_remove_feedback_arc_set] graph_rebuild_edges failed\n");
+		return;
+	}
 	renderer_update_graph(&state->renderer, data);
 	state->renderer.label.tree_needs_rebuild = true;
 
@@ -192,7 +195,10 @@ void apply_inplace_graph_update(ExecutionContext *ctx, void *result_data)
 	AppState *state = ctx->app_state;
 	GraphData *data = &state->current_graph;
 
-	graph_rebuild_edges(data);
+	if (!graph_rebuild_edges(data)) {
+		fprintf(stderr, "[apply_inplace_graph_update] graph_rebuild_edges failed\n");
+		return;
+	}
 	renderer_update_graph(&state->renderer, data);
 	state->renderer.label.tree_needs_rebuild = true;
 

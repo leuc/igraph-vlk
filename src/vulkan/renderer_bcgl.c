@@ -247,16 +247,16 @@ void renderer_create_bcgl_compute_pipeline(Renderer *r)
 // ============================================================================
 // PUBLIC: Initialize BCGL buffers from graph
 // ============================================================================
-void renderer_init_bcgl_buffers(Renderer *r, GraphData *graph)
+bool renderer_init_bcgl_buffers(Renderer *r, GraphData *graph)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
 	if (!ctx->pipeline)
-		return;
+		return true;
 
 	igraph_integer_t n = graph->node_count;
 	igraph_integer_t m = graph->edge_count;
 	if (n == 0)
-		return;
+		return true;
 
 	bcgl_destroy_old_buffers(r);
 
@@ -282,6 +282,7 @@ void renderer_init_bcgl_buffers(Renderer *r, GraphData *graph)
 	ctx->active = true;
 	ctx->iterations_dispatched = 0;
 	ctx->total_iterations = 0;
+	return true;
 }
 
 // ============================================================================

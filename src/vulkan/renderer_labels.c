@@ -124,11 +124,13 @@ static void bh_traverse_nearest_k(const igraph_bh_tree_t *tree, igraph_integer_t
 }
 
 // Rebuild the Barnes-Hut tree from current node positions (scaled by layoutScale).
-static void label_rebuild_tree(Renderer *r, GraphData *graph)
+static bool label_rebuild_tree(Renderer *r, GraphData *graph)
 {
 	uint32_t n = graph->node_count;
-	if (n == 0)
-		return;
+	if (n == 0) {
+		r->label.tree_needs_rebuild = false;
+		return true;
+	}
 
 	igraph_integer_t max_level, leaf_capacity;
 	igraph_bh_tree_get_scaling_params(n, 3, &max_level, &leaf_capacity);
@@ -137,13 +139,13 @@ static void label_rebuild_tree(Renderer *r, GraphData *graph)
 	igraph_error_t err = igraph_bh_tree_init(&r->label.tree, 3, 0.7, max_level, leaf_capacity);
 	if (err != IGRAPH_SUCCESS) {
 		fprintf(stderr, "label_rebuild_tree: igraph_bh_tree_init failed\n");
-		return;
+		return false;
 	}
 
 	igraph_matrix_t coords;
 	if (igraph_matrix_init(&coords, n, 3) != IGRAPH_SUCCESS) {
 		fprintf(stderr, "label_rebuild_tree: igraph_matrix_init coords failed\n");
-		return;
+		return false;
 	}
 	for (uint32_t i = 0; i < n; i++) {
 		igraph_matrix_set(&coords, i, 0, (igraph_real_t)(graph->nodes[i].position[0] * r->layoutScale));
@@ -155,7 +157,7 @@ static void label_rebuild_tree(Renderer *r, GraphData *graph)
 	if (igraph_vector_init(&masses, n) != IGRAPH_SUCCESS) {
 		fprintf(stderr, "label_rebuild_tree: igraph_vector_init masses failed\n");
 		igraph_matrix_destroy(&coords);
-		return;
+		return false;
 	}
 	for (uint32_t i = 0; i < n; i++)
 		VECTOR(masses)[i] = 1.0;
@@ -166,10 +168,11 @@ static void label_rebuild_tree(Renderer *r, GraphData *graph)
 
 	if (err != IGRAPH_SUCCESS) {
 		fprintf(stderr, "label_rebuild_tree: igraph_bh_tree_build failed\n");
-		return;
+		return false;
 	}
 
 	r->label.tree_needs_rebuild = false;
+	return true;
 }
 
 // Find K nearest nodes to the query point using BH tree traversal.
@@ -298,8 +301,10 @@ void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos,
 	}
 
 	// Rebuild BH tree if positions changed
-	if (r->label.tree_needs_rebuild)
-		label_rebuild_tree(r, graph);
+	if (r->label.tree_needs_rebuild) {
+		if (!label_rebuild_tree(r, graph))
+			fprintf(stderr, "renderer_update_node_labels: label_rebuild_tree failed\n");
+	}
 
 	r->label.count = 0;
 

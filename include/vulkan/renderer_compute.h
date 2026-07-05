@@ -53,7 +53,7 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
  * Creates node/edge topology buffers and traffic buffers for the compute shader.
  * Must be called after graph is loaded or changes.
  */
-void renderer_init_splc_buffers(Renderer *r, GraphData *graph);
+bool renderer_init_splc_buffers(Renderer *r, GraphData *graph);
 
 /**
  * Dispatch one level of the SPLC animation.

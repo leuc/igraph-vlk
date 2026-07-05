@@ -107,7 +107,10 @@ void apply_layout_bcgl(ExecutionContext *ctx, void *result_data)
 	}
 
 	// Init BCGL GPU buffers (fast, non-blocking)
-	renderer_init_bcgl_buffers(renderer, data);
+	if (!renderer_init_bcgl_buffers(renderer, data)) {
+		fprintf(stderr, "[apply_layout_bcgl] renderer_init_bcgl_buffers failed\n");
+		return;
+	}
 
 	// Set iteration counters for the per-frame poll loop
 	renderer->bcgl_ctx.total_iterations = BCGL_TOTAL_ITERATIONS;

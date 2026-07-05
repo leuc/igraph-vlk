@@ -13,7 +13,7 @@ void renderer_create_bcgl_compute_pipeline(Renderer *r);
  * Initialize BCGL compute buffers (node positions + CSR topology).
  * Destroys any prior buffers, seeds node positions from current layout.
  */
-void renderer_init_bcgl_buffers(Renderer *r, GraphData *graph);
+bool renderer_init_bcgl_buffers(Renderer *r, GraphData *graph);
 
 /**
  * Dispatch a chunk of BCGL layout iterations on the GPU (non-blocking).

@@ -34,7 +34,10 @@ static bool graph_finish_load(GraphData *data, const char *node_attr, const char
 		igraph_layout_grid_3d(&data->g, &data->current_layout, 0, 0);
 	}
 
-	graph_build_visualization(data);
+	if (!graph_build_visualization(data)) {
+		fprintf(stderr, "graph_finish_load: graph_build_visualization failed\n");
+		return false;
+	}
 	return true;
 }
 

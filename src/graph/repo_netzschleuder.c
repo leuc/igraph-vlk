@@ -299,7 +299,10 @@ void apply_netzschleuder_download(ExecutionContext *ctx, void *result_data)
 		igraph_matrix_init(&data->current_layout, 1, 3);
 	}
 
-	graph_build_visualization(data);
+	if (!graph_build_visualization(data)) {
+		fprintf(stderr, "[apply_netzschleuder_download] graph_build_visualization failed\n");
+		return;
+	}
 	renderer_update_graph(renderer, data);
 	renderer->label.tree_needs_rebuild = true;
 

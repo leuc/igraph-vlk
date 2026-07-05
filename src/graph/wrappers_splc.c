@@ -127,8 +127,14 @@ void apply_splc_animation(ExecutionContext *ctx, void *result_data)
 	GraphData *data = &state->current_graph;
 
 	state->renderer.needsAttributeUpload = VK_TRUE;
-	graph_rebuild_edges(data);
-	renderer_init_splc_buffers(&state->renderer, data);
+	if (!graph_rebuild_edges(data)) {
+		fprintf(stderr, "[apply_splc_animation] graph_rebuild_edges failed\n");
+		return;
+	}
+	if (!renderer_init_splc_buffers(&state->renderer, data)) {
+		fprintf(stderr, "[apply_splc_animation] renderer_init_splc_buffers failed\n");
+		return;
+	}
 	renderer_update_graph(&state->renderer, data);
 	state->renderer.label.tree_needs_rebuild = true;
 

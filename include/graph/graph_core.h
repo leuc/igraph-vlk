@@ -24,14 +24,14 @@ void graph_free_data(GraphData *data);
  * Node colors are randomized, positions are synced from the layout matrix.
  * @param data Pointer to GraphData to build
  */
-void graph_build_visualization(GraphData *data);
+bool graph_build_visualization(GraphData *data);
 
 /**
  * Rebuild only the edge array and node degrees after in-place edge changes.
  * Does NOT touch node colors, labels, sizes, or positions.
  * @param data Pointer to GraphData whose edges changed
  */
-void graph_rebuild_edges(GraphData *data);
+bool graph_rebuild_edges(GraphData *data);
 
 /**
  * Try to populate current_layout from _pos vertex attributes.

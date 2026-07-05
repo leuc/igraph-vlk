@@ -332,10 +332,10 @@ static void splc_write_compute_descriptors(Renderer *r)
 // ============================================================================
 // Initialize SPLC buffers from a GraphData instance
 // ============================================================================
-void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
+bool renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 {
 	if (!r->core.has_atomic_float)
-		return;
+		return true;
 
 	BufPair old_bufs[5];
 	splc_save_old_buffers(r, old_bufs);
@@ -344,11 +344,11 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	igraph_integer_t n = graph->node_count;
 	igraph_integer_t m = graph->edge_count;
 	if (n == 0 || !igraph_is_directed(&graph->g))
-		return;
+		return true;
 
 	igraph_vector_int_t levels;
 	if (igraph_vector_int_init(&levels, 0) != IGRAPH_SUCCESS) {
-		return;
+		return false;
 	}
 	igraph_integer_t max_level = calculate_dag_levels(&graph->g, &levels);
 	if (max_level < 0) {
@@ -357,7 +357,7 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 		splc_write_graphics_descriptors(r);
 		splc_destroy_buffer(r->core.device, old_bufs[1].buf, old_bufs[1].mem);
 		splc_destroy_buffer(r->core.device, old_bufs[4].buf, old_bufs[4].mem);
-		return;
+		return true;
 	}
 
 	r->splc.num_levels = (int)max_level + 1;
@@ -389,6 +389,7 @@ void renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	r->splc.active = true;
 	r->splc.current_level = 0;
 	r->splc.last_level_time = r->anim.data.time;
+	return true;
 }
 
 void renderer_dispatch_splc_level(Renderer *r, VkCommandBuffer cmd)

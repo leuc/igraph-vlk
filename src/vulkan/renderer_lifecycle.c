@@ -287,7 +287,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	return true;
 }
 
-void renderer_recreate_swapchain(Renderer *r)
+bool renderer_recreate_swapchain(Renderer *r)
 {
 	int w = 0, h = 0;
 	glfwGetFramebufferSize(r->window, &w, &h);
@@ -297,7 +297,11 @@ void renderer_recreate_swapchain(Renderer *r)
 	}
 
 	// Ensure queue is idle before destroying per-image semaphores
-	VK_CHECK(vkDeviceWaitIdle(r->core.device), "Failed to wait for device idle during swapchain recreation");
+	VkResult wait_res = vkDeviceWaitIdle(r->core.device);
+	if (wait_res != VK_SUCCESS) {
+		fprintf(stderr, "renderer_recreate_swapchain: vkDeviceWaitIdle failed\n");
+		return false;
+	}
 
 	// Destroy old framebuffers (render pass survives — format-based, not extent-based)
 	for (uint32_t i = 0; i < r->renderPass.imageCount; i++) {
@@ -339,4 +343,5 @@ void renderer_recreate_swapchain(Renderer *r)
 	r->ubo.data.proj[1][1] *= -1;
 
 	r->framebufferResized = false;
+	return true;
 }

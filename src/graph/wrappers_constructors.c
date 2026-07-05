@@ -491,7 +491,10 @@ void apply_new_graph(ExecutionContext *ctx, void *result_data)
 		}
 	}
 
-	graph_build_visualization(data);
+	if (!graph_build_visualization(data)) {
+		fprintf(stderr, "[apply_new_graph] graph_build_visualization failed\n");
+		return;
+	}
 
 	// Refresh renderer
 	renderer_update_graph(renderer, data);
