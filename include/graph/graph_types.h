@@ -30,6 +30,9 @@ typedef struct
  * Core Data Structures
  * ============================================================================ */
 
+#define NODE_SIZE_MIN 0.05f
+#define NODE_SIZE_MAX 4.0f
+
 typedef struct
 {
 	vec3 position;

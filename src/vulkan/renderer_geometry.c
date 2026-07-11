@@ -72,8 +72,8 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	NodeAttribute *nodeAttributes = malloc(sizeof(NodeAttribute) * graph->node_count);
 	for (uint32_t i = 0; i < graph->node_count; i++) {
 		float size = graph->nodes[i].size;
-		if (size < 0.1f)
-			size = 0.1f;
+		if (size < NODE_SIZE_MIN)
+			size = NODE_SIZE_MIN;
 		glm_vec3_scale(graph->nodes[i].position, r->layoutScale, nodePositions[i].pos);
 		memcpy(nodeAttributes[i].color, graph->nodes[i].color, sizeof(vec3));
 		nodeAttributes[i].size = size;

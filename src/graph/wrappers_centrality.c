@@ -351,8 +351,8 @@ void apply_centrality_scores(ExecutionContext *ctx, void *result_data)
 		igraph_real_t val = VECTOR(*scores)[i];
 		float normalized = (range > 0) ? (float)((val - min_v) / range) : 1.0f;
 
-		// Apply to node size (scale between 0.5 and 2.0)
-		data->nodes[i].size = 0.5f + normalized * 1.5f;
+		// Apply to node size (scale between NODE_SIZE_MIN and NODE_SIZE_MAX)
+		data->nodes[i].size = NODE_SIZE_MIN + normalized * (NODE_SIZE_MAX - NODE_SIZE_MIN);
 	}
 
 	// Refresh renderer
