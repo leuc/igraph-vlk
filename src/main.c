@@ -216,7 +216,7 @@ int main(int argc, char **argv)
 
 		// Update App FSM and Menu transforms
 		update_app_state(&app);
-		update_menu_transforms(app.app_ctx.root_menu, &app.app_ctx.menu_spawn_basis);
+		update_menu_transforms(app.app_ctx.menu.root, &app.app_ctx.menu.spawn_basis);
 
 		// Poll real-time layout snapshots from worker thread
 		if (app.current_worker_job && app.current_graph.graph_initialized) {

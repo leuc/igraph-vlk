@@ -45,7 +45,7 @@ static int count_menu_nodes(MenuNode *node)
 
 void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 {
-	MenuNode *node = ctx->root_menu;
+	MenuNode *node = ctx->menu.root;
 	if (node == NULL)
 		return;
 
@@ -93,8 +93,8 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 		if (current == NULL)
 			continue;
 
-		// 1. Draw as a list item if it's not the root
-		if (current != node) {
+		// 1. Draw as a list item if it's visible (the root owns a card, not a row)
+		if (current != node && current->is_visible) {
 			// Ensure capacity
 			if (tq_count >= tq_capacity) {
 				tq_capacity *= 2;
@@ -319,17 +319,17 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 	free(stack);
 
 	// --- Info Card ---
-	if (ctx->info_card.is_visible && ctx->active_menu_level) {
-		float card_w = calculate_text_width(ctx->info_card.title);
-		for (int pi = 0; pi < ctx->info_card.num_pairs; pi++) {
+	if (ctx->menu.info_card.is_visible && ctx->menu.active_level) {
+		float card_w = calculate_text_width(ctx->menu.info_card.title);
+		for (int pi = 0; pi < ctx->menu.info_card.num_pairs; pi++) {
 			char row_buf[128];
-			snprintf(row_buf, sizeof(row_buf), "%s: %s", ctx->info_card.pairs[pi].key, ctx->info_card.pairs[pi].value);
+			snprintf(row_buf, sizeof(row_buf), "%s: %s", ctx->menu.info_card.pairs[pi].key, ctx->menu.info_card.pairs[pi].value);
 			float row_w = calculate_text_width(row_buf);
 			if (row_w > card_w)
 				card_w = row_w;
 		}
 		card_w += 0.10f;
-		float card_h = 0.10f + (ctx->info_card.num_pairs * 0.09f);
+		float card_h = 0.10f + (ctx->menu.info_card.num_pairs * 0.09f);
 
 		// Info card background (MenuInstance)
 		if (instance_count + 2 >= capacity) {
@@ -338,10 +338,10 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 		}
 
 		vec3 card_pos;
-		glm_vec3_copy(ctx->active_menu_level->card_bg_pos, card_pos);
+		glm_vec3_copy(ctx->menu.active_level->card_bg_pos, card_pos);
 		vec3 right_shift, up_shift;
-		glm_vec3_scale(node->right_vec, (ctx->active_menu_level->card_width * 0.5f) + (card_w * 0.5f), right_shift);
-		float align_y = (ctx->active_menu_level->card_height * 0.5f) - (card_h * 0.5f);
+		glm_vec3_scale(node->right_vec, (ctx->menu.active_level->card_width * 0.5f) + (card_w * 0.5f), right_shift);
+		float align_y = (ctx->menu.active_level->card_height * 0.5f) - (card_h * 0.5f);
 		glm_vec3_scale(node->up_vec, align_y, up_shift);
 		glm_vec3_add(card_pos, right_shift, card_pos);
 		glm_vec3_add(card_pos, up_shift, card_pos);
@@ -379,7 +379,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 		// Info card title text (TextQuadInstance on title bar)
 		{
 			TextRegion titleRegion;
-			text_atlas_render(&r->menu.text_atlas, &globalAtlas, ctx->info_card.title, &titleRegion);
+			text_atlas_render(&r->menu.text_atlas, &globalAtlas, ctx->menu.info_card.title, &titleRegion);
 
 			vec3 title_pos;
 			glm_vec3_copy(card_pos, title_pos);
@@ -429,7 +429,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 		glm_vec3_add(row_base, row_base_up, row_base);
 		glm_vec3_add(row_base, row_base_left, row_base);
 
-		for (int i = 0; i < ctx->info_card.num_pairs; i++) {
+		for (int i = 0; i < ctx->menu.info_card.num_pairs; i++) {
 			vec3 row_pos;
 			glm_vec3_copy(row_base, row_pos);
 			vec3 row_down;
@@ -438,7 +438,7 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 
 			// Render "key   value" as one string for this row
 			char combined[128];
-			snprintf(combined, sizeof(combined), "%s: %s", ctx->info_card.pairs[i].key, ctx->info_card.pairs[i].value);
+			snprintf(combined, sizeof(combined), "%s: %s", ctx->menu.info_card.pairs[i].key, ctx->menu.info_card.pairs[i].value);
 
 			TextRegion rowRegion;
 			text_atlas_render(&r->menu.text_atlas, &globalAtlas, combined, &rowRegion);

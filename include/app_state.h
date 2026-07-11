@@ -47,7 +47,6 @@ typedef struct AppState
 	/* Interaction State */
 	int last_picked_node;
 	int last_picked_edge;
-	int prev_left_mouse_button;
 #ifdef USE_OPENXR
 	vec3 vr_play_offset; // XR offset applied to stage space (thumbstick movement)
 	float vr_play_yaw;	 // XR virtual body rotation (in radians)

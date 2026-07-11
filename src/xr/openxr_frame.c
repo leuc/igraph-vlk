@@ -197,8 +197,10 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 			VkRenderPass xrRP = app->renderer.renderPassXR != VK_NULL_HANDLE ? app->renderer.renderPassXR : app->renderer.renderPass.renderPass;
 
 			if (has_ray && i == 0) {
+				// Publish the controller hover so every input source shares one hovered node.
 				MenuNode *hit = raycast_menu_vr(app, ray_origin, ray_dir);
-				if (hit && hit->hovered && xr_context_is_action_pressed(&app->xr_ctx, app->xr_ctx.select_action, 1)) {
+				app->app_ctx.menu.hovered_node = hit;
+				if (hit && xr_context_is_action_pressed(&app->xr_ctx, app->xr_ctx.select_action, 1)) {
 					handle_menu_selection(&app->app_ctx, hit);
 				}
 			}

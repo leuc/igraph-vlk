@@ -80,9 +80,9 @@ static bool process_axes_and_buttons(AppState *state, float lx, float ly, float 
 	if (!first_frame && a_idx < max_btn && buttons[a_idx] == GLFW_PRESS && (is_gamepad ? prev_state.buttons[a_idx] : raw_prev_buttons[a_idx]) == GLFW_RELEASE) {
 		if (app->current_state == STATE_GRAPH_VIEW) {
 			interaction_pick_object(state, false);
-		} else if (app->crosshair_hovered_node) {
-			printf("[GAMEPAD] A pressed, activating: %s\n", app->crosshair_hovered_node->label);
-			handle_menu_selection(app, app->crosshair_hovered_node);
+		} else if (app->menu.hovered_node) {
+			printf("[GAMEPAD] A pressed, activating: %s\n", app->menu.hovered_node->label);
+			handle_menu_selection(app, app->menu.hovered_node);
 		}
 	}
 

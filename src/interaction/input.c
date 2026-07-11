@@ -250,13 +250,12 @@ static void mouse_button_callback(GLFWwindow *window, int button, int action, in
 
 			if (app->current_state == STATE_GRAPH_VIEW) {
 				interaction_pick_object(state, isDoubleClick);
-			} else if (app->current_state == STATE_MENU_OPEN) {
-				double mx, my;
-				glfwGetCursorPos(window, &mx, &my);
-				MenuNode *selected = interaction_pick_menu_node(state, mx, my);
-				if (selected) {
-					handle_menu_selection(app, selected);
-				}
+			} else if (app->current_state == STATE_MENU_OPEN || app->current_state == STATE_AWAITING_SELECTION) {
+				// Activate whatever the pointer already hovers (crosshair on desktop, controller
+				// ray in VR), exactly like the gamepad A button. Re-picking here from the cursor
+				// position would cast a second, different ray and select a second row.
+				if (app->menu.hovered_node)
+					handle_menu_selection(app, app->menu.hovered_node);
 			}
 		}
 	}

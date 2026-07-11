@@ -34,7 +34,7 @@ void apply_use_current_positions_as_seed(ExecutionContext *ctx, void *result_dat
 	data->use_as_seed = !data->use_as_seed;
 
 	// Update menu label to reflect toggle state
-	MenuNode *node = menu_find_node_by_command_id(ctx->app_state->app_ctx.root_menu, "use_current_positions_as_seed");
+	MenuNode *node = menu_find_node_by_command_id(ctx->app_state->app_ctx.menu.root, "use_current_positions_as_seed");
 	if (node) {
 		free((void *)node->label);
 		node->label = strdup(data->use_as_seed ? "[x] Use current positions as seed" : "[ ] Use current positions as seed");

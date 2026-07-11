@@ -18,8 +18,10 @@
 void app_context_init(AppContext *ctx, MenuNode *root_menu)
 {
 	ctx->current_state = STATE_GRAPH_VIEW;
-	ctx->root_menu = root_menu;
-	ctx->active_menu_level = root_menu;
+	ctx->menu.root = root_menu;
+	ctx->menu.active_level = root_menu;
+	ctx->menu.hovered_node = NULL;
+	ctx->menu.is_open = false;
 	ctx->pending_command = NULL;
 	ctx->selection_step = 0;
 }
@@ -36,23 +38,17 @@ void update_app_state(AppState *state)
 {
 	AppContext *app = &state->app_ctx;
 
-	// Perform crosshair raycasting to track hover in menu-related states
+	// Refresh menu hover once per frame from the active pointing device. This is the only place
+	// the desktop/gamepad hover is computed; input sources activate app->menu.hovered_node
+	// rather than casting rays of their own, so they cannot select different rows on one press.
 	if (app->current_state == STATE_MENU_OPEN || app->current_state == STATE_AWAITING_SELECTION) {
-
-		// Raycast from camera through screen center (crosshair)
-		MenuNode *hovered = raycast_menu_crosshair(state);
-		app->crosshair_hovered_node = hovered;
-
-		// Check for activation trigger (left mouse button press)
-		int current_left_button = glfwGetMouseButton(state->win.handle, GLFW_MOUSE_BUTTON_LEFT);
-		bool mouse_just_pressed = (current_left_button == GLFW_PRESS && state->prev_left_mouse_button == GLFW_RELEASE);
-
-		if (hovered && mouse_just_pressed) {
-			printf("[DEBUG] Triggered menu option: %s\n", hovered->label);
-			handle_menu_selection(app, hovered);
-		}
-
-		state->prev_left_mouse_button = current_left_button;
+#ifdef USE_OPENXR
+		// In VR the controller ray owns the hover (set from the XR frame loop) — leave it alone.
+		if (!state->vr_enabled)
+#endif
+			app->menu.hovered_node = raycast_menu_crosshair(state);
+	} else {
+		app->menu.hovered_node = NULL;
 	}
 
 	switch (app->current_state) {
@@ -259,13 +255,16 @@ void handle_menu_selection(AppContext *app, MenuNode *selected_node)
 	if (!selected_node)
 		return;
 
-	app->info_card.is_visible = false;
+	// Every input source funnels through here, so a single line covers mouse, gamepad and VR.
+	printf("[MENU] Activated: %s (%s)\n", selected_node->label, selected_node->type == NODE_BRANCH ? "branch" : "command");
 
-	enforce_single_open_branch(app->root_menu, selected_node);
+	app->menu.info_card.is_visible = false;
+
+	enforce_single_open_branch(app->menu.root, selected_node);
 
 	if (selected_node->type == NODE_BRANCH) {
 		selected_node->is_expanded = !selected_node->is_expanded;
-		app->active_menu_level = selected_node;
+		app->menu.active_level = selected_node;
 	} else if (selected_node->type == NODE_LEAF_COMMAND) {
 		app->pending_command = selected_node->command;
 		app->selection_step = 0;

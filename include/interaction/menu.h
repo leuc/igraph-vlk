@@ -14,13 +14,9 @@
 void interaction_menu_toggle(AppState *state);
 
 /**
- * Pick a menu node when the sphere menu is open using mouse coordinates.
- */
-MenuNode *interaction_pick_menu_node(AppState *state, double mouse_x, double mouse_y);
-
-/**
- * Raycast from the crosshair (center of screen) to pick a menu node.
- * Used for immersive 3D menu interaction without releasing mouse lock.
+ * Raycast from the crosshair (center of screen) to pick a menu node, and mark it hovered.
+ * This is the desktop/gamepad pointer: the cursor is captured while the menu is open, so
+ * screen-space cursor coordinates are meaningless and must never be used to pick.
  */
 MenuNode *raycast_menu_crosshair(AppState *state);
 

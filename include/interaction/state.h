@@ -78,12 +78,6 @@ typedef struct MenuNode
 	MenuNodeType type;
 	const char *label;
 
-	// 3D Visual State
-	float target_phi;	// Spherical coordinate
-	float target_theta; // Spherical coordinate
-	float current_radius;
-	float target_radius;
-
 	// Cached spatial data (computed once during layout, reused for rendering/picking)
 	vec3 text_anchor_pos; // The 3D position where left-aligned text starts
 	vec3 quad_center_pos; // The 3D position of the background quad's exact center
@@ -108,6 +102,9 @@ typedef struct MenuNode
 
 	bool hovered;	  // For visual feedback
 	bool is_expanded; // Whether submenu is unfolded
+	bool is_visible;  // Whether this node's row was laid out and drawn this frame (i.e. every
+					  // ancestor is expanded). Recomputed by update_menu_transforms(); rendering
+					  // and picking both gate on it, so stale/off-screen quads are never hit.
 
 	// Cached text atlas data (populated once at menu init)
 	TextRegion cachedTextRegion; // UV + pixel dimensions for this node's label in text atlas
@@ -147,14 +144,23 @@ typedef enum {
 	STATE_DISPLAY_RESULTS	  // Showing execution results (overlays, histograms, etc.)
 } AppInteractionState;
 
+// All app-level menu state. Per-node state (hovered/is_expanded/is_visible, layout geometry)
+// stays on MenuNode; this is the state that describes the menu as a whole.
+typedef struct
+{
+	MenuNode *root;			  // Menu tree root (allocated and freed by main.c)
+	MenuNode *active_level;	  // Last branch opened; the info card anchors to its card
+	MenuNode *hovered_node;	  // Row under the active pointer (crosshair or VR ray).
+							  // The single activation target for every input source.
+	SpatialBasis spawn_basis; // World anchor captured when the menu opens
+	InfoCardState info_card;  // Inspector panel state
+	bool is_open;			  // Menu is showing
+} MenuState;
+
 typedef struct AppContext
 {
 	AppInteractionState current_state;
-	MenuNode *root_menu;
-	MenuNode *active_menu_level;
-
-	// Crosshair hover tracking for immersive menu selection
-	MenuNode *crosshair_hovered_node;
+	MenuState menu;
 
 	IgraphCommand *pending_command;
 	int selection_step; // How many nodes have we picked so far?
@@ -162,12 +168,6 @@ typedef struct AppContext
 	// Results display state
 	bool has_visual_results;
 	void *results_data; // Optional: pointer to results for overlay rendering
-
-	// Info card state (generic inspector panel)
-	InfoCardState info_card;
-
-	// Menu world-space anchor (captured when menu opens)
-	SpatialBasis menu_spawn_basis;
 } AppContext;
 
 // Function declarations

@@ -13,9 +13,11 @@
 
 void interaction_menu_toggle(AppState *state)
 {
-	if (state->app_ctx.current_state == STATE_GRAPH_VIEW && state->app_ctx.root_menu->current_radius < 0.01f) {
+	MenuState *menu = &state->app_ctx.menu;
+
+	if (state->app_ctx.current_state == STATE_GRAPH_VIEW && !menu->is_open) {
 		state->app_ctx.current_state = STATE_MENU_OPEN;
-		state->app_ctx.root_menu->target_radius = 1.0f;
+		menu->is_open = true;
 
 #ifdef USE_OPENXR
 		if (state->vr_enabled) {
@@ -33,10 +35,10 @@ void interaction_menu_toggle(AppState *state)
 			head_fwd[0] = -rot_mat[2][0];
 			head_fwd[1] = -rot_mat[2][1];
 			head_fwd[2] = -rot_mat[2][2];
-			spatial_calculate_basis(head_pos, head_fwd, head_up, &state->app_ctx.menu_spawn_basis);
+			spatial_calculate_basis(head_pos, head_fwd, head_up, &menu->spawn_basis);
 		} else {
 #endif
-			spatial_calculate_basis(state->camera.pos, state->camera.front, state->camera.up, &state->app_ctx.menu_spawn_basis);
+			spatial_calculate_basis(state->camera.pos, state->camera.front, state->camera.up, &menu->spawn_basis);
 #ifdef USE_OPENXR
 		}
 #endif
@@ -44,9 +46,12 @@ void interaction_menu_toggle(AppState *state)
 		if (state->win.handle) {
 			glfwSetInputMode(state->win.handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 		}
-	} else if (state->app_ctx.current_state == STATE_MENU_OPEN || state->app_ctx.root_menu->current_radius > 0.99f) {
+	} else if (state->app_ctx.current_state == STATE_MENU_OPEN) {
 		state->app_ctx.current_state = STATE_GRAPH_VIEW;
-		state->app_ctx.root_menu->target_radius = 0.0f;
+		menu->is_open = false;
+		// Drop the hover so a click in graph view can't activate the row aimed at when closing.
+		menu_hover_clear_recursive(menu->root);
+		menu->hovered_node = NULL;
 		if (state->win.handle) {
 			glfwSetInputMode(state->win.handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 		}
@@ -60,8 +65,11 @@ static MenuNode *pick_menu_recursive(MenuNode *node, float *ray_ori, float *ray_
 
 	MenuNode *best_hit = NULL;
 
+	// Only rows the last layout pass actually placed on screen are pickable. Skipping the rest
+	// keeps the root (which owns no row) and every stale quad from a collapsed subtree out of
+	// the ray test, so a hit always corresponds to something the user can see.
 	float t;
-	if (picking_ray_quad_intersection(ray_ori, ray_dir, node->quad_center_pos, node->right_vec, node->up_vec, node->box_width, node->box_height, &t)) {
+	if (node->is_visible && picking_ray_quad_intersection(ray_ori, ray_dir, node->quad_center_pos, node->right_vec, node->up_vec, node->box_width, node->box_height, &t)) {
 		if (t > 0 && t < *min_t) {
 			*min_t = t;
 			best_hit = node;
@@ -80,6 +88,19 @@ static MenuNode *pick_menu_recursive(MenuNode *node, float *ray_ori, float *ray_
 	return best_hit;
 }
 
+// The single picking entry point. Every input source (mouse, gamepad, VR controller) resolves
+// its hover through this function, so they can never disagree about which row is under the
+// pointer; the caller only supplies the ray its device defines.
+static MenuNode *menu_pick_ray(AppState *state, float *ray_ori, float *ray_dir)
+{
+	menu_hover_clear_recursive(state->app_ctx.menu.root);
+	float min_t = FLT_MAX;
+	MenuNode *hit = pick_menu_recursive(state->app_ctx.menu.root, ray_ori, ray_dir, &min_t);
+	if (hit)
+		hit->hovered = true;
+	return hit;
+}
+
 void menu_hover_clear_recursive(MenuNode *node)
 {
 	if (!node)
@@ -90,48 +111,17 @@ void menu_hover_clear_recursive(MenuNode *node)
 	}
 }
 
+// Desktop/gamepad pointer. The cursor is captured (GLFW_CURSOR_DISABLED) whenever the menu is
+// open — mouse motion steers the camera, so the crosshair *is* the pointer. Picking from
+// glfwGetCursorPos() instead would use a free-running virtual coordinate unrelated to what the
+// user is aiming at, which is why no input source is allowed to build its own screen-space ray.
 MenuNode *raycast_menu_crosshair(AppState *state)
 {
-	menu_hover_clear_recursive(state->app_ctx.root_menu);
-	float min_t = FLT_MAX;
-	MenuNode *hit = pick_menu_recursive(state->app_ctx.root_menu, state->camera.pos, state->camera.front, &min_t);
-	if (hit)
-		hit->hovered = true;
-	return hit;
+	return menu_pick_ray(state, state->camera.pos, state->camera.front);
 }
 
+// VR pointer: the ray is the controller pose, supplied by the caller.
 MenuNode *raycast_menu_vr(AppState *state, vec3 ray_ori, vec3 ray_dir)
 {
-	menu_hover_clear_recursive(state->app_ctx.root_menu);
-	float min_t = FLT_MAX;
-	MenuNode *hit = pick_menu_recursive(state->app_ctx.root_menu, ray_ori, ray_dir, &min_t);
-	if (hit) {
-		printf("HIT: %s at t=%.2f\n", hit->label, min_t);
-		hit->hovered = true;
-	}
-	return hit;
-}
-
-MenuNode *interaction_pick_menu_node(AppState *state, double mouse_x, double mouse_y)
-{
-	float x = (2.0f * (float)mouse_x) / state->win.w - 1.0f;
-	float y = 1.0f - (2.0f * (float)mouse_y) / state->win.h;
-
-	vec3 ray_dir;
-	vec3 right, up;
-	glm_vec3_cross(state->camera.front, state->camera.up, right);
-	glm_vec3_normalize(right);
-	glm_vec3_cross(right, state->camera.front, up);
-	glm_vec3_normalize(up);
-
-	glm_vec3_copy(state->camera.front, ray_dir);
-	vec3 right_offset, up_offset;
-	glm_vec3_scale(right, x * 0.5f, right_offset);
-	glm_vec3_scale(up, y * 0.5f, up_offset);
-	glm_vec3_add(ray_dir, right_offset, ray_dir);
-	glm_vec3_add(ray_dir, up_offset, ray_dir);
-	glm_vec3_normalize(ray_dir);
-
-	float min_t = FLT_MAX;
-	return pick_menu_recursive(state->app_ctx.root_menu, state->camera.pos, ray_dir, &min_t);
+	return menu_pick_ray(state, ray_ori, ray_dir);
 }

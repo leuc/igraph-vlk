@@ -28,17 +28,18 @@ const float TEXT_PADDING = 0.05f;
 
 static MenuNode *create_menu_node(const char *label, MenuNodeType type)
 {
-	MenuNode *node = (MenuNode *)malloc(sizeof(MenuNode));
+	// calloc: the cached spatial data (quad_center_pos, box_width/height, ...) stays zeroed
+	// until the node is first laid out, so an unlaid node can never present a garbage quad.
+	MenuNode *node = (MenuNode *)calloc(1, sizeof(MenuNode));
+	if (!node)
+		return NULL;
 	node->label = strdup(label);
 	node->type = type;
-	node->target_phi = 0.0f;
-	node->target_theta = 0.0f;
-	node->current_radius = 0.0f;
-	node->target_radius = 0.0f;
 	node->num_children = 0;
 	node->children = NULL;
 	node->command = NULL;
 	node->is_expanded = false;
+	node->is_visible = false;
 	node->hovered = false;
 	node->card_width = 0.0f;
 	node->card_height = 0.0f;
@@ -58,16 +59,16 @@ static IgraphCommand *create_command(const char *id_name, const char *display_na
 
 void init_menu_tree(MenuNode *root)
 {
+	// The caller allocates the root with malloc, so clear it before use: the root is never laid
+	// out as a row (it only owns a card), and picking must not see uninitialized quad data.
+	memset(root, 0, sizeof(MenuNode));
 	root->label = strdup("Main");
 	root->type = NODE_BRANCH;
-	root->target_phi = 0.0f;
-	root->target_theta = 0.0f;
-	root->current_radius = 0.0f;
-	root->target_radius = 1.0f;
 	root->num_children = 0;
 	root->children = NULL;
 	root->command = NULL;
 	root->is_expanded = true;
+	root->is_visible = false;
 	root->hovered = false;
 	root->card_width = 0.0f;
 	root->card_height = 0.0f;
@@ -99,6 +100,8 @@ void init_menu_tree(MenuNode *root)
 
 				if (branch == NULL) {
 					branch = create_menu_node(token, NODE_BRANCH);
+					if (!branch)
+						return;
 					MenuNode **tmp = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode *) * (current_parent->num_children + 1));
 					if (!tmp) {
 						menu_tree_destroy(branch);
@@ -125,6 +128,8 @@ void init_menu_tree(MenuNode *root)
 			}
 			if (!branch) {
 				branch = create_menu_node(cmd_def->display_name, NODE_BRANCH);
+				if (!branch)
+					return;
 				MenuNode **tmp = (MenuNode **)realloc(current_parent->children, sizeof(MenuNode *) * (current_parent->num_children + 1));
 				if (!tmp) {
 					menu_tree_destroy(branch);
@@ -136,6 +141,8 @@ void init_menu_tree(MenuNode *root)
 		} else {
 			// Leaf: create an actionable command leaf
 			MenuNode *leaf = create_menu_node(cmd_def->display_name, NODE_LEAF_COMMAND);
+			if (!leaf)
+				return;
 			leaf->command = create_command(cmd_def->command_id, cmd_def->display_name, cmd_def->num_params);
 			leaf->command->cmd_def = cmd_def;
 
@@ -241,9 +248,6 @@ static void update_nextstep_layout_recursive(MenuNode *node, vec3 top_left_ancho
 	if (!node)
 		return;
 
-	node->target_phi = 0.0f;
-	node->target_theta = 0.0f;
-
 	if (node->type == NODE_BRANCH && node->num_children > 0) {
 		vec3 card_bg_pos;
 		vec3 right_offset, up_offset;
@@ -257,6 +261,10 @@ static void update_nextstep_layout_recursive(MenuNode *node, vec3 top_left_ancho
 			MenuNode *child = node->children[i];
 
 			if (node->is_expanded) {
+				// Reached only when every ancestor is expanded, so this row is on screen:
+				// its quad data below is fresh and it is a legal picking target this frame.
+				child->is_visible = true;
+
 				child->box_width = node->card_width;
 				child->box_height = MENU_ITEM_HEIGHT;
 
@@ -298,6 +306,19 @@ static void update_nextstep_layout_recursive(MenuNode *node, vec3 top_left_ancho
 	}
 }
 
+// Hide the whole tree before laying it out; update_nextstep_layout_recursive re-marks the rows
+// it actually places. Anything it does not reach (collapsed subtree, hidden branch, the root
+// itself) therefore stays invisible and keeps its stale quad out of the picker.
+static void clear_visibility_recursive(MenuNode *node)
+{
+	if (!node)
+		return;
+	node->is_visible = false;
+	for (int i = 0; i < node->num_children; i++) {
+		clear_visibility_recursive(node->children[i]);
+	}
+}
+
 static void copy_basis_recursive(MenuNode *node, const SpatialBasis *basis)
 {
 	if (!node)
@@ -317,6 +338,7 @@ void update_menu_transforms(MenuNode *node, const SpatialBasis *basis)
 
 	calculate_card_dimensions(node);
 	copy_basis_recursive(node, basis);
+	clear_visibility_recursive(node);
 
 	vec3 root_top_left;
 	spatial_resolve_position(basis, -0.6f, 0.4f, 2.5f, root_top_left);
@@ -381,6 +403,8 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 	MenuNode *filter_branch = find_child_branch(node_branch, "Filter");
 	if (!filter_branch) {
 		filter_branch = create_menu_node("Filter", NODE_BRANCH);
+		if (!filter_branch)
+			return;
 		MenuNode **tmp = realloc(node_branch->children, sizeof(MenuNode *) * (node_branch->num_children + 1));
 		if (!tmp) {
 			menu_tree_destroy(filter_branch);
@@ -393,6 +417,8 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 	// Add "Show All" leaf using registry CommandDef
 	const CommandDef *show_all_def = find_command_def("filter_show_all");
 	MenuNode *show_all = create_menu_node("Show All", NODE_LEAF_COMMAND);
+	if (!show_all)
+		return;
 	show_all->command = create_command("filter_show_all", "Show All", 0);
 	show_all->command->cmd_def = show_all_def;
 	{
@@ -417,9 +443,13 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 		FilterableAttr *fa = &data->filterable_attrs[a];
 
 		MenuNode *attr_branch = create_menu_node(fa->name, NODE_BRANCH);
+		if (!attr_branch)
+			continue;
 
 		for (int v = 0; v < fa->num_values; v++) {
 			MenuNode *val_leaf = create_menu_node(fa->values[v], NODE_LEAF_COMMAND);
+			if (!val_leaf)
+				continue;
 			val_leaf->command = create_command("filter_by_attr", fa->values[v], 2);
 			val_leaf->command->cmd_def = filter_def;
 			val_leaf->command->params[0].name = "attr_name";
@@ -505,6 +535,8 @@ static MenuNode *find_or_create_branch(MenuNode *parent, const char *label)
 
 static void add_child(MenuNode *parent, MenuNode *child)
 {
+	if (!parent || !child)
+		return;
 	MenuNode **tmp = (MenuNode **)realloc(parent->children, sizeof(MenuNode *) * (parent->num_children + 1));
 	if (!tmp) {
 		menu_tree_destroy(child);
@@ -537,6 +569,8 @@ static MenuNode *create_netz_leaf(const char *label, const StaticNetEntry *entry
 	if (!cmd_def)
 		return NULL;
 	MenuNode *leaf = create_menu_node(label, NODE_LEAF_COMMAND);
+	if (!leaf)
+		return NULL;
 	leaf->command = create_command("netzschleuder_download", label, 2);
 	leaf->command->cmd_def = cmd_def;
 	leaf->command->params[0].name = "entry_id";
@@ -685,6 +719,8 @@ void menu_populate_famous_graphs(MenuNode *root)
 	for (int i = 0; i < num_famous_graphs; i++) {
 		const char *name = famous_graph_names[i];
 		MenuNode *leaf = create_menu_node(name, NODE_LEAF_COMMAND);
+		if (!leaf)
+			continue;
 		leaf->command = create_command("igraph_famous", name, 1);
 		leaf->command->cmd_def = cmd_def;
 		leaf->command->params[0].name = "name";

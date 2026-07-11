@@ -122,8 +122,11 @@ typedef struct CommandDef {
 
 5. **Menu Interaction** (`src/interaction/menu.c`):
    - `interaction_menu_toggle(AppState *state)`: Opens/closes the spherical menu.
-   - `interaction_pick_menu_node(AppState *state, mouse_x, mouse_y)`: Mouse picking.
-   - `raycast_menu_crosshair(AppState *state)`: VR/immersive crosshair picking.
+   - `raycast_menu_crosshair(AppState *state)`: Desktop/gamepad picking. The cursor is captured while the menu is open, so the crosshair is the pointer — never pick from `glfwGetCursorPos()`.
+   - `raycast_menu_vr(AppState *state, ray_ori, ray_dir)`: VR controller picking.
+   - Both resolve hover into `AppContext.menu.hovered_node`. Input sources (mouse press, gamepad A, VR select) **activate that node**; they must not cast rays of their own, or one press selects two different rows.
+   - Only nodes with `MenuNode.is_visible` are pickable. It is recomputed every frame by `update_menu_transforms()` and marks the rows actually laid out and drawn, so collapsed subtrees and the root's non-existent row can never be hit.
+   - All app-level menu state (`root`, `active_level`, `hovered_node`, `spawn_basis`, `info_card`, `is_open`) lives in `AppContext.menu` (`MenuState`, `include/interaction/state.h`). Per-node flags/geometry stay on `MenuNode`.
 
 6. **Execution Flow**:
    - Select leaf -> `node->command->cmd_def` -> `worker_thread_submit_job` queues `worker_func` (compute).
