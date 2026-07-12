@@ -67,7 +67,7 @@ void *compute_maxflow_sampling(ExecutionContext *ctx)
 
 	int num_pairs = 5;
 	int pair_idx = 0;
-	int primary_source = -1;
+	igraph_integer_t primary_source = -1;
 
 	for (int attempt = 0; attempt < 10 && pair_idx < num_pairs; attempt++) {
 		igraph_integer_t source = igraph_rng_get_integer(igraph_rng_default(), 0, (igraph_integer_t)n - 1);
@@ -81,9 +81,9 @@ void *compute_maxflow_sampling(ExecutionContext *ctx)
 			continue;
 		}
 
-		int order_len = igraph_vector_int_size(&order);
-		int target = -1;
-		for (int i = 0; i < order_len; i++) {
+		igraph_integer_t order_len = igraph_vector_int_size(&order);
+		igraph_integer_t target = -1;
+		for (igraph_integer_t i = 0; i < order_len; i++) {
 			if (VECTOR(order)[i] != source) {
 				target = VECTOR(order)[i];
 				break;
@@ -104,15 +104,15 @@ void *compute_maxflow_sampling(ExecutionContext *ctx)
 		if (code == IGRAPH_SUCCESS && igraph_vector_size(&flow) == m) {
 			result->max_flow_value = fmaxf(result->max_flow_value, (float)flow_value);
 
-			for (int i = 0; i < (int)m; i++)
+			for (igraph_integer_t i = 0; i < m; i++)
 				result->edge_flows[i] += (float)VECTOR(flow)[i];
 
 			result->sample_count++;
 			if (primary_source < 0)
-				primary_source = (int)source;
-			fprintf(stderr, "[maxflow]   pair[%d] %d→%d flow_value=%.4f reachable=%d\n", pair_idx, (int)source, target, (float)flow_value, order_len);
+				primary_source = source;
+			fprintf(stderr, "[maxflow]   pair[%d] %" IGRAPH_PRId "→%" IGRAPH_PRId " flow_value=%.4f reachable=%" IGRAPH_PRId "\n", pair_idx, source, target, (float)flow_value, order_len);
 		} else {
-			fprintf(stderr, "[maxflow]   pair[%d] %d→%d SKIPPED code=%d flow_size=%d reachable=%d\n", pair_idx, (int)source, target, (int)code, (int)igraph_vector_size(&flow), order_len);
+			fprintf(stderr, "[maxflow]   pair[%d] %" IGRAPH_PRId "→%" IGRAPH_PRId " SKIPPED code=%d flow_size=%" IGRAPH_PRId " reachable=%" IGRAPH_PRId "\n", pair_idx, source, target, (int)code, igraph_vector_size(&flow), order_len);
 		}
 
 		igraph_vector_destroy(&flow);
@@ -123,7 +123,7 @@ void *compute_maxflow_sampling(ExecutionContext *ctx)
 		primary_source = 0;
 
 	if (result->sample_count > 0) {
-		for (int i = 0; i < (int)m; i++)
+		for (igraph_integer_t i = 0; i < m; i++)
 			result->edge_flows[i] /= result->sample_count;
 	}
 
@@ -132,11 +132,11 @@ void *compute_maxflow_sampling(ExecutionContext *ctx)
 
 	float flow_threshold = result->max_flow_value * 0.01f;
 	int nz_edges = 0;
-	for (int i = 0; i < (int)m; i++) {
+	for (igraph_integer_t i = 0; i < m; i++) {
 		if (result->edge_flows[i] > 0.0f)
 			nz_edges++;
 	}
-	fprintf(stderr, "[maxflow] %d pairs, max=%.4f nz=%d/%d\n", result->sample_count, result->max_flow_value, nz_edges, (int)m);
+	fprintf(stderr, "[maxflow] %d pairs, max=%.4f nz=%d/%" IGRAPH_PRId "\n", result->sample_count, result->max_flow_value, nz_edges, m);
 
 	int *node_ranks = malloc(n * sizeof(int));
 	if (!node_ranks) {
@@ -144,7 +144,7 @@ void *compute_maxflow_sampling(ExecutionContext *ctx)
 		free(result);
 		return NULL;
 	}
-	for (int i = 0; i < (int)n; i++)
+	for (igraph_integer_t i = 0; i < n; i++)
 		node_ranks[i] = MAXFLOW_SENTINEL_RANK;
 
 	// Build ragged adjacency of flow edges
@@ -157,16 +157,16 @@ void *compute_maxflow_sampling(ExecutionContext *ctx)
 		adj_cnt = calloc(n, sizeof(int));
 		adj = malloc(n * sizeof(int *));
 		if (adj_cnt && adj) {
-			for (int i = 0; i < (int)m; i++) {
+			for (igraph_integer_t i = 0; i < m; i++) {
 				if (result->edge_flows[i] > flow_threshold)
 					adj_cap[graph_data->edges[i].from]++;
 			}
-			for (int i = 0; i < (int)n; i++)
+			for (igraph_integer_t i = 0; i < n; i++)
 				adj[i] = adj_cap[i] > 0 ? malloc(adj_cap[i] * sizeof(int)) : NULL;
 
-			for (int i = 0; i < (int)m; i++) {
+			for (igraph_integer_t i = 0; i < m; i++) {
 				if (result->edge_flows[i] > flow_threshold) {
-					int f = graph_data->edges[i].from;
+					igraph_integer_t f = graph_data->edges[i].from;
 					adj[f][adj_cnt[f]++] = graph_data->edges[i].to;
 				}
 			}
@@ -192,7 +192,7 @@ void *compute_maxflow_sampling(ExecutionContext *ctx)
 
 	// Cleanup adjacency
 	if (adj) {
-		for (int i = 0; i < (int)n; i++)
+		for (igraph_integer_t i = 0; i < n; i++)
 			free(adj[i]);
 		free(adj);
 	}
@@ -204,11 +204,11 @@ void *compute_maxflow_sampling(ExecutionContext *ctx)
 
 	result->edge_from = malloc(m * sizeof(uint32_t));
 	if (result->edge_from) {
-		for (int i = 0; i < (int)m; i++)
+		for (igraph_integer_t i = 0; i < m; i++)
 			result->edge_from[i] = graph_data->edges[i].from;
 	}
 
-	printf("[maxflow] Computed flows for %d source→target pairs, max=%.4f, nz=%d/%d\n", result->sample_count, result->max_flow_value, nz_edges, (int)m);
+	printf("[maxflow] Computed flows for %d source→target pairs, max=%.4f, nz=%d/%" IGRAPH_PRId "\n", result->sample_count, result->max_flow_value, nz_edges, m);
 
 	return result;
 }
@@ -239,8 +239,10 @@ void apply_maxflow_sampling(ExecutionContext *ctx, void *result_data)
 	for (int i = 0; i < graph_data->edge_count; i++) {
 		graph_data->edges[i].weight = flow_result->edge_flows[i];
 	}
-	renderer_anim_setup_edge_visualization(&state->renderer, graph_data, flow_result->edge_flows, graph_data->edge_count, flow_result->max_flow_value);
-	renderer_anim_setup_flow_reveal(&state->renderer, graph_data, flow_result->node_ranks, flow_result->edge_from, graph_data->node_count, graph_data->edge_count, 4.0f);
+	renderer_anim_upload_edge_floats(&state->renderer, flow_result->edge_flows, graph_data->edge_count, flow_result->max_flow_value);
+	renderer_anim_upload_node_ranks(&state->renderer, flow_result->node_ranks, graph_data->node_count, 4.0f);
+	renderer_anim_upload_edge_from(&state->renderer, flow_result->edge_from, graph_data->edge_count);
+	renderer_anim_reset_timer(&state->renderer);
 
 	renderer_update_graph(&state->renderer, graph_data);
 	state->renderer.label.tree_needs_rebuild = true;

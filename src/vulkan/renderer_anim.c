@@ -12,7 +12,6 @@
 #include "vulkan/utils.h"
 
 static float g_bfs_start_time = 0.0f;
-#define MAXFLOW_SENTINEL_RANK 10000000
 
 void renderer_anim_init(Renderer *r)
 {
@@ -58,13 +57,103 @@ void renderer_anim_cleanup(Renderer *r)
 	VK_DESTROY_BUFFER(r->core.device, r->edge_vis.buf, r->edge_vis.mem);
 }
 
+// ── Generic GPU upload helpers ───────────────────────────────────────────────
+
+void renderer_anim_upload_node_ranks(Renderer *r, const int *ranks, uint32_t node_count, float total_duration)
+{
+	if (!r || !ranks || node_count == 0)
+		return;
+
+	VkDeviceSize size = sizeof(int) * node_count;
+
+	if (r->bfs.rank_buf == VK_NULL_HANDLE || r->bfs.node_count < node_count) {
+		VK_DESTROY_BUFFER(r->core.device, r->bfs.rank_buf, r->bfs.rank_mem);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.rank_buf, &r->bfs.rank_mem);
+	}
+
+	update_buffer(r->core.device, r->bfs.rank_mem, size, ranks);
+	r->bfs.node_count = node_count;
+
+	int max_rank = 0;
+	for (uint32_t i = 0; i < node_count; i++)
+		if (ranks[i] > max_rank)
+			max_rank = ranks[i];
+	r->anim.data._pad = (max_rank > 0 && total_duration > 0.0f) ? total_duration / (float)max_rank : 0.0f;
+
+	VkDescriptorBufferInfo info = {r->bfs.rank_buf, 0, size};
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4; i++) {
+		VkWriteDescriptorSet write = VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 5, &info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		vkUpdateDescriptorSets(r->core.device, 1, &write, 0, NULL);
+	}
+}
+
+void renderer_anim_upload_edge_from(Renderer *r, const uint32_t *from, uint32_t edge_count)
+{
+	if (!r || !from || edge_count == 0)
+		return;
+
+	VkDeviceSize size = sizeof(uint32_t) * edge_count;
+
+	if (r->bfs.from_buf == VK_NULL_HANDLE || r->bfs.edge_count < edge_count) {
+		VK_DESTROY_BUFFER(r->core.device, r->bfs.from_buf, r->bfs.from_mem);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.from_buf, &r->bfs.from_mem);
+	}
+
+	update_buffer(r->core.device, r->bfs.from_mem, size, from);
+	r->bfs.edge_count = edge_count;
+
+	VkDescriptorBufferInfo info = {r->bfs.from_buf, 0, size};
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4; i++) {
+		VkWriteDescriptorSet write = VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 6, &info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		vkUpdateDescriptorSets(r->core.device, 1, &write, 0, NULL);
+	}
+}
+
+void renderer_anim_upload_edge_floats(Renderer *r, const float *data, uint32_t edge_count, float max_value)
+{
+	if (!r || !data || edge_count == 0)
+		return;
+
+	// Pack [max_value, v0, v1, ...] so shader reads max from index 0
+	VkDeviceSize data_size = sizeof(float) * (edge_count + 1);
+	float *packed = malloc(data_size);
+	if (!packed)
+		return;
+	packed[0] = max_value;
+	memcpy(packed + 1, data, sizeof(float) * edge_count);
+
+	if (r->edge_vis.buf == VK_NULL_HANDLE || r->edge_vis.edge_count < edge_count) {
+		VK_DESTROY_BUFFER(r->core.device, r->edge_vis.buf, r->edge_vis.mem);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, data_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->edge_vis.buf, &r->edge_vis.mem);
+	}
+
+	update_buffer(r->core.device, r->edge_vis.mem, data_size, packed);
+	r->edge_vis.edge_count = edge_count;
+	r->edge_vis.max_value = max_value;
+
+	VkDescriptorBufferInfo info = {r->edge_vis.buf, 0, data_size};
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4; i++) {
+		VkWriteDescriptorSet write = VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 7, &info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		vkUpdateDescriptorSets(r->core.device, 1, &write, 0, NULL);
+	}
+
+	free(packed);
+}
+
+void renderer_anim_reset_timer(Renderer *r)
+{
+	g_bfs_start_time = r->anim.data.time;
+}
+
+// ── BFS ──────────────────────────────────────────────────────────────────────
+
 void renderer_anim_compute_bfs(Renderer *r, GraphData *graph)
 {
 	if (graph->node_count == 0)
 		return;
 
-	int source = 0;
-	for (int i = 1; i < (int)graph->node_count; i++)
+	igraph_integer_t source = 0;
+	for (igraph_integer_t i = 1; i < (igraph_integer_t)graph->node_count; i++)
 		if (graph->nodes[i].degree > graph->nodes[source].degree)
 			source = i;
 
@@ -81,54 +170,27 @@ void renderer_anim_compute_bfs(Renderer *r, GraphData *graph)
 	}
 
 	int *ranks = malloc(sizeof(int) * graph->node_count);
-	for (int i = 0; i < (int)graph->node_count; i++)
+	for (igraph_integer_t i = 0; i < (igraph_integer_t)graph->node_count; i++)
 		ranks[i] = -5;
 
-	int order_len = igraph_vector_int_size(&order);
-	for (int i = 0; i < order_len; i++)
+	igraph_integer_t order_len = igraph_vector_int_size(&order);
+	for (igraph_integer_t i = 0; i < order_len; i++)
 		ranks[VECTOR(order)[i]] = i;
 	igraph_vector_int_destroy(&order);
 
 	uint32_t *from = malloc(sizeof(uint32_t) * graph->edge_count);
-	for (int i = 0; i < (int)graph->edge_count; i++)
+	for (igraph_integer_t i = 0; i < (igraph_integer_t)graph->edge_count; i++)
 		from[i] = graph->edges[i].from;
 
-	VkDeviceSize rank_size = sizeof(int) * graph->node_count;
-	VkDeviceSize from_size = sizeof(uint32_t) * graph->edge_count;
-
-	if (r->bfs.rank_buf == VK_NULL_HANDLE || r->bfs.node_count < graph->node_count) {
-		VK_DESTROY_BUFFER(r->core.device, r->bfs.rank_buf, r->bfs.rank_mem);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, rank_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.rank_buf, &r->bfs.rank_mem);
-	}
-	if (r->bfs.from_buf == VK_NULL_HANDLE || r->bfs.edge_count < graph->edge_count) {
-		VK_DESTROY_BUFFER(r->core.device, r->bfs.from_buf, r->bfs.from_mem);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, from_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.from_buf, &r->bfs.from_mem);
-	}
-
-	update_buffer(r->core.device, r->bfs.rank_mem, rank_size, ranks);
-	update_buffer(r->core.device, r->bfs.from_mem, from_size, from);
-
-	r->bfs.node_count = graph->node_count;
-	r->bfs.edge_count = graph->edge_count;
-
-	float total_duration = 3.0f;
-	r->anim.data._pad = (order_len > 1) ? total_duration / order_len : total_duration;
-
-	VkDescriptorBufferInfo rank_info = {r->bfs.rank_buf, 0, rank_size};
-	VkDescriptorBufferInfo from_info = {r->bfs.from_buf, 0, from_size};
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4; i++) {
-		VkWriteDescriptorSet writes[] = {
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 5, &rank_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 6, &from_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-		};
-		vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
-	}
-
-	g_bfs_start_time = r->anim.data.time;
+	renderer_anim_upload_node_ranks(r, ranks, graph->node_count, 3.0f);
+	renderer_anim_upload_edge_from(r, from, graph->edge_count);
+	renderer_anim_reset_timer(r);
 
 	free(ranks);
 	free(from);
 }
+
+// ── Reset nodes (reveal all immediately) ─────────────────────────────────────
 
 void renderer_anim_reset_nodes(Renderer *r, GraphData *graph)
 {
@@ -143,67 +205,41 @@ void renderer_anim_reset_nodes(Renderer *r, GraphData *graph)
 	for (int i = 0; i < (int)graph->edge_count; i++)
 		from[i] = graph->edges[i].from;
 
-	VkDeviceSize rank_size = sizeof(int) * graph->node_count;
-	VkDeviceSize from_size = sizeof(uint32_t) * graph->edge_count;
-
-	if (r->bfs.rank_buf == VK_NULL_HANDLE || r->bfs.node_count < graph->node_count) {
-		VK_DESTROY_BUFFER(r->core.device, r->bfs.rank_buf, r->bfs.rank_mem);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, rank_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.rank_buf, &r->bfs.rank_mem);
-	}
-	if (r->bfs.from_buf == VK_NULL_HANDLE || r->bfs.edge_count < graph->edge_count) {
-		VK_DESTROY_BUFFER(r->core.device, r->bfs.from_buf, r->bfs.from_mem);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, from_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.from_buf, &r->bfs.from_mem);
-	}
-
-	update_buffer(r->core.device, r->bfs.rank_mem, rank_size, ranks);
-	update_buffer(r->core.device, r->bfs.from_mem, from_size, from);
-
-	r->bfs.node_count = graph->node_count;
-	r->bfs.edge_count = graph->edge_count;
-
-	r->anim.data._pad = 0.0f;
-
-	VkDescriptorBufferInfo rank_info = {r->bfs.rank_buf, 0, rank_size};
-	VkDescriptorBufferInfo from_info = {r->bfs.from_buf, 0, from_size};
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4; i++) {
-		VkWriteDescriptorSet writes[] = {
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 5, &rank_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 6, &from_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-		};
-		vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
-	}
-
-	g_bfs_start_time = r->anim.data.time;
+	renderer_anim_upload_node_ranks(r, ranks, graph->node_count, 0.0f);
+	renderer_anim_upload_edge_from(r, from, graph->edge_count);
+	renderer_anim_reset_timer(r);
 
 	free(ranks);
 	free(from);
 }
+
+// ── Reset edges (clear SPLC / flow guard values) ─────────────────────────────
 
 void renderer_anim_reset_edges(Renderer *r)
 {
 	if (!r)
 		return;
 
-	// Zero SPLC max_weight (binding 3) → shader sees max_w = 0
 	if (r->splc.max_memory != VK_NULL_HANDLE) {
 		uint32_t zero = 0u;
 		update_buffer(r->core.device, r->splc.max_memory, sizeof(uint32_t), &zero);
 	}
 
-	// Zero edge_vis[0] flow max (binding 7) → shader sees max_flow = 0
 	if (r->edge_vis.buf != VK_NULL_HANDLE) {
 		float zero = 0.0f;
 		update_buffer(r->core.device, r->edge_vis.mem, sizeof(float), &zero);
 	}
 }
 
+// ── DFS ──────────────────────────────────────────────────────────────────────
+
 void renderer_anim_compute_dfs(Renderer *r, GraphData *graph)
 {
 	if (graph->node_count == 0)
 		return;
 
-	int source = 0;
-	for (int i = 1; i < (int)graph->node_count; i++)
+	igraph_integer_t source = 0;
+	for (igraph_integer_t i = 1; i < (igraph_integer_t)graph->node_count; i++)
 		if (graph->nodes[i].degree > graph->nodes[source].degree)
 			source = i;
 
@@ -220,54 +256,27 @@ void renderer_anim_compute_dfs(Renderer *r, GraphData *graph)
 	}
 
 	int *ranks = malloc(sizeof(int) * graph->node_count);
-	for (int i = 0; i < (int)graph->node_count; i++)
+	for (igraph_integer_t i = 0; i < (igraph_integer_t)graph->node_count; i++)
 		ranks[i] = -5;
 
-	int order_len = igraph_vector_int_size(&order);
-	for (int i = 0; i < order_len; i++)
+	igraph_integer_t order_len = igraph_vector_int_size(&order);
+	for (igraph_integer_t i = 0; i < order_len; i++)
 		ranks[VECTOR(order)[i]] = i;
 	igraph_vector_int_destroy(&order);
 
 	uint32_t *from = malloc(sizeof(uint32_t) * graph->edge_count);
-	for (int i = 0; i < (int)graph->edge_count; i++)
+	for (igraph_integer_t i = 0; i < (igraph_integer_t)graph->edge_count; i++)
 		from[i] = graph->edges[i].from;
 
-	VkDeviceSize rank_size = sizeof(int) * graph->node_count;
-	VkDeviceSize from_size = sizeof(uint32_t) * graph->edge_count;
-
-	if (r->bfs.rank_buf == VK_NULL_HANDLE || r->bfs.node_count < graph->node_count) {
-		VK_DESTROY_BUFFER(r->core.device, r->bfs.rank_buf, r->bfs.rank_mem);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, rank_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.rank_buf, &r->bfs.rank_mem);
-	}
-	if (r->bfs.from_buf == VK_NULL_HANDLE || r->bfs.edge_count < graph->edge_count) {
-		VK_DESTROY_BUFFER(r->core.device, r->bfs.from_buf, r->bfs.from_mem);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, from_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.from_buf, &r->bfs.from_mem);
-	}
-
-	update_buffer(r->core.device, r->bfs.rank_mem, rank_size, ranks);
-	update_buffer(r->core.device, r->bfs.from_mem, from_size, from);
-
-	r->bfs.node_count = graph->node_count;
-	r->bfs.edge_count = graph->edge_count;
-
-	float total_duration = 3.0f;
-	r->anim.data._pad = (order_len > 1) ? total_duration / order_len : total_duration;
-
-	VkDescriptorBufferInfo rank_info = {r->bfs.rank_buf, 0, rank_size};
-	VkDescriptorBufferInfo from_info = {r->bfs.from_buf, 0, from_size};
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4; i++) {
-		VkWriteDescriptorSet writes[] = {
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 5, &rank_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 6, &from_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-		};
-		vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
-	}
-
-	g_bfs_start_time = r->anim.data.time;
+	renderer_anim_upload_node_ranks(r, ranks, graph->node_count, 3.0f);
+	renderer_anim_upload_edge_from(r, from, graph->edge_count);
+	renderer_anim_reset_timer(r);
 
 	free(ranks);
 	free(from);
 }
+
+// ── Topological sort ─────────────────────────────────────────────────────────
 
 void renderer_anim_compute_topo(Renderer *r, GraphData *graph)
 {
@@ -287,126 +296,22 @@ void renderer_anim_compute_topo(Renderer *r, GraphData *graph)
 	}
 
 	int *ranks = malloc(sizeof(int) * graph->node_count);
-	for (int i = 0; i < (int)graph->node_count; i++)
+	for (igraph_integer_t i = 0; i < (igraph_integer_t)graph->node_count; i++)
 		ranks[i] = -5;
 
-	int order_len = igraph_vector_int_size(&order);
-	for (int i = 0; i < order_len; i++)
+	igraph_integer_t order_len = igraph_vector_int_size(&order);
+	for (igraph_integer_t i = 0; i < order_len; i++)
 		ranks[VECTOR(order)[i]] = i;
 	igraph_vector_int_destroy(&order);
 
 	uint32_t *from = malloc(sizeof(uint32_t) * graph->edge_count);
-	for (int i = 0; i < (int)graph->edge_count; i++)
+	for (igraph_integer_t i = 0; i < (igraph_integer_t)graph->edge_count; i++)
 		from[i] = graph->edges[i].from;
 
-	VkDeviceSize rank_size = sizeof(int) * graph->node_count;
-	VkDeviceSize from_size = sizeof(uint32_t) * graph->edge_count;
-
-	if (r->bfs.rank_buf == VK_NULL_HANDLE || r->bfs.node_count < graph->node_count) {
-		VK_DESTROY_BUFFER(r->core.device, r->bfs.rank_buf, r->bfs.rank_mem);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, rank_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.rank_buf, &r->bfs.rank_mem);
-	}
-	if (r->bfs.from_buf == VK_NULL_HANDLE || r->bfs.edge_count < graph->edge_count) {
-		VK_DESTROY_BUFFER(r->core.device, r->bfs.from_buf, r->bfs.from_mem);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, from_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.from_buf, &r->bfs.from_mem);
-	}
-
-	update_buffer(r->core.device, r->bfs.rank_mem, rank_size, ranks);
-	update_buffer(r->core.device, r->bfs.from_mem, from_size, from);
-
-	r->bfs.node_count = graph->node_count;
-	r->bfs.edge_count = graph->edge_count;
-
-	float total_duration = 3.0f;
-	r->anim.data._pad = (order_len > 1) ? total_duration / order_len : total_duration;
-
-	VkDescriptorBufferInfo rank_info = {r->bfs.rank_buf, 0, rank_size};
-	VkDescriptorBufferInfo from_info = {r->bfs.from_buf, 0, from_size};
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4; i++) {
-		VkWriteDescriptorSet writes[] = {
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 5, &rank_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 6, &from_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-		};
-		vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
-	}
-
-	g_bfs_start_time = r->anim.data.time;
+	renderer_anim_upload_node_ranks(r, ranks, graph->node_count, 3.0f);
+	renderer_anim_upload_edge_from(r, from, graph->edge_count);
+	renderer_anim_reset_timer(r);
 
 	free(ranks);
 	free(from);
-}
-
-void renderer_anim_setup_flow_reveal(Renderer *r, GraphData *graph, const int *ranks, const uint32_t *from, uint32_t node_count, uint32_t edge_count, float total_duration)
-{
-	if (!r || !graph || node_count == 0)
-		return;
-
-	VkDeviceSize rank_size = sizeof(int) * node_count;
-	VkDeviceSize from_size = sizeof(uint32_t) * edge_count;
-
-	if (r->bfs.rank_buf == VK_NULL_HANDLE || r->bfs.node_count < node_count) {
-		VK_DESTROY_BUFFER(r->core.device, r->bfs.rank_buf, r->bfs.rank_mem);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, rank_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.rank_buf, &r->bfs.rank_mem);
-	}
-	if (r->bfs.from_buf == VK_NULL_HANDLE || r->bfs.edge_count < edge_count) {
-		VK_DESTROY_BUFFER(r->core.device, r->bfs.from_buf, r->bfs.from_mem);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, from_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.from_buf, &r->bfs.from_mem);
-	}
-
-	update_buffer(r->core.device, r->bfs.rank_mem, rank_size, ranks);
-	update_buffer(r->core.device, r->bfs.from_mem, from_size, from);
-
-	r->bfs.node_count = node_count;
-	r->bfs.edge_count = edge_count;
-
-	int max_rank = 0;
-	for (uint32_t i = 0; i < node_count; i++) {
-		if (ranks[i] < MAXFLOW_SENTINEL_RANK && ranks[i] > max_rank)
-			max_rank = ranks[i];
-	}
-	r->anim.data._pad = (max_rank > 0) ? total_duration / max_rank : total_duration;
-
-	VkDescriptorBufferInfo rank_info = {r->bfs.rank_buf, 0, rank_size};
-	VkDescriptorBufferInfo from_info = {r->bfs.from_buf, 0, from_size};
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4; i++) {
-		VkWriteDescriptorSet writes[] = {
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 5, &rank_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 6, &from_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-		};
-		vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
-	}
-
-	g_bfs_start_time = r->anim.data.time;
-}
-
-void renderer_anim_setup_edge_visualization(Renderer *r, GraphData *graph, const float *edge_data, uint32_t edge_count, float max_value)
-{
-	if (!r || !graph || !edge_data || edge_count == 0)
-		return;
-
-	// Pack [max_value, edge_flow_0, edge_flow_1, ...] so the shader can read max from index 0
-	VkDeviceSize data_size = sizeof(float) * (edge_count + 1);
-	float *packed = malloc(data_size);
-	if (!packed)
-		return;
-	packed[0] = max_value;
-	memcpy(packed + 1, edge_data, sizeof(float) * edge_count);
-
-	if (r->edge_vis.buf == VK_NULL_HANDLE || r->edge_vis.edge_count < edge_count) {
-		VK_DESTROY_BUFFER(r->core.device, r->edge_vis.buf, r->edge_vis.mem);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, data_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->edge_vis.buf, &r->edge_vis.mem);
-	}
-
-	update_buffer(r->core.device, r->edge_vis.mem, data_size, (void *)packed);
-
-	r->edge_vis.edge_count = edge_count;
-	r->edge_vis.max_value = max_value;
-
-	VkDescriptorBufferInfo edge_vis_info = {r->edge_vis.buf, 0, data_size};
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4; i++) {
-		VkWriteDescriptorSet write = VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 7, &edge_vis_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		vkUpdateDescriptorSets(r->core.device, 1, &write, 0, NULL);
-	}
-
-	free(packed);
 }
