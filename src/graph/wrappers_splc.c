@@ -7,6 +7,7 @@
 #include "app_state.h"
 #include "graph/graph_core.h"
 #include "vulkan/renderer.h"
+#include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_compute.h"
 
 #include <stdio.h>
@@ -129,6 +130,9 @@ void apply_splc_animation(ExecutionContext *ctx, void *result_data)
 
 	AppState *state = ctx->app_state;
 	GraphData *data = &state->current_graph;
+
+	renderer_anim_reset_nodes(&state->renderer, data);
+	renderer_anim_reset_edges(&state->renderer);
 
 	state->renderer.needsAttributeUpload = VK_TRUE;
 	if (!graph_rebuild_edges(data)) {

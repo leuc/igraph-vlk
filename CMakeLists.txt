@@ -137,11 +137,12 @@ add_executable(
 	src/graph/wrappers_community.c
 	src/graph/wrappers_centrality.c
 	src/graph/wrappers_constructors.c
-	src/graph/wrappers_splc.c
-	src/graph/wrappers_paths.c
-	src/graph/wrappers_structural.c
 	src/graph/wrappers_cycles.c
 	src/graph/wrappers_filter.c
+	src/graph/wrappers_flow.c
+	src/graph/wrappers_paths.c
+	src/graph/wrappers_splc.c
+	src/graph/wrappers_structural.c
 	src/graph/repo.c
 	src/graph/repo_netzschleuder.c
 	src/graph/worker_thread.c

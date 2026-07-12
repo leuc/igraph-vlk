@@ -77,6 +77,8 @@ void apply_bfs_trigger(ExecutionContext *ctx, void *result_data)
 	if (!ctx || !ctx->app_state)
 		return;
 	AppState *state = ctx->app_state;
+	renderer_anim_reset_nodes(&state->renderer, &state->current_graph);
+	renderer_anim_reset_edges(&state->renderer);
 	renderer_anim_compute_bfs(&state->renderer, &state->current_graph);
 }
 
@@ -86,6 +88,8 @@ void apply_dfs_trigger(ExecutionContext *ctx, void *result_data)
 	if (!ctx || !ctx->app_state)
 		return;
 	AppState *state = ctx->app_state;
+	renderer_anim_reset_nodes(&state->renderer, &state->current_graph);
+	renderer_anim_reset_edges(&state->renderer);
 	renderer_anim_compute_dfs(&state->renderer, &state->current_graph);
 }
 
@@ -95,6 +99,8 @@ void apply_topo_trigger(ExecutionContext *ctx, void *result_data)
 	if (!ctx || !ctx->app_state)
 		return;
 	AppState *state = ctx->app_state;
+	renderer_anim_reset_nodes(&state->renderer, &state->current_graph);
+	renderer_anim_reset_edges(&state->renderer);
 	renderer_anim_compute_topo(&state->renderer, &state->current_graph);
 }
 

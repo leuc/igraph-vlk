@@ -453,6 +453,14 @@ typedef struct Renderer
 		uint32_t edge_count;
 	} bfs;
 
+	struct
+	{
+		VkBuffer buf;
+		VkDeviceMemory mem;
+		uint32_t edge_count;
+		float max_value;
+	} edge_vis;
+
 	// XR-specific depth buffers (per view, separate from desktop)
 	uint32_t xr_view_count;
 	VkImage *xrDepthImages;				  // [view_index]

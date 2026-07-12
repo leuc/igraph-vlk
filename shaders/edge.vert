@@ -17,11 +17,13 @@ layout(binding = 4) uniform GlobalAnimState
 }
 anim;
 
-layout(std430, binding = 5) readonly buffer BFSOrder {
+layout(std430, binding = 5) readonly buffer BFSOrder
+{
 	int bfsRank[];
 };
 
-layout(std430, binding = 6) readonly buffer EdgeFrom {
+layout(std430, binding = 6) readonly buffer EdgeFrom
+{
 	uint edgeFrom[];
 };
 
@@ -39,6 +41,11 @@ layout(std430, binding = 2) readonly buffer SPLCEdgeBuffer
 layout(std430, binding = 3) readonly buffer MaxBuffer
 {
 	uint global_max_weight_uint;
+};
+
+layout(std430, binding = 7) readonly buffer EdgeVis
+{
+	float edgeFlow[];
 };
 
 layout(push_constant) uniform SPLCConstants
@@ -72,7 +79,15 @@ void main()
 		float intensity = clamp(pow(log(w + 1.0) / log(max_w + 1.0), 0.3), 0.0, 1.0);
 		fragColor = inColor * (0.2 + 0.8 * intensity) * reveal_t;
 	} else {
-		fragColor = inColor * reveal_t;
+		float max_flow = edgeFlow[0];
+		vec3 base = mix(vec3(0.15), inColor, reveal_t);
+		if (max_flow > 0.0) {
+			float w = edgeFlow[edge_index + 1];
+			float intensity = clamp(pow(log(w + 1.0) / log(max_flow + 1.0), 0.3), 0.0, 1.0);
+			fragColor = base * (0.2 + 0.8 * intensity);
+		} else {
+			fragColor = base;
+		}
 	}
 	fragSelected = inSelected;
 	fragNormalizedPos = inNormalizedPos;

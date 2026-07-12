@@ -12,6 +12,7 @@
 #include "vulkan/utils.h"
 
 static float g_bfs_start_time = 0.0f;
+#define MAXFLOW_SENTINEL_RANK 10000000
 
 void renderer_anim_init(Renderer *r)
 {
@@ -54,6 +55,7 @@ void renderer_anim_cleanup(Renderer *r)
 		VK_DESTROY_BUFFER(r->core.device, r->anim.buffers[i], r->anim.memory[i]);
 	VK_DESTROY_BUFFER(r->core.device, r->bfs.rank_buf, r->bfs.rank_mem);
 	VK_DESTROY_BUFFER(r->core.device, r->bfs.from_buf, r->bfs.from_mem);
+	VK_DESTROY_BUFFER(r->core.device, r->edge_vis.buf, r->edge_vis.mem);
 }
 
 void renderer_anim_compute_bfs(Renderer *r, GraphData *graph)
@@ -126,6 +128,73 @@ void renderer_anim_compute_bfs(Renderer *r, GraphData *graph)
 
 	free(ranks);
 	free(from);
+}
+
+void renderer_anim_reset_nodes(Renderer *r, GraphData *graph)
+{
+	if (graph->node_count == 0)
+		return;
+
+	int *ranks = malloc(sizeof(int) * graph->node_count);
+	for (int i = 0; i < (int)graph->node_count; i++)
+		ranks[i] = 0;
+
+	uint32_t *from = malloc(sizeof(uint32_t) * graph->edge_count);
+	for (int i = 0; i < (int)graph->edge_count; i++)
+		from[i] = graph->edges[i].from;
+
+	VkDeviceSize rank_size = sizeof(int) * graph->node_count;
+	VkDeviceSize from_size = sizeof(uint32_t) * graph->edge_count;
+
+	if (r->bfs.rank_buf == VK_NULL_HANDLE || r->bfs.node_count < graph->node_count) {
+		VK_DESTROY_BUFFER(r->core.device, r->bfs.rank_buf, r->bfs.rank_mem);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, rank_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.rank_buf, &r->bfs.rank_mem);
+	}
+	if (r->bfs.from_buf == VK_NULL_HANDLE || r->bfs.edge_count < graph->edge_count) {
+		VK_DESTROY_BUFFER(r->core.device, r->bfs.from_buf, r->bfs.from_mem);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, from_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.from_buf, &r->bfs.from_mem);
+	}
+
+	update_buffer(r->core.device, r->bfs.rank_mem, rank_size, ranks);
+	update_buffer(r->core.device, r->bfs.from_mem, from_size, from);
+
+	r->bfs.node_count = graph->node_count;
+	r->bfs.edge_count = graph->edge_count;
+
+	r->anim.data._pad = 0.0f;
+
+	VkDescriptorBufferInfo rank_info = {r->bfs.rank_buf, 0, rank_size};
+	VkDescriptorBufferInfo from_info = {r->bfs.from_buf, 0, from_size};
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4; i++) {
+		VkWriteDescriptorSet writes[] = {
+			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 5, &rank_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 6, &from_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+		};
+		vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
+	}
+
+	g_bfs_start_time = r->anim.data.time;
+
+	free(ranks);
+	free(from);
+}
+
+void renderer_anim_reset_edges(Renderer *r)
+{
+	if (!r)
+		return;
+
+	// Zero SPLC max_weight (binding 3) → shader sees max_w = 0
+	if (r->splc.max_memory != VK_NULL_HANDLE) {
+		uint32_t zero = 0u;
+		update_buffer(r->core.device, r->splc.max_memory, sizeof(uint32_t), &zero);
+	}
+
+	// Zero edge_vis[0] flow max (binding 7) → shader sees max_flow = 0
+	if (r->edge_vis.buf != VK_NULL_HANDLE) {
+		float zero = 0.0f;
+		update_buffer(r->core.device, r->edge_vis.mem, sizeof(float), &zero);
+	}
 }
 
 void renderer_anim_compute_dfs(Renderer *r, GraphData *graph)
@@ -265,4 +334,79 @@ void renderer_anim_compute_topo(Renderer *r, GraphData *graph)
 
 	free(ranks);
 	free(from);
+}
+
+void renderer_anim_setup_flow_reveal(Renderer *r, GraphData *graph, const int *ranks, const uint32_t *from, uint32_t node_count, uint32_t edge_count, float total_duration)
+{
+	if (!r || !graph || node_count == 0)
+		return;
+
+	VkDeviceSize rank_size = sizeof(int) * node_count;
+	VkDeviceSize from_size = sizeof(uint32_t) * edge_count;
+
+	if (r->bfs.rank_buf == VK_NULL_HANDLE || r->bfs.node_count < node_count) {
+		VK_DESTROY_BUFFER(r->core.device, r->bfs.rank_buf, r->bfs.rank_mem);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, rank_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.rank_buf, &r->bfs.rank_mem);
+	}
+	if (r->bfs.from_buf == VK_NULL_HANDLE || r->bfs.edge_count < edge_count) {
+		VK_DESTROY_BUFFER(r->core.device, r->bfs.from_buf, r->bfs.from_mem);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, from_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->bfs.from_buf, &r->bfs.from_mem);
+	}
+
+	update_buffer(r->core.device, r->bfs.rank_mem, rank_size, ranks);
+	update_buffer(r->core.device, r->bfs.from_mem, from_size, from);
+
+	r->bfs.node_count = node_count;
+	r->bfs.edge_count = edge_count;
+
+	int max_rank = 0;
+	for (uint32_t i = 0; i < node_count; i++) {
+		if (ranks[i] < MAXFLOW_SENTINEL_RANK && ranks[i] > max_rank)
+			max_rank = ranks[i];
+	}
+	r->anim.data._pad = (max_rank > 0) ? total_duration / max_rank : total_duration;
+
+	VkDescriptorBufferInfo rank_info = {r->bfs.rank_buf, 0, rank_size};
+	VkDescriptorBufferInfo from_info = {r->bfs.from_buf, 0, from_size};
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4; i++) {
+		VkWriteDescriptorSet writes[] = {
+			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 5, &rank_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 6, &from_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+		};
+		vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
+	}
+
+	g_bfs_start_time = r->anim.data.time;
+}
+
+void renderer_anim_setup_edge_visualization(Renderer *r, GraphData *graph, const float *edge_data, uint32_t edge_count, float max_value)
+{
+	if (!r || !graph || !edge_data || edge_count == 0)
+		return;
+
+	// Pack [max_value, edge_flow_0, edge_flow_1, ...] so the shader can read max from index 0
+	VkDeviceSize data_size = sizeof(float) * (edge_count + 1);
+	float *packed = malloc(data_size);
+	if (!packed)
+		return;
+	packed[0] = max_value;
+	memcpy(packed + 1, edge_data, sizeof(float) * edge_count);
+
+	if (r->edge_vis.buf == VK_NULL_HANDLE || r->edge_vis.edge_count < edge_count) {
+		VK_DESTROY_BUFFER(r->core.device, r->edge_vis.buf, r->edge_vis.mem);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, data_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->edge_vis.buf, &r->edge_vis.mem);
+	}
+
+	update_buffer(r->core.device, r->edge_vis.mem, data_size, (void *)packed);
+
+	r->edge_vis.edge_count = edge_count;
+	r->edge_vis.max_value = max_value;
+
+	VkDescriptorBufferInfo edge_vis_info = {r->edge_vis.buf, 0, data_size};
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4; i++) {
+		VkWriteDescriptorSet write = VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 7, &edge_vis_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		vkUpdateDescriptorSets(r->core.device, 1, &write, 0, NULL);
+	}
+
+	free(packed);
 }
