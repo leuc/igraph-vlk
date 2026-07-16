@@ -7,6 +7,7 @@
 #define GRAPH_STREAM_H
 
 #include "graph_types.h"
+#include "interaction/state.h"
 #include <stdbool.h>
 
 /* ============================================================================
@@ -56,5 +57,13 @@ bool graph_stream_at_eof(GraphStream *stream);
  * GraphData — call graph_free_data() separately as with any other GraphData.
  */
 void graph_stream_destroy(GraphStream *stream);
+
+/**
+ * Toggle-command pair for the "Data/Stream > [ ] Pause" menu item — flips
+ * AppState.graph_stream_paused and updates the menu label to reflect state,
+ * mirroring the Layout/Seed toggle in src/graph/layouts_seed.c.
+ */
+void *compute_toggle_stream_pause(ExecutionContext *ctx);
+void apply_toggle_stream_pause(ExecutionContext *ctx, void *result_data);
 
 #endif // GRAPH_STREAM_H

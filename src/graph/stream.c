@@ -11,7 +11,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "app_state.h"
 #include "os/stream.h"
+#include "ui/menu.h"
 
 #define GRAPH_STREAM_LINE_BATCH 256
 #define GRAPH_STREAM_MAX_LINES_PER_FRAME 5000
@@ -488,4 +490,32 @@ void graph_stream_destroy(GraphStream *stream)
 
 	name_map_destroy(&stream->names);
 	free(stream);
+}
+
+// ============================================================================
+// "Data/Stream > [ ] Pause" menu toggle
+// ============================================================================
+
+void *compute_toggle_stream_pause(ExecutionContext *ctx)
+{
+	(void)ctx;
+	return (void *)(uintptr_t)1;
+}
+
+void apply_toggle_stream_pause(ExecutionContext *ctx, void *result_data)
+{
+	(void)result_data;
+	if (!ctx || !ctx->app_state)
+		return;
+	ctx->app_state->graph_stream_paused = !ctx->app_state->graph_stream_paused;
+
+	MenuNode *node = menu_find_node_by_command_id(ctx->app_state->app_ctx.menu.root, "toggle_stream_pause");
+	if (node) {
+		free((void *)node->label);
+		node->label = strdup(ctx->app_state->graph_stream_paused ? "[x] Pause" : "[ ] Pause");
+		if (node->command) {
+			free((void *)node->command->display_name);
+			node->command->display_name = strdup(node->label);
+		}
+	}
 }

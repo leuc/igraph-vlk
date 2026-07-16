@@ -5,14 +5,15 @@
 
 #include "command_registry.h"
 #include "graph/repo_netzschleuder.h"
+#include "graph/stream.h"
 #include "graph/wrappers_centrality.h"
 #include "graph/wrappers_community.h"
 #include "graph/wrappers_constructors.h"
 #include "graph/wrappers_cycles.h"
 #include "graph/wrappers_filter.h"
+#include "graph/wrappers_flow.h"
 #include "graph/wrappers_layout.h"
 #include "graph/wrappers_paths.h"
-#include "graph/wrappers_flow.h"
 #include "graph/wrappers_splc.h"
 #include "graph/wrappers_structural.h"
 
@@ -36,6 +37,8 @@ const CommandDef g_command_registry[] = {
 
 	{"Data/Spatial", "igraph_nearest_neighbor_graph", "Geometric random graphs", compute_igraph_nearest_neighbor_graph, apply_new_graph, free_new_graph},
 	{"Data/Spatial", "igraph_gabriel_graph", "Gabriel graphs", compute_igraph_gabriel_graph, apply_new_graph, free_new_graph},
+
+	{"Data/Stream", "toggle_stream_pause", "[ ] Pause", compute_toggle_stream_pause, apply_toggle_stream_pause, free_noop},
 
 	{"Layout/Seed", "use_current_positions_as_seed", "[ ] Use current positions as seed", compute_use_current_positions_as_seed, apply_use_current_positions_as_seed, free_noop},
 	{"Layout/Seed", "seed_random_uniform", "Random Uniform [-1, 1]", compute_seed_random_uniform, apply_layout_matrix, free_layout_matrix},

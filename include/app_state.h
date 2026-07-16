@@ -38,6 +38,7 @@ typedef struct AppState
 	bool vr_enabled;
 	GraphData current_graph;
 	GraphStream *graph_stream; // non-NULL while streaming NCOL edges from stdin
+	bool graph_stream_paused;  // user-toggled pause for stream ingest polling
 	Camera camera;
 
 	/* Window / System State */

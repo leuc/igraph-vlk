@@ -260,7 +260,7 @@ int main(int argc, char **argv)
 		// igraph_t mutation happens here, on the main thread only — held back
 		// while a worker job is running, since layout/other job workers read
 		// the same live igraph_t on a background thread)
-		if (app.graph_stream && !app.job_in_progress) {
+		if (app.graph_stream && !app.job_in_progress && !app.graph_stream_paused) {
 			if (graph_stream_poll(app.graph_stream, &app.current_graph)) {
 				renderer_update_graph(&app.renderer, &app.current_graph);
 			}
