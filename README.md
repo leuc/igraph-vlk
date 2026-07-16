@@ -14,6 +14,7 @@ Interactive graph visualization with
  - 3D menu system
  - WASD + Gamepad navigation
  - Directly load graphs from Netzschleuder Repository
+ - Live graph streaming from stdin (NCOL firehose)
  - Runs on Steam Deck
 
 ## EXPERIMENTAL
@@ -139,6 +140,28 @@ Some layouts can use a custom /seed/ (node positions) for the initial placement.
 
 This allows the combination or refinement of resulting layout node positions.
 
+### Streaming Graphs (NCOL over stdin)
+
+If stdin is piped or redirected (not a terminal), igraph-vlk automatically detects this at startup, starts from an empty graph, and grows it live as [NCOL](https://igraph.org/c/doc/igraph-File-Formats.html)-format lines arrive on stdin — no CLI flag needed. Any file argument passed on the command line is ignored in this mode.
+
+Each line is `<name1> <name2> [<weight>]` (whitespace-separated, weight optional). Nodes are created on first mention; the resulting graph is always undirected. Malformed lines are logged to stderr and skipped rather than stopping the stream.
+
+```sh
+printf 'a b 1\nb c 2\nc a\n' | ./igraph-vlk
+```
+
+Ingest is automatically held while a worker job (layout, centrality, community detection, etc.) is running — new lines keep queuing up in the background and are applied once the job finishes, so nothing is dropped or interleaved with a job reading the graph.
+
+**Example: Bluesky Jetstream reply graph**
+
+[`scripts/bsky_reply_graph.jq`](scripts/bsky_reply_graph.jq) turns the [Bluesky Jetstream](https://github.com/bluesky-social/jetstream) firehose into a live reply/comment graph: every reply post becomes an edge to the post it replies to.
+
+```sh
+curl -sN "wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.bsky.feed.post" \
+  | ./scripts/bsky_reply_graph.jq \
+  | ./igraph-vlk
+```
+
 ## Features
 
 ### Graph I/O & Generation
@@ -146,6 +169,7 @@ This allows the combination or refinement of resulting layout node positions.
 | Feature | Details |
 |---|---|
 | **GraphML import** | Load graphs via CLI argument |
+| **Live NCOL streaming (stdin)** | Auto-detected when stdin is piped/redirected — grows the graph live from NCOL-format lines (`name1 name2 [weight]`) as they arrive; ingest pauses while a worker job is running |
 | **Graph generation** | 7 deterministic (Ring, Star, K-ary Tree, Lattice, Clique, Cycle, Famous/Notable), 6 stochastic (Erdos-Renyi, Barabasi-Albert, Watts-Strogatz, Forest Fire, Random Tree, Degree Sequence), 2 bipartite (Random Bipartite, Bipartite Projection), 2 spatial (Geometric Random, Gabriel) |
 
 ### Graph Analysis
