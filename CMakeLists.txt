@@ -102,6 +102,7 @@ add_executable(
 	src/vulkan/images.c
 	src/vulkan/utils.c
 	src/os/path.c
+	src/os/stream.c
 	src/vulkan/text.c
 	# Extracted refactor modules
 	src/vulkan/renderer_cleanup.c
@@ -111,6 +112,7 @@ add_executable(
 	# Graph modules
 	src/graph/graph_core.c
 	src/graph/graph_io.c
+	src/graph/stream.c
 	src/graph/graph_filter.c
 	src/graph/graph_filter_visibility.c
 	src/graph/layered_sphere.c

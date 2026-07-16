@@ -8,6 +8,7 @@
 #include "graph/graph_filter_visibility.h"
 #include "graph/graph_io.h"
 #include "graph/repo_netzschleuder.h"
+#include "graph/stream.h"
 #include "graph/wrappers_layout.h"
 #include "interaction/camera.h"
 #include "interaction/input.h"
@@ -15,6 +16,7 @@
 #include "interaction/state.h"
 #include "interaction/window.h"
 #include "os/path.h"
+#include "os/stream.h"
 #include "ui/hud.h"
 #include "ui/menu.h"
 #include "vulkan/menu.h"
@@ -77,8 +79,17 @@ int main(int argc, char **argv)
 
 	app.current_filename = filename;
 	app.current_graph.graph_initialized = false;
+	app.graph_stream = NULL;
 
-	if (filename) {
+	if (os_stream_stdin_is_piped()) {
+		if (filename)
+			fprintf(stderr, "stdin is piped; ignoring filename argument \"%s\" — starting from an empty streamed graph\n", filename);
+		app.graph_stream = graph_stream_init(&app.current_graph);
+		if (!app.graph_stream) {
+			fprintf(stderr, "Failed to initialize graph streaming from stdin\n");
+			return EXIT_FAILURE;
+		}
+	} else if (filename) {
 		if (!graph_load(filename, &app.current_graph, NULL, NULL)) {
 			fprintf(stderr, "Failed to load graph: %s\n", filename);
 			return EXIT_FAILURE;
@@ -88,6 +99,8 @@ int main(int argc, char **argv)
 	// Create window (platform-aware sizing, hints, and callbacks)
 	if (!window_create(&app)) {
 		fprintf(stderr, "Failed to create window\n");
+		if (app.graph_stream)
+			graph_stream_destroy(app.graph_stream);
 		graph_free_data(&app.current_graph);
 		glfwTerminate();
 		return EXIT_FAILURE;
@@ -102,6 +115,8 @@ int main(int argc, char **argv)
 		app.vr_enabled = xr_context_init(&app.xr_ctx, "igraph-vlk");
 		if (!app.vr_enabled) {
 			fprintf(stderr, "Failed to initialize OpenXR context.\n");
+			if (app.graph_stream)
+				graph_stream_destroy(app.graph_stream);
 			graph_free_data(&app.current_graph);
 			glfwDestroyWindow(app.win.handle);
 			glfwTerminate();
@@ -122,6 +137,8 @@ int main(int argc, char **argv)
 	if (!renderer_init(&app.renderer, app.win.handle, &app.current_graph, NULL)) {
 #endif
 		fprintf(stderr, "Failed to initialize renderer\n");
+		if (app.graph_stream)
+			graph_stream_destroy(app.graph_stream);
 		graph_free_data(&app.current_graph);
 #ifdef USE_OPENXR
 		if (app.vr_enabled)
@@ -137,6 +154,8 @@ int main(int argc, char **argv)
 		if (!xr_init_vr(&app)) {
 			fprintf(stderr, "Failed to initialize VR session.\n");
 			xr_context_cleanup(&app.xr_ctx);
+			if (app.graph_stream)
+				graph_stream_destroy(app.graph_stream);
 			graph_free_data(&app.current_graph);
 			renderer_cleanup(&app.renderer);
 			glfwDestroyWindow(app.win.handle);
@@ -164,6 +183,8 @@ int main(int argc, char **argv)
 	if (!worker_thread_init(&app.worker_ctx, 10)) {
 		fprintf(stderr, "Failed to initialize worker thread\n");
 		menu_tree_destroy(root_menu);
+		if (app.graph_stream)
+			graph_stream_destroy(app.graph_stream);
 		graph_free_data(&app.current_graph);
 		renderer_cleanup(&app.renderer);
 #ifdef USE_OPENXR
@@ -235,6 +256,14 @@ int main(int argc, char **argv)
 			}
 		}
 
+		// Poll incremental NCOL edges streamed from stdin (non-blocking; all
+		// igraph_t mutation happens here, on the main thread only)
+		if (app.graph_stream) {
+			if (graph_stream_poll(app.graph_stream, &app.current_graph)) {
+				renderer_update_graph(&app.renderer, &app.current_graph);
+			}
+		}
+
 		// Generate menu buffers if menu is open or processing
 		if (app.app_ctx.current_state == STATE_MENU_OPEN || app.app_ctx.current_state == STATE_JOB_IN_PROGRESS || app.app_ctx.current_state == STATE_EXECUTING) {
 			generate_vulkan_menu_buffers(&app.app_ctx, &app.renderer);
@@ -277,6 +306,10 @@ int main(int argc, char **argv)
 	worker_thread_cleanup(&app.worker_ctx);
 	app_context_destroy(&app.app_ctx);
 	menu_tree_destroy(root_menu);
+	if (app.graph_stream) {
+		graph_stream_destroy(app.graph_stream);
+		app.graph_stream = NULL;
+	}
 	graph_free_data(&app.current_graph);
 	renderer_cleanup(&app.renderer);
 #ifdef USE_OPENXR

@@ -13,6 +13,7 @@
 
 #include "graph/graph_core.h"
 #include "graph/graph_types.h"
+#include "graph/stream.h"
 #include "graph/worker_thread.h"
 #include "interaction/camera.h"
 #include "interaction/state.h"
@@ -36,6 +37,7 @@ typedef struct AppState
 #endif
 	bool vr_enabled;
 	GraphData current_graph;
+	GraphStream *graph_stream; // non-NULL while streaming NCOL edges from stdin
 	Camera camera;
 
 	/* Window / System State */
