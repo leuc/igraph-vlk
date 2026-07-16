@@ -59,6 +59,14 @@ bool graph_stream_at_eof(GraphStream *stream);
 void graph_stream_destroy(GraphStream *stream);
 
 /**
+ * Borrowed view of the live per-vertex coreness maintained during streaming
+ * (see graph/dyn_k-core.h), indexed by vertex id, sized to the current
+ * vertex count. NULL if maintenance is unavailable. Valid until the next
+ * graph_stream_poll()/graph_stream_destroy() call. Main thread only.
+ */
+const int *graph_stream_coreness(const GraphStream *gs);
+
+/**
  * Toggle-command pair for the "Data/Stream > [ ] Pause" menu item — flips
  * AppState.graph_stream_paused and updates the menu label to reflect state,
  * mirroring the Layout/Seed toggle in src/graph/layouts_seed.c.

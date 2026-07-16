@@ -113,6 +113,7 @@ add_executable(
 	src/graph/graph_core.c
 	src/graph/graph_io.c
 	src/graph/stream.c
+	src/graph/dyn_k-core.c
 	src/graph/graph_filter.c
 	src/graph/graph_filter_visibility.c
 	src/graph/layered_sphere.c
@@ -179,6 +180,14 @@ if(USE_OPENXR)
 endif()
 
 target_compile_definitions(igraph-vlk PRIVATE NODE_VERT_SHADER_PATH="shaders/node.vert.spv" NODE_FRAG_SHADER_PATH="shaders/node.frag.spv" EDGE_VERT_SHADER_PATH="shaders/edge.vert.spv" EDGE_FRAG_SHADER_PATH="shaders/edge.frag.spv" LABEL_VERT_SHADER_PATH="shaders/label.vert.spv" LABEL_FRAG_SHADER_PATH="shaders/label.frag.spv" UI_VERT_SHADER_PATH="shaders/ui.vert.spv" UI_FRAG_SHADER_PATH="shaders/ui.frag.spv" MENU_VERT_SHADER_PATH="shaders/menu.vert.spv" MENU_FRAG_SHADER_PATH="shaders/menu.frag.spv" TEXTQUAD_VERT_SHADER_PATH="shaders/textquad.vert.spv" TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv" ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv" SPLC_COMP_SHADER_PATH="shaders/splc.comp.spv" BCGL_COMP_SHADER_PATH="shaders/bcgl.comp.spv" RAY_VERT_SHADER_PATH="shaders/ray.vert.spv" RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv")
+
+# Standalone test for dynamic k-core maintenance (not installed)
+add_executable(dyn_kcore_test tests/dyn_kcore_test.c src/graph/dyn_k-core.c)
+target_include_directories(dyn_kcore_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${IGRAPH_INCLUDE_DIRS})
+target_link_libraries(dyn_kcore_test PRIVATE igraph::igraph)
+if(NOT MSVC)
+	target_link_libraries(dyn_kcore_test PRIVATE m)
+endif()
 
 install(TARGETS igraph-vlk DESTINATION bin)
 install(DIRECTORY ${CMAKE_BINARY_DIR}/shaders/ DESTINATION share/igraph-vlk/shaders FILES_MATCHING PATTERN "*.spv")

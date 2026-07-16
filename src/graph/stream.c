@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "app_state.h"
+#include "graph/dyn_k-core.h"
 #include "os/stream.h"
 #include "ui/menu.h"
 
@@ -142,6 +143,7 @@ struct GraphStream
 {
 	OsStreamReader *reader;
 	NameMap names;
+	DynKCore *kcore;		// live coreness maintenance; NULL if init failed (non-fatal)
 	uint32_t node_capacity; // amortized capacity of data->nodes[]
 	uint32_t edge_capacity; // amortized capacity of data->edges[]
 	bool fatal_error;		// set on unrecoverable error; poll() becomes a no-op
@@ -349,9 +351,14 @@ GraphStream *graph_stream_init(GraphData *data)
 		return NULL;
 	}
 
+	gs->kcore = dyn_kcore_init(&data->g);
+	if (!gs->kcore)
+		fprintf(stderr, "graph_stream_init: dynamic k-core maintenance unavailable\n");
+
 	gs->reader = os_stream_reader_start();
 	if (!gs->reader) {
 		fprintf(stderr, "graph_stream_init: failed to start stdin reader thread\n");
+		dyn_kcore_destroy(gs->kcore);
 		name_map_destroy(&gs->names);
 		free(gs);
 		igraph_matrix_destroy(&data->current_layout);
@@ -441,31 +448,43 @@ bool graph_stream_poll(GraphStream *gs, GraphData *data)
 	// Batched edge add: ONE igraph_add_edges() call for the whole poll's batch
 	// (it is O(E_total) per call, not O(edges added) — see include/graph/stream.h).
 	igraph_integer_t num_new_edges = igraph_vector_int_size(&new_edges) / 2;
+	bool edges_in_graph = false;
 	if (num_new_edges > 0 && !gs->fatal_error) {
 		if (igraph_add_edges(&data->g, &new_edges, NULL) != IGRAPH_SUCCESS) {
 			fprintf(stderr, "graph_stream_poll: igraph_add_edges failed for batch of %lld — dropping batch\n", (long long)num_new_edges);
-		} else if (ensure_edge_capacity(gs, data, old_edge_count + (uint32_t)num_new_edges)) {
-			for (igraph_integer_t k = 0; k < num_new_edges; k++) {
-				igraph_integer_t eid = old_edge_count + k;
-				igraph_integer_t from_vid = VECTOR(new_edges)[2 * k];
-				igraph_integer_t to_vid = VECTOR(new_edges)[2 * k + 1];
+		} else {
+			edges_in_graph = true;
+			if (ensure_edge_capacity(gs, data, old_edge_count + (uint32_t)num_new_edges)) {
+				for (igraph_integer_t k = 0; k < num_new_edges; k++) {
+					igraph_integer_t eid = old_edge_count + k;
+					igraph_integer_t from_vid = VECTOR(new_edges)[2 * k];
+					igraph_integer_t to_vid = VECTOR(new_edges)[2 * k + 1];
 
-				if (gs->pend_has_weight[k] && SETEAN(&data->g, "weight", eid, gs->pend_weight[k]) != IGRAPH_SUCCESS)
-					fprintf(stderr, "graph_stream_poll: SETEAN weight failed for edge %lld\n", (long long)eid);
+					if (gs->pend_has_weight[k] && SETEAN(&data->g, "weight", eid, gs->pend_weight[k]) != IGRAPH_SUCCESS)
+						fprintf(stderr, "graph_stream_poll: SETEAN weight failed for edge %lld\n", (long long)eid);
 
-				Edge *e = &data->edges[data->edge_count];
-				e->from = (uint32_t)from_vid;
-				e->to = (uint32_t)to_vid;
-				e->selected = 0.0f;
-				e->weight = gs->pend_has_weight[k] ? (float)gs->pend_weight[k] : 0.0f;
-				data->edge_count++;
+					Edge *e = &data->edges[data->edge_count];
+					e->from = (uint32_t)from_vid;
+					e->to = (uint32_t)to_vid;
+					e->selected = 0.0f;
+					e->weight = gs->pend_has_weight[k] ? (float)gs->pend_weight[k] : 0.0f;
+					data->edge_count++;
 
-				data->nodes[from_vid].degree++;
-				data->nodes[to_vid].degree++;
+					data->nodes[from_vid].degree++;
+					data->nodes[to_vid].degree++;
+				}
+				data->props.edge_count = (int)data->edge_count;
+				changed = true;
 			}
-			data->props.edge_count = (int)data->edge_count;
-			changed = true;
 		}
+	}
+
+	// Maintain live coreness against the igraph graph (also syncs newly
+	// added vertices when the edge batch was dropped).
+	if (gs->kcore && !dyn_kcore_on_edges(gs->kcore, &data->g, edges_in_graph ? &new_edges : NULL)) {
+		fprintf(stderr, "graph_stream_poll: dynamic k-core maintenance failed — disabling\n");
+		dyn_kcore_destroy(gs->kcore);
+		gs->kcore = NULL;
 	}
 
 	igraph_vector_int_destroy(&new_edges);
@@ -488,8 +507,14 @@ void graph_stream_destroy(GraphStream *stream)
 	else
 		fprintf(stderr, "graph_stream_destroy: stdin reader still active — leaving it for the OS to reclaim\n");
 
+	dyn_kcore_destroy(stream->kcore);
 	name_map_destroy(&stream->names);
 	free(stream);
+}
+
+const int *graph_stream_coreness(const GraphStream *gs)
+{
+	return (gs && gs->kcore) ? dyn_kcore_values(gs->kcore) : NULL;
 }
 
 // ============================================================================
