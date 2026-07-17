@@ -225,6 +225,14 @@ curl -sN "wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.
 - Self-loops count twice and parallel edges keep multiplicity, matching `igraph_coreness(..., IGRAPH_ALL)` semantics exactly. Correctness is guarded by `tests/dyn_kcore_test.c`, which diffs the maintained values against a full `igraph_coreness` recompute (and igraph's own structural `validate_coreness` oracle) over the same graph families igraph's own `coreness.c` uses.
 - References: Sariyüce et al. (2013); Liu et al. (2021).
 
+**Dynamic (Streaming) Leiden Communities:**
+- Maintains the Leiden (CPM, density-scaled γ) community membership of every vertex as edges stream in over the live NCOL graph, *without* recomputing the full Leiden decomposition per change. It runs on the same background ingest path as the streaming reader (see [Streaming Graphs](#streaming-graphs-ncol-over-stdin)).
+- This is a single-threaded C port of the **Dynamic Frontier (DF) approach to Leiden** from Sahu's parallel GVE-Leiden implementation (the `leidenMoveW` / `leidenScanCommunitiesW` / `leidenChooseCommunity` / `leidenAffectedVerticesFrontierW` functions in `leiden.hxx`). Only the endpoints of cross-community edge insertions and intra-community deletions are enqueued as a frontier; on a successful move the vertex's neighbors are expanded into the frontier, so the work stays local to the affected region instead of scanning all vertices each call.
+- A refinement pass resets touched vertices that changed community back to a singleton and re-runs local-moving restricted to same-pre-refine (vcob) candidates, preserving the well-connected sub-communities the static Leiden refinement phase guarantees. Aggregation is scoped to the `cchg`-flagged communities (matched by representative-vertex-id labels), mirroring the static Leiden `continue_clustering` loop in igraph's `src/community/leiden.c`.
+- The initial partition is bootstrapped with the same CPM objective (via `igraph_community_leiden_simple`) that the maintainer then adjusts incrementally, so the bootstrap is already a local optimum under the maintained formula.
+- References: Sahu, S. *A Starting Point for Dynamic Community Detection with Leiden Algorithm*. arXiv:2405.11658; Sahu, S. (2024). *Heuristic-Based Dynamic Leiden Algorithm for Efficient Tracking of Communities on Evolving Graphs*. arXiv:2410.15451. https://doi.org/10.48550/arXiv.2410.15451. Source: https://github.com/puzzlef/leiden-communities-openmp-dynamic
+- The static Leiden objective itself: Traag, Waltman & van Eck (2019) (see [Community Detection](#community-detection-results-mapped-to-node-colors)).
+
 **GPU-Accelerated Main Path Analysis (SPLC):**
 - Search Path Link Count traffic simulation on GPU compute shader with real-time animation
 
@@ -421,6 +429,11 @@ igraph core:
 **Dynamic (Streaming) k-Core:**
 - Saríyüce, A.E., Gedik, B., Jacques-Silva, G., Wu, K.-L. & Çatalyürek, Ü.V. (2013). Streaming Algorithms for K-Core Decomposition. *Proc. VLDB Endowment*, 6(6), 433–444. https://doi.org/10.14778/2536336.2536344
 - Liu, Q., Zhu, X., Huang, X. & Xu, J. (2021). Local Algorithms for Distance-Generalized Core Decomposition over Large Dynamic Graphs. *Proc. VLDB Endowment*, 14(9), 1531–1543. https://doi.org/10.14778/3461535.3461542
+
+**Dynamic (Streaming) Leiden Communities:**
+- Sahu, S. *A Starting Point for Dynamic Community Detection with Leiden Algorithm*. arXiv:2405.11658. https://arxiv.org/abs/2405.11658
+- Sahu, S. (2024). Heuristic-Based Dynamic Leiden Algorithm for Efficient Tracking of Communities on Evolving Graphs. *arXiv:2410.15451*. Preprint, arXiv. https://doi.org/10.48550/arXiv.2410.15451
+- Sahu, S. *leiden-communities-openmp-dynamic* (GVE-Leiden source, `leiden.hxx`). https://github.com/puzzlef/leiden-communities-openmp-dynamic
 
 **Transitivity:**
 - Watts, D.J. & Strogatz, S.H. (1998). Collective dynamics of small-world networks. *Nature*, 393, 440–442.
