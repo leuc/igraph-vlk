@@ -56,10 +56,15 @@ No typechecker (C). Check for igraph/Vulkan errors at runtime.
 
 ## Testing
 
-No unit/integration tests (no `test/` dir, no CTest targets).
+Unit tests live in `tests/` and are wired into CMake/CTest.
 
+- **Run all tests**: `ctest --test-dir build --output-on-failure` (or `ctest -C Debug` from inside `build/`). Each test is a `RUN_TEST`-driven executable that asserts with `IGRAPH_ASSERT`; `add_test` registers them in `CMakeLists.txt`.
+- **Test layout**:
+  - `tests/dyn_kcore_test.c` — data-driven correctness for `src/graph/dyn_k-core.c` (dynamic streaming k-core maintenance). Mirrors igraph's own `tests/unit/coreness.c`: it runs the maintained coreness over the exact same graph list (empty, singleton, full/looped/directed, Zachary, Zachary+loops+multiedges, geometric) and validates against both `igraph_coreness` and the shared `validate_coreness` oracle.
+  - `tests/test_utilities.h` — generic harness: `RUN_TEST(func)` drives a test function and verifies the igraph FINALLY stack; `VERIFY_FINALLY_STACK()`.
+  - `tests/validate_coreness.h` — structural coreness oracle (ported from igraph's `coreness.c`): every k-core subgraph must have min degree ≥ k.
+- **Adding a test**: create `tests/<name>_test.c`, add a matching `add_executable`/`target_include_directories`/`target_link_libraries` + `add_test(NAME <name>_test COMMAND <name>_test)` block in `CMakeLists.txt` (link `igraph::igraph` and, on non-MSVC, `m`). Keep benchmarking/perf out of unit tests.
 - **Manual Testing**: Run `./build/igraph-vlk`, load graphs (GraphML), test layouts (OpenOrd, Layered Sphere), interactions (pan/zoom/select), menus.
-- **Single Test**: N/A; add via CMake `add_test` if implementing.
 - **Visual/Perf**: FPS in HUD; stress large graphs (>10k nodes).
 
 ## Adding Menu Items

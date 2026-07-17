@@ -32,7 +32,9 @@ struct DynKCore
 	int max_core;			 // largest coreness present; only grows (insertion-only)
 	int max_subcore_touched; // largest subcore BFS ever visited for one edge
 	int epoch;
-	igraph_vector_int_t neis; // reusable neighbor buffer
+	igraph_vector_int_t neis;  // reusable neighbor buffer (vertex ids)
+	igraph_vector_int_t inc;   // reusable incident-edge-id buffer
+	igraph_integer_t live_eid; // edge ids >= this belong to later insertions not yet processed
 };
 
 // ============================================================================
@@ -87,13 +89,36 @@ static bool dyn_kcore_sync_vcount(DynKCore *kc, const igraph_t *g)
 // Support counting (the one place that defines core semantics; also the
 // extension seam for (k,h)-cores, where 1-hop neighbors would become h-hop).
 // Matches igraph_coreness: IGRAPH_ALL, self-loops twice, multiplicity kept.
+//
+// We enumerate incident *edge ids* and keep only those with id < live_eid.
+// live_eid is the edge id of the NEXT not-yet-processed insertion, so this
+// reproduces igraph_neighbors semantics while excluding edges that arrive
+// later in the current batch (Sariyuce's single-edge maintenance must see
+// the graph exactly as it stood at each insertion). Self-loops appear twice
+// in the incident list (counted twice) and parallel edges keep multiplicity.
 // ============================================================================
 
 static bool fetch_neighbors(DynKCore *kc, const igraph_t *g, igraph_integer_t w)
 {
-	if (igraph_neighbors(g, &kc->neis, w, IGRAPH_ALL, IGRAPH_LOOPS, true) != IGRAPH_SUCCESS) {
-		fprintf(stderr, "dyn_kcore: igraph_neighbors failed for vertex %lld\n", (long long)w);
+	if (igraph_incident(g, &kc->inc, w, IGRAPH_ALL, IGRAPH_LOOPS) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "dyn_kcore: igraph_incident failed for vertex %lld\n", (long long)w);
 		return false;
+	}
+	igraph_vector_int_clear(&kc->neis);
+	igraph_integer_t m = igraph_vector_int_size(&kc->inc);
+	for (igraph_integer_t i = 0; i < m; i++) {
+		igraph_integer_t eid = VECTOR(kc->inc)[i];
+		if (eid >= kc->live_eid)
+			continue;
+		igraph_integer_t from, to;
+		if (igraph_edge(g, eid, &from, &to) != IGRAPH_SUCCESS) {
+			fprintf(stderr, "dyn_kcore: igraph_edge failed for edge %lld\n", (long long)eid);
+			return false;
+		}
+		if (igraph_vector_int_push_back(&kc->neis, (from == w) ? to : from) != IGRAPH_SUCCESS) {
+			fprintf(stderr, "dyn_kcore: neighbor buffer push_back failed\n");
+			return false;
+		}
 	}
 	return true;
 }
@@ -179,8 +204,11 @@ static bool process_insert(DynKCore *kc, const igraph_t *g, igraph_integer_t u, 
 			kc->core[w] = k + 1;
 			if (k + 1 > kc->max_core)
 				kc->max_core = k + 1;
-			if (changed && igraph_vector_int_push_back(changed, w) != IGRAPH_SUCCESS)
-				changed = NULL; // report is best-effort; core[] stays correct
+			// Report of changed ids is best-effort; an OOM here must NOT
+			// abort the maintenance (core[] is already correct) nor leave a
+			// dangling local NULL the caller can't see. Just skip the entry.
+			if (changed)
+				igraph_vector_int_push_back(changed, w);
 		}
 	}
 	return true;
@@ -198,6 +226,12 @@ DynKCore *dyn_kcore_init(const igraph_t *g)
 		return NULL;
 	}
 	if (igraph_vector_int_init(&kc->neis, 0) != IGRAPH_SUCCESS) {
+		free(kc);
+		return NULL;
+	}
+	if (igraph_vector_int_init(&kc->inc, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(&kc->neis);
+		igraph_vector_int_destroy(&kc->inc);
 		free(kc);
 		return NULL;
 	}
@@ -226,6 +260,9 @@ DynKCore *dyn_kcore_init(const igraph_t *g)
 		}
 		igraph_vector_int_destroy(&cores);
 	}
+	// The whole graph is present at init: every edge is "live" (no future
+	// edges to exclude). dyn_kcore_verify() also relies on this.
+	kc->live_eid = igraph_ecount(g);
 	return kc;
 }
 
@@ -239,9 +276,20 @@ bool dyn_kcore_on_edges(DynKCore *kc, const igraph_t *g, const igraph_vector_int
 		return true;
 
 	igraph_integer_t n = igraph_vector_int_size(new_edges) / 2;
+	// The batch was already added to g in one igraph_add_edges() call, so the
+	// graph now contains every edge of the batch, with contiguous ids
+	// [base, base+n). We process edges in stream order and set live_eid to the
+	// id of the NEXT not-yet-processed edge so fetch_neighbors() counts exactly
+	// the edges present at each insertion (Sariyuce's single-edge maintenance
+	// must see the graph as it stood then; edges later in the batch — and any
+	// genuinely future batch — are excluded as "future edge" contamination).
+	igraph_integer_t base = igraph_ecount(g) - n;
 	for (igraph_integer_t i = 0; i < n; i++) {
 		igraph_integer_t u = VECTOR(*new_edges)[2 * i];
 		igraph_integer_t v = VECTOR(*new_edges)[2 * i + 1];
+		// Edge i has id base+i; it is already in g and must be counted, while
+		// edges base+i+1 .. base+n-1 are still "future" for this insertion.
+		kc->live_eid = base + i + 1;
 		if (u < 0 || u >= kc->vcount || v < 0 || v >= kc->vcount) {
 			fprintf(stderr, "dyn_kcore: edge (%lld,%lld) out of range, skipping\n", (long long)u, (long long)v);
 			continue;
