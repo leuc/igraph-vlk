@@ -12,14 +12,17 @@
 /* ============================================================================
  * Dynamic (streaming) Leiden community maintenance, insertion-only.
  *
- * Maintains an approximate Leiden (standard modularity, resolution gamma=1)
- * partition as edges are inserted, without recomputing the full O(V+E)
- * decomposition per batch.
+ * Maintains an approximate Leiden CPM (Constant Potts Model) partition as
+ * edges are inserted, without recomputing the full O(V+E) decomposition per
+ * batch.
  * Ported from the Dynamic Frontier (DF) heuristic [Sahu 2024, "Heuristic-based
  * Dynamic Leiden"; Sahu, "A Starting Point for Dynamic Community Detection
  * with Leiden Algorithm"], the best-performing/cheapest of the ND/DS/DF
  * marking strategies compared there, with reference to the serial local-move
- * formulas in leiden-communities-openmp-dynamic's inc/leiden.hxx.
+ * formulas in leiden-communities-openmp-dynamic's inc/leiden.hxx. The
+ * reference's frontier-marking heuristic is objective-agnostic (it was
+ * derived for modularity); only the delta-quality formula used to accept or
+ * reject a move (dyn_leiden_choose in the .c file) is CPM's.
  *
  * Only a source edge endpoint crossing a community boundary (or an
  * intra-community edge, which just flags its community for refinement)
@@ -29,11 +32,17 @@
  * graph rescan), so cost stays proportional to the affected region rather
  * than the whole graph.
  *
- * Semantics match igraph_community_leiden_simple(..., IGRAPH_LEIDEN_OBJECTIVE_MODULARITY,
- * resolution=1.0, beta=0.01, n_iterations=1): standard modularity objective,
- * unweighted (edge weight 1.0, self-loops count twice), undirected. Edge
- * deletion is out of scope (the stream is insertion-only, matching
- * dyn_k-core.h).
+ * Semantics match igraph_community_leiden_simple(..., IGRAPH_LEIDEN_OBJECTIVE_CPM,
+ * resolution=max(3*density, 0.001), beta=0.01, n_iterations=1) — the same
+ * objective and density-scaled resolution heuristic as the static Leiden menu
+ * command (wrappers_community.c) and layered_sphere.c, with density =
+ * 2*ecount/(vcount*(vcount-1)). The resolution is recomputed from the live
+ * graph on every dyn_leiden_init/dyn_leiden_on_edges call, so a region left
+ * untouched since the resolution last shifted keeps a partition that was
+ * optimal under an older resolution — an accepted approximation, in the same
+ * spirit as the frontier heuristic itself never rescanning the whole graph.
+ * Unweighted (edge weight 1.0), undirected. Edge deletion is out of scope
+ * (the stream is insertion-only, matching dyn_k-core.h).
  *
  * Threading: main thread only (reads the live igraph_t; never mutates it).
  * ============================================================================ */
@@ -76,6 +85,14 @@ const igraph_integer_t *dyn_leiden_membership(const DynLeiden *dl);
  * stale/out-of-range query degrades to "its own singleton" rather than 0).
  */
 igraph_integer_t dyn_leiden_get(const DynLeiden *dl, igraph_integer_t v);
+
+/**
+ * CPM resolution (gamma) used by the most recent dyn_leiden_init /
+ * dyn_leiden_on_edges call: max(3 * 2*ecount/(vcount*(vcount-1)), 0.001) over
+ * the live graph at that time. Lets tests/debug evaluate quality under the
+ * exact gamma the maintainer optimized.
+ */
+double dyn_leiden_resolution(const DynLeiden *dl);
 
 /**
  * Number of distinct communities currently maintained. O(V) (a dedup scan

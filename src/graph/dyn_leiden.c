@@ -5,12 +5,27 @@
 
 #include "graph/dyn_leiden.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define DYN_LEIDEN_MAX_ITERATIONS 20 // local-move wave cap, matches the reference's default
 #define DYN_LEIDEN_MAX_PASSES 10	 // aggregation (community-merge) pass cap, matches the reference's default
+
+// Density-scaled CPM resolution, matching the static Leiden menu command
+// (wrappers_community.c:compute_igraph_community_leiden) and
+// layered_sphere.c: gamma = max(3 * graph density, 0.001), recomputed from
+// the live graph on every dyn_leiden_init/dyn_leiden_on_edges call. The
+// heuristic is deliberately duplicated here rather than shared, since it is
+// small and consolidating it is a separate, unrelated concern.
+static double dyn_leiden_cpm_resolution(const igraph_t *g)
+{
+	igraph_integer_t vcount = igraph_vcount(g);
+	igraph_integer_t ecount = igraph_ecount(g);
+	double graph_density = (vcount > 1) ? (2.0 * (double)ecount) / ((double)vcount * (double)(vcount - 1)) : 0.0;
+	return fmax(graph_density * 3.0, 0.001);
+}
 
 // ============================================================================
 // State
@@ -32,8 +47,7 @@
 struct DynLeiden
 {
 	igraph_integer_t *vcom; // community label per vertex
-	double *vtot;			// weighted degree per vertex
-	double *ctot;			// weighted degree per community label
+	igraph_integer_t *csiz; // community size (member count) per community label
 
 	igraph_integer_t *comm_head; // first member of community c, or -1
 	igraph_integer_t *comm_next; // next member after v in its community, or -1
@@ -73,7 +87,7 @@ struct DynLeiden
 	igraph_integer_t vcount;
 	igraph_integer_t capacity;
 
-	double resolution; // R = gamma, fixed at 1.0 for standard modularity (see dyn_leiden_choose)
+	double resolution; // CPM gamma, recomputed from live graph density on every init/on_edges call (see dyn_leiden_cpm_resolution)
 
 	int max_frontier_size; // lifetime max touched_count
 	int last_frontier_size;
@@ -95,8 +109,7 @@ static bool dyn_leiden_sync_vcount(DynLeiden *dl, const igraph_t *g)
 			cap *= 2;
 
 		igraph_integer_t *vcom = realloc(dl->vcom, sizeof(igraph_integer_t) * (size_t)cap);
-		double *vtot = realloc(dl->vtot, sizeof(double) * (size_t)cap);
-		double *ctot = realloc(dl->ctot, sizeof(double) * (size_t)cap);
+		igraph_integer_t *csiz = realloc(dl->csiz, sizeof(igraph_integer_t) * (size_t)cap);
 		igraph_integer_t *comm_head = realloc(dl->comm_head, sizeof(igraph_integer_t) * (size_t)cap);
 		igraph_integer_t *comm_next = realloc(dl->comm_next, sizeof(igraph_integer_t) * (size_t)cap);
 		igraph_integer_t *comm_prev = realloc(dl->comm_prev, sizeof(igraph_integer_t) * (size_t)cap);
@@ -112,10 +125,8 @@ static bool dyn_leiden_sync_vcount(DynLeiden *dl, const igraph_t *g)
 
 		if (vcom)
 			dl->vcom = vcom;
-		if (vtot)
-			dl->vtot = vtot;
-		if (ctot)
-			dl->ctot = ctot;
+		if (csiz)
+			dl->csiz = csiz;
 		if (comm_head)
 			dl->comm_head = comm_head;
 		if (comm_next)
@@ -141,7 +152,7 @@ static bool dyn_leiden_sync_vcount(DynLeiden *dl, const igraph_t *g)
 		if (vcout)
 			dl->vcout = vcout;
 
-		if (!vcom || !vtot || !ctot || !comm_head || !comm_next || !comm_prev || !vcob || !touched_flag || !touched || !cchg || !cchg_list || !queue || !in_queue || !vcs || !vcout) {
+		if (!vcom || !csiz || !comm_head || !comm_next || !comm_prev || !vcob || !touched_flag || !touched || !cchg || !cchg_list || !queue || !in_queue || !vcs || !vcout) {
 			fprintf(stderr, "dyn_leiden: realloc to capacity %lld failed\n", (long long)cap);
 			return false;
 		}
@@ -151,8 +162,7 @@ static bool dyn_leiden_sync_vcount(DynLeiden *dl, const igraph_t *g)
 	// New vertices: singleton community of their own, zero weight.
 	for (igraph_integer_t v = dl->vcount; v < n; v++) {
 		dl->vcom[v] = v;
-		dl->vtot[v] = 0.0;
-		dl->ctot[v] = 0.0;
+		dl->csiz[v] = 1;
 		dl->comm_head[v] = v;
 		dl->comm_next[v] = -1;
 		dl->comm_prev[v] = -1;
@@ -222,7 +232,7 @@ static void dyn_leiden_list_insert(DynLeiden *dl, igraph_integer_t c, igraph_int
 }
 
 // Central mutator: every community change (local-move, refine reset,
-// aggregation merge) goes through here so vcom/ctot/membership-list stay
+// aggregation merge) goes through here so vcom/csiz/membership-list stay
 // consistent. changed is best-effort (push_back failure is silently
 // skipped, matching dyn_k-core.c's convention — the maintained state is
 // already correct, only the caller's optional changelist is incomplete).
@@ -231,12 +241,11 @@ static void dyn_leiden_move(DynLeiden *dl, igraph_integer_t v, igraph_integer_t 
 	igraph_integer_t old_c = dl->vcom[v];
 	if (old_c == new_c)
 		return;
-	double w = dl->vtot[v];
 	dyn_leiden_list_remove(dl, v);
-	dl->ctot[old_c] -= w;
+	dl->csiz[old_c]--;
 	dl->vcom[v] = new_c;
 	dyn_leiden_list_insert(dl, new_c, v);
-	dl->ctot[new_c] += w;
+	dl->csiz[new_c]++;
 	if (changed)
 		igraph_vector_int_push_back(changed, v);
 }
@@ -328,8 +337,9 @@ static void dyn_leiden_scan_add(DynLeiden *dl, igraph_integer_t c)
 }
 
 // Per-vertex scan (local-move/refine): candidate communities are u's live
-// neighbor communities, weight = 1.0 per edge, self-loops excluded (they
-// only ever count toward vtot/ctot degree, never toward moving elsewhere).
+// neighbor communities, weight = 1.0 per edge, self-loops excluded (a
+// self-loop never proposes moving u "elsewhere" — it's internal wherever u
+// ends up, so it cancels out of every delta-CPM comparison).
 // In REFINE mode, candidates are further restricted to neighbors sharing u's
 // pre-refine (vcob) community, matching the reference's REFINE gate.
 static bool dyn_leiden_scan_vertex(DynLeiden *dl, const igraph_t *g, igraph_integer_t u, bool refine)
@@ -375,15 +385,21 @@ static bool dyn_leiden_scan_community(DynLeiden *dl, const igraph_t *g, igraph_i
 }
 
 // ============================================================================
-// Delta-modularity argmax (leidenChooseCommunity port)
+// Delta-CPM argmax (leidenChooseCommunity port, adapted to CPM)
 //
-// Generic over both call sites: a vertex move (own_weight=vtot[u], d=vcom[u])
-// and a community merge (own_weight=ctot[c], d=c) reduce to the same formula
-// once "own_weight" and "current label" are parameterized — see
-// properties.hxx:253 / leiden.hxx:634-644 for the derivation.
+// igraph's CPM convention (node weight n_i=1): Q*2m = sum_c (2*w_int_c -
+// gamma*N_c^2). The 1/2m factor and partition-independent constants drop out
+// of the argmax/sign, so a vertex move u: d->c gives
+//   dQ ~ (k_u->c - k_u->d) - gamma*(1 + n_c - n_d)
+// (n_d counted with u still in d), and a community merge c->t gives
+//   dQ ~ e_ct - gamma*N_c*N_t.
+// Both reduce to the same formula below once "own_size" and "current label"
+// are parameterized: own_size=1, d=vcom[u] for a vertex move; own_size=csiz[c],
+// d=c for a merge (there vcout[d]=0 and csiz[c]-csiz[d]=0, recovering
+// e_ct - gamma*N_c*N_t exactly).
 // ============================================================================
 
-static void dyn_leiden_choose(const DynLeiden *dl, double own_weight, igraph_integer_t d, double M, igraph_integer_t *out_c, double *out_gain)
+static void dyn_leiden_choose(const DynLeiden *dl, igraph_integer_t own_size, igraph_integer_t d, igraph_integer_t *out_c, double *out_gain)
 {
 	igraph_integer_t cmax = d;
 	double emax = 0.0;
@@ -392,7 +408,7 @@ static void dyn_leiden_choose(const DynLeiden *dl, double own_weight, igraph_int
 		igraph_integer_t c = dl->vcs[i];
 		if (c == d)
 			continue;
-		double e = (dl->vcout[c] - vcout_d) / M - dl->resolution * own_weight * (own_weight + dl->ctot[c] - dl->ctot[d]) / (2.0 * M * M);
+		double e = (dl->vcout[c] - vcout_d) - dl->resolution * (double)own_size * ((double)own_size + (double)(dl->csiz[c] - dl->csiz[d]));
 		if (e > emax) {
 			emax = e;
 			cmax = c;
@@ -400,24 +416,6 @@ static void dyn_leiden_choose(const DynLeiden *dl, double own_weight, igraph_int
 	}
 	*out_c = cmax;
 	*out_gain = emax;
-}
-
-// ============================================================================
-// Weight update on insertion (leidenUpdateWeightsFromU port)
-// ============================================================================
-
-static void dyn_leiden_update_weights(DynLeiden *dl, const igraph_vector_int_t *new_edges)
-{
-	igraph_integer_t n = igraph_vector_int_size(new_edges) / 2;
-	for (igraph_integer_t i = 0; i < n; i++) {
-		igraph_integer_t u = VECTOR(*new_edges)[2 * i];
-		igraph_integer_t v = VECTOR(*new_edges)[2 * i + 1];
-		igraph_integer_t cu = dl->vcom[u], cv = dl->vcom[v];
-		dl->vtot[u] += 1.0;
-		dl->ctot[cu] += 1.0;
-		dl->vtot[v] += 1.0;
-		dl->ctot[cv] += 1.0; // self-loop (u==v): applies twice, matching IGRAPH_LOOPS_TWICE
-	}
 }
 
 // ============================================================================
@@ -456,7 +454,7 @@ static bool dyn_leiden_mark_frontier(DynLeiden *dl, const igraph_vector_int_t *n
 // Local-moving (wave-based leidenMoveW port; queue-driven, not a dense scan)
 // ============================================================================
 
-static bool dyn_leiden_local_move(DynLeiden *dl, const igraph_t *g, double M, bool refine, igraph_vector_int_t *changed)
+static bool dyn_leiden_local_move(DynLeiden *dl, const igraph_t *g, bool refine, igraph_vector_int_t *changed)
 {
 	int wave_count = 0;
 	while (dl->queue_count > 0 && wave_count < DYN_LEIDEN_MAX_ITERATIONS) {
@@ -464,13 +462,13 @@ static bool dyn_leiden_local_move(DynLeiden *dl, const igraph_t *g, double M, bo
 		for (igraph_integer_t k = 0; k < wave_size; k++) {
 			igraph_integer_t u = dyn_leiden_dequeue(dl);
 			igraph_integer_t d = dl->vcom[u];
-			if (refine && dl->ctot[d] > dl->vtot[u])
+			if (refine && dl->csiz[d] > 1)
 				continue; // refine only ever grows a still-singleton community
 			if (!dyn_leiden_scan_vertex(dl, g, u, refine))
 				return false;
 			igraph_integer_t best_c;
 			double best_gain;
-			dyn_leiden_choose(dl, dl->vtot[u], d, M, &best_c, &best_gain);
+			dyn_leiden_choose(dl, 1, d, &best_c, &best_gain);
 			if (best_gain <= 0.0 || best_c == d)
 				continue;
 			dyn_leiden_move(dl, u, best_c, changed);
@@ -501,13 +499,13 @@ static bool dyn_leiden_local_move(DynLeiden *dl, const igraph_t *g, double M, bo
 // Reset touched vertices whose pre-move community changed back to a
 // singleton, then re-run local-moving restricted to same-vcob candidates
 // (dyn_leiden_scan_vertex's REFINE gate) that are still singletons
-// (the ctot[d]>vtot[u] check in dyn_leiden_local_move) — finds
+// (the csiz[d]>1 check in dyn_leiden_local_move) — finds
 // well-connected sub-communities without the reference's CSR-based
 // ID-renaming machinery (unneeded here: labels are already stable
 // representative vertex ids, not compacted integers).
 // ============================================================================
 
-static bool dyn_leiden_refine(DynLeiden *dl, const igraph_t *g, double M, igraph_vector_int_t *changed)
+static bool dyn_leiden_refine(DynLeiden *dl, const igraph_t *g, igraph_vector_int_t *changed)
 {
 	for (igraph_integer_t i = 0; i < dl->touched_count; i++) {
 		igraph_integer_t u = dl->touched[i];
@@ -533,7 +531,7 @@ static bool dyn_leiden_refine(DynLeiden *dl, const igraph_t *g, double M, igraph
 		if (!dyn_leiden_enqueue(dl, u))
 			return false;
 	}
-	return dyn_leiden_local_move(dl, g, M, /*refine=*/true, changed);
+	return dyn_leiden_local_move(dl, g, /*refine=*/true, changed);
 }
 
 // ============================================================================
@@ -546,8 +544,8 @@ static bool dyn_leiden_refine(DynLeiden *dl, const igraph_t *g, double M, igraph
 //
 // Communities flagged cchg during local-moving/refinement are the seed
 // worklist; merging one community into a neighbor is mathematically the
-// same delta-modularity argmax as a vertex move, with the "vertex" being
-// the whole community (own_weight=ctot[c], d=c — see dyn_leiden_choose).
+// same delta-CPM argmax as a vertex move, with the "vertex" being
+// the whole community (own_size=csiz[c], d=c — see dyn_leiden_choose).
 // A merge folds every member of the losing community into the winner via
 // the same dyn_leiden_move mutator, and flags the winner for another round,
 // bounded by DYN_LEIDEN_MAX_PASSES (mirrors igraph's own
@@ -565,7 +563,7 @@ static void dyn_leiden_merge_community(DynLeiden *dl, igraph_integer_t c, igraph
 	}
 }
 
-static bool dyn_leiden_aggregate(DynLeiden *dl, const igraph_t *g, double M, igraph_vector_int_t *changed)
+static bool dyn_leiden_aggregate(DynLeiden *dl, const igraph_t *g, igraph_vector_int_t *changed)
 {
 	for (igraph_integer_t i = 0; i < dl->cchg_count; i++) {
 		igraph_integer_t c = dl->cchg_list[i];
@@ -584,7 +582,7 @@ static bool dyn_leiden_aggregate(DynLeiden *dl, const igraph_t *g, double M, igr
 				return false;
 			igraph_integer_t best_c;
 			double best_gain;
-			dyn_leiden_choose(dl, dl->ctot[c], c, M, &best_c, &best_gain);
+			dyn_leiden_choose(dl, dl->csiz[c], c, &best_c, &best_gain);
 			if (best_gain <= 0.0 || best_c == c)
 				continue;
 			dyn_leiden_merge_community(dl, c, best_c, changed);
@@ -626,19 +624,20 @@ DynLeiden *dyn_leiden_init(const igraph_t *g)
 		return NULL;
 	}
 
+	dl->resolution = dyn_leiden_cpm_resolution(g);
+
 	if (dl->vcount > 0) {
 		igraph_vector_int_t membership;
 		if (igraph_vector_int_init(&membership, dl->vcount) != IGRAPH_SUCCESS) {
 			dyn_leiden_destroy(dl);
 			return NULL;
 		}
-		// Bootstrap under the SAME objective (standard modularity, gamma=1)
+		// Bootstrap under the SAME objective (CPM, density-scaled gamma)
 		// that dyn_leiden_choose() maintains afterward — otherwise the
 		// initial partition wouldn't even be a local optimum under the
 		// formula that immediately starts adjusting it.
 		igraph_int_t nb_clusters;
-		igraph_real_t quality;
-		igraph_error_t code = igraph_community_leiden_simple(g, NULL, IGRAPH_LEIDEN_OBJECTIVE_MODULARITY, 1.0, 0.01, 0, -1, &membership, &nb_clusters, &quality);
+		igraph_error_t code = igraph_community_leiden_simple(g, NULL, IGRAPH_LEIDEN_OBJECTIVE_CPM, dl->resolution, 0.01, 0, -1, &membership, &nb_clusters, NULL);
 		if (code != IGRAPH_SUCCESS) {
 			fprintf(stderr, "dyn_leiden_init: igraph_community_leiden_simple failed\n");
 			igraph_vector_int_destroy(&membership);
@@ -648,7 +647,7 @@ DynLeiden *dyn_leiden_init(const igraph_t *g)
 
 		// Translate igraph's compact 0..C-1 cluster indices into our
 		// representative-vertex-id labels (lowest member id per cluster),
-		// then rebuild vcom/ctot/membership-list from that assignment —
+		// then rebuild vcom/csiz/membership-list from that assignment —
 		// a one-time O(V) pass, bootstrap only.
 		igraph_integer_t *rep = malloc(sizeof(igraph_integer_t) * (size_t)nb_clusters);
 		if (!rep) {
@@ -668,36 +667,18 @@ DynLeiden *dyn_leiden_init(const igraph_t *g)
 			dl->comm_head[v] = -1;
 			dl->comm_next[v] = -1;
 			dl->comm_prev[v] = -1;
-			dl->ctot[v] = 0.0;
+			dl->csiz[v] = 0;
 		}
 		for (igraph_integer_t v = 0; v < dl->vcount; v++) {
 			igraph_integer_t c = rep[(igraph_integer_t)VECTOR(membership)[v]];
 			dl->vcom[v] = c;
 			dyn_leiden_list_insert(dl, c, v);
+			dl->csiz[c]++;
 		}
 		free(rep);
 		igraph_vector_int_destroy(&membership);
-
-		igraph_vector_int_t inc;
-		if (igraph_vector_int_init(&inc, 0) != IGRAPH_SUCCESS) {
-			dyn_leiden_destroy(dl);
-			return NULL;
-		}
-		for (igraph_integer_t v = 0; v < dl->vcount; v++) {
-			if (igraph_incident(g, &inc, v, IGRAPH_ALL, IGRAPH_LOOPS_TWICE) != IGRAPH_SUCCESS) {
-				fprintf(stderr, "dyn_leiden_init: igraph_incident failed for vertex %lld\n", (long long)v);
-				igraph_vector_int_destroy(&inc);
-				dyn_leiden_destroy(dl);
-				return NULL;
-			}
-			double deg = (double)igraph_vector_int_size(&inc);
-			dl->vtot[v] = deg;
-			dl->ctot[dl->vcom[v]] += deg;
-		}
-		igraph_vector_int_destroy(&inc);
 	}
 
-	dl->resolution = 1.0; // standard modularity (gamma=1); see struct field comment
 	return dl;
 }
 
@@ -707,20 +688,19 @@ bool dyn_leiden_on_edges(DynLeiden *dl, const igraph_t *g, const igraph_vector_i
 		return false;
 	if (!dyn_leiden_sync_vcount(dl, g))
 		return false;
+
+	dl->resolution = dyn_leiden_cpm_resolution(g); // gamma tracks live density every call (graph already contains the new edges)
+
 	if (!new_edges || dl->vcount == 0)
 		return true;
 
-	igraph_integer_t ecount = igraph_ecount(g);
-	double M = (double)(ecount > 0 ? ecount : 1);
-
-	dyn_leiden_update_weights(dl, new_edges);
 	if (!dyn_leiden_mark_frontier(dl, new_edges))
 		return false;
-	if (!dyn_leiden_local_move(dl, g, M, /*refine=*/false, changed))
+	if (!dyn_leiden_local_move(dl, g, /*refine=*/false, changed))
 		return false;
-	if (!dyn_leiden_refine(dl, g, M, changed))
+	if (!dyn_leiden_refine(dl, g, changed))
 		return false;
-	if (!dyn_leiden_aggregate(dl, g, M, changed))
+	if (!dyn_leiden_aggregate(dl, g, changed))
 		return false;
 
 	dl->last_frontier_size = (int)dl->touched_count;
@@ -743,6 +723,11 @@ igraph_integer_t dyn_leiden_get(const DynLeiden *dl, igraph_integer_t v)
 	if (!dl || v < 0 || v >= dl->vcount)
 		return v;
 	return dl->vcom[v];
+}
+
+double dyn_leiden_resolution(const DynLeiden *dl)
+{
+	return dl ? dl->resolution : 0.0;
 }
 
 int dyn_leiden_community_count(const DynLeiden *dl)
@@ -773,8 +758,7 @@ void dyn_leiden_destroy(DynLeiden *dl)
 	igraph_vector_int_destroy(&dl->neis);
 	igraph_vector_int_destroy(&dl->inc);
 	free(dl->vcom);
-	free(dl->vtot);
-	free(dl->ctot);
+	free(dl->csiz);
 	free(dl->comm_head);
 	free(dl->comm_next);
 	free(dl->comm_prev);
