@@ -19,6 +19,49 @@
 
 #include <stdlib.h>
 
+// Unit-test-only oracle: recompute igraph_coreness(g) from scratch and diff
+// against the maintained values (via the public dyn_kcore_values() view).
+// This is intentionally NOT part of the runtime library: it performs a full
+// O(V+E) coreness recompute that would defeat the dynamic streaming
+// maintenance if called outside of tests.
+static int dyn_kcore_verify(const DynKCore *kc, const igraph_t *g)
+{
+	if (!kc)
+		return 0;
+
+	igraph_integer_t n = igraph_vcount(g);
+	if (n == 0)
+		return 1;
+
+	const int *maintained = dyn_kcore_values(kc);
+	if (!maintained)
+		return 0;
+
+	igraph_vector_int_t cores;
+	if (igraph_vector_int_init(&cores, n) != IGRAPH_SUCCESS)
+		return 0;
+	if (igraph_coreness(g, &cores, IGRAPH_ALL) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(&cores);
+		return 0;
+	}
+
+	igraph_integer_t mismatches = 0;
+	for (igraph_integer_t i = 0; i < n; i++) {
+		if (maintained[i] != (int)VECTOR(cores)[i]) {
+			if (mismatches < 10)
+				fprintf(stderr, "dyn_kcore_verify: vertex %lld maintained %d, actual %lld\n", (long long)i, maintained[i], (long long)VECTOR(cores)[i]);
+			mismatches++;
+		}
+	}
+	igraph_vector_int_destroy(&cores);
+
+	if (mismatches > 0) {
+		fprintf(stderr, "dyn_kcore_verify: %lld mismatch(es) of %lld vertices\n", (long long)mismatches, (long long)n);
+		return 0;
+	}
+	return 1;
+}
+
 // Stream `edges` (flat u,v pairs) into g/kc in batches of `batch_edges`
 // edges, mirroring graph/stream.c, then assert final coreness.
 static int run_case(const igraph_integer_t *edges, size_t n_edges, const int *expected, igraph_integer_t n_vertices, int batch_edges)

@@ -83,13 +83,6 @@ const int *dyn_kcore_values(const DynKCore *kc);
 int dyn_kcore_get(const DynKCore *kc, igraph_integer_t v);
 
 /**
- * Debug oracle: recompute igraph_coreness(g) from scratch and diff against
- * the maintained values, logging mismatches to stderr.
- * @return true iff all values match.
- */
-bool dyn_kcore_verify(const DynKCore *kc, const igraph_t *g);
-
-/**
  * Free the maintainer (never touches the graph).
  */
 void dyn_kcore_destroy(DynKCore *kc);

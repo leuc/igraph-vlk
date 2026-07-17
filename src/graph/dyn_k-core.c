@@ -261,7 +261,7 @@ DynKCore *dyn_kcore_init(const igraph_t *g)
 		igraph_vector_int_destroy(&cores);
 	}
 	// The whole graph is present at init: every edge is "live" (no future
-	// edges to exclude). dyn_kcore_verify() also relies on this.
+	// edges to exclude). The unit-test verify oracle also relies on this.
 	kc->live_eid = igraph_ecount(g);
 	return kc;
 }
@@ -326,43 +326,6 @@ int dyn_kcore_max(const DynKCore *kc)
 int dyn_kcore_max_subcore_size(const DynKCore *kc)
 {
 	return kc ? kc->max_subcore_touched : 0;
-}
-
-bool dyn_kcore_verify(const DynKCore *kc, const igraph_t *g)
-{
-	if (!kc)
-		return false;
-	igraph_integer_t n = igraph_vcount(g);
-	if (n != kc->vcount) {
-		fprintf(stderr, "dyn_kcore_verify: vcount mismatch (maintained %lld, graph %lld)\n", (long long)kc->vcount, (long long)n);
-		return false;
-	}
-	if (n == 0)
-		return true;
-
-	igraph_vector_int_t cores;
-	if (igraph_vector_int_init(&cores, n) != IGRAPH_SUCCESS)
-		return false;
-	if (igraph_coreness(g, &cores, IGRAPH_ALL) != IGRAPH_SUCCESS) {
-		igraph_vector_int_destroy(&cores);
-		return false;
-	}
-
-	igraph_integer_t mismatches = 0;
-	for (igraph_integer_t i = 0; i < n; i++) {
-		if (kc->core[i] != (int)VECTOR(cores)[i]) {
-			if (mismatches < 10)
-				fprintf(stderr, "dyn_kcore_verify: vertex %lld maintained %d, actual %lld\n", (long long)i, kc->core[i], (long long)VECTOR(cores)[i]);
-			mismatches++;
-		}
-	}
-	igraph_vector_int_destroy(&cores);
-
-	if (mismatches > 0) {
-		fprintf(stderr, "dyn_kcore_verify: %lld mismatch(es) of %lld vertices\n", (long long)mismatches, (long long)n);
-		return false;
-	}
-	return true;
 }
 
 void dyn_kcore_destroy(DynKCore *kc)
