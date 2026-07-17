@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include <igraph_progress.h>
+#include <igraph_step.h>
 
 static bool layered_sphere_iterate(LayeredSphereContext *ctx, const igraph_t *ig)
 {
@@ -163,7 +164,7 @@ static bool layered_sphere_iterate(LayeredSphereContext *ctx, const igraph_t *ig
 
 		ctx->phase = PHASE_INTRA_SPHERE;
 		ctx->phase_iter = 0;
-		return true;
+		return igraph_step(ctx->layout, NULL) == IGRAPH_SUCCESS;
 	}
 
 	int local_moves = 0;
@@ -194,6 +195,10 @@ static bool layered_sphere_iterate(LayeredSphereContext *ctx, const igraph_t *ig
 	if (ctx->phase != PHASE_DONE) {
 		ctx->current_iter++;
 	}
+
+	if (igraph_step(ctx->layout, NULL) != IGRAPH_SUCCESS)
+		return false;
+
 	return (ctx->phase != PHASE_DONE);
 }
 
