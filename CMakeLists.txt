@@ -113,6 +113,7 @@ add_executable(
 	src/graph/graph_core.c
 	src/graph/graph_io.c
 	src/graph/stream.c
+	src/graph/ncol_parse.c
 	src/graph/dyn_k-core.c
 	src/graph/dyn_leiden.c
 	src/graph/graph_filter.c
@@ -210,6 +211,33 @@ if(NOT MSVC)
 	target_link_libraries(layered_sphere_common_test PRIVATE m)
 endif()
 add_test(NAME layered_sphere_common_test COMMAND layered_sphere_common_test)
+
+# Standalone test for NCOL line parsing (not installed)
+add_executable(ncol_parse_test tests/ncol_parse_test.c src/graph/ncol_parse.c)
+target_include_directories(ncol_parse_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${IGRAPH_INCLUDE_DIRS})
+target_link_libraries(ncol_parse_test PRIVATE igraph::igraph)
+if(NOT MSVC)
+	target_link_libraries(ncol_parse_test PRIVATE m)
+endif()
+add_test(NAME ncol_parse_test COMMAND ncol_parse_test)
+
+# Standalone test for menu/camera spatial basis math (not installed)
+add_executable(spatial_test tests/spatial_test.c src/interaction/spatial.c)
+target_include_directories(spatial_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${IGRAPH_INCLUDE_DIRS} ${CGLM_INCLUDE_DIR})
+target_link_libraries(spatial_test PRIVATE igraph::igraph)
+if(NOT MSVC)
+	target_link_libraries(spatial_test PRIVATE m)
+endif()
+add_test(NAME spatial_test COMMAND spatial_test)
+
+# Standalone test for ray-picking geometry math (not installed)
+add_executable(picking_test tests/picking_test.c src/interaction/picking.c)
+target_include_directories(picking_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${Vulkan_INCLUDE_DIRS} ${CGLM_INCLUDE_DIR} ${IGRAPH_INCLUDE_DIRS})
+target_link_libraries(picking_test PRIVATE igraph::igraph)
+if(NOT MSVC)
+	target_link_libraries(picking_test PRIVATE m)
+endif()
+add_test(NAME picking_test COMMAND picking_test)
 
 install(TARGETS igraph-vlk DESTINATION bin)
 install(DIRECTORY ${CMAKE_BINARY_DIR}/shaders/ DESTINATION share/igraph-vlk/shaders FILES_MATCHING PATTERN "*.spv")
