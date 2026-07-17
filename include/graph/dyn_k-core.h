@@ -18,9 +18,11 @@
  * Per inserted edge, only the endpoint with the smaller coreness (the root)
  * and vertices with the same coreness reachable from it through same-coreness
  * paths (the "subcore") can change, each by at most +1 [Sariyuce et al.,
- * VLDB 2013, Theorems 1/2/4]. The change is computed by optimistically
- * lifting the whole subcore and peeling back unsupported vertices — the
- * n-order H-index fixpoint of [Liu et al., VLDB 2021, Theorems 3.2/3.5]
+ * "Streaming Algorithms for K-Core Decomposition", PVLDB 6(6), 2013,
+ * Theorems 1/2/4]. The change is computed by optimistically lifting the
+ * whole subcore and peeling back unsupported vertices — the n-order H-index
+ * fixpoint of [Liu et al., "Local Algorithms for Distance-Generalized Core
+ * Decomposition over Large Dynamic Graphs", PVLDB 14(9), 2021, Theorems 3.2/3.5]
  * restricted to the subcore, where it needs no bucket sort because values
  * are binary (K vs K+1).
  *

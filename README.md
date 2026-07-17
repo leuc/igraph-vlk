@@ -219,6 +219,12 @@ curl -sN "wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.
 **Cycle Analysis:**
 - Remove feedback arc set — Eades, Lin & Smyth (1993); Baharev et al. (2021)
 
+**Dynamic (Streaming) k-Core Maintenance:**
+- Maintains the exact coreness of every vertex as edges stream in over the live NCOL graph, *without* recomputing the full O(V+E) decomposition per change. It runs on the same background ingest path as the streaming reader (see [Streaming Graphs](#streaming-graphs-ncol-over-stdin)).
+- Only the subcore reachable from the inserted edge's lower-coreness endpoint (over same-coreness vertices) can change, and each vertex by at most +1 — so the update is computed by optimistically lifting that subcore one level and peeling back every vertex without enough supporters (a binary K-vs-K+1 fixpoint that needs only a plain queue).
+- Self-loops count twice and parallel edges keep multiplicity, matching `igraph_coreness(..., IGRAPH_ALL)` semantics exactly. Correctness is guarded by `tests/dyn_kcore_test.c`, which diffs the maintained values against a full `igraph_coreness` recompute (and igraph's own structural `validate_coreness` oracle) over the same graph families igraph's own `coreness.c` uses.
+- References: Sariyüce et al. (2013); Liu et al. (2021).
+
 **GPU-Accelerated Main Path Analysis (SPLC):**
 - Search Path Link Count traffic simulation on GPU compute shader with real-time animation
 
@@ -411,6 +417,10 @@ igraph core:
 - Barabasi, A.-L. & Albert, R. (1999). Emergence of scaling in random networks. *Science*, 286, 509–512.
 - Watts, D.J. & Strogatz, S.H. (1998). Collective dynamics of "small-world" networks. *Nature*, 393, 440–442.
 - Erdos, P. & Renyi, A. (1959). On random graphs. *Publicationes Mathematicae*, 6, 290–297.
+
+**Dynamic (Streaming) k-Core:**
+- Saríyüce, A.E., Gedik, B., Jacques-Silva, G., Wu, K.-L. & Çatalyürek, Ü.V. (2013). Streaming Algorithms for K-Core Decomposition. *Proc. VLDB Endowment*, 6(6), 433–444. https://doi.org/10.14778/2536336.2536344
+- Liu, Q., Zhu, X., Huang, X. & Xu, J. (2021). Local Algorithms for Distance-Generalized Core Decomposition over Large Dynamic Graphs. *Proc. VLDB Endowment*, 14(9), 1531–1543. https://doi.org/10.14778/3461535.3461542
 
 **Transitivity:**
 - Watts, D.J. & Strogatz, S.H. (1998). Collective dynamics of small-world networks. *Nature*, 393, 440–442.

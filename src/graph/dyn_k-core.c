@@ -128,9 +128,12 @@ static bool fetch_neighbors(DynKCore *kc, const igraph_t *g, igraph_integer_t w)
 //
 // Only the root's subcore (same-coreness region reachable through
 // same-coreness vertices) can change, each vertex by at most +1
-// [Sariyuce 2013, Thms 1/2/4]. We lift the whole subcore optimistically to
-// K+1 and peel back every vertex without K+1 supporters — the binary-valued
-// H-index fixpoint [Liu 2021, Thms 3.2/3.5], needing only a plain queue.
+// [Sariyuce et al., "Streaming Algorithms for K-Core Decomposition", PVLDB
+// 6(6), 2013, Thms 1/2/4]. We lift the whole subcore optimistically to K+1
+// and peel back every vertex without K+1 supporters — the binary-valued
+// H-index fixpoint [Liu et al., "Local Algorithms for Distance-Generalized
+// Core Decomposition over Large Dynamic Graphs", PVLDB 14(9), 2021, Thms 3.2/3.5],
+// needing only a plain queue.
 // ============================================================================
 
 static bool process_insert(DynKCore *kc, const igraph_t *g, igraph_integer_t u, igraph_integer_t v, igraph_vector_int_t *changed)
