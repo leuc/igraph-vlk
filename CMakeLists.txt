@@ -118,6 +118,7 @@ add_executable(
 	src/graph/graph_filter.c
 	src/graph/graph_filter_visibility.c
 	src/graph/layered_sphere.c
+	src/graph/layered_sphere_common.c
 	src/graph/graph_actions.c
 	# Layout wrappers (split by algorithm)
 	src/graph/layouts_force_fr.c
@@ -200,6 +201,15 @@ if(NOT MSVC)
 	target_link_libraries(dyn_leiden_test PRIVATE m)
 endif()
 add_test(NAME dyn_leiden_test COMMAND dyn_leiden_test)
+
+# Standalone test for the layered-sphere layout's common helpers (not installed)
+add_executable(layered_sphere_common_test tests/layered_sphere_common_test.c src/graph/layered_sphere_common.c)
+target_include_directories(layered_sphere_common_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${IGRAPH_INCLUDE_DIRS})
+target_link_libraries(layered_sphere_common_test PRIVATE igraph::igraph)
+if(NOT MSVC)
+	target_link_libraries(layered_sphere_common_test PRIVATE m)
+endif()
+add_test(NAME layered_sphere_common_test COMMAND layered_sphere_common_test)
 
 install(TARGETS igraph-vlk DESTINATION bin)
 install(DIRECTORY ${CMAKE_BINARY_DIR}/shaders/ DESTINATION share/igraph-vlk/shaders FILES_MATCHING PATTERN "*.spv")
