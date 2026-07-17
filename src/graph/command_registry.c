@@ -39,6 +39,7 @@ const CommandDef g_command_registry[] = {
 	{"Data/Spatial", "igraph_gabriel_graph", "Gabriel graphs", compute_igraph_gabriel_graph, apply_new_graph, free_new_graph},
 
 	{"Data/Stream", "toggle_stream_pause", "[ ] Pause", compute_toggle_stream_pause, apply_toggle_stream_pause, free_noop},
+	{"Data/Stream", "toggle_stream_layered_sphere", "[x] Live Layered Sphere", compute_toggle_stream_layered_sphere, apply_toggle_stream_layered_sphere, free_noop},
 
 	{"Layout/Seed", "use_current_positions_as_seed", "[ ] Use current positions as seed", compute_use_current_positions_as_seed, apply_use_current_positions_as_seed, free_noop},
 	{"Layout/Seed", "seed_random_uniform", "Random Uniform [-1, 1]", compute_seed_random_uniform, apply_layout_matrix, free_layout_matrix},

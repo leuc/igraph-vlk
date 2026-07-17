@@ -14,6 +14,7 @@
 
 #include "app_state.h"
 #include "graph/dyn_k-core.h"
+#include "graph/dyn_layered_sphere.h"
 #include "graph/dyn_leiden.h"
 #include "graph/ncol_parse.h"
 #include "graph/wrappers_community.h"
@@ -148,12 +149,14 @@ struct GraphStream
 {
 	OsStreamReader *reader;
 	NameMap names;
-	DynKCore *kcore;		// live coreness maintenance; NULL if init failed (non-fatal)
-	int last_max_core;		// max coreness at the last node-size mapping
-	DynLeiden *leiden;		// live community maintenance; NULL if init failed (non-fatal)
-	uint32_t node_capacity; // amortized capacity of data->nodes[]
-	uint32_t edge_capacity; // amortized capacity of data->edges[]
-	bool fatal_error;		// set on unrecoverable error; poll() becomes a no-op
+	DynKCore *kcore;				  // live coreness maintenance; NULL if init failed (non-fatal)
+	int last_max_core;				  // max coreness at the last node-size mapping
+	DynLeiden *leiden;				  // live community maintenance; NULL if init failed (non-fatal)
+	DynLayeredSphere *layered_sphere; // live Layered Sphere layout maintenance; NULL if init failed (non-fatal)
+	bool layered_sphere_enabled;	  // user-toggled, on by default (see "Data/Stream > [x] Live Layered Sphere")
+	uint32_t node_capacity;			  // amortized capacity of data->nodes[]
+	uint32_t edge_capacity;			  // amortized capacity of data->edges[]
+	bool fatal_error;				  // set on unrecoverable error; poll() becomes a no-op
 
 	// Debug totals: running counts since streaming started, reported to
 	// stderr on a throttle (see stream_debug_report()).
@@ -348,11 +351,17 @@ GraphStream *graph_stream_init(GraphData *data)
 	if (!gs->leiden)
 		fprintf(stderr, "graph_stream_init: dynamic Leiden community maintenance unavailable\n");
 
+	gs->layered_sphere = dyn_layered_sphere_init(&data->g, gs->kcore ? dyn_kcore_values(gs->kcore) : NULL, gs->leiden ? dyn_leiden_membership(gs->leiden) : NULL, &data->current_layout);
+	if (!gs->layered_sphere)
+		fprintf(stderr, "graph_stream_init: dynamic Layered Sphere layout maintenance unavailable\n");
+	gs->layered_sphere_enabled = true;
+
 	gs->reader = os_stream_reader_start();
 	if (!gs->reader) {
 		fprintf(stderr, "graph_stream_init: failed to start stdin reader thread\n");
 		dyn_kcore_destroy(gs->kcore);
 		dyn_leiden_destroy(gs->leiden);
+		dyn_layered_sphere_destroy(gs->layered_sphere);
 		name_map_destroy(&gs->names);
 		free(gs);
 		igraph_matrix_destroy(&data->current_layout);
@@ -413,6 +422,23 @@ static void stream_apply_community_colors(GraphStream *gs, GraphData *data, cons
 		igraph_integer_t vid = VECTOR(*changed)[i];
 		if (vid >= 0 && vid < (igraph_integer_t)data->node_count)
 			community_id_to_rgb(comm[vid], data->nodes[vid].color);
+	}
+}
+
+// ============================================================================
+// Mirror maintained Layered Sphere positions into node positions. Every
+// vertex is repositioned on every dyn_layered_sphere_on_update call (it
+// reruns the full bucketing+placement pass from scratch — see
+// graph/dyn_layered_sphere.h), so this mirrors all of data->nodes[], not a
+// touched-vertex subset.
+// ============================================================================
+
+static void stream_mirror_layered_sphere_positions(GraphData *data)
+{
+	for (uint32_t v = 0; v < data->node_count; v++) {
+		data->nodes[v].position[0] = (float)MATRIX(data->current_layout, v, 0);
+		data->nodes[v].position[1] = (float)MATRIX(data->current_layout, v, 1);
+		data->nodes[v].position[2] = (float)MATRIX(data->current_layout, v, 2);
 	}
 }
 
@@ -604,6 +630,27 @@ bool graph_stream_poll(GraphStream *gs, GraphData *data)
 			igraph_vector_int_destroy(&community_changed);
 	}
 
+	// Maintain the live Layered Sphere layout, on by default (see
+	// "Data/Stream > [x] Live Layered Sphere", user-toggleable): reuses
+	// whatever coreness/community values are currently maintained above
+	// (falling back to a no-op this poll if those maintainers are themselves
+	// unavailable). Reruns the full bucketing+placement pass every poll (see
+	// graph/dyn_layered_sphere.h), so no touched-vertex set is needed here.
+	if (gs->layered_sphere && gs->layered_sphere_enabled) {
+		const int *core_values = gs->kcore ? dyn_kcore_values(gs->kcore) : NULL;
+		const igraph_integer_t *comm_values = gs->leiden ? dyn_leiden_membership(gs->leiden) : NULL;
+		if (core_values && comm_values) {
+			if (!dyn_layered_sphere_on_update(gs->layered_sphere, &data->g, core_values, comm_values, &data->current_layout)) {
+				fprintf(stderr, "graph_stream_poll: dynamic Layered Sphere maintenance failed — disabling\n");
+				dyn_layered_sphere_destroy(gs->layered_sphere);
+				gs->layered_sphere = NULL;
+			} else {
+				stream_mirror_layered_sphere_positions(data);
+				changed = true;
+			}
+		}
+	}
+
 	stream_debug_report(gs, data);
 
 	igraph_vector_int_destroy(&new_edges);
@@ -628,6 +675,7 @@ void graph_stream_destroy(GraphStream *stream)
 
 	dyn_kcore_destroy(stream->kcore);
 	dyn_leiden_destroy(stream->leiden);
+	dyn_layered_sphere_destroy(stream->layered_sphere);
 	name_map_destroy(&stream->names);
 	free(stream);
 }
@@ -663,6 +711,35 @@ void apply_toggle_stream_pause(ExecutionContext *ctx, void *result_data)
 	if (node) {
 		free((void *)node->label);
 		node->label = strdup(ctx->app_state->graph_stream_paused ? "[x] Pause" : "[ ] Pause");
+		if (node->command) {
+			free((void *)node->command->display_name);
+			node->command->display_name = strdup(node->label);
+		}
+	}
+}
+
+// ============================================================================
+// "Data/Stream > [ ] Live Layered Sphere" menu toggle
+// ============================================================================
+
+void *compute_toggle_stream_layered_sphere(ExecutionContext *ctx)
+{
+	(void)ctx;
+	return (void *)(uintptr_t)1;
+}
+
+void apply_toggle_stream_layered_sphere(ExecutionContext *ctx, void *result_data)
+{
+	(void)result_data;
+	if (!ctx || !ctx->app_state || !ctx->app_state->graph_stream)
+		return;
+	GraphStream *gs = ctx->app_state->graph_stream;
+	gs->layered_sphere_enabled = !gs->layered_sphere_enabled;
+
+	MenuNode *node = menu_find_node_by_command_id(ctx->app_state->app_ctx.menu.root, "toggle_stream_layered_sphere");
+	if (node) {
+		free((void *)node->label);
+		node->label = strdup(gs->layered_sphere_enabled ? "[x] Live Layered Sphere" : "[ ] Live Layered Sphere");
 		if (node->command) {
 			free((void *)node->command->display_name);
 			node->command->display_name = strdup(node->label);

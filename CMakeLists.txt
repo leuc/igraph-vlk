@@ -116,6 +116,7 @@ add_executable(
 	src/graph/ncol_parse.c
 	src/graph/dyn_k-core.c
 	src/graph/dyn_leiden.c
+	src/graph/dyn_layered_sphere.c
 	src/graph/graph_filter.c
 	src/graph/graph_filter_visibility.c
 	src/graph/layered_sphere.c
@@ -211,6 +212,15 @@ if(NOT MSVC)
 	target_link_libraries(layered_sphere_common_test PRIVATE m)
 endif()
 add_test(NAME layered_sphere_common_test COMMAND layered_sphere_common_test)
+
+# Standalone test for dynamic (streaming) Layered Sphere layout maintenance (not installed)
+add_executable(dyn_layered_sphere_test tests/dyn_layered_sphere_test.c src/graph/dyn_layered_sphere.c src/graph/layered_sphere_common.c src/graph/dyn_k-core.c src/graph/dyn_leiden.c)
+target_include_directories(dyn_layered_sphere_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${IGRAPH_INCLUDE_DIRS})
+target_link_libraries(dyn_layered_sphere_test PRIVATE igraph::igraph)
+if(NOT MSVC)
+	target_link_libraries(dyn_layered_sphere_test PRIVATE m)
+endif()
+add_test(NAME dyn_layered_sphere_test COMMAND dyn_layered_sphere_test)
 
 # Standalone test for NCOL line parsing (not installed)
 add_executable(ncol_parse_test tests/ncol_parse_test.c src/graph/ncol_parse.c)

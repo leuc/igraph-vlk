@@ -82,4 +82,15 @@ const igraph_integer_t *graph_stream_community(const GraphStream *gs);
 void *compute_toggle_stream_pause(ExecutionContext *ctx);
 void apply_toggle_stream_pause(ExecutionContext *ctx, void *result_data);
 
+/**
+ * Toggle-command pair for the "Data/Stream > [ ] Live Layered Sphere" menu
+ * item — opt-in live maintenance of the Layered Sphere layout (see
+ * graph/dyn_layered_sphere.h) while streaming, on by default. Flips the
+ * enclosing GraphStream's internal flag (looked up via
+ * ExecutionContext.app_state->graph_stream, same as the pause toggle reaches
+ * AppState.graph_stream_paused) and updates the menu label.
+ */
+void *compute_toggle_stream_layered_sphere(ExecutionContext *ctx);
+void apply_toggle_stream_layered_sphere(ExecutionContext *ctx, void *result_data);
+
 #endif // GRAPH_STREAM_H
