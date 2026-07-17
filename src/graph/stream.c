@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "app_state.h"
 #include "graph/dyn_k-core.h"
@@ -20,6 +21,7 @@
 #define GRAPH_STREAM_MAX_LINES_PER_FRAME 5000
 #define GRAPH_STREAM_GRID_SIDE 32
 #define GRAPH_STREAM_GRID_SPACING 2.0
+#define GRAPH_STREAM_DEBUG_REPORT_INTERVAL_SEC 2.0
 
 // ============================================================================
 // Name -> vertex-id map (open addressing, linear probing, FNV-1a).
@@ -144,9 +146,20 @@ struct GraphStream
 	OsStreamReader *reader;
 	NameMap names;
 	DynKCore *kcore;		// live coreness maintenance; NULL if init failed (non-fatal)
+	int last_max_core;		// max coreness at the last node-size mapping
 	uint32_t node_capacity; // amortized capacity of data->nodes[]
 	uint32_t edge_capacity; // amortized capacity of data->edges[]
 	bool fatal_error;		// set on unrecoverable error; poll() becomes a no-op
+
+	// Debug totals: running counts since streaming started, reported to
+	// stderr on a throttle (see stream_debug_report()).
+	uint64_t total_vertices_streamed;
+	uint64_t total_edges_streamed;
+	uint64_t total_kcore_updates;	  // sum of vertices whose coreness changed
+	uint64_t vertices_at_last_report; // snapshots for interval-delta reporting
+	uint64_t edges_at_last_report;
+	uint64_t kcore_updates_at_last_report;
+	double last_debug_report_time;
 
 	// Per-poll scratch space for edge weights, indexed in lockstep with the
 	// pairs pushed into the poll's flat igraph_vector_int_t edge batch.
@@ -339,6 +352,13 @@ GraphStream *graph_stream_init(GraphData *data)
 	gs->node_capacity = 0;
 	gs->edge_capacity = 0;
 	gs->fatal_error = false;
+	gs->total_vertices_streamed = 0;
+	gs->total_edges_streamed = 0;
+	gs->total_kcore_updates = 0;
+	gs->vertices_at_last_report = 0;
+	gs->edges_at_last_report = 0;
+	gs->kcore_updates_at_last_report = 0;
+	gs->last_debug_report_time = 0.0;
 
 	if (!name_map_init(&gs->names, 64)) {
 		fprintf(stderr, "graph_stream_init: name_map_init failed\n");
@@ -354,6 +374,7 @@ GraphStream *graph_stream_init(GraphData *data)
 	gs->kcore = dyn_kcore_init(&data->g);
 	if (!gs->kcore)
 		fprintf(stderr, "graph_stream_init: dynamic k-core maintenance unavailable\n");
+	gs->last_max_core = 0;
 
 	gs->reader = os_stream_reader_start();
 	if (!gs->reader) {
@@ -370,6 +391,74 @@ GraphStream *graph_stream_init(GraphData *data)
 	}
 
 	return gs;
+}
+
+// ============================================================================
+// Mirror maintained coreness into node sizes (NODE_SIZE_MIN..NODE_SIZE_MAX,
+// the same mapping as apply_centrality_scores). Touches only vertices whose
+// coreness changed this poll; rescales everything only when the max coreness
+// rises, which happens at most max-coreness times over a whole stream.
+// ============================================================================
+
+static void stream_apply_coreness_sizes(GraphStream *gs, GraphData *data, const igraph_vector_int_t *changed)
+{
+	const int *core = dyn_kcore_values(gs->kcore);
+	int maxk = dyn_kcore_max(gs->kcore);
+	if (!core || maxk < 1 || !data->nodes)
+		return;
+
+	float scale = (NODE_SIZE_MAX - NODE_SIZE_MIN) / (float)maxk;
+	if (maxk != gs->last_max_core) {
+		gs->last_max_core = maxk;
+		for (uint32_t i = 0; i < data->node_count; i++)
+			data->nodes[i].size = NODE_SIZE_MIN + (float)core[i] * scale;
+	} else {
+		igraph_integer_t n = igraph_vector_int_size(changed);
+		for (igraph_integer_t i = 0; i < n; i++) {
+			igraph_integer_t vid = VECTOR(*changed)[i];
+			if (vid >= 0 && vid < (igraph_integer_t)data->node_count)
+				data->nodes[vid].size = NODE_SIZE_MIN + (float)core[vid] * scale;
+		}
+	}
+}
+
+// ============================================================================
+// Debug report: running V/E streamed totals vs. dyn k-core update volume,
+// throttled to stderr so a fast firehose doesn't spam once per frame.
+//
+// The lifetime totals alone are misleading — they naturally track close to
+// V+E because nearly every vertex gets lifted exactly once over the graph's
+// life (locality is a per-operation property, not a cumulative one). The
+// interval deltas (since the last report) and their ratio are the actual
+// locality signal: Δupdates/ΔE close to 1-2 means each new edge is only
+// lifting its own endpoints, not the whole graph. max_subcore is the honest
+// worst case — the most vertices any single edge insertion ever had to
+// visit (see dyn_kcore_max_subcore_size()) — and should stay small and flat
+// as V grows, not trend upward, if the maintenance is genuinely local.
+// ============================================================================
+
+static void stream_debug_report(GraphStream *gs, const GraphData *data)
+{
+	if (gs->total_vertices_streamed == 0 && gs->total_edges_streamed == 0)
+		return;
+
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	double now = (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+	if (now - gs->last_debug_report_time < GRAPH_STREAM_DEBUG_REPORT_INTERVAL_SEC)
+		return;
+	gs->last_debug_report_time = now;
+
+	uint64_t dv = gs->total_vertices_streamed - gs->vertices_at_last_report;
+	uint64_t de = gs->total_edges_streamed - gs->edges_at_last_report;
+	uint64_t du = gs->total_kcore_updates - gs->kcore_updates_at_last_report;
+	double ratio = (de > 0) ? (double)du / (double)de : 0.0;
+
+	fprintf(stderr, "[graph_stream] streamed V=%llu E=%llu (live: V=%u E=%u) | dyn k-core: updates=%llu (ΔV=%llu ΔE=%llu Δupdates=%llu ratio=%.2f) max_subcore=%d%s\n", (unsigned long long)gs->total_vertices_streamed, (unsigned long long)gs->total_edges_streamed, data->node_count, data->edge_count, (unsigned long long)gs->total_kcore_updates, (unsigned long long)dv, (unsigned long long)de, (unsigned long long)du, ratio, dyn_kcore_max_subcore_size(gs->kcore), gs->kcore ? "" : " (disabled)");
+
+	gs->vertices_at_last_report = gs->total_vertices_streamed;
+	gs->edges_at_last_report = gs->total_edges_streamed;
+	gs->kcore_updates_at_last_report = gs->total_kcore_updates;
 }
 
 bool graph_stream_poll(GraphStream *gs, GraphData *data)
@@ -479,13 +568,30 @@ bool graph_stream_poll(GraphStream *gs, GraphData *data)
 		}
 	}
 
+	if (num_new_vertices > 0)
+		gs->total_vertices_streamed += (uint64_t)num_new_vertices;
+	if (edges_in_graph)
+		gs->total_edges_streamed += (uint64_t)num_new_edges;
+
 	// Maintain live coreness against the igraph graph (also syncs newly
-	// added vertices when the edge batch was dropped).
-	if (gs->kcore && !dyn_kcore_on_edges(gs->kcore, &data->g, edges_in_graph ? &new_edges : NULL)) {
-		fprintf(stderr, "graph_stream_poll: dynamic k-core maintenance failed — disabling\n");
-		dyn_kcore_destroy(gs->kcore);
-		gs->kcore = NULL;
+	// added vertices when the edge batch was dropped), then mirror the
+	// changed values into node sizes so structural growth is visible.
+	if (gs->kcore) {
+		igraph_vector_int_t core_changed;
+		bool have_changed = igraph_vector_int_init(&core_changed, 0) == IGRAPH_SUCCESS;
+		if (!dyn_kcore_on_edges(gs->kcore, &data->g, edges_in_graph ? &new_edges : NULL, have_changed ? &core_changed : NULL)) {
+			fprintf(stderr, "graph_stream_poll: dynamic k-core maintenance failed — disabling\n");
+			dyn_kcore_destroy(gs->kcore);
+			gs->kcore = NULL;
+		} else if (have_changed) {
+			gs->total_kcore_updates += (uint64_t)igraph_vector_int_size(&core_changed);
+			stream_apply_coreness_sizes(gs, data, &core_changed);
+		}
+		if (have_changed)
+			igraph_vector_int_destroy(&core_changed);
 	}
+
+	stream_debug_report(gs, data);
 
 	igraph_vector_int_destroy(&new_edges);
 	return changed;

@@ -29,6 +29,8 @@ struct DynKCore
 	igraph_integer_t *queue; // peel cascade queue
 	igraph_integer_t vcount;
 	igraph_integer_t capacity;
+	int max_core;			 // largest coreness present; only grows (insertion-only)
+	int max_subcore_touched; // largest subcore BFS ever visited for one edge
 	int epoch;
 	igraph_vector_int_t neis; // reusable neighbor buffer
 };
@@ -106,7 +108,7 @@ static bool fetch_neighbors(DynKCore *kc, const igraph_t *g, igraph_integer_t w)
 // H-index fixpoint [Liu 2021, Thms 3.2/3.5], needing only a plain queue.
 // ============================================================================
 
-static bool process_insert(DynKCore *kc, const igraph_t *g, igraph_integer_t u, igraph_integer_t v)
+static bool process_insert(DynKCore *kc, const igraph_t *g, igraph_integer_t u, igraph_integer_t v, igraph_vector_int_t *changed)
 {
 	igraph_integer_t root = (kc->core[u] <= kc->core[v]) ? u : v;
 	int k = kc->core[root];
@@ -142,6 +144,8 @@ static bool process_insert(DynKCore *kc, const igraph_t *g, igraph_integer_t u, 
 		}
 		kc->support[w] = s;
 	}
+	if (list_len > kc->max_subcore_touched)
+		kc->max_subcore_touched = (int)list_len;
 
 	// Peel: evict every subcore vertex without k+1 supporters, cascading.
 	igraph_integer_t queue_len = 0;
@@ -171,8 +175,13 @@ static bool process_insert(DynKCore *kc, const igraph_t *g, igraph_integer_t u, 
 	// Lift survivors.
 	for (igraph_integer_t i = 0; i < list_len; i++) {
 		igraph_integer_t w = kc->list[i];
-		if (kc->evict_stamp[w] != epoch)
+		if (kc->evict_stamp[w] != epoch) {
 			kc->core[w] = k + 1;
+			if (k + 1 > kc->max_core)
+				kc->max_core = k + 1;
+			if (changed && igraph_vector_int_push_back(changed, w) != IGRAPH_SUCCESS)
+				changed = NULL; // report is best-effort; core[] stays correct
+		}
 	}
 	return true;
 }
@@ -210,14 +219,17 @@ DynKCore *dyn_kcore_init(const igraph_t *g)
 			dyn_kcore_destroy(kc);
 			return NULL;
 		}
-		for (igraph_integer_t i = 0; i < kc->vcount; i++)
+		for (igraph_integer_t i = 0; i < kc->vcount; i++) {
 			kc->core[i] = (int)VECTOR(cores)[i];
+			if (kc->core[i] > kc->max_core)
+				kc->max_core = kc->core[i];
+		}
 		igraph_vector_int_destroy(&cores);
 	}
 	return kc;
 }
 
-bool dyn_kcore_on_edges(DynKCore *kc, const igraph_t *g, const igraph_vector_int_t *new_edges)
+bool dyn_kcore_on_edges(DynKCore *kc, const igraph_t *g, const igraph_vector_int_t *new_edges, igraph_vector_int_t *changed)
 {
 	if (!kc)
 		return false;
@@ -239,7 +251,7 @@ bool dyn_kcore_on_edges(DynKCore *kc, const igraph_t *g, const igraph_vector_int
 		// covers that; the peel makes unneeded passes no-ops.
 		int passes = (u == v) ? 2 : 1;
 		for (int p = 0; p < passes; p++) {
-			if (!process_insert(kc, g, u, v))
+			if (!process_insert(kc, g, u, v, changed))
 				return false;
 		}
 	}
@@ -256,6 +268,16 @@ int dyn_kcore_get(const DynKCore *kc, igraph_integer_t v)
 	if (!kc || v < 0 || v >= kc->vcount)
 		return 0;
 	return kc->core[v];
+}
+
+int dyn_kcore_max(const DynKCore *kc)
+{
+	return kc ? kc->max_core : 0;
+}
+
+int dyn_kcore_max_subcore_size(const DynKCore *kc)
+{
+	return kc ? kc->max_subcore_touched : 0;
 }
 
 bool dyn_kcore_verify(const DynKCore *kc, const igraph_t *g)

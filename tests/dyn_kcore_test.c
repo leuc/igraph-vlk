@@ -63,7 +63,7 @@ static bool apply_batch(igraph_t *g, DynKCore *kc, const igraph_vector_int_t *ed
 	}
 	if (igraph_add_edges(g, edges, NULL) != IGRAPH_SUCCESS)
 		return false;
-	return dyn_kcore_on_edges(kc, g, edges);
+	return dyn_kcore_on_edges(kc, g, edges, NULL);
 }
 
 // Push one edge into the pending batch; flush + verify when full.
@@ -259,7 +259,7 @@ static bool case_pref_attach(igraph_integer_t n_vertices, igraph_integer_t edges
 				if (ok) {
 					struct timespec t0, t1;
 					clock_gettime(CLOCK_MONOTONIC, &t0);
-					ok = dyn_kcore_on_edges(kc, &g, &batch);
+					ok = dyn_kcore_on_edges(kc, &g, &batch, NULL);
 					clock_gettime(CLOCK_MONOTONIC, &t1);
 					dyn_seconds += (double)(t1.tv_sec - t0.tv_sec) + (double)(t1.tv_nsec - t0.tv_nsec) * 1e-9;
 				}
@@ -295,7 +295,7 @@ static bool case_pref_attach(igraph_integer_t n_vertices, igraph_integer_t edges
 // uniform-coreness graphs (the BA pathology in Sariyuce et al. §6.2, where
 // the subcore approaches the whole graph) are exercised for correctness at
 // small scale by the pref-attach case instead.
-static bool case_firehose_perf(igraph_integer_t n_vertices, igraph_integer_t thread_size, igraph_integer_t batch_edges, double *out_dyn_seconds, igraph_integer_t *out_edges)
+static bool case_firehose_perf(igraph_integer_t n_vertices, igraph_integer_t thread_size, igraph_integer_t batch_edges, double *out_dyn_seconds, igraph_integer_t *out_edges, int *out_max_subcore)
 {
 	igraph_t g;
 	if (igraph_empty(&g, 0, IGRAPH_UNDIRECTED) != IGRAPH_SUCCESS)
@@ -337,7 +337,7 @@ static bool case_firehose_perf(igraph_integer_t n_vertices, igraph_integer_t thr
 				if (ok) {
 					struct timespec t0, t1;
 					clock_gettime(CLOCK_MONOTONIC, &t0);
-					ok = dyn_kcore_on_edges(kc, &g, &batch);
+					ok = dyn_kcore_on_edges(kc, &g, &batch, NULL);
 					clock_gettime(CLOCK_MONOTONIC, &t1);
 					dyn_seconds += (double)(t1.tv_sec - t0.tv_sec) + (double)(t1.tv_nsec - t0.tv_nsec) * 1e-9;
 				}
@@ -350,7 +350,7 @@ static bool case_firehose_perf(igraph_integer_t n_vertices, igraph_integer_t thr
 			if (ok)
 				ok = igraph_add_edges(&g, &batch, NULL) == IGRAPH_SUCCESS;
 			if (ok)
-				ok = dyn_kcore_on_edges(kc, &g, &batch);
+				ok = dyn_kcore_on_edges(kc, &g, &batch, NULL);
 			igraph_vector_int_clear(&batch);
 		}
 		if (ok)
@@ -364,6 +364,8 @@ static bool case_firehose_perf(igraph_integer_t n_vertices, igraph_integer_t thr
 		*out_dyn_seconds = dyn_seconds;
 	if (out_edges)
 		*out_edges = total_edges;
+	if (out_max_subcore)
+		*out_max_subcore = dyn_kcore_max_subcore_size(kc);
 	dyn_kcore_destroy(kc);
 	igraph_destroy(&g);
 	return ok;
@@ -393,6 +395,92 @@ static bool case_bootstrap(void)
 	return ok;
 }
 
+// Exercises the changed-vertex output vector and dyn_kcore_max() directly
+// (used by graph/stream.c to mirror coreness onto node size).
+static bool case_changed_and_max(void)
+{
+	igraph_t g;
+	if (igraph_empty(&g, 0, IGRAPH_UNDIRECTED) != IGRAPH_SUCCESS)
+		return false;
+	DynKCore *kc = dyn_kcore_init(&g);
+	bool ok = (kc != NULL) && dyn_kcore_max(kc) == 0;
+
+	igraph_vector_int_t edges, changed;
+	if (ok && igraph_vector_int_init(&edges, 0) == IGRAPH_SUCCESS) {
+		if (igraph_vector_int_init(&changed, 0) != IGRAPH_SUCCESS) {
+			igraph_vector_int_destroy(&edges);
+			ok = false;
+		}
+	} else {
+		ok = false;
+	}
+	if (!ok) {
+		dyn_kcore_destroy(kc);
+		igraph_destroy(&g);
+		return false;
+	}
+
+	// Path 0-1, 1-2: a fresh edge always lifts both coreness-0 endpoints to
+	// 1 (edge 0-1: both fresh -> 2 changed); edge 1-2 only lifts the fresh
+	// vertex 2 (vertex 1 is already at coreness 1). Path stays a 1-core
+	// throughout, so max never exceeds 1.
+	static const igraph_integer_t path[][2] = {{0, 1}, {1, 2}};
+	static const igraph_integer_t path_expected_changed[] = {2, 1};
+	for (size_t i = 0; ok && i < sizeof(path) / sizeof(path[0]); i++) {
+		igraph_vector_int_clear(&edges);
+		ok = igraph_vector_int_push_back(&edges, path[i][0]) == IGRAPH_SUCCESS && igraph_vector_int_push_back(&edges, path[i][1]) == IGRAPH_SUCCESS;
+		if (ok) {
+			igraph_integer_t maxid = path[i][0] > path[i][1] ? path[i][0] : path[i][1];
+			if (maxid >= igraph_vcount(&g))
+				ok = igraph_add_vertices(&g, maxid + 1 - igraph_vcount(&g), NULL) == IGRAPH_SUCCESS;
+		}
+		if (ok)
+			ok = igraph_add_edges(&g, &edges, NULL) == IGRAPH_SUCCESS;
+		if (ok) {
+			igraph_vector_int_clear(&changed);
+			ok = dyn_kcore_on_edges(kc, &g, &edges, &changed) && igraph_vector_int_size(&changed) == path_expected_changed[i] && dyn_kcore_max(kc) == 1;
+		}
+	}
+
+	// Close the triangle 2-0: all three lift to coreness 2, reported changed.
+	if (ok) {
+		igraph_vector_int_clear(&edges);
+		ok = igraph_vector_int_push_back(&edges, 2) == IGRAPH_SUCCESS && igraph_vector_int_push_back(&edges, 0) == IGRAPH_SUCCESS;
+		if (ok)
+			ok = igraph_add_edges(&g, &edges, NULL) == IGRAPH_SUCCESS;
+		if (ok) {
+			igraph_vector_int_clear(&changed);
+			ok = dyn_kcore_on_edges(kc, &g, &edges, &changed);
+		}
+		if (ok) {
+			ok = igraph_vector_int_size(&changed) == 3 && dyn_kcore_max(kc) == 2 && dyn_kcore_get(kc, 0) == 2 && dyn_kcore_get(kc, 1) == 2 && dyn_kcore_get(kc, 2) == 2;
+		}
+	}
+
+	// Fresh disjoint pair: reported changed, but max coreness unaffected.
+	if (ok) {
+		igraph_vector_int_clear(&edges);
+		ok = igraph_vector_int_push_back(&edges, 3) == IGRAPH_SUCCESS && igraph_vector_int_push_back(&edges, 4) == IGRAPH_SUCCESS;
+		if (ok)
+			ok = igraph_add_vertices(&g, 5 - igraph_vcount(&g), NULL) == IGRAPH_SUCCESS && igraph_add_edges(&g, &edges, NULL) == IGRAPH_SUCCESS;
+		if (ok) {
+			igraph_vector_int_clear(&changed);
+			ok = dyn_kcore_on_edges(kc, &g, &edges, &changed);
+		}
+		if (ok)
+			ok = igraph_vector_int_size(&changed) == 2 && dyn_kcore_max(kc) == 2 && dyn_kcore_get(kc, 3) == 1 && dyn_kcore_get(kc, 4) == 1;
+	}
+
+	if (ok)
+		ok = dyn_kcore_verify(kc, &g);
+
+	igraph_vector_int_destroy(&changed);
+	igraph_vector_int_destroy(&edges);
+	dyn_kcore_destroy(kc);
+	igraph_destroy(&g);
+	return ok;
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -407,15 +495,18 @@ int main(void)
 	check("uniform random multigraph", case_random_uniform());
 	check("pref-attach stream (verified batches)", case_pref_attach(3000, 3, 61, true, NULL, NULL));
 	check("bootstrap from existing graph", case_bootstrap());
+	check("changed-vertex output + max()", case_changed_and_max());
 
 	// Perf: 500k vertices in thread-shaped components, batches of 5000,
 	// oracle check at the end.
 	double dyn_seconds = 0.0;
 	igraph_integer_t total_edges = 0;
-	bool perf_ok = case_firehose_perf(500000, 400, 5000, &dyn_seconds, &total_edges);
+	int max_subcore = 0;
+	bool perf_ok = case_firehose_perf(500000, 400, 5000, &dyn_seconds, &total_edges, &max_subcore);
 	check("perf 500k-vertex firehose stream", perf_ok);
 	if (perf_ok) {
 		printf("  maintenance: %lld edges in %.3f s (%.0f edges/s, %.2f us/edge)\n", (long long)total_edges, dyn_seconds, (double)total_edges / dyn_seconds, dyn_seconds * 1e6 / (double)total_edges);
+		printf("  max_subcore (worst-case single-edge touch, at 500k+ vertices): %d\n", max_subcore);
 	}
 
 	if (failures == 0) {

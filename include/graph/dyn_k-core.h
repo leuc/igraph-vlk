@@ -49,10 +49,27 @@ DynKCore *dyn_kcore_init(const igraph_t *g);
  * @param new_edges Flat vector (from0,to0,from1,to1,...) of the edges just
  *                  inserted, in insertion order; NULL means "no new edges,
  *                  just sync the vertex count".
+ * @param changed   If not NULL, ids of vertices whose coreness changed are
+ *                  appended (duplicates possible when a vertex is lifted
+ *                  more than once in the batch).
  * @return false on unrecoverable failure (the maintainer is then stale;
  *         re-create it via dyn_kcore_init), true otherwise.
  */
-bool dyn_kcore_on_edges(DynKCore *kc, const igraph_t *g, const igraph_vector_int_t *new_edges);
+bool dyn_kcore_on_edges(DynKCore *kc, const igraph_t *g, const igraph_vector_int_t *new_edges, igraph_vector_int_t *changed);
+
+/**
+ * Largest coreness currently present (0 for an empty/edgeless graph).
+ * Monotonically non-decreasing under insertion-only streaming.
+ */
+int dyn_kcore_max(const DynKCore *kc);
+
+/**
+ * Largest single-edge subcore BFS ever visited (vertices touched, not just
+ * lifted), lifetime. The honest worst-case per-edge cost bound: should stay
+ * small and not trend upward as the graph grows, if the maintenance is
+ * actually local.
+ */
+int dyn_kcore_max_subcore_size(const DynKCore *kc);
 
 /**
  * Borrowed view of the maintained coreness values, indexed by vertex id.
