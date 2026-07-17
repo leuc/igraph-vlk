@@ -114,6 +114,7 @@ add_executable(
 	src/graph/graph_io.c
 	src/graph/stream.c
 	src/graph/dyn_k-core.c
+	src/graph/dyn_leiden.c
 	src/graph/graph_filter.c
 	src/graph/graph_filter_visibility.c
 	src/graph/layered_sphere.c
@@ -190,6 +191,15 @@ if(NOT MSVC)
 	target_link_libraries(dyn_kcore_test PRIVATE m)
 endif()
 add_test(NAME dyn_kcore_test COMMAND dyn_kcore_test)
+
+# Standalone test for dynamic Leiden community maintenance (not installed)
+add_executable(dyn_leiden_test tests/dyn_leiden_test.c src/graph/dyn_leiden.c)
+target_include_directories(dyn_leiden_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${IGRAPH_INCLUDE_DIRS})
+target_link_libraries(dyn_leiden_test PRIVATE igraph::igraph)
+if(NOT MSVC)
+	target_link_libraries(dyn_leiden_test PRIVATE m)
+endif()
+add_test(NAME dyn_leiden_test COMMAND dyn_leiden_test)
 
 install(TARGETS igraph-vlk DESTINATION bin)
 install(DIRECTORY ${CMAKE_BINARY_DIR}/shaders/ DESTINATION share/igraph-vlk/shaders FILES_MATCHING PATTERN "*.spv")

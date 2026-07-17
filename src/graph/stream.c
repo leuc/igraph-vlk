@@ -14,6 +14,8 @@
 
 #include "app_state.h"
 #include "graph/dyn_k-core.h"
+#include "graph/dyn_leiden.h"
+#include "graph/wrappers_community.h"
 #include "os/stream.h"
 #include "ui/menu.h"
 
@@ -147,6 +149,7 @@ struct GraphStream
 	NameMap names;
 	DynKCore *kcore;		// live coreness maintenance; NULL if init failed (non-fatal)
 	int last_max_core;		// max coreness at the last node-size mapping
+	DynLeiden *leiden;		// live community maintenance; NULL if init failed (non-fatal)
 	uint32_t node_capacity; // amortized capacity of data->nodes[]
 	uint32_t edge_capacity; // amortized capacity of data->edges[]
 	bool fatal_error;		// set on unrecoverable error; poll() becomes a no-op
@@ -156,9 +159,11 @@ struct GraphStream
 	uint64_t total_vertices_streamed;
 	uint64_t total_edges_streamed;
 	uint64_t total_kcore_updates;	  // sum of vertices whose coreness changed
+	uint64_t total_leiden_updates;	  // sum of vertices whose community changed
 	uint64_t vertices_at_last_report; // snapshots for interval-delta reporting
 	uint64_t edges_at_last_report;
 	uint64_t kcore_updates_at_last_report;
+	uint64_t leiden_updates_at_last_report;
 	double last_debug_report_time;
 
 	// Per-poll scratch space for edge weights, indexed in lockstep with the
@@ -355,9 +360,11 @@ GraphStream *graph_stream_init(GraphData *data)
 	gs->total_vertices_streamed = 0;
 	gs->total_edges_streamed = 0;
 	gs->total_kcore_updates = 0;
+	gs->total_leiden_updates = 0;
 	gs->vertices_at_last_report = 0;
 	gs->edges_at_last_report = 0;
 	gs->kcore_updates_at_last_report = 0;
+	gs->leiden_updates_at_last_report = 0;
 	gs->last_debug_report_time = 0.0;
 
 	if (!name_map_init(&gs->names, 64)) {
@@ -376,10 +383,15 @@ GraphStream *graph_stream_init(GraphData *data)
 		fprintf(stderr, "graph_stream_init: dynamic k-core maintenance unavailable\n");
 	gs->last_max_core = 0;
 
+	gs->leiden = dyn_leiden_init(&data->g);
+	if (!gs->leiden)
+		fprintf(stderr, "graph_stream_init: dynamic Leiden community maintenance unavailable\n");
+
 	gs->reader = os_stream_reader_start();
 	if (!gs->reader) {
 		fprintf(stderr, "graph_stream_init: failed to start stdin reader thread\n");
 		dyn_kcore_destroy(gs->kcore);
+		dyn_leiden_destroy(gs->leiden);
 		name_map_destroy(&gs->names);
 		free(gs);
 		igraph_matrix_destroy(&data->current_layout);
@@ -423,6 +435,27 @@ static void stream_apply_coreness_sizes(GraphStream *gs, GraphData *data, const 
 }
 
 // ============================================================================
+// Mirror maintained community membership into node colors. Unlike coreness
+// sizes, a community's color depends only on its own id (golden-ratio hue
+// stepping, see community_id_to_rgb()), never on a global maximum, so there
+// is no "rescale everything" case to handle here.
+// ============================================================================
+
+static void stream_apply_community_colors(GraphStream *gs, GraphData *data, const igraph_vector_int_t *changed)
+{
+	const igraph_integer_t *comm = dyn_leiden_membership(gs->leiden);
+	if (!comm || !data->nodes)
+		return;
+
+	igraph_integer_t n = igraph_vector_int_size(changed);
+	for (igraph_integer_t i = 0; i < n; i++) {
+		igraph_integer_t vid = VECTOR(*changed)[i];
+		if (vid >= 0 && vid < (igraph_integer_t)data->node_count)
+			community_id_to_rgb(comm[vid], data->nodes[vid].color);
+	}
+}
+
+// ============================================================================
 // Debug report: running V/E streamed totals vs. dyn k-core update volume,
 // throttled to stderr so a fast firehose doesn't spam once per frame.
 //
@@ -453,12 +486,14 @@ static void stream_debug_report(GraphStream *gs, const GraphData *data)
 	uint64_t de = gs->total_edges_streamed - gs->edges_at_last_report;
 	uint64_t du = gs->total_kcore_updates - gs->kcore_updates_at_last_report;
 	double ratio = (de > 0) ? (double)du / (double)de : 0.0;
+	uint64_t dl_updates = gs->total_leiden_updates - gs->leiden_updates_at_last_report;
 
-	fprintf(stderr, "[graph_stream] streamed V=%llu E=%llu (live: V=%u E=%u) | dyn k-core: updates=%llu (ΔV=%llu ΔE=%llu Δupdates=%llu ratio=%.2f) max_subcore=%d%s\n", (unsigned long long)gs->total_vertices_streamed, (unsigned long long)gs->total_edges_streamed, data->node_count, data->edge_count, (unsigned long long)gs->total_kcore_updates, (unsigned long long)dv, (unsigned long long)de, (unsigned long long)du, ratio, dyn_kcore_max_subcore_size(gs->kcore), gs->kcore ? "" : " (disabled)");
+	fprintf(stderr, "[graph_stream] streamed V=%llu E=%llu (live: V=%u E=%u) | dyn k-core: updates=%llu (ΔV=%llu ΔE=%llu Δupdates=%llu ratio=%.2f) max_subcore=%d%s | dyn leiden: updates=%llu (Δupdates=%llu) communities=%d frontier(last/max)=%d/%d%s\n", (unsigned long long)gs->total_vertices_streamed, (unsigned long long)gs->total_edges_streamed, data->node_count, data->edge_count, (unsigned long long)gs->total_kcore_updates, (unsigned long long)dv, (unsigned long long)de, (unsigned long long)du, ratio, dyn_kcore_max_subcore_size(gs->kcore), gs->kcore ? "" : " (disabled)", (unsigned long long)gs->total_leiden_updates, (unsigned long long)dl_updates, gs->leiden ? dyn_leiden_community_count(gs->leiden) : 0, gs->leiden ? dyn_leiden_last_frontier_size(gs->leiden) : 0, gs->leiden ? dyn_leiden_max_frontier_size(gs->leiden) : 0, gs->leiden ? "" : " (disabled)");
 
 	gs->vertices_at_last_report = gs->total_vertices_streamed;
 	gs->edges_at_last_report = gs->total_edges_streamed;
 	gs->kcore_updates_at_last_report = gs->total_kcore_updates;
+	gs->leiden_updates_at_last_report = gs->total_leiden_updates;
 }
 
 bool graph_stream_poll(GraphStream *gs, GraphData *data)
@@ -591,6 +626,23 @@ bool graph_stream_poll(GraphStream *gs, GraphData *data)
 			igraph_vector_int_destroy(&core_changed);
 	}
 
+	// Maintain live community membership the same way, then mirror changed
+	// vertices into node colors.
+	if (gs->leiden) {
+		igraph_vector_int_t community_changed;
+		bool have_changed = igraph_vector_int_init(&community_changed, 0) == IGRAPH_SUCCESS;
+		if (!dyn_leiden_on_edges(gs->leiden, &data->g, edges_in_graph ? &new_edges : NULL, have_changed ? &community_changed : NULL)) {
+			fprintf(stderr, "graph_stream_poll: dynamic Leiden maintenance failed — disabling\n");
+			dyn_leiden_destroy(gs->leiden);
+			gs->leiden = NULL;
+		} else if (have_changed) {
+			gs->total_leiden_updates += (uint64_t)igraph_vector_int_size(&community_changed);
+			stream_apply_community_colors(gs, data, &community_changed);
+		}
+		if (have_changed)
+			igraph_vector_int_destroy(&community_changed);
+	}
+
 	stream_debug_report(gs, data);
 
 	igraph_vector_int_destroy(&new_edges);
@@ -614,6 +666,7 @@ void graph_stream_destroy(GraphStream *stream)
 		fprintf(stderr, "graph_stream_destroy: stdin reader still active — leaving it for the OS to reclaim\n");
 
 	dyn_kcore_destroy(stream->kcore);
+	dyn_leiden_destroy(stream->leiden);
 	name_map_destroy(&stream->names);
 	free(stream);
 }
@@ -621,6 +674,11 @@ void graph_stream_destroy(GraphStream *stream)
 const int *graph_stream_coreness(const GraphStream *gs)
 {
 	return (gs && gs->kcore) ? dyn_kcore_values(gs->kcore) : NULL;
+}
+
+const igraph_integer_t *graph_stream_community(const GraphStream *gs)
+{
+	return (gs && gs->leiden) ? dyn_leiden_membership(gs->leiden) : NULL;
 }
 
 // ============================================================================

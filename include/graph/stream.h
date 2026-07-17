@@ -67,6 +67,14 @@ void graph_stream_destroy(GraphStream *stream);
 const int *graph_stream_coreness(const GraphStream *gs);
 
 /**
+ * Borrowed view of the live per-vertex community membership maintained
+ * during streaming (see graph/dyn_leiden.h), indexed by vertex id. NULL if
+ * maintenance is unavailable. Valid until the next
+ * graph_stream_poll()/graph_stream_destroy() call. Main thread only.
+ */
+const igraph_integer_t *graph_stream_community(const GraphStream *gs);
+
+/**
  * Toggle-command pair for the "Data/Stream > [ ] Pause" menu item — flips
  * AppState.graph_stream_paused and updates the menu label to reflect state,
  * mirroring the Layout/Seed toggle in src/graph/layouts_seed.c.

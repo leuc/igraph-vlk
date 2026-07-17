@@ -77,10 +77,10 @@ void *compute_igraph_community_leiden(ExecutionContext *ctx)
 	igraph_error_t code;
 	if (igraph_is_directed(graph)) {
 		// For directed graphs, use full leiden with vertex weights
-		code = igraph_community_leiden(graph, NULL, NULL, NULL, resolution, 0.01, 1, -1, membership, &nb_clusters, &quality);
+		code = igraph_community_leiden(graph, NULL, NULL, NULL, resolution, 0.01, 0, -1, membership, &nb_clusters, &quality);
 	} else {
 		// For undirected graphs, use leiden_simple without vertex weights
-		code = igraph_community_leiden_simple(graph, NULL, IGRAPH_LEIDEN_OBJECTIVE_CPM, resolution, 0.01, 1, -1, membership, &nb_clusters, &quality);
+		code = igraph_community_leiden_simple(graph, NULL, IGRAPH_LEIDEN_OBJECTIVE_CPM, resolution, 0.01, 0, -1, membership, &nb_clusters, &quality);
 	}
 
 	if (code != IGRAPH_SUCCESS) {
@@ -503,6 +503,18 @@ void *compute_igraph_community_fluid_communities(ExecutionContext *ctx)
 // Apply and Free Functions
 // ============================================================================
 
+void community_id_to_rgb(igraph_integer_t comm_id, float out_rgb[3])
+{
+	float hue = (float)comm_id * 0.618033988749895f;
+	hue -= floorf(hue);
+	float h = hue * 6.0f;
+	int hi = (int)floorf(h);
+	float f = h - hi;
+	out_rgb[0] = (hi == 0 || hi == 5) ? 1.0f : (hi == 1 || hi == 2) ? 1.0f - f : f;
+	out_rgb[1] = (hi == 0 || hi == 3) ? f : (hi == 1 || hi == 2) ? 1.0f : 1.0f - f;
+	out_rgb[2] = (hi == 0 || hi == 4) ? 1.0f - f : (hi == 2 || hi == 3) ? f : 1.0f;
+}
+
 void apply_community_membership(ExecutionContext *ctx, void *result_data)
 {
 	if (!ctx || !ctx->app_state || !result_data) {
@@ -547,33 +559,12 @@ void apply_community_membership(ExecutionContext *ctx, void *result_data)
 			max_cluster_size = cluster_sizes[i];
 	}
 
-	// Generate distinct colors for each community using golden ratio
-	vec3 *colors = malloc(sizeof(vec3) * cluster_count);
-	for (int i = 0; i < cluster_count; i++) {
-		float hue = (float)i * 0.618033988749895f;
-		hue -= floor(hue);
-		colors[i][0] = hue;
-		colors[i][1] = 0.8f;
-		colors[i][2] = 0.9f;
-	}
-
-	// Apply colors to nodes (convert HSV-like to RGB)
 	for (int i = 0; i < data->node_count; i++) {
 		int comm = VECTOR(*membership)[i];
-		if (comm < cluster_count) {
-			float h = colors[comm][0] * 6.0f;
-			int hi = (int)floor(h);
-			float f = h - hi;
-			float r = (hi == 0 || hi == 5) ? 1.0f : (hi == 1 || hi == 2) ? 1.0f - f : f;
-			float g = (hi == 0 || hi == 3) ? f : (hi == 1 || hi == 2) ? 1.0f : 1.0f - f;
-			float b = (hi == 0 || hi == 4) ? 1.0f - f : (hi == 2 || hi == 3) ? f : 1.0f;
-			data->nodes[i].color[0] = r;
-			data->nodes[i].color[1] = g;
-			data->nodes[i].color[2] = b;
-		}
+		if (comm < cluster_count)
+			community_id_to_rgb(comm, data->nodes[i].color);
 	}
 
-	free(colors);
 	free(cluster_sizes);
 
 	// Mark attributes dirty and refresh renderer
