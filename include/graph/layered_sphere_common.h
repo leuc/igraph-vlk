@@ -82,6 +82,7 @@ int find_closest_slot_by_hilbert(SphereGrid *grid, int target_h);
 double calculate_move_delta_intra(const igraph_t *ig, const igraph_matrix_t *layout, LayeredSphereContext *ctx, int u, int target_sphere_s, int target_slot_k);
 double calculate_move_delta_inter(const igraph_t *ig, const igraph_matrix_t *layout, LayeredSphereContext *ctx, int u, int target_sphere_s, int target_slot_k);
 
+int bucket_communities_into_spheres(const CommData *comms, int num_communities, int total_node_count, int *comm_to_sphere);
 double sphere_radius_for(int s, int n_in_group, double prev_radius);
 int sphere_slot_count(int n_in_group, double radius);
 void compute_slot_point(int i, int M_s, double radius, int hilbert_res, SpherePoint *out);

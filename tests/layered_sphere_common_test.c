@@ -75,6 +75,58 @@ static int test_compare_communities_kcore(void)
 	return 0;
 }
 
+// Pins the greedy bucketing formula shared by the batch (layered_sphere.c
+// PHASE_INIT) and streaming (dyn_layered_sphere.c) paths: nucleus capacity =
+// first community's own size, sphere s>0 capacity = base_capacity * s^2 with
+// base_capacity = max(15, remaining * 0.015), zero-count communities skipped.
+// Input must already be sorted by avg_kcore descending (the callers qsort
+// with compare_communities_kcore first).
+static int test_bucket_communities_into_spheres(void)
+{
+	// Nucleus exactly fits community A; B overflows into sphere 1; C and E
+	// still fit sphere 1 (capacity 15); D is empty and must be skipped.
+	CommData comms1[5] = {
+		{.comm_id = 0, .avg_kcore = 9.0, .node_count = 5},	// A -> sphere 0 (nucleus, capacity 5)
+		{.comm_id = 1, .avg_kcore = 5.0, .node_count = 3},	// B -> sphere 1 (5+3 > 5)
+		{.comm_id = 2, .avg_kcore = 3.0, .node_count = 2},	// C -> sphere 1 (3+2 <= 15)
+		{.comm_id = 3, .avg_kcore = 1.0, .node_count = 10}, // E -> sphere 1 (5+10 <= 15)
+		{.comm_id = 4, .avg_kcore = 0.0, .node_count = 0},	// D -> skipped entirely
+	};
+	int comm_to_sphere1[5] = {-99, -99, -99, -99, -99};
+	IGRAPH_ASSERT(bucket_communities_into_spheres(comms1, 5, 20, comm_to_sphere1) == 2);
+	IGRAPH_ASSERT(comm_to_sphere1[0] == 0);
+	IGRAPH_ASSERT(comm_to_sphere1[1] == 1);
+	IGRAPH_ASSERT(comm_to_sphere1[2] == 1);
+	IGRAPH_ASSERT(comm_to_sphere1[3] == 1);
+	IGRAPH_ASSERT(comm_to_sphere1[4] == -99); // empty community never written
+
+	// Quadratic capacity growth: sphere 1 caps at base_capacity (15), sphere 2
+	// at base_capacity * 4 (60), so the third big community overflows sphere 1
+	// but the fourth still fits sphere 2 alongside it.
+	CommData comms2[4] = {
+		{.comm_id = 0, .avg_kcore = 9.0, .node_count = 4},	// -> sphere 0
+		{.comm_id = 1, .avg_kcore = 8.0, .node_count = 10}, // -> sphere 1 (4+10 > 4)
+		{.comm_id = 2, .avg_kcore = 7.0, .node_count = 10}, // -> sphere 2 (10+10 > 15)
+		{.comm_id = 3, .avg_kcore = 6.0, .node_count = 10}, // -> sphere 2 (10+10 <= 60)
+	};
+	int comm_to_sphere2[4];
+	IGRAPH_ASSERT(bucket_communities_into_spheres(comms2, 4, 34, comm_to_sphere2) == 3);
+	IGRAPH_ASSERT(comm_to_sphere2[0] == 0);
+	IGRAPH_ASSERT(comm_to_sphere2[1] == 1);
+	IGRAPH_ASSERT(comm_to_sphere2[2] == 2);
+	IGRAPH_ASSERT(comm_to_sphere2[3] == 2);
+
+	// Degenerate single community: everything on the nucleus, one sphere.
+	CommData comms3[1] = {
+		{.comm_id = 0, .avg_kcore = 2.0, .node_count = 7},
+	};
+	int comm_to_sphere3[1];
+	IGRAPH_ASSERT(bucket_communities_into_spheres(comms3, 1, 7, comm_to_sphere3) == 1);
+	IGRAPH_ASSERT(comm_to_sphere3[0] == 0);
+
+	return 0;
+}
+
 static int test_compare_nodes_placement(void)
 {
 	NodePlacement nodes[4] = {
@@ -133,19 +185,15 @@ static int test_get_vector_int_max(void)
 static int test_find_closest_slot_by_hilbert(void)
 {
 	SpherePoint pts[5] = {
-		{.hilbert_dist = 0},
-		{.hilbert_dist = 10},
-		{.hilbert_dist = 20},
-		{.hilbert_dist = 30},
-		{.hilbert_dist = 40},
+		{.hilbert_dist = 0}, {.hilbert_dist = 10}, {.hilbert_dist = 20}, {.hilbert_dist = 30}, {.hilbert_dist = 40},
 	};
 	SphereGrid grid = {.max_slots = 5, .slots = pts};
 
 	IGRAPH_ASSERT(find_closest_slot_by_hilbert(&grid, 0) == 0);
 	IGRAPH_ASSERT(find_closest_slot_by_hilbert(&grid, 40) == 4);
-	IGRAPH_ASSERT(find_closest_slot_by_hilbert(&grid, 21) == 2);  // closer to 20
-	IGRAPH_ASSERT(find_closest_slot_by_hilbert(&grid, 26) == 3);  // closer to 30
-	IGRAPH_ASSERT(find_closest_slot_by_hilbert(&grid, 25) == 3);  // tie -> higher index wins (strict '<' favors the upper bound)
+	IGRAPH_ASSERT(find_closest_slot_by_hilbert(&grid, 21) == 2); // closer to 20
+	IGRAPH_ASSERT(find_closest_slot_by_hilbert(&grid, 26) == 3); // closer to 30
+	IGRAPH_ASSERT(find_closest_slot_by_hilbert(&grid, 25) == 3); // tie -> higher index wins (strict '<' favors the upper bound)
 	return 0;
 }
 
@@ -385,8 +433,8 @@ static int test_calculate_move_delta_intra(void)
 	ctx.grids = calloc(1, sizeof(SphereGrid));
 
 	SpherePoint pts[2] = {
-		{.x = 10.0, .y = 0.0, .z = 0.0, .hilbert_dist = 0},  // u's current slot
-		{.x = 0.0, .y = 10.0, .z = 0.0, .hilbert_dist = 1},  // target slot (v here)
+		{.x = 10.0, .y = 0.0, .z = 0.0, .hilbert_dist = 0}, // u's current slot
+		{.x = 0.0, .y = 10.0, .z = 0.0, .hilbert_dist = 1}, // target slot (v here)
 	};
 	ctx.grids[0].radius = 10.0;
 	ctx.grids[0].max_slots = 2;
@@ -394,15 +442,15 @@ static int test_calculate_move_delta_intra(void)
 	int occ[2] = {0, 1};
 	ctx.grids[0].slot_occupant = occ;
 
-	ctx.node_to_slot_idx[0] = 0;  // u at slot 0
-	ctx.node_to_slot_idx[1] = 1;  // v at slot 1 (target)
+	ctx.node_to_slot_idx[0] = 0; // u at slot 0
+	ctx.node_to_slot_idx[1] = 1; // v at slot 1 (target)
 
 	double delta = calculate_move_delta_intra(&g, &layout, &ctx, /*u=*/0, /*target_sphere_s=*/0, /*target_slot_k=*/1);
 	// Moving u from (1,0,0) to (0,1,0) direction takes it from a quarter
 	// circle away from w to exactly on top of w.
 	double expected = 0.0 - (10.0 * M_PI / 2.0);
 	IGRAPH_ASSERT(dbl_close(delta, expected, 1e-4));
-	IGRAPH_ASSERT(delta < -0.001);  // this move would be accepted
+	IGRAPH_ASSERT(delta < -0.001); // this move would be accepted
 
 	free(ctx.node_to_sphere_id);
 	free(ctx.node_to_slot_idx);
@@ -431,9 +479,9 @@ static int test_calculate_move_delta_inter(void)
 	ctx.layout = &layout;
 	ctx.node_to_sphere_id = malloc(3 * sizeof(int));
 	ctx.node_to_slot_idx = malloc(3 * sizeof(int));
-	ctx.node_to_sphere_id[0] = 0;  // u lives in sphere 0
-	ctx.node_to_sphere_id[1] = 1;  // v (target occupant) lives in sphere 1
-	ctx.node_to_sphere_id[2] = 1;  // w irrelevant for inter (no sphere filter)
+	ctx.node_to_sphere_id[0] = 0; // u lives in sphere 0
+	ctx.node_to_sphere_id[1] = 1; // v (target occupant) lives in sphere 1
+	ctx.node_to_sphere_id[2] = 1; // w irrelevant for inter (no sphere filter)
 	ctx.num_spheres = 2;
 	ctx.grids = calloc(2, sizeof(SphereGrid));
 
@@ -513,12 +561,12 @@ static int test_try_move_node(void)
 	try_move_node(&g, &layout, &ctx, /*u=*/0, /*s=*/0, /*target_slot=*/1, /*current_slot=*/0, /*is_intra=*/true, &local_moves);
 
 	IGRAPH_ASSERT(local_moves == 1);
-	IGRAPH_ASSERT(ctx.grids[0].slot_occupant[1] == 0);  // u now at target slot
-	IGRAPH_ASSERT(ctx.grids[0].slot_occupant[0] == 1);  // v swapped into u's old slot
+	IGRAPH_ASSERT(ctx.grids[0].slot_occupant[1] == 0); // u now at target slot
+	IGRAPH_ASSERT(ctx.grids[0].slot_occupant[0] == 1); // v swapped into u's old slot
 	IGRAPH_ASSERT(ctx.node_to_slot_idx[0] == 1);
 	IGRAPH_ASSERT(ctx.node_to_slot_idx[1] == 0);
-	IGRAPH_ASSERT(dbl_close(MATRIX(layout, 0, 1), 10.0, TOL));  // u's coords updated
-	IGRAPH_ASSERT(dbl_close(MATRIX(layout, 1, 0), 10.0, TOL));  // v's coords updated
+	IGRAPH_ASSERT(dbl_close(MATRIX(layout, 0, 1), 10.0, TOL)); // u's coords updated
+	IGRAPH_ASSERT(dbl_close(MATRIX(layout, 1, 0), 10.0, TOL)); // v's coords updated
 
 	free(ctx.node_to_sphere_id);
 	free(ctx.node_to_slot_idx);
@@ -593,6 +641,7 @@ int main(void)
 	RUN_TEST(test_geodesic_distance);
 	RUN_TEST(test_hilbert_curve);
 	RUN_TEST(test_compare_communities_kcore);
+	RUN_TEST(test_bucket_communities_into_spheres);
 	RUN_TEST(test_compare_nodes_placement);
 	RUN_TEST(test_compare_points);
 	RUN_TEST(test_get_vector_int_max);

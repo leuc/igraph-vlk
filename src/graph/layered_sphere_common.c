@@ -234,6 +234,47 @@ double calculate_move_delta_inter(const igraph_t *ig, const igraph_matrix_t *lay
 	return potential_score - current_score;
 }
 
+// Greedy sphere bucketing: walk the communities (already sorted by avg
+// coreness descending, see compare_communities_kcore) and pack them onto
+// concentric spheres. Sphere 0 (the nucleus) is sized to exactly the first —
+// largest/highest-avg-coreness — community; each further sphere s holds
+// base_capacity * s^2 nodes, a new sphere opening whenever the current one's
+// capacity would be exceeded. Writes comm_to_sphere[comms[i].comm_id] for
+// every non-empty community — the caller sizes that array to cover its
+// comm_id key space — and returns the number of spheres used.
+int bucket_communities_into_spheres(const CommData *comms, int num_communities, int total_node_count, int *comm_to_sphere)
+{
+	int nucleus_capacity = comms[0].node_count;
+	int remaining_nodes = total_node_count - nucleus_capacity;
+	int base_capacity = (int)fmax(15.0, remaining_nodes * 0.015);
+
+	int current_sphere = 0;
+	int current_load = 0;
+
+	for (int i = 0; i < num_communities; i++) {
+		int c_size = comms[i].node_count;
+		if (c_size == 0)
+			continue;
+
+		int sphere_capacity;
+		if (current_sphere == 0) {
+			sphere_capacity = nucleus_capacity;
+		} else {
+			sphere_capacity = base_capacity * current_sphere * current_sphere;
+		}
+
+		if (current_load > 0 && current_load + c_size > sphere_capacity) {
+			current_sphere++;
+			current_load = 0;
+		}
+
+		comm_to_sphere[comms[i].comm_id] = current_sphere;
+		current_load += c_size;
+	}
+
+	return current_sphere + 1;
+}
+
 double sphere_radius_for(int s, int n_in_group, double prev_radius)
 {
 	double required_area = n_in_group * 40.0;

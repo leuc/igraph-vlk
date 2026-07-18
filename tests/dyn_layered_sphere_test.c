@@ -43,6 +43,7 @@ typedef struct
 
 static int fixture_init(Fixture *f)
 {
+	igraph_set_attribute_table(&igraph_cattribute_table); // required for dyn_layered_sphere's VAN()/igraph_cattribute_has_attr() timestamp lookup; the real app sets this once globally (main.c/stream.c/graph_io.c)
 	if (igraph_empty(&f->g, 0, IGRAPH_UNDIRECTED) != IGRAPH_SUCCESS)
 		return 0;
 	if (igraph_matrix_init(&f->layout, 0, 3) != IGRAPH_SUCCESS)
@@ -226,6 +227,7 @@ static int test_isolated_new_vertices(void)
 // keep streaming — mirrors dyn_kcore_test.c's test_bootstrap.
 static int test_bootstrap_then_stream(void)
 {
+	igraph_set_attribute_table(&igraph_cattribute_table);
 	igraph_t g;
 	IGRAPH_ASSERT(igraph_small(&g, 0, IGRAPH_UNDIRECTED, 0, 1, 1, 2, 2, 0, 2, 3, 3, 4, -1) == IGRAPH_SUCCESS);
 

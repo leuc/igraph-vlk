@@ -4,8 +4,8 @@
  */
 
 #include "graph/layered_sphere.h"
-#include "graph/layered_sphere_common.h"
 #include "app_state.h"
+#include "graph/layered_sphere_common.h"
 
 #include <math.h>
 #ifdef _OPENMP
@@ -73,36 +73,8 @@ static bool layered_sphere_iterate(LayeredSphereContext *ctx, const igraph_t *ig
 		}
 		qsort(comms, num_communities, sizeof(CommData), compare_communities_kcore);
 
-		int nucleus_capacity = comms[0].node_count;
-		int remaining_nodes = vcount - nucleus_capacity;
-		int base_capacity = (int)fmax(15.0, remaining_nodes * 0.015);
-
-		int current_sphere = 0;
-		int current_load = 0;
 		int *comm_to_sphere = malloc(num_communities * sizeof(int));
-
-		for (int i = 0; i < num_communities; i++) {
-			int c_size = comms[i].node_count;
-			if (c_size == 0)
-				continue;
-
-			int sphere_capacity;
-			if (current_sphere == 0) {
-				sphere_capacity = nucleus_capacity;
-			} else {
-				sphere_capacity = base_capacity * current_sphere * current_sphere;
-			}
-
-			if (current_load > 0 && current_load + c_size > sphere_capacity) {
-				current_sphere++;
-				current_load = 0;
-			}
-
-			comm_to_sphere[comms[i].comm_id] = current_sphere;
-			current_load += c_size;
-		}
-
-		ctx->num_spheres = current_sphere + 1;
+		ctx->num_spheres = bucket_communities_into_spheres(comms, num_communities, vcount, comm_to_sphere);
 
 		for (int i = 0; i < vcount; i++)
 			ctx->node_to_sphere_id[i] = comm_to_sphere[VECTOR(membership)[i]];

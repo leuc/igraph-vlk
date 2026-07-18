@@ -18,8 +18,14 @@
  * nucleus, sized to the largest/densest community; further spheres opened
  * once the current one's capacity is exceeded), and each sphere gets its own
  * Hilbert-curve slot grid (src/graph/layered_sphere_common.c) with members
- * seeded evenly-spaced in (community, coreness) order. This module never
- * computes coreness or community membership itself — it only consumes the
+ * seeded evenly-spaced in (community, timestamp) order — coreness only
+ * decides which sphere a community lands on, not a member's position within
+ * it. The timestamp is read as a real "timestamp" igraph vertex attribute
+ * (set in graph/stream.c's ensure_vertex from wall-clock arrival time,
+ * falling back to vertex id if the attribute isn't present at all), so that
+ * same-community members stay in a stable relative order across recomputes
+ * instead of reshuffling arbitrarily. This module never computes coreness
+ * or community membership itself — it only consumes the
  * live arrays maintained by DynKCore/DynLeiden (graph/dyn_k-core.h,
  * graph/dyn_leiden.h), exactly the way graph/stream.c already drives those
  * two, so bucketing/placement stays O(1)-per-vertex-lookup cheap.

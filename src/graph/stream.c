@@ -240,6 +240,16 @@ static bool ensure_vertex(GraphStream *gs, GraphData *data, const char *name, ig
 	if (SETVAS(&data->g, "name", vid, name) != IGRAPH_SUCCESS)
 		fprintf(stderr, "graph_stream: SETVAS name failed for vertex %lld (\"%s\")\n", (long long)vid, name);
 
+	// Real arrival time, not just an ordinal: the natural slot a genuine
+	// timestamp from the data source (e.g. an NCOL time field) would occupy
+	// later — see graph/dyn_layered_sphere.c, which reads this to stabilize
+	// a vertex's placement relative to its community-mates.
+	struct timespec arrival_ts;
+	clock_gettime(CLOCK_MONOTONIC, &arrival_ts);
+	double timestamp = (double)arrival_ts.tv_sec + (double)arrival_ts.tv_nsec * 1e-9;
+	if (SETVAN(&data->g, "timestamp", vid, timestamp) != IGRAPH_SUCCESS)
+		fprintf(stderr, "graph_stream: SETVAN timestamp failed for vertex %lld (\"%s\")\n", (long long)vid, name);
+
 	if (!ensure_node_capacity(gs, data, data->node_count + 1))
 		return false;
 
