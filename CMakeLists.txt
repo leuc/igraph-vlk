@@ -117,6 +117,7 @@ add_executable(
 	src/graph/dyn_k-core.c
 	src/graph/dyn_leiden.c
 	src/graph/dyn_layered_sphere.c
+	src/graph/community_simhash.c
 	src/graph/graph_filter.c
 	src/graph/graph_filter_visibility.c
 	src/graph/layered_sphere.c
@@ -221,6 +222,15 @@ if(NOT MSVC)
 	target_link_libraries(dyn_layered_sphere_test PRIVATE m)
 endif()
 add_test(NAME dyn_layered_sphere_test COMMAND dyn_layered_sphere_test)
+
+# Standalone test for community SimHash (order-independent fingerprint + color)
+add_executable(community_simhash_test tests/community_simhash_test.c src/graph/community_simhash.c)
+target_include_directories(community_simhash_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${IGRAPH_INCLUDE_DIRS})
+target_link_libraries(community_simhash_test PRIVATE igraph::igraph)
+if(NOT MSVC)
+	target_link_libraries(community_simhash_test PRIVATE m)
+endif()
+add_test(NAME community_simhash_test COMMAND community_simhash_test)
 
 # Standalone test for NCOL line parsing (not installed)
 add_executable(ncol_parse_test tests/ncol_parse_test.c src/graph/ncol_parse.c)

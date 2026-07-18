@@ -13,6 +13,7 @@
 #include <time.h>
 
 #include "app_state.h"
+#include "graph/community_simhash.h"
 #include "graph/dyn_k-core.h"
 #include "graph/dyn_layered_sphere.h"
 #include "graph/dyn_leiden.h"
@@ -427,11 +428,17 @@ static void stream_apply_community_colors(GraphStream *gs, GraphData *data, cons
 	if (!comm || !data->nodes)
 		return;
 
+	igraph_integer_t vcount = igraph_vcount(&data->g);
 	igraph_integer_t n = igraph_vector_int_size(changed);
 	for (igraph_integer_t i = 0; i < n; i++) {
 		igraph_integer_t vid = VECTOR(*changed)[i];
-		if (vid >= 0 && vid < (igraph_integer_t)data->node_count)
-			community_id_to_rgb(comm[vid], data->nodes[vid].color);
+		if (vid >= 0 && vid < (igraph_integer_t)data->node_count) {
+			// Color by the community's member-set SimHash, not its volatile
+			// representative vertex id, so a community keeps its color across
+			// merges/splits instead of thrashing every poll.
+			uint64_t h = community_simhash_from_membership(comm, vcount, comm[vid]);
+			community_simhash_to_rgb(h, data->nodes[vid].color);
+		}
 	}
 }
 
