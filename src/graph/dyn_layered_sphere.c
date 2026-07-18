@@ -88,6 +88,11 @@
 #define DYN_LS_SLOT_HEADROOM_BASE 4.0		// every sphere's radius and slot count are sized for this multiple of its occupancy at build time, so grids absorb growth without resizing
 #define DYN_LS_SLOT_HEADROOM_PER_SPHERE 0.5 // extra headroom fraction added on top per sphere index further from the nucleus, so outer spheres end up progressively sparser
 
+// SimHash comparison threshold: two fingerprints at Hamming distance <= 16 are
+// considered "the same community" — tolerating a few migrated or added members
+// while still catching real merges/splits (which flip 32+ bits).
+#define DYN_LS_SIMHASH_DISTANCE 16
+
 // Simple high-resolution timer for performance breakdown logging, in
 // microseconds (see the phase timestamps t0..t6 in dyn_ls_recompute).
 static inline double dyn_ls_timer_us(const struct timespec *start, const struct timespec *end)
@@ -563,7 +568,7 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 	// satisfies both conditions, the entire core is frozen.
 	min_sphere_to_rebuild = num_spheres;
 	for (int i = 0; i < num_communities; i++) {
-		if (comms[i].avg_kcore <= k_max && simhash_now[comms[i].comm_id] != dls->comm_simhash[comms[i].comm_id]) {
+		if (comms[i].avg_kcore <= k_max && community_simhash_hamming(simhash_now[comms[i].comm_id], dls->comm_simhash[comms[i].comm_id]) > DYN_LS_SIMHASH_DISTANCE) {
 			min_sphere_to_rebuild = comm_to_sphere[comms[i].comm_id];
 			break;
 		}
@@ -581,7 +586,7 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 		int s = comm_to_sphere[comms[i].comm_id];
 		if (comms[i].avg_kcore > k_max)
 			continue; // topologically insulated — cache entry unchanged
-		if (simhash_now[comms[i].comm_id] != dls->comm_simhash[comms[i].comm_id])
+		if (community_simhash_hamming(simhash_now[comms[i].comm_id], dls->comm_simhash[comms[i].comm_id]) > DYN_LS_SIMHASH_DISTANCE)
 			sphere_changed[s] = true;
 	}
 
