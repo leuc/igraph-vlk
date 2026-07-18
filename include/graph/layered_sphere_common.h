@@ -52,6 +52,16 @@ typedef struct
 	igraph_vector_int_t neis;
 } SphereGrid;
 
+// Writes a sphere slot's 3D coordinates into the layout matrix for node_id.
+// Shared by every placement path (seed, local-append, disconnected-append,
+// try_move_node) so the MATRIX(...) triple isn't repeated at each call site.
+static inline void write_slot_position(igraph_matrix_t *layout, igraph_integer_t node_id, const SpherePoint *p)
+{
+	MATRIX(*layout, node_id, 0) = p->x;
+	MATRIX(*layout, node_id, 1) = p->y;
+	MATRIX(*layout, node_id, 2) = p->z;
+}
+
 typedef enum { PHASE_INIT = 0, PHASE_INTRA_SPHERE = 1, PHASE_INTER_SPHERE = 2, PHASE_DONE = 3 } LayoutPhase;
 
 typedef struct LayeredSphereContext

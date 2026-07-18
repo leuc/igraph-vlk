@@ -88,18 +88,8 @@
 #define DYN_LS_SLOT_HEADROOM_BASE 4.0		// every sphere's radius and slot count are sized for this multiple of its occupancy at build time, so grids absorb growth without resizing
 #define DYN_LS_SLOT_HEADROOM_PER_SPHERE 0.5 // extra headroom fraction added on top per sphere index further from the nucleus, so outer spheres end up progressively sparser
 
-// Simple high-resolution timer for performance breakdown logging.
-// Times are in microseconds; phases are labelled by index (0 = total).
-#define DYN_LS_NUM_TIMERS 8
-#define DYN_LS_T_AGGREGATE 0
-#define DYN_LS_T_SIMHASH 1
-#define DYN_LS_T_OVPASS 2
-#define DYN_LS_T_SPHERECHG 3
-#define DYN_LS_T_SEED 4
-#define DYN_LS_T_BUCKET 5
-#define DYN_LS_T_FITS 6
-#define DYN_LS_T_STEP 7
-
+// Simple high-resolution timer for performance breakdown logging, in
+// microseconds (see the phase timestamps t0..t6 in dyn_ls_recompute).
 static inline double dyn_ls_timer_us(const struct timespec *start, const struct timespec *end)
 {
 	return (double)(end->tv_sec - start->tv_sec) * 1000000.0 + (double)(end->tv_nsec - start->tv_nsec) / 1000.0;
@@ -235,9 +225,7 @@ static bool dyn_ls_append_disconnected(DynLayeredSphere *dls, igraph_integer_t n
 	for (int slot = grid->max_slots - 1; slot >= 0; slot--) {
 		if (grid->slot_occupant[slot] == -1) {
 			grid->slot_occupant[slot] = (int)node_id;
-			MATRIX(*layout, node_id, 0) = grid->slots[slot].x;
-			MATRIX(*layout, node_id, 1) = grid->slots[slot].y;
-			MATRIX(*layout, node_id, 2) = grid->slots[slot].z;
+			write_slot_position(layout, node_id, &grid->slots[slot]);
 			return true;
 		}
 	}
@@ -331,9 +319,7 @@ static bool dyn_ls_try_local_append(DynLayeredSphere *dls, igraph_integer_t node
 	if (slot < 0)
 		return false; // sphere full — local overflow
 	grid->slot_occupant[slot] = (int)node_id;
-	MATRIX(*layout, node_id, 0) = grid->slots[slot].x;
-	MATRIX(*layout, node_id, 1) = grid->slots[slot].y;
-	MATRIX(*layout, node_id, 2) = grid->slots[slot].z;
+	write_slot_position(layout, node_id, &grid->slots[slot]);
 	return true;
 }
 
@@ -345,10 +331,14 @@ static bool dyn_ls_try_local_append(DynLayeredSphere *dls, igraph_integer_t node
 
 // Builds the CommData array — one entry per non-empty community, avg
 // coreness computed from the live per-vertex values — sorted by avg coreness
-// descending via the shared compare_communities_kcore. Returns NULL on
-// allocation failure.
+// descending via the shared compare_communities_kcore. *out_num_communities
+// is always set (0 on any failure or if there are genuinely no communities);
+// the caller must check it rather than just the returned pointer, since a
+// legitimately empty result also returns NULL (calloc(0, ...) is allowed to).
 static CommData *dyn_ls_aggregate_communities(const int *coreness, const igraph_integer_t *community, igraph_integer_t vcount, int *out_num_communities)
 {
+	*out_num_communities = 0;
+
 	double *comm_sum_kcore = calloc((size_t)vcount, sizeof(double));
 	int *comm_count = calloc((size_t)vcount, sizeof(int));
 	if (!comm_sum_kcore || !comm_count) {
@@ -370,26 +360,29 @@ static CommData *dyn_ls_aggregate_communities(const int *coreness, const igraph_
 		if (comm_count[c] > 0)
 			num_communities++;
 
-	CommData *comms = calloc((size_t)num_communities, sizeof(CommData));
-	if (!comms) {
-		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
-		free(comm_sum_kcore);
-		free(comm_count);
-		return NULL;
-	}
-	int ci = 0;
-	for (igraph_integer_t c = 0; c < vcount; c++) {
-		if (comm_count[c] > 0) {
-			comms[ci].comm_id = (int)c;
-			comms[ci].avg_kcore = comm_sum_kcore[c] / comm_count[c];
-			comms[ci].node_count = comm_count[c];
-			ci++;
+	CommData *comms = NULL;
+	if (num_communities > 0) {
+		comms = calloc((size_t)num_communities, sizeof(CommData));
+		if (!comms) {
+			fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
+			free(comm_sum_kcore);
+			free(comm_count);
+			return NULL;
 		}
+		int ci = 0;
+		for (igraph_integer_t c = 0; c < vcount; c++) {
+			if (comm_count[c] > 0) {
+				comms[ci].comm_id = (int)c;
+				comms[ci].avg_kcore = comm_sum_kcore[c] / comm_count[c];
+				comms[ci].node_count = comm_count[c];
+				ci++;
+			}
+		}
+		qsort(comms, (size_t)num_communities, sizeof(CommData), compare_communities_kcore);
 	}
 	free(comm_sum_kcore);
 	free(comm_count);
 
-	qsort(comms, (size_t)num_communities, sizeof(CommData), compare_communities_kcore);
 	*out_num_communities = num_communities;
 	return comms;
 }
@@ -467,25 +460,43 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 	struct timespec t0 = {0}, t1 = {0}, t2 = {0}, t3 = {0}, t4 = {0}, t5 = {0}, t6 = {0};
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t0);
 
-	int num_communities;
-	CommData *comms = dyn_ls_aggregate_communities(coreness, community, vcount, &num_communities);
-	if (!comms)
-		return false;
+	// Every heap allocation below is freed exactly once at `cleanup`, whether
+	// this call succeeds or bails out early — declare and zero-init them all
+	// up front so `goto cleanup` from any failure point is safe (free(NULL)
+	// is a no-op) instead of each failure branch hand-listing its own subset.
+	bool result = false;
+	CommData *comms = NULL;
+	int *comm_to_sphere = NULL;
+	uint64_t *simhash_now = NULL;
+	igraph_integer_t *unstable_ids = NULL;
+	int *node_to_sphere = NULL;
+	int *node_to_slot = NULL;
+	int *sphere_count = NULL;
+	bool *sphere_changed = NULL;
+	int num_communities = 0, num_spheres = 0, num_unstable = 0, min_sphere_to_rebuild = 0;
 
-	int *comm_to_sphere = malloc((size_t)vcount * sizeof(int)); // indexed by comm_id (a vertex id), unlike the batch path's compact-id array
+	comms = dyn_ls_aggregate_communities(coreness, community, vcount, &num_communities);
+	if (num_communities == 0) {
+		// Either aggregation hit an allocation failure (already logged inside
+		// dyn_ls_aggregate_communities) or every community[] entry was
+		// out-of-range (defensive-only case). Either way there is nothing to
+		// place this round; keep the existing grids/layout untouched and let
+		// the next poll retry rather than tearing down the maintainer.
+		result = true;
+		goto cleanup;
+	}
+
+	comm_to_sphere = malloc((size_t)vcount * sizeof(int)); // indexed by comm_id (a vertex id), unlike the batch path's compact-id array
 	if (!comm_to_sphere) {
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
-		free(comms);
-		return false;
+		goto cleanup;
 	}
-	int num_spheres = bucket_communities_into_spheres(comms, num_communities, (int)vcount, comm_to_sphere);
+	num_spheres = bucket_communities_into_spheres(comms, num_communities, (int)vcount, comm_to_sphere);
 
 	// Ensure the per-community SimHash cache is sized for the current graph.
 	if (!dyn_ls_ensure_comm_simhash(dls, vcount)) {
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
-		free(comms);
-		free(comm_to_sphere);
-		return false;
+		goto cleanup;
 	}
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
 
@@ -496,17 +507,12 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 	// membership from scratch each time — O(V*C) for C communities). Reuses
 	// the exact same per-bit projection, so hash values are identical either
 	// way; only the loop shape changes.
-	uint64_t *simhash_now = calloc((size_t)vcount, sizeof(uint64_t));
-	igraph_integer_t *unstable_ids = malloc((size_t)num_communities * sizeof(igraph_integer_t));
-	if (!simhash_now || (num_communities > 0 && !unstable_ids)) {
+	simhash_now = calloc((size_t)vcount, sizeof(uint64_t));
+	unstable_ids = malloc((size_t)num_communities * sizeof(igraph_integer_t));
+	if (!simhash_now || !unstable_ids) {
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
-		free(simhash_now);
-		free(unstable_ids);
-		free(comms);
-		free(comm_to_sphere);
-		return false;
+		goto cleanup;
 	}
-	int num_unstable = 0;
 	for (int i = 0; i < num_communities; i++) {
 		if (comms[i].avg_kcore > k_max)
 			continue; // topologically insulated — member set unchanged by theorem
@@ -515,31 +521,20 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 	if (num_unstable > 0)
 		community_simhash_batch(community, vcount, unstable_ids, num_unstable, simhash_now);
 	free(unstable_ids);
+	unstable_ids = NULL;
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
 
 	// Node -> sphere map plus per-sphere group sizes, one O(V) pass.
-	int *node_to_sphere = malloc((size_t)vcount * sizeof(int));
-	int *node_to_slot = malloc((size_t)vcount * sizeof(int));
-	int *sphere_count = calloc((size_t)num_spheres, sizeof(int));
+	node_to_sphere = malloc((size_t)vcount * sizeof(int));
+	node_to_slot = malloc((size_t)vcount * sizeof(int));
+	sphere_count = calloc((size_t)num_spheres, sizeof(int));
 	if (!node_to_sphere || !node_to_slot || !sphere_count) {
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
-		free(simhash_now);
-		free(comms);
-		free(comm_to_sphere);
-		free(node_to_sphere);
-		free(node_to_slot);
-		free(sphere_count);
-		return false;
+		goto cleanup;
 	}
 	if (!dyn_ls_ensure_comm_sphere(dls, vcount)) {
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
-		free(simhash_now);
-		free(comms);
-		free(comm_to_sphere);
-		free(node_to_sphere);
-		free(node_to_slot);
-		free(sphere_count);
-		return false;
+		goto cleanup;
 	}
 	// Reset the community->sphere map; the O(V) pass below repopulates it for
 	// every community that currently has members. A brand-new community (not
@@ -548,6 +543,10 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 		dls->comm_sphere[c] = -1;
 	for (igraph_integer_t i = 0; i < vcount; i++) {
 		igraph_integer_t cid = community[i];
+		if (cid < 0 || cid >= vcount) {
+			node_to_sphere[i] = -1; // defensive: mirrors dyn_ls_aggregate_communities' guard — leave unmapped rather than reading/writing out of bounds below
+			continue;
+		}
 		node_to_sphere[i] = comm_to_sphere[cid];
 		sphere_count[node_to_sphere[i]]++;
 		dls->comm_sphere[cid] = node_to_sphere[i];
@@ -562,8 +561,7 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 	// k_max AND whose SimHash differs from cache; that community's sphere
 	// becomes the outermost sphere that must be rebuilt. If no community
 	// satisfies both conditions, the entire core is frozen.
-	bool *sphere_changed = NULL;
-	int min_sphere_to_rebuild = num_spheres;
+	min_sphere_to_rebuild = num_spheres;
 	for (int i = 0; i < num_communities; i++) {
 		if (comms[i].avg_kcore <= k_max && simhash_now[comms[i].comm_id] != dls->comm_simhash[comms[i].comm_id]) {
 			min_sphere_to_rebuild = comm_to_sphere[comms[i].comm_id];
@@ -577,13 +575,7 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 	sphere_changed = calloc((size_t)num_spheres, sizeof(bool));
 	if (!sphere_changed) {
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
-		free(simhash_now);
-		free(comms);
-		free(comm_to_sphere);
-		free(node_to_sphere);
-		free(node_to_slot);
-		free(sphere_count);
-		return false;
+		goto cleanup;
 	}
 	for (int i = 0; i < num_communities; i++) {
 		int s = comm_to_sphere[comms[i].comm_id];
@@ -604,7 +596,9 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 	}
 
 	free(comms);
+	comms = NULL;
 	free(comm_to_sphere);
+	comm_to_sphere = NULL;
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t3);
 
 	// Sphere overflow check: the persistent grids are reused as long as
@@ -676,15 +670,10 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 	}
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t5);
 
-	free(simhash_now);
-	free(sphere_changed);
-	free(node_to_sphere);
-	free(node_to_slot);
-	free(sphere_count);
 	if (!ok)
-		return false;
+		goto cleanup; // result stays false
 
-	bool step_ok = igraph_step(layout, NULL) == IGRAPH_SUCCESS;
+	result = igraph_step(layout, NULL) == IGRAPH_SUCCESS;
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t6);
 	{
 		static int log_counter = 0;
@@ -699,7 +688,17 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 			fprintf(stderr, "dyn_ls_t: agg=%.0f bkt_sim=%.0f ovpass=%.0f chg=%.0f seed=%.0f step=%.0f tot=%.0f us\n", us_agg, us_sim, us_ov, us_chg, us_seed, us_step, us_tot);
 		}
 	}
-	return step_ok;
+
+cleanup:
+	free(comms);
+	free(comm_to_sphere);
+	free(simhash_now);
+	free(unstable_ids);
+	free(node_to_sphere);
+	free(node_to_slot);
+	free(sphere_count);
+	free(sphere_changed);
+	return result;
 }
 
 // ============================================================================
@@ -733,12 +732,16 @@ bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, cons
 	// arrived vertices (those added since the previous call). An insertion can
 	// only alter coreness/community for vertices with coreness <= k_max, so a
 	// sphere whose minimum community coreness strictly exceeds k_max is
-	// insulated and needs no rebuild. Default -1 means no blast radius
-	// (edge-only batch with no new vertices — nothing is automatically
-	// unstable). When there ARE new vertices but coreness is unavailable,
-	// fall back to INT_MAX so everything recomputes defensively.
-	int k_max = -1;
+	// insulated and needs no rebuild. Defaults to INT_MAX (full recompute)
+	// both when coreness is unavailable AND when there are no new vertices —
+	// an edge-only batch between two already-known vertices is exactly the
+	// "a new edge" case the blast-radius theorem also covers, but only a new
+	// vertex's own coreness is tracked here, so an edge-only batch can't
+	// derive a tighter bound and must not be silently treated as "nothing
+	// changed" (that would leave coreness/community-driven moves stuck).
+	int k_max = INT_MAX;
 	if (vcount > old_vcount) {
+		k_max = -1;
 		for (igraph_integer_t v = old_vcount; v < vcount; v++)
 			if (coreness && coreness[v] > k_max)
 				k_max = coreness[v];
@@ -746,23 +749,17 @@ bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, cons
 		// default to full rebuild.
 		if (k_max < 0)
 			k_max = INT_MAX;
-	}
 
-	// Connected-arrival fast path (Simplified Local Buffers): each newly
-	// arrived vertex is appended into its community's sphere (connected) or
-	// the outermost sphere's tail (disconnected) with no re-sort. If any
-	// vertex's append fails (new community, full sphere, no sphere built
-	// yet), we fall through to the full recompute.
-	if (vcount > old_vcount) {
-		bool any_placed = false;
+		// Connected-arrival fast path (Simplified Local Buffers): each newly
+		// arrived vertex is appended into its community's sphere (connected)
+		// or the outermost sphere's tail (disconnected) with no re-sort. If
+		// any vertex's append fails (new community, full sphere, no sphere
+		// built yet), we fall through to the full recompute.
 		bool all_local = true;
-		bool fast_path_ran = false;
 		for (igraph_integer_t v = old_vcount; v < vcount && all_local; v++) {
 			igraph_integer_t deg;
 			if (igraph_degree_1(g, &deg, v, IGRAPH_ALL, IGRAPH_NO_LOOPS) != IGRAPH_SUCCESS)
 				deg = 0;
-			fast_path_ran = true;
-			any_placed = true;
 			if (deg > 0) {
 				if (!dyn_ls_try_local_append(dls, v, community[v], community, vcount, layout))
 					all_local = false;
@@ -771,44 +768,17 @@ bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, cons
 					all_local = false;
 			}
 		}
-		if (any_placed && all_local) {
+		if (all_local) {
 			fprintf(stderr, "dyn_ls: fast local-append %lld new vertices\n", (long long)(vcount - old_vcount));
 			dls->last_seen_vcount = vcount;
 			return igraph_step(layout, NULL) == IGRAPH_SUCCESS;
 		}
-		// When the fast path attempted any vertex and failed, skip the
-		// disconnected-only path below — some vertices may already be placed
-		// and retrying them would cause slot collisions. Fall through to the
-		// full recompute instead (which correctly positions everything).
-		if (fast_path_ran)
-			goto fallback;
+		// Some vertex's append failed (new community, full sphere, no sphere
+		// built yet) — some vertices in this batch may already be placed, so
+		// fall through to a full recompute rather than retrying the
+		// disconnected-only path, which would double-place them.
 	}
 
-	// Simple condition: if every vertex that arrived since the last call is
-	// still disconnected (degree 0), just append each one to the end of the
-	// outermost sphere's curve directly — no re-sort. A single connected
-	// arrival (or a failed append) falls through to the full recompute.
-	bool all_new_disconnected = (vcount > old_vcount);
-	for (igraph_integer_t v = old_vcount; v < vcount && all_new_disconnected; v++) {
-		igraph_integer_t deg;
-		if (igraph_degree_1(g, &deg, v, IGRAPH_ALL, IGRAPH_NO_LOOPS) != IGRAPH_SUCCESS || deg > 0)
-			all_new_disconnected = false;
-	}
-	if (all_new_disconnected) {
-		bool appended_all = true;
-		for (igraph_integer_t v = old_vcount; v < vcount && appended_all; v++)
-			appended_all = dyn_ls_append_disconnected(dls, v, layout);
-		if (appended_all) {
-			fprintf(stderr, "dyn_ls: fast append-disconnected %lld new vertices\n", (long long)(vcount - old_vcount));
-			dls->last_seen_vcount = vcount;
-			return igraph_step(layout, NULL) == IGRAPH_SUCCESS;
-		}
-		fprintf(stderr, "dyn_ls: fast append-disconnected failed — no sphere or outermost sphere full, falling back\n");
-	}
-
-	// Fast path attempted placement and some vertex failed — skip the
-	// disconnected-only retry to avoid double-placement collisions.
-fallback:
 	dls->last_seen_vcount = vcount;
 	return dyn_ls_recompute(dls, g, coreness, community, layout, k_max);
 }
