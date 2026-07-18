@@ -16,15 +16,14 @@
  *
  * fixture_add_batch mirrors graph/stream.c's graph_stream_poll: vertices
  * added first, one igraph_add_edges call per batch, then
- * dyn_kcore_on_edges / dyn_leiden_on_edges / dyn_layered_sphere_on_update in
- * that order. Every vertex is repositioned on every
- * dyn_layered_sphere_on_update call (it reruns the full bucketing+placement
- * pass from scratch), so no touched-vertex set is needed.
+ * dyn_core_tree_on_edges / dyn_leiden_on_edges / dyn_layered_sphere_on_update
+ * in that order, threading touched_levels/community_changed through to the
+ * layout exactly as stream.c does.
  *
  * No benchmarking: timing/throughput belongs in a separate harness.
  */
 
-#include "graph/dyn_k-core.h"
+#include "graph/dyn_core_tree.h"
 #include "graph/dyn_layered_sphere.h"
 #include "graph/dyn_leiden.h"
 #include "test_utilities.h"
@@ -35,7 +34,7 @@
 typedef struct
 {
 	igraph_t g;
-	DynKCore *kc;
+	DynCoreTree *ct;
 	DynLeiden *dl;
 	DynLayeredSphere *dls;
 	igraph_matrix_t layout;
@@ -48,17 +47,17 @@ static int fixture_init(Fixture *f)
 		return 0;
 	if (igraph_matrix_init(&f->layout, 0, 3) != IGRAPH_SUCCESS)
 		return 0;
-	f->kc = dyn_kcore_init(&f->g);
+	f->ct = dyn_core_tree_init(&f->g);
 	f->dl = dyn_leiden_init(&f->g);
-	f->dls = dyn_layered_sphere_init(&f->g, f->kc ? dyn_kcore_values(f->kc) : NULL, f->dl ? dyn_leiden_membership(f->dl) : NULL, &f->layout);
-	return f->kc && f->dl && f->dls;
+	f->dls = dyn_layered_sphere_init(&f->g, f->ct, f->dl ? dyn_leiden_membership(f->dl) : NULL, &f->layout);
+	return f->ct && f->dl && f->dls;
 }
 
 static void fixture_destroy(Fixture *f)
 {
 	dyn_layered_sphere_destroy(f->dls);
 	dyn_leiden_destroy(f->dl);
-	dyn_kcore_destroy(f->kc);
+	dyn_core_tree_destroy(f->ct);
 	igraph_matrix_destroy(&f->layout);
 	igraph_destroy(&f->g);
 }
@@ -80,10 +79,16 @@ static int fixture_add_batch(Fixture *f, const igraph_integer_t *edges, size_t n
 	if (has_edges)
 		IGRAPH_ASSERT(igraph_add_edges(&f->g, &batch, NULL) == IGRAPH_SUCCESS);
 
-	IGRAPH_ASSERT(dyn_kcore_on_edges(f->kc, &f->g, has_edges ? &batch : NULL, NULL));
-	IGRAPH_ASSERT(dyn_leiden_on_edges(f->dl, &f->g, has_edges ? &batch : NULL, NULL));
-	IGRAPH_ASSERT(dyn_layered_sphere_on_update(f->dls, &f->g, dyn_kcore_values(f->kc), dyn_leiden_membership(f->dl), &f->layout));
+	igraph_vector_int_t touched_levels, community_changed;
+	IGRAPH_ASSERT(igraph_vector_int_init(&touched_levels, 0) == IGRAPH_SUCCESS);
+	IGRAPH_ASSERT(igraph_vector_int_init(&community_changed, 0) == IGRAPH_SUCCESS);
 
+	IGRAPH_ASSERT(dyn_core_tree_on_edges(f->ct, &f->g, has_edges ? &batch : NULL, &touched_levels));
+	IGRAPH_ASSERT(dyn_leiden_on_edges(f->dl, &f->g, has_edges ? &batch : NULL, &community_changed));
+	IGRAPH_ASSERT(dyn_layered_sphere_on_update(f->dls, &f->g, f->ct, &touched_levels, dyn_leiden_membership(f->dl), &community_changed, &f->layout));
+
+	igraph_vector_int_destroy(&community_changed);
+	igraph_vector_int_destroy(&touched_levels);
 	igraph_vector_int_destroy(&batch);
 	return 1;
 }
@@ -151,38 +156,43 @@ static int test_triangle(void)
 	// Not asserting an exact sphere/community count here: at this density
 	// DynLeiden's density-scaled CPM resolution (see dyn_leiden.c) can just
 	// as validly keep all three vertices singleton as merge them, and either
-	// outcome must still produce a valid placement.
+	// outcome must still produce a valid placement. Sphere COUNT, unlike
+	// before, no longer depends on Leiden at all (only on distinct coreness
+	// levels), but this test only has one level (2) either way.
 
 	fixture_destroy(&f);
 	return 0;
 }
 
-// Isolated vertices (no edges) always stay singleton communities of size 1 —
-// deterministic, unlike edge-connected communities whose Leiden partition
-// depends on the density-scaled CPM resolution (see dyn_leiden.c). Streaming
-// in enough of them guarantees the nucleus sphere's capacity (fixed to
-// whichever singleton lands first) is exceeded, forcing the greedy bucketing
-// (layered_sphere.c:76-103, mirrored in dyn_ls_recompute) to open further
-// spheres — this exercises that path and confirms placement invariants
-// survive it across multiple spheres.
-static int test_sphere_bucketing_opens_second_sphere(void)
+// Two distinct coreness levels — a closed triangle (coreness 2) plus several
+// isolated vertices (coreness 0) — must land in exactly two spheres. Sphere
+// assignment is now a strict 1:1 map from populated coreness level to sphere
+// (see dyn_layered_sphere.h), so this is guaranteed by construction rather
+// than by exceeding some capacity threshold the way the old capacity-packed
+// bucketing needed (and unlike test_triangle, this is deterministic
+// regardless of how DynLeiden partitions communities, since sphere count no
+// longer depends on community structure at all).
+static int test_distinct_levels_open_multiple_spheres(void)
 {
 	Fixture f;
 	IGRAPH_ASSERT(fixture_init(&f));
 
-	IGRAPH_ASSERT(fixture_add_batch(&f, NULL, 0, 20));
+	static const igraph_integer_t triangle[] = {0, 1, 1, 2, 2, 0};
+	IGRAPH_ASSERT(fixture_add_batch(&f, triangle, sizeof(triangle) / sizeof(triangle[0]), 3));
+	IGRAPH_ASSERT(fixture_add_batch(&f, NULL, 0, 10)); // 7 more isolated (coreness-0) vertices
+
 	IGRAPH_ASSERT(check_placement_invariants(&f.layout));
-	IGRAPH_ASSERT(count_distinct_radii(&f.layout) > 1);
+	IGRAPH_ASSERT(count_distinct_radii(&f.layout) == 2); // level 2 (triangle) + level 0 (isolated)
 
 	fixture_destroy(&f);
 	return 0;
 }
 
-// Two cliques of very different size (and therefore very different avg
-// coreness) sort to opposite ends of the community ranking; bridging them
-// with one edge afterward (which may or may not make DynLeiden merge their
-// communities) must not break placement invariants either way, regardless
-// of how the bucketing resolves it.
+// Two cliques of very different size (and therefore very different coreness)
+// land on different spheres; bridging them with one edge afterward (which
+// may or may not make DynLeiden merge their communities, and may or may not
+// change either clique's coreness) must not break placement invariants
+// either way.
 static int test_two_disparate_communities(void)
 {
 	Fixture f;
@@ -231,30 +241,34 @@ static int test_bootstrap_then_stream(void)
 	igraph_t g;
 	IGRAPH_ASSERT(igraph_small(&g, 0, IGRAPH_UNDIRECTED, 0, 1, 1, 2, 2, 0, 2, 3, 3, 4, -1) == IGRAPH_SUCCESS);
 
-	DynKCore *kc = dyn_kcore_init(&g);
+	DynCoreTree *ct = dyn_core_tree_init(&g);
 	DynLeiden *dl = dyn_leiden_init(&g);
 	igraph_matrix_t layout;
 	IGRAPH_ASSERT(igraph_matrix_init(&layout, igraph_vcount(&g), 3) == IGRAPH_SUCCESS);
-	DynLayeredSphere *dls = dyn_layered_sphere_init(&g, dyn_kcore_values(kc), dyn_leiden_membership(dl), &layout);
-	IGRAPH_ASSERT(kc && dl && dls);
+	DynLayeredSphere *dls = dyn_layered_sphere_init(&g, ct, dl ? dyn_leiden_membership(dl) : NULL, &layout);
+	IGRAPH_ASSERT(ct && dl && dls);
 	IGRAPH_ASSERT(check_placement_invariants(&layout));
 
 	static const igraph_integer_t more[] = {3, 0, 4, 0};
-	igraph_vector_int_t batch;
+	igraph_vector_int_t batch, touched_levels, community_changed;
 	IGRAPH_ASSERT(igraph_vector_int_init(&batch, 0) == IGRAPH_SUCCESS);
+	IGRAPH_ASSERT(igraph_vector_int_init(&touched_levels, 0) == IGRAPH_SUCCESS);
+	IGRAPH_ASSERT(igraph_vector_int_init(&community_changed, 0) == IGRAPH_SUCCESS);
 	for (size_t i = 0; i < sizeof(more) / sizeof(more[0]); i++)
 		IGRAPH_ASSERT(igraph_vector_int_push_back(&batch, more[i]) == IGRAPH_SUCCESS);
 	IGRAPH_ASSERT(igraph_add_edges(&g, &batch, NULL) == IGRAPH_SUCCESS);
 
-	IGRAPH_ASSERT(dyn_kcore_on_edges(kc, &g, &batch, NULL));
-	IGRAPH_ASSERT(dyn_leiden_on_edges(dl, &g, &batch, NULL));
-	IGRAPH_ASSERT(dyn_layered_sphere_on_update(dls, &g, dyn_kcore_values(kc), dyn_leiden_membership(dl), &layout));
+	IGRAPH_ASSERT(dyn_core_tree_on_edges(ct, &g, &batch, &touched_levels));
+	IGRAPH_ASSERT(dyn_leiden_on_edges(dl, &g, &batch, &community_changed));
+	IGRAPH_ASSERT(dyn_layered_sphere_on_update(dls, &g, ct, &touched_levels, dyn_leiden_membership(dl), &community_changed, &layout));
 	IGRAPH_ASSERT(check_placement_invariants(&layout));
 
+	igraph_vector_int_destroy(&community_changed);
+	igraph_vector_int_destroy(&touched_levels);
 	igraph_vector_int_destroy(&batch);
 	dyn_layered_sphere_destroy(dls);
 	dyn_leiden_destroy(dl);
-	dyn_kcore_destroy(kc);
+	dyn_core_tree_destroy(ct);
 	igraph_matrix_destroy(&layout);
 	igraph_destroy(&g);
 	return 0;
@@ -263,7 +277,7 @@ static int test_bootstrap_then_stream(void)
 int main(void)
 {
 	RUN_TEST(test_triangle);
-	RUN_TEST(test_sphere_bucketing_opens_second_sphere);
+	RUN_TEST(test_distinct_levels_open_multiple_spheres);
 	RUN_TEST(test_two_disparate_communities);
 	RUN_TEST(test_isolated_new_vertices);
 	RUN_TEST(test_bootstrap_then_stream);

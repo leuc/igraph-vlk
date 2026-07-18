@@ -6,41 +6,45 @@
 #ifndef GRAPH_DYN_LAYERED_SPHERE_H
 #define GRAPH_DYN_LAYERED_SPHERE_H
 
+#include "graph/dyn_core_tree.h"
+
 #include <igraph/igraph.h>
 #include <stdbool.h>
 
 /* ============================================================================
  * Dynamic (streaming) Layered Sphere layout maintenance, insertion-only.
  *
- * Mirrors the static/batch Layered Sphere layout's PHASE_INIT bucketing
- * (src/graph/layered_sphere.c) exactly: communities are sorted by average
- * coreness, greedily bucketed onto concentric spheres (sphere 0 = the
- * nucleus, sized to the largest/densest community; further spheres opened
- * once the current one's capacity is exceeded), and each sphere gets its own
- * Hilbert-curve slot grid (src/graph/layered_sphere_common.c) with members
- * seeded evenly-spaced in (community, timestamp) order — coreness only
- * decides which sphere a community lands on, not a member's position within
- * it. The timestamp is read as a real "timestamp" igraph vertex attribute
- * (set in graph/stream.c's ensure_vertex from wall-clock arrival time,
- * falling back to vertex id if the attribute isn't present at all), so that
- * same-community members stay in a stable relative order across recomputes
- * instead of reshuffling arbitrarily. This module never computes coreness
- * or community membership itself — it only consumes the
- * live arrays maintained by DynKCore/DynLeiden (graph/dyn_k-core.h,
- * graph/dyn_leiden.h), exactly the way graph/stream.c already drives those
- * two, so bucketing/placement stays O(1)-per-vertex-lookup cheap.
+ * Sphere assignment is read directly from a DynCoreTree (graph/dyn_core_tree.h)
+ * instead of being approximated per recompute: every currently-populated
+ * coreness LEVEL in the tree gets exactly one sphere (strict 1:1, no capacity-
+ * based packing of adjacent levels), ranked DESCENDING — the highest populated
+ * level is sphere 0 (the nucleus), level 0 (the tree root: coreness-0/isolated
+ * vertices) is always the outermost sphere. Multiple disjoint same-level tree
+ * nodes (unconnected components with the same coreness) still share one
+ * sphere, preserving "shell = degree of centrality" rather than switching to
+ * a connectivity-based grouping. DynLeiden community membership is the
+ * intra-shell grouping/ordering key (unchanged in spirit from before), not
+ * the shell-assignment key.
  *
- * Unlike the batch algorithm, there is no iterative relaxation phase
- * (PHASE_INTRA_SPHERE/PHASE_INTER_SPHERE) — placement is pure sort-and-
- * bucket. Because deriving coreness/community is cheap, the entire
- * bucketing+placement pass reruns from scratch on every
- * dyn_layered_sphere_on_update/_init call rather than being maintained
- * incrementally: an intentional full O(V + C log C) recompute per call, not
- * O(touched) like DynKCore/DynLeiden. Vertices can move to a different
- * sphere/slot on every call as a result.
+ * Change detection is exact, not approximated: dyn_core_tree_on_edges'
+ * touched_levels output says precisely which spheres' populations moved
+ * (radial change), and DynLeiden's own community_changed output says which
+ * vertices' community label moved without necessarily changing coreness
+ * (angular-only change) — both are unioned into a per-sphere dirty flag, and
+ * only dirty spheres are cleared and re-seeded. A separate persistent
+ * per-sphere level record detects the rarer case where the level-to-sphere-
+ * index RANKING itself shifts (a previously-unpopulated level becomes
+ * populated, or vice versa, changing every affected level's rank even when no
+ * single level's own membership actually moved) and forces a full rebuild
+ * when it does, since a sphere index can then represent a completely
+ * different level's population than it did last time.
+ *
+ * Community membership itself is still read live from DynLeiden
+ * (graph/dyn_leiden.h) via O(1) per-vertex lookups; only coreness/hierarchy
+ * information comes from the tree now.
  *
  * Edge/vertex deletion is out of scope (the stream is insertion-only,
- * matching dyn_k-core.h and dyn_leiden.h).
+ * matching dyn_core_tree.h and dyn_leiden.h).
  *
  * Threading: main thread only (reads the live igraph_t; never mutates it).
  * ============================================================================ */
@@ -50,26 +54,33 @@ typedef struct DynLayeredSphere DynLayeredSphere;
 /**
  * Create a maintainer and run the first bucketing+placement pass (the graph
  * may be empty).
- * @param coreness  Live per-vertex coreness (e.g. dyn_kcore_values()).
+ * @param ct        Live k-core hierarchy (e.g. from dyn_core_tree_init()).
  * @param community Live per-vertex community membership, ids are
  *                  representative vertex ids (e.g. dyn_leiden_membership()).
  * @param layout    Caller-owned matrix to write positions into; must already
  *                  be sized igraph_vcount(g) x 3 (or more).
  * @return New handle, or NULL on allocation/igraph failure.
  */
-DynLayeredSphere *dyn_layered_sphere_init(const igraph_t *g, const int *coreness, const igraph_integer_t *community, igraph_matrix_t *layout);
+DynLayeredSphere *dyn_layered_sphere_init(const igraph_t *g, const DynCoreTree *ct, const igraph_integer_t *community, igraph_matrix_t *layout);
 
 /**
- * Rerun the full bucketing+placement pass against the current graph/
- * coreness/community state. Call after dyn_kcore_on_edges/
- * dyn_leiden_on_edges have been advanced for the same batch — every vertex
- * is repositioned every call, so no "changed vertices" list is needed.
- * @param layout Caller-owned matrix to write positions into; grown by the
- *               caller to igraph_vcount(g) x 3 beforehand.
+ * Advance the layout after a batch of edge insertions. Call after
+ * dyn_core_tree_on_edges/dyn_leiden_on_edges have been advanced for the same
+ * batch, passing their touched_levels/community_changed output straight
+ * through — that is what lets this call skip spheres that provably didn't
+ * change instead of re-deriving everything from scratch.
+ * @param touched_levels  touched_levels output from this batch's
+ *                        dyn_core_tree_on_edges call (may be NULL/empty if
+ *                        nothing coreness-related changed).
+ * @param community_changed changed-vertex output from this batch's
+ *                        dyn_leiden_on_edges call (may be NULL/empty if no
+ *                        community reassignment happened).
+ * @param layout          Caller-owned matrix to write positions into; grown
+ *                        by the caller to igraph_vcount(g) x 3 beforehand.
  * @return false on unrecoverable failure (the maintainer is then stale;
  *         re-create it via dyn_layered_sphere_init), true otherwise.
  */
-bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, const int *coreness, const igraph_integer_t *community, igraph_matrix_t *layout);
+bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, const DynCoreTree *ct, const igraph_vector_int_t *touched_levels, const igraph_integer_t *community, const igraph_vector_int_t *community_changed, igraph_matrix_t *layout);
 
 /**
  * Free the maintainer (never touches the graph or the layout matrix).

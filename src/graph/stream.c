@@ -14,6 +14,7 @@
 
 #include "app_state.h"
 #include "graph/community_simhash.h"
+#include "graph/dyn_core_tree.h"
 #include "graph/dyn_k-core.h"
 #include "graph/dyn_layered_sphere.h"
 #include "graph/dyn_leiden.h"
@@ -152,6 +153,7 @@ struct GraphStream
 	NameMap names;
 	DynKCore *kcore;				  // live coreness maintenance; NULL if init failed (non-fatal)
 	int last_max_core;				  // max coreness at the last node-size mapping
+	DynCoreTree *core_tree;			  // live k-core hierarchy maintenance (consumed by layered_sphere for sphere assignment); NULL if init failed (non-fatal). Independent of kcore above — see graph/dyn_core_tree.h's own DynKCore instance; the redundant coreness computation is an accepted tradeoff (dyn_core_tree.h's file header explains why it can't share kcore's).
 	DynLeiden *leiden;				  // live community maintenance; NULL if init failed (non-fatal)
 	DynLayeredSphere *layered_sphere; // live Layered Sphere layout maintenance; NULL if init failed (non-fatal)
 	bool layered_sphere_enabled;	  // user-toggled, on by default (see "Data/Stream > [x] Live Layered Sphere")
@@ -362,7 +364,11 @@ GraphStream *graph_stream_init(GraphData *data)
 	if (!gs->leiden)
 		fprintf(stderr, "graph_stream_init: dynamic Leiden community maintenance unavailable\n");
 
-	gs->layered_sphere = dyn_layered_sphere_init(&data->g, gs->kcore ? dyn_kcore_values(gs->kcore) : NULL, gs->leiden ? dyn_leiden_membership(gs->leiden) : NULL, &data->current_layout);
+	gs->core_tree = dyn_core_tree_init(&data->g);
+	if (!gs->core_tree)
+		fprintf(stderr, "graph_stream_init: dynamic k-core hierarchy maintenance unavailable\n");
+
+	gs->layered_sphere = dyn_layered_sphere_init(&data->g, gs->core_tree, gs->leiden ? dyn_leiden_membership(gs->leiden) : NULL, &data->current_layout);
 	if (!gs->layered_sphere)
 		fprintf(stderr, "graph_stream_init: dynamic Layered Sphere layout maintenance unavailable\n");
 	gs->layered_sphere_enabled = true;
@@ -371,6 +377,7 @@ GraphStream *graph_stream_init(GraphData *data)
 	if (!gs->reader) {
 		fprintf(stderr, "graph_stream_init: failed to start stdin reader thread\n");
 		dyn_kcore_destroy(gs->kcore);
+		dyn_core_tree_destroy(gs->core_tree);
 		dyn_leiden_destroy(gs->leiden);
 		dyn_layered_sphere_destroy(gs->layered_sphere);
 		name_map_destroy(&gs->names);
@@ -443,11 +450,12 @@ static void stream_apply_community_colors(GraphStream *gs, GraphData *data, cons
 }
 
 // ============================================================================
-// Mirror maintained Layered Sphere positions into node positions. Every
-// vertex is repositioned on every dyn_layered_sphere_on_update call (it
-// reruns the full bucketing+placement pass from scratch — see
-// graph/dyn_layered_sphere.h), so this mirrors all of data->nodes[], not a
-// touched-vertex subset.
+// Mirror maintained Layered Sphere positions into node positions. Copies all
+// of data->nodes[] rather than tracking a touched-vertex subset: cheap
+// relative to the layout work itself, and simpler than threading a moved-
+// vertex list out of dyn_layered_sphere_on_update (which — see
+// graph/dyn_layered_sphere.h — now only repositions the spheres
+// touched_levels/community_changed actually flag, not every vertex).
 // ============================================================================
 
 static void stream_mirror_layered_sphere_positions(GraphData *data)
@@ -631,33 +639,46 @@ bool graph_stream_poll(GraphStream *gs, GraphData *data)
 	}
 
 	// Maintain live community membership the same way, then mirror changed
-	// vertices into node colors.
+	// vertices into node colors. community_changed survives past this block
+	// (unlike core_changed above) — the layered-sphere block below also
+	// consumes it, to re-seed a sphere whose community grouping shifted even
+	// when nobody's coreness did.
+	igraph_vector_int_t community_changed;
+	bool have_community_changed = igraph_vector_int_init(&community_changed, 0) == IGRAPH_SUCCESS;
 	if (gs->leiden) {
-		igraph_vector_int_t community_changed;
-		bool have_changed = igraph_vector_int_init(&community_changed, 0) == IGRAPH_SUCCESS;
-		if (!dyn_leiden_on_edges(gs->leiden, &data->g, edges_in_graph ? &new_edges : NULL, have_changed ? &community_changed : NULL)) {
+		if (!dyn_leiden_on_edges(gs->leiden, &data->g, edges_in_graph ? &new_edges : NULL, have_community_changed ? &community_changed : NULL)) {
 			fprintf(stderr, "graph_stream_poll: dynamic Leiden maintenance failed — disabling\n");
 			dyn_leiden_destroy(gs->leiden);
 			gs->leiden = NULL;
-		} else if (have_changed) {
+		} else if (have_community_changed) {
 			gs->total_leiden_updates += (uint64_t)igraph_vector_int_size(&community_changed);
 			stream_apply_community_colors(gs, data, &community_changed);
 		}
-		if (have_changed)
-			igraph_vector_int_destroy(&community_changed);
+	}
+
+	// Maintain the live k-core hierarchy the same way; touched_levels feeds
+	// the layered-sphere block below (which sphere(s) need re-seeding),
+	// analogous to community_changed above but for coreness/radial change.
+	igraph_vector_int_t touched_levels;
+	bool have_touched_levels = igraph_vector_int_init(&touched_levels, 0) == IGRAPH_SUCCESS;
+	if (gs->core_tree) {
+		if (!dyn_core_tree_on_edges(gs->core_tree, &data->g, edges_in_graph ? &new_edges : NULL, have_touched_levels ? &touched_levels : NULL)) {
+			fprintf(stderr, "graph_stream_poll: dynamic k-core hierarchy maintenance failed — disabling\n");
+			dyn_core_tree_destroy(gs->core_tree);
+			gs->core_tree = NULL;
+		}
 	}
 
 	// Maintain the live Layered Sphere layout, on by default (see
-	// "Data/Stream > [x] Live Layered Sphere", user-toggleable): reuses
-	// whatever coreness/community values are currently maintained above
-	// (falling back to a no-op this poll if those maintainers are themselves
-	// unavailable). Reruns the full bucketing+placement pass every poll (see
-	// graph/dyn_layered_sphere.h), so no touched-vertex set is needed here.
+	// "Data/Stream > [x] Live Layered Sphere", user-toggleable): sphere
+	// assignment is read directly from the k-core hierarchy tree, and only
+	// the spheres touched_levels/community_changed actually flag are cleared
+	// and re-seeded (see graph/dyn_layered_sphere.h) — falls back to a no-op
+	// this poll if the tree or Leiden are themselves unavailable.
 	if (gs->layered_sphere && gs->layered_sphere_enabled) {
-		const int *core_values = gs->kcore ? dyn_kcore_values(gs->kcore) : NULL;
 		const igraph_integer_t *comm_values = gs->leiden ? dyn_leiden_membership(gs->leiden) : NULL;
-		if (core_values && comm_values) {
-			if (!dyn_layered_sphere_on_update(gs->layered_sphere, &data->g, core_values, comm_values, &data->current_layout)) {
+		if (gs->core_tree && comm_values) {
+			if (!dyn_layered_sphere_on_update(gs->layered_sphere, &data->g, gs->core_tree, have_touched_levels ? &touched_levels : NULL, comm_values, have_community_changed ? &community_changed : NULL, &data->current_layout)) {
 				fprintf(stderr, "graph_stream_poll: dynamic Layered Sphere maintenance failed — disabling\n");
 				dyn_layered_sphere_destroy(gs->layered_sphere);
 				gs->layered_sphere = NULL;
@@ -667,6 +688,10 @@ bool graph_stream_poll(GraphStream *gs, GraphData *data)
 			}
 		}
 	}
+	if (have_touched_levels)
+		igraph_vector_int_destroy(&touched_levels);
+	if (have_community_changed)
+		igraph_vector_int_destroy(&community_changed);
 
 	stream_debug_report(gs, data);
 
@@ -691,6 +716,7 @@ void graph_stream_destroy(GraphStream *stream)
 		fprintf(stderr, "graph_stream_destroy: stdin reader still active — leaving it for the OS to reclaim\n");
 
 	dyn_kcore_destroy(stream->kcore);
+	dyn_core_tree_destroy(stream->core_tree);
 	dyn_leiden_destroy(stream->leiden);
 	dyn_layered_sphere_destroy(stream->layered_sphere);
 	name_map_destroy(&stream->names);

@@ -168,10 +168,11 @@ static void merge_nodes(DynCoreTree *ct, int a, int b, igraph_vector_int_t *touc
 	// hang directly off the node the ancestor-merge converged on) — it must
 	// be unlinked from wherever it sits before its next_sibling field is
 	// repurposed as the freelist link, or the parent's child chain corrupts.
+	int b_level = ct->nodes[b].level; // capture before free_node repurposes b's other fields
 	detach_from_parent(ct, b);
 	free_node(ct, b);
 	if (touched)
-		igraph_vector_int_push_back(touched, b);
+		igraph_vector_int_push_back(touched, b_level);
 }
 
 // Walks from `node` up through parent pointers until reaching `ancestor`,
@@ -315,7 +316,7 @@ static bool apply_group(DynCoreTree *ct, const igraph_t *g, int n_prime, const i
 			igraph_vector_int_push_back(&bucket_level, level);
 			igraph_vector_int_push_back(&bucket_node, new_node);
 			if (touched)
-				igraph_vector_int_push_back(touched, new_node);
+				igraph_vector_int_push_back(touched, level);
 			for (igraph_integer_t i = 0; i < n; i++)
 				if (!done[i] && (int)VECTOR(*gstar_level)[i] == level) {
 					done[i] = true;
@@ -444,7 +445,7 @@ static bool apply_group(DynCoreTree *ct, const igraph_t *g, int n_prime, const i
 			} else if (nc_level > highest_level) {
 				reparent_node(ct, nc, highest_node);
 				if (touched)
-					igraph_vector_int_push_back(touched, nc);
+					igraph_vector_int_push_back(touched, nc_level);
 			}
 			// else: nc sits below every bucket this call created (it isn't
 			// part of this group's lift at all) — leave it exactly where it
@@ -460,6 +461,7 @@ static bool apply_group(DynCoreTree *ct, const igraph_t *g, int n_prime, const i
 	// children (whatever the NC step above didn't already move) reparent to
 	// its own parent. The root is exempt — it always exists.
 	if (n_prime != DYN_CORE_TREE_ROOT && ct->nodes[n_prime].member_count == 0) {
+		int n_prime_level = ct->nodes[n_prime].level; // capture before free_node
 		int grandparent = ct->nodes[n_prime].parent;
 		int c = ct->nodes[n_prime].first_child;
 		while (c != -1) {
@@ -470,7 +472,7 @@ static bool apply_group(DynCoreTree *ct, const igraph_t *g, int n_prime, const i
 		detach_from_parent(ct, n_prime);
 		free_node(ct, n_prime);
 		if (touched)
-			igraph_vector_int_push_back(touched, n_prime);
+			igraph_vector_int_push_back(touched, n_prime_level);
 	}
 
 	return true;
@@ -712,7 +714,7 @@ DynCoreTree *dyn_core_tree_init(const igraph_t *g)
 	return ct;
 }
 
-bool dyn_core_tree_on_edges(DynCoreTree *ct, const igraph_t *g, const igraph_vector_int_t *new_edges, igraph_vector_int_t *touched_nodes)
+bool dyn_core_tree_on_edges(DynCoreTree *ct, const igraph_t *g, const igraph_vector_int_t *new_edges, igraph_vector_int_t *touched_levels)
 {
 	if (!ct)
 		return false;
@@ -730,7 +732,7 @@ bool dyn_core_tree_on_edges(DynCoreTree *ct, const igraph_t *g, const igraph_vec
 			fprintf(stderr, "dyn_core_tree: edge (%lld,%lld) out of range, skipping\n", (long long)u, (long long)v);
 			continue;
 		}
-		if (!insert_edge(ct, g, u, v, touched_nodes))
+		if (!insert_edge(ct, g, u, v, touched_levels))
 			return false;
 	}
 	return true;

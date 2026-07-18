@@ -83,16 +83,20 @@ DynCoreTree *dyn_core_tree_init(const igraph_t *g);
  * @param new_edges  Flat vector (from0,to0,from1,to1,...) of the edges just
  *                    inserted, in insertion order; NULL means "no new edges,
  *                    just sync the vertex count".
- * @param touched_nodes If not NULL, ids of every tree node created, merged
- *                    into, reparented, or removed while processing this batch
- *                    are appended (duplicates possible, and a removed node's
- *                    id may be reused by a later dyn_core_tree_init/on_edges
- *                    call — treat entries as "this shell changed" signals for
- *                    the batch just processed, not as stable identities).
+ * @param touched_levels If not NULL, the LEVEL of every tree node created,
+ *                    merged into, reparented, or removed while processing
+ *                    this batch is appended (duplicates possible, not
+ *                    deduplicated). A level is captured at the moment of the
+ *                    event, so — unlike a node id — it stays correct even for
+ *                    a node later removed, or whose slot is reallocated to an
+ *                    unrelated node later in this same batch (the node pool
+ *                    reuses freed ids immediately; a caller reading a stale
+ *                    id after the call could otherwise silently observe the
+ *                    wrong, reincarnated node's level).
  * @return false on unrecoverable failure (the maintainer is then stale;
  *         re-create it via dyn_core_tree_init), true otherwise.
  */
-bool dyn_core_tree_on_edges(DynCoreTree *ct, const igraph_t *g, const igraph_vector_int_t *new_edges, igraph_vector_int_t *touched_nodes);
+bool dyn_core_tree_on_edges(DynCoreTree *ct, const igraph_t *g, const igraph_vector_int_t *new_edges, igraph_vector_int_t *touched_levels);
 
 /**
  * The tree node currently containing vertex v (DYN_CORE_TREE_ROOT for an

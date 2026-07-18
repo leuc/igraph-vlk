@@ -5,61 +5,66 @@
  * Dynamic (streaming) Layered Sphere layout maintenance, insertion-only.
  *
  * Mirrors src/graph/layered_sphere.c's PHASE_INIT and shares its actual code
- * where the inputs allow: bucket_communities_into_spheres (the nucleus /
- * base_capacity*s^2 formula), compare_communities_kcore, sphere_radius_for,
- * build_sphere_grid, compare_nodes_placement, and seed_slots_for_sphere are
- * all called from layered_sphere_common.c unmodified. Two things differ from
- * the batch algorithm:
+ * where the inputs allow: sphere_radius_for, build_sphere_grid,
+ * compare_nodes_placement, and seed_slots_for_sphere are all called from
+ * layered_sphere_common.c unmodified (bucket_communities_into_spheres is
+ * NOT shared here — see below). Differences from the batch algorithm:
  *
- * 1. Coreness and Leiden community membership are never recomputed here —
- *    they're read live from DynKCore/DynLeiden (O(1) per-vertex lookups),
- *    replacing PHASE_INIT's igraph_coreness/igraph_community_leiden_simple
- *    calls. Community ids are therefore representative VERTEX ids (sparse,
- *    up to vcount), not the compact 0..C-1 cluster indices the batch path
- *    sees — dyn_ls_aggregate_communities and the vcount-sized comm_to_sphere
- *    array account for that.
- * 2. There is no annealed relaxation phase (PHASE_INTRA_SPHERE/
+ * 1. Sphere assignment is read directly from a DynCoreTree (dyn_core_tree.h)
+ *    instead of being approximated: every currently-populated coreness LEVEL
+ *    gets exactly one sphere (strict 1:1, no capacity-based packing of
+ *    adjacent levels, unlike the batch path's bucket_communities_into_spheres
+ *    or this file's own older avg-coreness/community aggregation), ranked
+ *    DESCENDING — the highest populated level is sphere 0 (the nucleus),
+ *    level 0 (the tree root: coreness-0/isolated vertices) is always the
+ *    outermost sphere. Multiple disjoint same-level tree nodes (unconnected
+ *    components at the same coreness) still share one sphere, preserving
+ *    "shell = degree of centrality" rather than switching to a
+ *    connectivity-based grouping. Community membership is still read live
+ *    from DynLeiden (O(1) per-vertex lookups) and is the intra-shell
+ *    grouping/ordering key, not the shell-assignment key.
+ * 2. Change detection is exact, not approximated: dyn_core_tree_on_edges'
+ *    touched_levels output says precisely which spheres' populations moved
+ *    (radial change), and DynLeiden's community_changed output says which
+ *    vertices' community label moved without necessarily changing coreness
+ *    (angular-only change) — both are unioned into a per-sphere dirty flag.
+ *    Because the tree is exact (not approximated the way the old SimHash-
+ *    based cache was), an UNTOUCHED sphere is provably unchanged as long as
+ *    no RENUMBERING occurred (see point 3) — so, unlike the old design,
+ *    there is no need to defensively clear/reseed every sphere "outward" of
+ *    the innermost change; only the individually dirty spheres are touched.
+ * 3. A previously-unpopulated level becoming populated (or vice versa) can
+ *    shift every OTHER already-populated level's sphere rank even though
+ *    that level's own membership never moved — e.g. populated levels
+ *    {2,3,7} -> {2,7,8} leaves the sphere COUNT unchanged (3) but shifts
+ *    level 7 from rank 2 to rank 1. dyn_ls_recompute detects this by
+ *    comparing the freshly computed level->sphere mapping against the
+ *    persisted one from last time (dls->level_to_sphere[]) and forces a full
+ *    rebuild on any mismatch, since a sphere index can then represent a
+ *    completely different level's population than it did last time.
+ * 4. There is no annealed relaxation phase (PHASE_INTRA_SPHERE/
  *    PHASE_INTER_SPHERE): within a sphere, members are grouped by community
  *    and ordered purely by arrival timestamp, then each connected node gets
  *    a single one-shot refinement move toward its neighbors
- *    (dyn_ls_refine_connected). The batch's intra_degree/transitivity
- *    ordering keys need O(E)-ish full graph scans per call, which would
- *    defeat the point of using already-incremental coreness/community
- *    values; the timestamp rides in NodePlacement.density (with
- *    intra_degree pinned to 0) so the shared compare_nodes_placement
+ *    (dyn_ls_refine_connected). The timestamp rides in NodePlacement.density
+ *    (with intra_degree pinned to 0) so the shared compare_nodes_placement
  *    comparator and seed_slots_for_sphere seeder apply unchanged — with all
  *    intra_degree equal, that comparator reduces exactly to (community asc,
  *    timestamp asc). The timestamp itself is the "timestamp" igraph vertex
  *    attribute (set in graph/stream.c's ensure_vertex from wall-clock
- *    arrival time; a genuine data-source timestamp can occupy the same
- *    attribute later with no change here), falling back to the vertex id —
- *    which also tracks insertion order — when the attribute is absent.
+ *    arrival time), falling back to the vertex id when the attribute is
+ *    absent.
  *
- * Because deriving coreness/community is cheap, the bucketing+seeding pass
- * reruns on every connected arrival — an intentional full O(V + C log C)
- * recompute, not the O(touched) incremental style of DynKCore/DynLeiden.
- * The sphere GEOMETRY, however, persists: each grid is sized with a large
- * occupancy headroom (DYN_LS_SLOT_HEADROOM_BASE, applied to both the radius
- * and the slot count) when built, and a recompute only re-seeds occupants
- * into the existing slots. Grids are torn down and rebuilt ONLY on sphere
- * overflow — when a sphere's member count exceeds its slot capacity, or
- * more spheres are needed than exist (see the fits check in
- * dyn_ls_recompute). Two more shortcuts: a batch of arrivals that are ALL
- * still disconnected (degree 0) is appended straight onto the end of the
- * outermost sphere's curve with no recompute at all
+ * The sphere GEOMETRY persists across recomputes exactly as before: each
+ * grid is sized with a large occupancy headroom (DYN_LS_SLOT_HEADROOM_BASE,
+ * applied to both the radius and the slot count) when built, and a recompute
+ * only re-seeds occupants into the existing slots. Grids are torn down and
+ * rebuilt ONLY on sphere overflow or level-rank renumbering (see the `fits`
+ * check in dyn_ls_recompute). Two more shortcuts: a batch of arrivals that
+ * are ALL still disconnected (degree 0) is appended straight onto the end of
+ * the outermost sphere's curve with no recompute at all
  * (dyn_layered_sphere_on_update), and last_seen_vcount tracks which
  * vertices are new arrivals.
- *
- * Topological blast radius (stable core): an insertion (a new edge, or a new
- * vertex) only alters the coreness/community of vertices whose coreness is
- * <= k_max, the highest coreness among the newly arrived vertices. comms is
- * sorted by avg coreness descending and bucketed into contiguous,
- * non-decreasing sphere indices, so finding the first community at or below
- * k_max yields the innermost sphere that must be rebuilt (min_sphere_to_rebuild);
- * every sphere inside that radius is topologically insulated and keeps its
- * slot mappings entirely — only the outer spheres are cleared and re-seeded.
- * A grid overflow rebuild (fits == false) wipes all slot data, so it forces
- * min_sphere_to_rebuild back to 0 (full re-seed) regardless of k_max.
  *
  * Simplified Local Buffers (connected-arrival fast path): the shared seeder
  * interleaves each sphere's headroom as gaps across its slots, so a newly
@@ -67,18 +72,23 @@
  * into its community's sphere (dyn_ls_try_local_append) without any re-sort
  * or recompute — it just fills one of those gaps. The attempt only fails (and
  * falls through to the full recompute) when the vertex starts a brand-new
- * community, or its community's sphere has no free slot left. A persistent
- * comm_sphere[] map (community id -> sphere, rebuilt every recompute) makes
- * the community->sphere lookup O(1) on the fast path. Disconnected-only
- * batches take the cheaper dyn_ls_append_disconnected path instead.
+ * level, or its sphere has no free slot left. dls->level_to_sphere[] (kept up
+ * to date by every recompute) makes the level->sphere lookup O(1) on the fast
+ * path — it is always authoritative (the tree cannot go stale), so unlike the
+ * old community-keyed cache there is no fallback scan needed at all.
+ * Disconnected-only batches take the cheaper dyn_ls_append_disconnected path
+ * instead. As with the old design, the fast path does not itself consult
+ * touched_levels/community_changed — if every new vertex places locally, the
+ * whole call returns early without a full recompute, the same accepted
+ * heuristic tradeoff (favoring speed for the common case over reacting to
+ * rarer coreness-ripple side effects on already-existing vertices) this file
+ * already made before this integration.
  */
 
 #include "graph/dyn_layered_sphere.h"
-#include "graph/community_simhash.h"
 #include "graph/layered_sphere_common.h"
 
 #include <igraph_step.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -88,13 +98,8 @@
 #define DYN_LS_SLOT_HEADROOM_BASE 4.0		// every sphere's radius and slot count are sized for this multiple of its occupancy at build time, so grids absorb growth without resizing
 #define DYN_LS_SLOT_HEADROOM_PER_SPHERE 0.5 // extra headroom fraction added on top per sphere index further from the nucleus, so outer spheres end up progressively sparser
 
-// SimHash comparison threshold: two fingerprints at Hamming distance <= 16 are
-// considered "the same community" — tolerating a few migrated or added members
-// while still catching real merges/splits (which flip 32+ bits).
-#define DYN_LS_SIMHASH_DISTANCE 16
-
 // Simple high-resolution timer for performance breakdown logging, in
-// microseconds (see the phase timestamps t0..t6 in dyn_ls_recompute).
+// microseconds (see the phase timestamps t0..t4 in dyn_ls_recompute).
 static inline double dyn_ls_timer_us(const struct timespec *start, const struct timespec *end)
 {
 	return (double)(end->tv_sec - start->tv_sec) * 1000000.0 + (double)(end->tv_nsec - start->tv_nsec) / 1000.0;
@@ -102,14 +107,12 @@ static inline double dyn_ls_timer_us(const struct timespec *start, const struct 
 
 struct DynLayeredSphere
 {
-	SphereGrid *grids;				   // persistent: built with headroom, reused across recomputes, torn down and rebuilt ONLY on sphere overflow (see dyn_ls_recompute's fits check)
+	SphereGrid *grids;				   // persistent: built with headroom, reused across recomputes, torn down and rebuilt ONLY on sphere overflow or renumbering (see dyn_ls_recompute's fits check)
 	int grids_capacity;				   // capacity of grids[]
 	int num_spheres;				   // grids currently built (for cleanup/reuse bookkeeping)
 	igraph_integer_t last_seen_vcount; // vcount as of the end of the previous on_update/init call (append or recompute) — used to find newly-arrived vertices
-	int *comm_sphere;				   // persistent: comm_sphere[comm_id] = sphere index of that community's members (-1 if the community is absent/new). Rebuilt from the live community map on every recompute; lets the fast-path local append locate a vertex's sphere without rescanning. comm_id is a vertex id (sparse, up to vcount).
-	igraph_integer_t comm_sphere_cap;  // capacity of comm_sphere[] (== current vcount after the latest recompute)
-	uint64_t *comm_simhash;			   // persistent: comm_simhash[comm_id] = SimHash of that community's member set at the last recompute. Lets a recompute skip re-seeding communities (and whole spheres) whose member set is unchanged — identical member set => identical avg_kcore => identical sphere, so no repositioning is needed. Keyed by comm_id (a vertex id), like comm_sphere.
-	igraph_integer_t comm_simhash_cap; // capacity of comm_simhash[] (== current vcount after the latest recompute)
+	int *level_to_sphere;			   // persistent: level_to_sphere[level] = sphere index that coreness level currently maps to, -1 if that level is unpopulated. Indexed by coreness level (grown as the graph's max coreness grows). Read by the fast-append path for O(1) sphere lookup; compared against the freshly recomputed mapping every recompute to detect rank-shifting renumbering (point 3 in the file header).
+	int level_to_sphere_cap;		   // capacity of level_to_sphere[] (levels 0..cap-1 representable)
 };
 
 // ============================================================================
@@ -118,8 +121,8 @@ struct DynLayeredSphere
 
 // Frees every currently-built grid's contents (not the grids[] array
 // itself, which is kept for reuse) — mirrors layered_sphere_cleanup's
-// per-grid teardown. Called only on sphere overflow (before a rebuild) and
-// on destroy, never on an ordinary recompute.
+// per-grid teardown. Called only on sphere overflow/renumbering (before a
+// rebuild) and on destroy, never on an ordinary recompute.
 static void dyn_ls_free_grid_contents(DynLayeredSphere *dls)
 {
 	for (int s = 0; s < dls->num_spheres; s++) {
@@ -149,43 +152,26 @@ static bool dyn_ls_ensure_grids_capacity(DynLayeredSphere *dls, int needed)
 	return true;
 }
 
-// Grows comm_sphere[] to hold at least vcount entries (indexed by community
-// ids, which are vertex ids up to vcount). Returns true on success.
-static bool dyn_ls_ensure_comm_sphere(DynLayeredSphere *dls, igraph_integer_t vcount)
+// Grows level_to_sphere[] to hold at least `needed` levels (0..needed-1),
+// zeroing (as -1, "unpopulated") the newly grown region so a query for a
+// level not yet seen by any recompute reads as absent rather than garbage.
+static bool dyn_ls_ensure_level_to_sphere(DynLayeredSphere *dls, int needed)
 {
-	if (vcount <= dls->comm_sphere_cap)
+	if (needed <= dls->level_to_sphere_cap)
 		return true;
-	igraph_integer_t cap = dls->comm_sphere_cap ? dls->comm_sphere_cap : 16;
-	while (cap < vcount)
+	int old_cap = dls->level_to_sphere_cap;
+	int cap = dls->level_to_sphere_cap ? dls->level_to_sphere_cap : 16;
+	while (cap < needed)
 		cap *= 2;
-	int *grown = realloc(dls->comm_sphere, sizeof(int) * (size_t)cap);
+	int *grown = realloc(dls->level_to_sphere, sizeof(int) * (size_t)cap);
 	if (!grown) {
-		fprintf(stderr, "dyn_layered_sphere: realloc comm_sphere to capacity %lld failed\n", (long long)cap);
+		fprintf(stderr, "dyn_layered_sphere: realloc level_to_sphere to capacity %d failed\n", cap);
 		return false;
 	}
-	dls->comm_sphere = grown;
-	dls->comm_sphere_cap = cap;
-	return true;
-}
-
-static bool dyn_ls_ensure_comm_simhash(DynLayeredSphere *dls, igraph_integer_t vcount)
-{
-	if (vcount <= dls->comm_simhash_cap)
-		return true;
-	igraph_integer_t old_cap = dls->comm_simhash_cap;
-	igraph_integer_t cap = dls->comm_simhash_cap ? dls->comm_simhash_cap : 16;
-	while (cap < vcount)
-		cap *= 2;
-	uint64_t *grown = realloc(dls->comm_simhash, sizeof(uint64_t) * (size_t)cap);
-	if (!grown) {
-		fprintf(stderr, "dyn_layered_sphere: realloc comm_simhash to capacity %lld failed\n", (long long)cap);
-		return false;
-	}
-	// Zero the newly grown portion so stale comparisons never spuriously
-	// match a real hash on the first recompute after growth.
-	memset(grown + old_cap, 0, sizeof(uint64_t) * (size_t)(cap - old_cap));
-	dls->comm_simhash = grown;
-	dls->comm_simhash_cap = cap;
+	for (int l = old_cap; l < cap; l++)
+		grown[l] = -1;
+	dls->level_to_sphere = grown;
+	dls->level_to_sphere_cap = cap;
 	return true;
 }
 
@@ -193,7 +179,7 @@ static bool dyn_ls_ensure_comm_simhash(DynLayeredSphere *dls, igraph_integer_t v
 // sized — radius AND slot count — for DYN_LS_SLOT_HEADROOM_BASE (+ the
 // per-sphere extra) times its actual occupancy, so subsequent recomputes and
 // appends fit into the existing slots without any resizing. Only called on
-// sphere overflow; the previous grids must already be freed.
+// sphere overflow/renumbering; the previous grids must already be freed.
 static bool dyn_ls_build_grids(DynLayeredSphere *dls, const int *sphere_count, int num_spheres)
 {
 	if (!dyn_ls_ensure_grids_capacity(dls, num_spheres))
@@ -204,7 +190,7 @@ static bool dyn_ls_build_grids(DynLayeredSphere *dls, const int *sphere_count, i
 	double current_radius = 0.0;
 	for (int s = 0; s < num_spheres; s++) {
 		if (sphere_count[s] == 0)
-			continue; // defensive: bucketing never opens an empty sphere
+			continue; // defensive: a rank with zero occupancy should never occur (every populated level has >=1 member)
 		int capacity_n = (int)((double)sphere_count[s] * (DYN_LS_SLOT_HEADROOM_BASE + s * DYN_LS_SLOT_HEADROOM_PER_SPHERE));
 		current_radius = sphere_radius_for(s, capacity_n, current_radius);
 		if (!build_sphere_grid(&dls->grids[s], capacity_n, current_radius, HILBERT_RES))
@@ -219,9 +205,12 @@ static bool dyn_ls_build_grids(DynLayeredSphere *dls, const int *sphere_count, i
 
 // Places a newly-arrived, disconnected vertex directly into the outermost
 // sphere's next free slot — "the end of the curve" — without touching any
-// other vertex's position: no re-sort, no recompute. Returns false if
-// there's no sphere to append into yet, or the outermost sphere is full;
-// either way the caller falls back to a full recompute.
+// other vertex's position: no re-sort, no recompute. Correct only because
+// level 0 (coreness-0/isolated vertices) always ranks last (see the file
+// header's descending-rank point): a fresh disconnected vertex is always
+// coreness 0, so the outermost sphere is always the right target. Returns
+// false if there's no sphere to append into yet, or the outermost sphere is
+// full; either way the caller falls back to a full recompute.
 static bool dyn_ls_append_disconnected(DynLayeredSphere *dls, igraph_integer_t node_id, igraph_matrix_t *layout)
 {
 	if (dls->num_spheres == 0)
@@ -242,55 +231,25 @@ static bool dyn_ls_append_disconnected(DynLayeredSphere *dls, igraph_integer_t n
 // ============================================================================
 
 // Attempts to place a newly-arrived, connected vertex into the persistent
-// grid that already holds its community, in a free (-1) slot near that
-// community's existing members — no re-sort, no recompute. This is the
+// grid that already holds its coreness level, in a free (-1) slot near that
+// level's same-community members — no re-sort, no recompute. This is the
 // "Simplified Local Buffers" fast path: headroom is already interleaved
-// across every sphere's slots by the shared seeder, so an in-community
-// arrival just fills one of those gaps.
+// across every sphere's slots by the shared seeder, so an in-level arrival
+// just fills one of those gaps.
 //
 // Returns false (and the caller falls through to a full recompute) when:
-//   - comm_id has no sphere yet (a brand-new community), or
-//   - the community's sphere has no free slot left (local/overall overflow).
+//   - the vertex's level has no sphere yet (a brand-new level), or
+//   - that sphere has no free slot left (local/overall overflow).
 // Only ever writes a free slot, so placement stays collision-free.
-static bool dyn_ls_try_local_append(DynLayeredSphere *dls, igraph_integer_t node_id, igraph_integer_t comm_id, const igraph_integer_t *community, igraph_integer_t vcount, igraph_matrix_t *layout)
+static bool dyn_ls_try_local_append(DynLayeredSphere *dls, const DynCoreTree *ct, igraph_integer_t node_id, const igraph_integer_t *community, igraph_integer_t vcount, igraph_matrix_t *layout)
 {
-	// Fast path: cached comm_sphere mapping.
-	int s = (comm_id >= 0 && comm_id < dls->comm_sphere_cap) ? dls->comm_sphere[comm_id] : -1;
-
-	// When the cached sphere index is stale (e.g. Leiden renumbered the
-	// community's representative id, or grids were rebuilt with fewer
-	// spheres), scan all built grids' occupant slots for any vertex whose
-	// community matches comm_id. In insertion-only streaming the community
-	// always has at least one pre-existing member, so this succeeds for any
-	// non-new community. The membership[] array is snapshot from the last
-	// recompute's community data.
-	if (s < 0 || s >= dls->num_spheres || !dls->grids[s].slot_occupant) {
-		s = -1;
-		for (int si = 0; si < dls->num_spheres; si++) {
-			SphereGrid *g = &dls->grids[si];
-			if (!g->slot_occupant)
-				continue;
-			for (int k = 0; k < g->max_slots; k++) {
-				int occ = g->slot_occupant[k];
-				if (occ >= 0 && occ < vcount && community[occ] == comm_id) {
-					s = si;
-					break;
-				}
-			}
-			if (s >= 0)
-				break;
-		}
-		// If the scan also found nothing, this is a truly new community
-		// with no members yet — fall through to recompute.
-		if (s < 0)
-			return false;
-		// Cache the discovered sphere so subsequent appends in the same
-		// batch hit the fast path directly.
-		if (comm_id >= 0 && comm_id < dls->comm_sphere_cap)
-			dls->comm_sphere[comm_id] = s;
-	}
+	int level = dyn_core_tree_level(ct, dyn_core_tree_node_of(ct, node_id));
+	int s = (level >= 0 && level < dls->level_to_sphere_cap) ? dls->level_to_sphere[level] : -1;
+	if (s < 0 || s >= dls->num_spheres || !dls->grids[s].slot_occupant)
+		return false; // brand-new level with no sphere yet -> fall through to recompute
 
 	SphereGrid *grid = &dls->grids[s];
+	igraph_integer_t comm_id = community[node_id];
 
 	// Find a free slot near the vertex's community on this sphere. First,
 	// locate any occupant of the same community to use as an anchor, then
@@ -329,101 +288,38 @@ static bool dyn_ls_try_local_append(DynLayeredSphere *dls, igraph_integer_t node
 }
 
 // ============================================================================
-// Recompute stage 1: community aggregation
-// (mirrors layered_sphere.c PHASE_INIT's CommData accumulation, adapted to
-// sparse representative-vertex-id community labels)
+// Recompute stage 1: per-sphere placement
 // ============================================================================
 
-// Builds the CommData array — one entry per non-empty community, avg
-// coreness computed from the live per-vertex values — sorted by avg coreness
-// descending via the shared compare_communities_kcore. *out_num_communities
-// is always set (0 on any failure or if there are genuinely no communities);
-// the caller must check it rather than just the returned pointer, since a
-// legitimately empty result also returns NULL (calloc(0, ...) is allowed to).
-static CommData *dyn_ls_aggregate_communities(const int *coreness, const igraph_integer_t *community, igraph_integer_t vcount, int *out_num_communities)
+// One-shot neighbor refinement for sphere s: each connected node in grp gets
+// a single direct move toward its neighbors via the shared
+// node_hilbert_target/try_move_node pair (no damping schedule, no iteration).
+// Disconnected nodes are skipped outright. Takes the already-gathered
+// membership list from dyn_ls_seed_sphere rather than re-scanning for it.
+static void dyn_ls_refine_connected(const igraph_t *g, LayeredSphereContext *ctx, int s, const NodePlacement *grp, int n_in_group)
 {
-	*out_num_communities = 0;
-
-	double *comm_sum_kcore = calloc((size_t)vcount, sizeof(double));
-	int *comm_count = calloc((size_t)vcount, sizeof(int));
-	if (!comm_sum_kcore || !comm_count) {
-		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
-		free(comm_sum_kcore);
-		free(comm_count);
-		return NULL;
-	}
-	for (igraph_integer_t i = 0; i < vcount; i++) {
-		igraph_integer_t c = community[i];
-		if (c < 0 || c >= vcount)
-			continue; // defensive: community ids are always valid vertex ids in practice
-		comm_sum_kcore[c] += coreness[i];
-		comm_count[c]++;
-	}
-
-	int num_communities = 0;
-	for (igraph_integer_t c = 0; c < vcount; c++)
-		if (comm_count[c] > 0)
-			num_communities++;
-
-	CommData *comms = NULL;
-	if (num_communities > 0) {
-		comms = calloc((size_t)num_communities, sizeof(CommData));
-		if (!comms) {
-			fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
-			free(comm_sum_kcore);
-			free(comm_count);
-			return NULL;
-		}
-		int ci = 0;
-		for (igraph_integer_t c = 0; c < vcount; c++) {
-			if (comm_count[c] > 0) {
-				comms[ci].comm_id = (int)c;
-				comms[ci].avg_kcore = comm_sum_kcore[c] / comm_count[c];
-				comms[ci].node_count = comm_count[c];
-				ci++;
-			}
-		}
-		qsort(comms, (size_t)num_communities, sizeof(CommData), compare_communities_kcore);
-	}
-	free(comm_sum_kcore);
-	free(comm_count);
-
-	*out_num_communities = num_communities;
-	return comms;
-}
-
-// ============================================================================
-// Recompute stage 2: per-sphere placement
-// ============================================================================
-
-// One-shot neighbor refinement for sphere s: each connected node gets a
-// single direct move toward its neighbors via the shared
-// node_hilbert_target/try_move_node pair (no damping schedule, no iteration
-// — not the batch algorithm's annealed relaxation loop). Disconnected nodes
-// are skipped outright.
-static void dyn_ls_refine_connected(const igraph_t *g, LayeredSphereContext *ctx, int s)
-{
-	for (igraph_integer_t i = 0; i < ctx->vcount; i++) {
-		if (ctx->node_to_sphere_id[i] != s)
-			continue;
+	for (int i = 0; i < n_in_group; i++) {
+		igraph_integer_t v = grp[i].id;
 		igraph_integer_t deg;
-		if (igraph_degree_1(g, &deg, i, IGRAPH_ALL, IGRAPH_NO_LOOPS) != IGRAPH_SUCCESS || deg == 0)
+		if (igraph_degree_1(g, &deg, v, IGRAPH_ALL, IGRAPH_NO_LOOPS) != IGRAPH_SUCCESS || deg == 0)
 			continue;
-		int current_slot = ctx->node_to_slot_idx[i];
-		int target_slot = node_hilbert_target(g, ctx->layout, ctx, (int)i, s, true, 1.0, HILBERT_RES);
+		int current_slot = ctx->node_to_slot_idx[v];
+		int target_slot = node_hilbert_target(g, ctx->layout, ctx, (int)v, s, true, 1.0, HILBERT_RES);
 		if (target_slot != current_slot) {
 			int moves = 0;
-			try_move_node(g, ctx->layout, ctx, (int)i, s, target_slot, current_slot, true, &moves);
+			try_move_node(g, ctx->layout, ctx, (int)v, s, target_slot, current_slot, true, &moves);
 		}
 	}
 }
 
-// Seeds sphere s's n_in_group members into its (already-built, persistent)
-// grid: ordered via the shared compare_nodes_placement (density carries the
-// timestamp, intra_degree is 0 — see the file header), seeded via the shared
-// seed_slots_for_sphere, then refined via dyn_ls_refine_connected. Never
-// touches the grid's geometry.
-static bool dyn_ls_seed_sphere(const igraph_t *g, LayeredSphereContext *ctx, int s, int n_in_group, const igraph_integer_t *community, bool has_timestamp)
+// Seeds sphere s (which holds exactly the tree's target_level, since the
+// level<->sphere mapping is strictly 1:1) into its (already-built,
+// persistent) grid: members are gathered by walking the tree directly
+// (O(this level's occupancy), not O(vcount)), ordered via the shared
+// compare_nodes_placement (density carries the timestamp, intra_degree is 0
+// — see the file header), seeded via the shared seed_slots_for_sphere, then
+// refined via dyn_ls_refine_connected. Never touches the grid's geometry.
+static bool dyn_ls_seed_sphere(const igraph_t *g, LayeredSphereContext *ctx, const DynCoreTree *ct, int s, int target_level, int n_in_group, const igraph_integer_t *community, bool has_timestamp)
 {
 	NodePlacement *grp = malloc(sizeof(NodePlacement) * (size_t)n_in_group);
 	if (!grp) {
@@ -431,38 +327,42 @@ static bool dyn_ls_seed_sphere(const igraph_t *g, LayeredSphereContext *ctx, int
 		return false;
 	}
 	int m = 0;
-	for (igraph_integer_t i = 0; i < ctx->vcount; i++) {
-		if (ctx->node_to_sphere_id[i] == s) {
-			grp[m].id = (int)i;
-			grp[m].community_id = (int)community[i];
-			grp[m].density = has_timestamp ? VAN(g, DYN_LS_TIMESTAMP_ATTR, i) : (double)i;
+	int node_count = dyn_core_tree_node_count(ct);
+	for (int id = 0; id < node_count; id++) {
+		if (dyn_core_tree_level(ct, id) != target_level)
+			continue;
+		for (igraph_integer_t v = dyn_core_tree_first_member(ct, id); v != -1; v = dyn_core_tree_next_member(ct, v)) {
+			grp[m].id = (int)v;
+			grp[m].community_id = (int)community[v];
+			grp[m].density = has_timestamp ? VAN(g, DYN_LS_TIMESTAMP_ATTR, v) : (double)v;
 			grp[m].intra_degree = 0;
 			m++;
 		}
 	}
 	qsort(grp, (size_t)m, sizeof(NodePlacement), compare_nodes_placement);
 	seed_slots_for_sphere(ctx, s, grp, m);
-	free(grp);
 
-	dyn_ls_refine_connected(g, ctx, s);
+	dyn_ls_refine_connected(g, ctx, s, grp, m);
+	free(grp);
 	return true;
 }
 
 // ============================================================================
-// Full recompute: orchestration only — aggregate, bucket (shared), map,
-// re-seed the persistent grids (rebuilding them ONLY on sphere overflow).
-// Rerun on every connected arrival.
+// Full recompute: orchestration only — enumerate populated levels from the
+// tree (shared bucket_communities_into_spheres is NOT used here — that
+// approximates a hierarchy the tree already gives exactly), map, re-seed the
+// persistent grids (rebuilding them ONLY on sphere overflow or renumbering).
 // ============================================================================
 
-static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int *coreness, const igraph_integer_t *community, igraph_matrix_t *layout, int k_max)
+static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const DynCoreTree *ct, const igraph_integer_t *community, igraph_matrix_t *layout, const igraph_vector_int_t *touched_levels, const igraph_vector_int_t *community_changed)
 {
 	igraph_integer_t vcount = igraph_vcount(g);
-	if (vcount == 0 || !coreness || !community) {
+	if (vcount == 0 || !ct || !community) {
 		dyn_ls_free_grid_contents(dls); // empty graph / maintainers gone = reset
 		return true;
 	}
 
-	struct timespec t0 = {0}, t1 = {0}, t2 = {0}, t3 = {0}, t4 = {0}, t5 = {0}, t6 = {0};
+	struct timespec t0 = {0}, t1 = {0}, t2 = {0}, t3 = {0}, t4 = {0};
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t0);
 
 	// Every heap allocation below is freed exactly once at `cleanup`, whether
@@ -470,190 +370,198 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 	// up front so `goto cleanup` from any failure point is safe (free(NULL)
 	// is a no-op) instead of each failure branch hand-listing its own subset.
 	bool result = false;
-	CommData *comms = NULL;
-	int *comm_to_sphere = NULL;
-	uint64_t *simhash_now = NULL;
-	igraph_integer_t *unstable_ids = NULL;
+	bool *populated = NULL;
+	int *fresh_level_to_sphere = NULL;
+	int *sphere_to_level = NULL;
+	int *sphere_count = NULL;
 	int *node_to_sphere = NULL;
 	int *node_to_slot = NULL;
-	int *sphere_count = NULL;
 	bool *sphere_changed = NULL;
-	int num_communities = 0, num_spheres = 0, num_unstable = 0, min_sphere_to_rebuild = 0;
+	int num_spheres = 0;
 
-	comms = dyn_ls_aggregate_communities(coreness, community, vcount, &num_communities);
-	if (num_communities == 0) {
-		// Either aggregation hit an allocation failure (already logged inside
-		// dyn_ls_aggregate_communities) or every community[] entry was
-		// out-of-range (defensive-only case). Either way there is nothing to
-		// place this round; keep the existing grids/layout untouched and let
-		// the next poll retry rather than tearing down the maintainer.
+	// 1. Enumerate populated coreness levels directly from the tree (O(tree
+	// node count), not O(V)): every alive node's level is a populated level.
+	int node_count = dyn_core_tree_node_count(ct);
+	int max_level = -1;
+	for (int id = 0; id < node_count; id++) {
+		int lvl = dyn_core_tree_level(ct, id);
+		if (lvl > max_level)
+			max_level = lvl;
+	}
+	if (max_level < 0) {
+		// No alive nodes at all — shouldn't happen once vcount > 0 (the root
+		// is always alive), but nothing to place either way.
+		result = true;
+		goto cleanup;
+	}
+	int level_cap = max_level + 1;
+
+	populated = calloc((size_t)level_cap, sizeof(bool));
+	if (!populated) {
+		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
+		goto cleanup;
+	}
+	for (int id = 0; id < node_count; id++) {
+		int lvl = dyn_core_tree_level(ct, id);
+		if (lvl >= 0)
+			populated[lvl] = true;
+	}
+	for (int l = 0; l < level_cap; l++)
+		if (populated[l])
+			num_spheres++;
+	if (num_spheres == 0) {
 		result = true;
 		goto cleanup;
 	}
 
-	comm_to_sphere = malloc((size_t)vcount * sizeof(int)); // indexed by comm_id (a vertex id), unlike the batch path's compact-id array
-	if (!comm_to_sphere) {
+	// Descending rank: the highest populated level is sphere 0 (the
+	// nucleus), level 0 (isolated/coreness-0 vertices, always populated once
+	// vcount > 0) is always the last/outermost sphere index.
+	fresh_level_to_sphere = malloc(sizeof(int) * (size_t)level_cap);
+	sphere_to_level = malloc(sizeof(int) * (size_t)num_spheres);
+	if (!fresh_level_to_sphere || !sphere_to_level) {
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
 		goto cleanup;
 	}
-	num_spheres = bucket_communities_into_spheres(comms, num_communities, (int)vcount, comm_to_sphere);
-
-	// Ensure the per-community SimHash cache is sized for the current graph.
-	if (!dyn_ls_ensure_comm_simhash(dls, vcount)) {
-		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
-		goto cleanup;
+	{
+		int rank = 0;
+		for (int l = level_cap - 1; l >= 0; l--) {
+			if (populated[l]) {
+				fresh_level_to_sphere[l] = rank;
+				sphere_to_level[rank] = l;
+				rank++;
+			} else {
+				fresh_level_to_sphere[l] = -1;
+			}
+		}
 	}
+	free(populated);
+	populated = NULL;
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
 
-	// Compute SimHash for every live, unstable community using the shared
-	// batch API: one O(vcount) pass over the membership array accumulates
-	// every requested community's hash bits simultaneously (vs. calling
-	// community_simhash_from_membership once per community, which would scan
-	// membership from scratch each time — O(V*C) for C communities). Reuses
-	// the exact same per-bit projection, so hash values are identical either
-	// way; only the loop shape changes.
-	simhash_now = calloc((size_t)vcount, sizeof(uint64_t));
-	unstable_ids = malloc((size_t)num_communities * sizeof(igraph_integer_t));
-	if (!simhash_now || !unstable_ids) {
+	// 2. Per-sphere occupancy: sum of member_count over every tree node at
+	// that sphere's level (another O(tree node count) pass).
+	sphere_count = calloc((size_t)num_spheres, sizeof(int));
+	if (!sphere_count) {
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
 		goto cleanup;
 	}
-	for (int i = 0; i < num_communities; i++) {
-		if (comms[i].avg_kcore > k_max)
-			continue; // topologically insulated — member set unchanged by theorem
-		unstable_ids[num_unstable++] = comms[i].comm_id;
+	for (int id = 0; id < node_count; id++) {
+		int lvl = dyn_core_tree_level(ct, id);
+		if (lvl < 0)
+			continue;
+		sphere_count[fresh_level_to_sphere[lvl]] += (int)dyn_core_tree_member_count(ct, id);
 	}
-	if (num_unstable > 0)
-		community_simhash_batch(community, vcount, unstable_ids, num_unstable, simhash_now);
-	free(unstable_ids);
-	unstable_ids = NULL;
+
+	// 3. Renumbering check: compare the freshly computed level->sphere
+	// mapping against the persisted one from the last recompute. Coreness is
+	// monotonically non-decreasing (insertion-only), so max_level here is
+	// always >= any previously seen max_level — a mismatch can only mean a
+	// level's rank shifted, never that it vanished from the representable
+	// range.
+	bool renumbered = false;
+	for (int l = 0; l < level_cap && !renumbered; l++) {
+		int old_s = (l < dls->level_to_sphere_cap) ? dls->level_to_sphere[l] : -1;
+		if (old_s != fresh_level_to_sphere[l])
+			renumbered = true;
+	}
+
+	// 4. Sphere overflow check: only meaningful when nothing renumbered — the
+	// persistent grids are reused as long as every sphere's members still
+	// fit in its (headroom-sized) slots and no new sphere is needed.
+	bool fits = !renumbered && num_spheres <= dls->num_spheres;
+	for (int s = 0; fits && s < num_spheres; s++)
+		if (sphere_count[s] > dls->grids[s].max_slots)
+			fits = false;
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
 
-	// Node -> sphere map plus per-sphere group sizes, one O(V) pass.
-	node_to_sphere = malloc((size_t)vcount * sizeof(int));
-	node_to_slot = malloc((size_t)vcount * sizeof(int));
-	sphere_count = calloc((size_t)num_spheres, sizeof(int));
-	if (!node_to_sphere || !node_to_slot || !sphere_count) {
-		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
-		goto cleanup;
-	}
-	if (!dyn_ls_ensure_comm_sphere(dls, vcount)) {
-		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
-		goto cleanup;
-	}
-	// Reset the community->sphere map; the O(V) pass below repopulates it for
-	// every community that currently has members. A brand-new community (not
-	// yet present) keeps -1, which the fast-path append reads as "new".
-	for (igraph_integer_t c = 0; c < vcount; c++)
-		dls->comm_sphere[c] = -1;
-	for (igraph_integer_t i = 0; i < vcount; i++) {
-		igraph_integer_t cid = community[i];
-		if (cid < 0 || cid >= vcount) {
-			node_to_sphere[i] = -1; // defensive: mirrors dyn_ls_aggregate_communities' guard — leave unmapped rather than reading/writing out of bounds below
-			continue;
-		}
-		node_to_sphere[i] = comm_to_sphere[cid];
-		sphere_count[node_to_sphere[i]]++;
-		dls->comm_sphere[cid] = node_to_sphere[i];
-	}
-
-	// Topological blast radius (stable core) tightened by SimHash: an
-	// insertion only alters the coreness/community of vertices whose coreness
-	// is <= k_max, but within that band a community whose member set is
-	// unchanged (SimHash identical to the last recompute's cache) cannot have
-	// changed sphere — so it must not force a rebuild. We scan comms (sorted
-	// by avg_kcore descending) for the first community whose avg_kcore <=
-	// k_max AND whose SimHash differs from cache; that community's sphere
-	// becomes the outermost sphere that must be rebuilt. If no community
-	// satisfies both conditions, the entire core is frozen.
-	min_sphere_to_rebuild = num_spheres;
-	for (int i = 0; i < num_communities; i++) {
-		if (comms[i].avg_kcore <= k_max && community_simhash_hamming(simhash_now[comms[i].comm_id], dls->comm_simhash[comms[i].comm_id]) > DYN_LS_SIMHASH_DISTANCE) {
-			min_sphere_to_rebuild = comm_to_sphere[comms[i].comm_id];
-			break;
-		}
-	}
-
-	// Precompute per-sphere "changed" flags for the per-sphere seed skip (B):
-	// a sphere whose every community has an unchanged SimHash keeps its
-	// occupants and does not need re-seeding.
 	sphere_changed = calloc((size_t)num_spheres, sizeof(bool));
 	if (!sphere_changed) {
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
 		goto cleanup;
 	}
-	for (int i = 0; i < num_communities; i++) {
-		int s = comm_to_sphere[comms[i].comm_id];
-		if (comms[i].avg_kcore > k_max)
-			continue; // topologically insulated — cache entry unchanged
-		if (community_simhash_hamming(simhash_now[comms[i].comm_id], dls->comm_simhash[comms[i].comm_id]) > DYN_LS_SIMHASH_DISTANCE)
-			sphere_changed[s] = true;
-	}
-
-	// Update the SimHash cache for every live community so the next poll
-	// can detect changes. Stale comm_ids (beyond current communities)
-	// keep their previous cache entry; they are never read because no vertex
-	// maps to them.
-	for (int ci = 0; ci < num_communities; ci++) {
-		if (comms[ci].avg_kcore > k_max)
-			continue; // topologically insulated — cache stays valid
-		dls->comm_simhash[comms[ci].comm_id] = simhash_now[comms[ci].comm_id];
-	}
-
-	free(comms);
-	comms = NULL;
-	free(comm_to_sphere);
-	comm_to_sphere = NULL;
-	clock_gettime(CLOCK_MONOTONIC_RAW, &t3);
-
-	// Sphere overflow check: the persistent grids are reused as long as
-	// every sphere's members still fit in its (headroom-sized) slots and no
-	// new sphere is needed; only a genuine overflow triggers a rebuild.
-	bool fits = num_spheres <= dls->num_spheres;
-	for (int s = 0; fits && s < num_spheres; s++)
-		if (sphere_count[s] > dls->grids[s].max_slots)
-			fits = false;
 
 	bool ok = true;
 	if (!fits) {
-		fprintf(stderr, "dyn_layered_sphere: sphere overflow — rebuilding grids for %d sphere(s) (had %d)\n", num_spheres, dls->num_spheres);
+		fprintf(stderr, "dyn_layered_sphere: %s — rebuilding grids for %d sphere(s) (had %d)\n", renumbered ? "level ranks shifted" : "sphere overflow", num_spheres, dls->num_spheres);
 		dyn_ls_free_grid_contents(dls);
 		ok = dyn_ls_build_grids(dls, sphere_count, num_spheres);
-		// Grids were just torn down and rebuilt: all persistent slot data was
-		// wiped, so the entire graph must be re-seeded regardless of k_max.
-		min_sphere_to_rebuild = 0;
-		// Every sphere must be re-seeded after a grid teardown.
 		for (int s = 0; s < num_spheres; s++)
 			sphere_changed[s] = true;
 	} else {
-		// Reuse: clear occupants only; geometry (radius, slots) is untouched.
-		// Only spheres at or outside the blast radius are cleared — members
-		// may have moved between spheres, and spheres beyond num_spheres may
-		// hold stale occupants. Frozen inner spheres (strictly inside the
-		// radius) keep their slot mappings entirely.
-		for (int s = min_sphere_to_rebuild; s < dls->num_spheres; s++)
-			for (int k = 0; k < dls->grids[s].max_slots; k++)
-				dls->grids[s].slot_occupant[k] = -1;
+		// Exact, precise invalidation: because the tree is exact (not
+		// approximated) and no renumbering occurred, an untouched sphere is
+		// PROVABLY unchanged — no defensive "clear everything outward"
+		// needed, unlike the old SimHash-approximated design.
+		if (touched_levels) {
+			igraph_integer_t n = igraph_vector_int_size(touched_levels);
+			for (igraph_integer_t i = 0; i < n; i++) {
+				int lvl = (int)VECTOR(*touched_levels)[i];
+				if (lvl >= 0 && lvl < level_cap && fresh_level_to_sphere[lvl] >= 0)
+					sphere_changed[fresh_level_to_sphere[lvl]] = true;
+			}
+		}
+		if (community_changed) {
+			igraph_integer_t n = igraph_vector_int_size(community_changed);
+			for (igraph_integer_t i = 0; i < n; i++) {
+				igraph_integer_t v = VECTOR(*community_changed)[i];
+				int lvl = dyn_core_tree_level(ct, dyn_core_tree_node_of(ct, v));
+				if (lvl >= 0 && lvl < level_cap && fresh_level_to_sphere[lvl] >= 0)
+					sphere_changed[fresh_level_to_sphere[lvl]] = true;
+			}
+		}
+		for (int s = 0; s < num_spheres; s++)
+			if (sphere_changed[s])
+				for (int k = 0; k < dls->grids[s].max_slots; k++)
+					dls->grids[s].slot_occupant[k] = -1;
 	}
-	clock_gettime(CLOCK_MONOTONIC_RAW, &t4);
+
+	// Persist the fresh mapping for the fast-append path and next
+	// recompute's renumbering check.
+	if (!dyn_ls_ensure_level_to_sphere(dls, level_cap)) {
+		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
+		goto cleanup;
+	}
+	for (int l = 0; l < level_cap; l++)
+		dls->level_to_sphere[l] = fresh_level_to_sphere[l];
+	clock_gettime(CLOCK_MONOTONIC_RAW, &t3);
 
 	// Debug: one-line summary of optimization decisions (throttled to avoid
-	// flooding stderr on every poll). k_max is the blast-radius threshold;
-	// communities with avg_kcore > k_max are topologically insulated and never
-	// recomputed. min_sphere_to_rebuild is the first sphere that gets cleared
-	// and re-seeded (0 means everything, num_spheres means nothing). fits
-	// tells whether grids were reused (true) or rebuilt after overflow (false).
-	// sphere_changed[s] is set per-sphere; any false sphere in the rebuild
-	// band keeps its occupants without re-seeding.
+	// flooding stderr on every poll).
 	{
 		static int log_counter = 0;
 		if (++log_counter % 32 == 1) {
 			int to_seed = 0;
-			for (int s = min_sphere_to_rebuild; s < num_spheres; s++)
+			for (int s = 0; s < num_spheres; s++)
 				if (sphere_count[s] > 0 && sphere_changed[s])
 					to_seed++;
-			fprintf(stderr, "dyn_ls: recompute k_max=%d comms=%d/%d frozen->s%d fits=%d spheres=%d/%d seed=%d\n", k_max, num_unstable, num_communities, min_sphere_to_rebuild, fits, num_spheres, dls->num_spheres, to_seed);
+			fprintf(stderr, "dyn_ls: recompute spheres=%d/%d fits=%d renumbered=%d seed=%d\n", num_spheres, dls->num_spheres, fits, renumbered, to_seed);
 		}
+	}
+
+	// Node -> sphere map plus per-slot map, one O(V)-sized array populated by
+	// walking the (much smaller) tree instead of scanning community[]. Still
+	// touches every vertex once — required by the shared LayeredSphereContext
+	// API, which node_hilbert_target/try_move_node use to look up ANY
+	// neighbor's sphere during refinement, not just same-sphere ones — but
+	// the expensive per-community aggregation/sort/hashing this replaced no
+	// longer happens at all.
+	node_to_sphere = malloc((size_t)vcount * sizeof(int));
+	node_to_slot = malloc((size_t)vcount * sizeof(int));
+	if (!node_to_sphere || !node_to_slot) {
+		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
+		goto cleanup;
+	}
+	for (igraph_integer_t v = 0; v < vcount; v++)
+		node_to_sphere[v] = -1;
+	for (int id = 0; id < node_count; id++) {
+		int lvl = dyn_core_tree_level(ct, id);
+		if (lvl < 0)
+			continue;
+		int s = fresh_level_to_sphere[lvl];
+		for (igraph_integer_t v = dyn_core_tree_first_member(ct, id); v != -1; v = dyn_core_tree_next_member(ct, v))
+			if (v < vcount)
+				node_to_sphere[v] = s;
 	}
 
 	if (ok) {
@@ -665,43 +573,37 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 		ctx.vcount = (int)vcount;
 
 		bool has_timestamp = igraph_cattribute_has_attr(g, IGRAPH_ATTRIBUTE_VERTEX, DYN_LS_TIMESTAMP_ATTR);
-		for (int s = min_sphere_to_rebuild; s < num_spheres && ok; s++) {
-			if (sphere_count[s] == 0)
+		for (int s = 0; s < num_spheres && ok; s++) {
+			if (sphere_count[s] == 0 || !sphere_changed[s])
 				continue;
-			if (!sphere_changed[s])
-				continue; // B: per-sphere seed skip — all communities unchanged
-			ok = dyn_ls_seed_sphere(g, &ctx, s, sphere_count[s], community, has_timestamp);
+			ok = dyn_ls_seed_sphere(g, &ctx, ct, s, sphere_to_level[s], sphere_count[s], community, has_timestamp);
 		}
 	}
-	clock_gettime(CLOCK_MONOTONIC_RAW, &t5);
 
 	if (!ok)
 		goto cleanup; // result stays false
 
 	result = igraph_step(layout, NULL) == IGRAPH_SUCCESS;
-	clock_gettime(CLOCK_MONOTONIC_RAW, &t6);
+	clock_gettime(CLOCK_MONOTONIC_RAW, &t4);
 	{
 		static int log_counter = 0;
 		if (++log_counter % 32 == 1) {
-			double us_agg = dyn_ls_timer_us(&t0, &t1);
-			double us_sim = dyn_ls_timer_us(&t1, &t2);
-			double us_ov = dyn_ls_timer_us(&t2, &t3);
-			double us_chg = dyn_ls_timer_us(&t3, &t4);
-			double us_seed = dyn_ls_timer_us(&t4, &t5);
-			double us_step = dyn_ls_timer_us(&t5, &t6);
-			double us_tot = dyn_ls_timer_us(&t0, &t6);
-			fprintf(stderr, "dyn_ls_t: agg=%.0f bkt_sim=%.0f ovpass=%.0f chg=%.0f seed=%.0f step=%.0f tot=%.0f us\n", us_agg, us_sim, us_ov, us_chg, us_seed, us_step, us_tot);
+			double us_levels = dyn_ls_timer_us(&t0, &t1);
+			double us_occ = dyn_ls_timer_us(&t1, &t2);
+			double us_geom = dyn_ls_timer_us(&t2, &t3);
+			double us_seed = dyn_ls_timer_us(&t3, &t4);
+			double us_tot = dyn_ls_timer_us(&t0, &t4);
+			fprintf(stderr, "dyn_ls_t: levels=%.0f occ=%.0f geom=%.0f seed=%.0f tot=%.0f us\n", us_levels, us_occ, us_geom, us_seed, us_tot);
 		}
 	}
 
 cleanup:
-	free(comms);
-	free(comm_to_sphere);
-	free(simhash_now);
-	free(unstable_ids);
+	free(populated);
+	free(fresh_level_to_sphere);
+	free(sphere_to_level);
+	free(sphere_count);
 	free(node_to_sphere);
 	free(node_to_slot);
-	free(sphere_count);
 	free(sphere_changed);
 	return result;
 }
@@ -710,14 +612,14 @@ cleanup:
 // Public API
 // ============================================================================
 
-DynLayeredSphere *dyn_layered_sphere_init(const igraph_t *g, const int *coreness, const igraph_integer_t *community, igraph_matrix_t *layout)
+DynLayeredSphere *dyn_layered_sphere_init(const igraph_t *g, const DynCoreTree *ct, const igraph_integer_t *community, igraph_matrix_t *layout)
 {
 	DynLayeredSphere *dls = calloc(1, sizeof(DynLayeredSphere));
 	if (!dls) {
 		fprintf(stderr, "dyn_layered_sphere_init: allocation failed\n");
 		return NULL;
 	}
-	if (!dyn_ls_recompute(dls, g, coreness, community, layout, INT_MAX)) {
+	if (!dyn_ls_recompute(dls, g, ct, community, layout, NULL, NULL)) {
 		dyn_layered_sphere_destroy(dls);
 		return NULL;
 	}
@@ -725,7 +627,7 @@ DynLayeredSphere *dyn_layered_sphere_init(const igraph_t *g, const int *coreness
 	return dls;
 }
 
-bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, const int *coreness, const igraph_integer_t *community, igraph_matrix_t *layout)
+bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, const DynCoreTree *ct, const igraph_vector_int_t *touched_levels, const igraph_integer_t *community, const igraph_vector_int_t *community_changed, igraph_matrix_t *layout)
 {
 	if (!dls)
 		return false;
@@ -733,40 +635,19 @@ bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, cons
 	igraph_integer_t vcount = igraph_vcount(g);
 	igraph_integer_t old_vcount = dls->last_seen_vcount;
 
-	// Topological blast radius: k_max is the highest coreness among the newly
-	// arrived vertices (those added since the previous call). An insertion can
-	// only alter coreness/community for vertices with coreness <= k_max, so a
-	// sphere whose minimum community coreness strictly exceeds k_max is
-	// insulated and needs no rebuild. Defaults to INT_MAX (full recompute)
-	// both when coreness is unavailable AND when there are no new vertices —
-	// an edge-only batch between two already-known vertices is exactly the
-	// "a new edge" case the blast-radius theorem also covers, but only a new
-	// vertex's own coreness is tracked here, so an edge-only batch can't
-	// derive a tighter bound and must not be silently treated as "nothing
-	// changed" (that would leave coreness/community-driven moves stuck).
-	int k_max = INT_MAX;
+	// Connected-arrival fast path (Simplified Local Buffers): each newly
+	// arrived vertex is appended into its level's sphere (connected) or the
+	// outermost sphere's tail (disconnected) with no re-sort. If any
+	// vertex's append fails (new level, full sphere, no sphere built yet),
+	// we fall through to the full recompute.
 	if (vcount > old_vcount) {
-		k_max = -1;
-		for (igraph_integer_t v = old_vcount; v < vcount; v++)
-			if (coreness && coreness[v] > k_max)
-				k_max = coreness[v];
-		// coreness was entirely NULL — can't determine blast radius,
-		// default to full rebuild.
-		if (k_max < 0)
-			k_max = INT_MAX;
-
-		// Connected-arrival fast path (Simplified Local Buffers): each newly
-		// arrived vertex is appended into its community's sphere (connected)
-		// or the outermost sphere's tail (disconnected) with no re-sort. If
-		// any vertex's append fails (new community, full sphere, no sphere
-		// built yet), we fall through to the full recompute.
 		bool all_local = true;
 		for (igraph_integer_t v = old_vcount; v < vcount && all_local; v++) {
 			igraph_integer_t deg;
 			if (igraph_degree_1(g, &deg, v, IGRAPH_ALL, IGRAPH_NO_LOOPS) != IGRAPH_SUCCESS)
 				deg = 0;
 			if (deg > 0) {
-				if (!dyn_ls_try_local_append(dls, v, community[v], community, vcount, layout))
+				if (!dyn_ls_try_local_append(dls, ct, v, community, vcount, layout))
 					all_local = false;
 			} else {
 				if (!dyn_ls_append_disconnected(dls, v, layout))
@@ -778,14 +659,14 @@ bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, cons
 			dls->last_seen_vcount = vcount;
 			return igraph_step(layout, NULL) == IGRAPH_SUCCESS;
 		}
-		// Some vertex's append failed (new community, full sphere, no sphere
+		// Some vertex's append failed (new level, full sphere, no sphere
 		// built yet) — some vertices in this batch may already be placed, so
 		// fall through to a full recompute rather than retrying the
 		// disconnected-only path, which would double-place them.
 	}
 
 	dls->last_seen_vcount = vcount;
-	return dyn_ls_recompute(dls, g, coreness, community, layout, k_max);
+	return dyn_ls_recompute(dls, g, ct, community, layout, touched_levels, community_changed);
 }
 
 void dyn_layered_sphere_destroy(DynLayeredSphere *dls)
@@ -794,7 +675,6 @@ void dyn_layered_sphere_destroy(DynLayeredSphere *dls)
 		return;
 	dyn_ls_free_grid_contents(dls);
 	free(dls->grids);
-	free(dls->comm_sphere);
-	free(dls->comm_simhash);
+	free(dls->level_to_sphere);
 	free(dls);
 }

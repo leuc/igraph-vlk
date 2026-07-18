@@ -193,7 +193,7 @@ static int test_disjoint_components(void)
 	return 0;
 }
 
-static int test_touched_nodes_nonempty(void)
+static int test_touched_levels_nonempty(void)
 {
 	igraph_t g;
 	IGRAPH_ASSERT(igraph_empty(&g, 0, IGRAPH_UNDIRECTED) == IGRAPH_SUCCESS);
@@ -201,28 +201,93 @@ static int test_touched_nodes_nonempty(void)
 	DynCoreTree *ct = dyn_core_tree_init(&g);
 	IGRAPH_ASSERT(ct != NULL);
 
-	igraph_vector_int_t edge, touched;
+	igraph_vector_int_t edge, touched_levels;
 	IGRAPH_ASSERT(igraph_vector_int_init(&edge, 2) == IGRAPH_SUCCESS);
-	IGRAPH_ASSERT(igraph_vector_int_init(&touched, 0) == IGRAPH_SUCCESS);
+	IGRAPH_ASSERT(igraph_vector_int_init(&touched_levels, 0) == IGRAPH_SUCCESS);
 
+	// Two fresh, isolated vertices both lift to coreness 1: the only tree
+	// event is "create a level-1 node", so touched_levels must be exactly [1].
 	VECTOR(edge)[0] = 0;
 	VECTOR(edge)[1] = 1;
 	IGRAPH_ASSERT(igraph_add_edges(&g, &edge, NULL) == IGRAPH_SUCCESS);
-	IGRAPH_ASSERT(dyn_core_tree_on_edges(ct, &g, &edge, &touched));
-	IGRAPH_ASSERT(igraph_vector_int_size(&touched) > 0); // a level-1 node was created
+	IGRAPH_ASSERT(dyn_core_tree_on_edges(ct, &g, &edge, &touched_levels));
+	IGRAPH_ASSERT(igraph_vector_int_size(&touched_levels) == 1);
+	IGRAPH_ASSERT(VECTOR(touched_levels)[0] == 1);
 
-	igraph_vector_int_clear(&touched);
+	igraph_vector_int_clear(&touched_levels);
 	VECTOR(edge)[0] = 5;
 	VECTOR(edge)[1] = 6;
 	IGRAPH_ASSERT(igraph_add_vertices(&g, 4, NULL) == IGRAPH_SUCCESS); // vcount 3 -> 7, so vertices 5,6 exist
 	IGRAPH_ASSERT(igraph_add_edges(&g, &edge, NULL) == IGRAPH_SUCCESS);
-	IGRAPH_ASSERT(dyn_core_tree_on_edges(ct, &g, &edge, &touched));
-	IGRAPH_ASSERT(igraph_vector_int_size(&touched) > 0); // a fresh, unrelated level-1 node
+	IGRAPH_ASSERT(dyn_core_tree_on_edges(ct, &g, &edge, &touched_levels));
+	IGRAPH_ASSERT(igraph_vector_int_size(&touched_levels) == 1); // a fresh, unrelated level-1 node
+	IGRAPH_ASSERT(VECTOR(touched_levels)[0] == 1);
 
 	validate_core_tree(ct, &g);
 
-	igraph_vector_int_destroy(&touched);
+	igraph_vector_int_destroy(&touched_levels);
 	igraph_vector_int_destroy(&edge);
+	dyn_core_tree_destroy(ct);
+	igraph_destroy(&g);
+	return 0;
+}
+
+// Regression test for the id-reuse hazard touched_levels was introduced to
+// fix: within a single dyn_core_tree_on_edges call, a node freed by one edge
+// (e.g. a merged-away or emptied node) can have its slot immediately reused
+// by alloc_node for a LATER edge in the same batch. Reporting raw node ids
+// would let a caller who inspects them after the call read the wrong,
+// reincarnated node's level for anything that got freed mid-batch. This
+// drives the exact triangle-closing sequence from test_triangle_shape — which
+// is known (hand-traced there) to free and reuse a node slot mid-batch — but
+// as ONE batched dyn_core_tree_on_edges call instead of three separate calls,
+// so the reuse actually happens WITHIN the touched_levels collection window,
+// and asserts every reported level is a real, valid level for this graph
+// (never a stale/reincarnated value) with both intermediate (1) and final (2)
+// levels represented.
+static int test_touched_levels_survive_same_batch_reuse(void)
+{
+	igraph_t g;
+	IGRAPH_ASSERT(igraph_empty(&g, 0, IGRAPH_UNDIRECTED) == IGRAPH_SUCCESS);
+	IGRAPH_ASSERT(igraph_add_vertices(&g, 3, NULL) == IGRAPH_SUCCESS);
+	DynCoreTree *ct = dyn_core_tree_init(&g);
+	IGRAPH_ASSERT(ct != NULL);
+
+	static const igraph_integer_t edges[] = {0, 1, 1, 2, 2, 0};
+	igraph_vector_int_t batch, touched_levels;
+	IGRAPH_ASSERT(igraph_vector_int_init(&batch, 0) == IGRAPH_SUCCESS);
+	IGRAPH_ASSERT(igraph_vector_int_init(&touched_levels, 0) == IGRAPH_SUCCESS);
+	for (size_t i = 0; i < sizeof(edges) / sizeof(edges[0]); i++)
+		IGRAPH_ASSERT(igraph_vector_int_push_back(&batch, edges[i]) == IGRAPH_SUCCESS);
+	IGRAPH_ASSERT(igraph_add_edges(&g, &batch, NULL) == IGRAPH_SUCCESS);
+	IGRAPH_ASSERT(dyn_core_tree_on_edges(ct, &g, &batch, &touched_levels));
+
+	bool saw_level_1 = false, saw_level_2 = false;
+	igraph_integer_t n = igraph_vector_int_size(&touched_levels);
+	IGRAPH_ASSERT(n > 0);
+	for (igraph_integer_t i = 0; i < n; i++) {
+		int lvl = (int)VECTOR(touched_levels)[i];
+		IGRAPH_ASSERT(lvl == 1 || lvl == 2); // never a stale/reincarnated value
+		if (lvl == 1)
+			saw_level_1 = true;
+		if (lvl == 2)
+			saw_level_2 = true;
+	}
+	IGRAPH_ASSERT(saw_level_1); // the transient level-1 grouping
+	IGRAPH_ASSERT(saw_level_2); // the final triangle-closing lift
+
+	// The final tree shape must still match test_triangle_shape's hand-traced
+	// result regardless of how many nodes were created/freed/reused getting
+	// there: all three vertices in one level-2 node, direct child of root.
+	int final_node = dyn_core_tree_node_of(ct, 0);
+	IGRAPH_ASSERT(final_node == dyn_core_tree_node_of(ct, 1));
+	IGRAPH_ASSERT(final_node == dyn_core_tree_node_of(ct, 2));
+	IGRAPH_ASSERT(dyn_core_tree_level(ct, final_node) == 2);
+	IGRAPH_ASSERT(dyn_core_tree_parent(ct, final_node) == DYN_CORE_TREE_ROOT);
+	validate_core_tree(ct, &g);
+
+	igraph_vector_int_destroy(&touched_levels);
+	igraph_vector_int_destroy(&batch);
 	dyn_core_tree_destroy(ct);
 	igraph_destroy(&g);
 	return 0;
@@ -331,7 +396,8 @@ int main(void)
 	RUN_TEST(test_empty_and_singleton);
 	RUN_TEST(test_triangle_shape);
 	RUN_TEST(test_disjoint_components);
-	RUN_TEST(test_touched_nodes_nonempty);
+	RUN_TEST(test_touched_levels_nonempty);
+	RUN_TEST(test_touched_levels_survive_same_batch_reuse);
 	RUN_TEST(test_random_multigraph);
 	RUN_TEST(test_oracle_family);
 
