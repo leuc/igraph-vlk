@@ -365,7 +365,7 @@ void seed_slots_for_sphere(LayeredSphereContext *ctx, int s, NodePlacement *grp,
 		int sid = fmin(M_s - 1, i * step);
 		ctx->grids[s].slot_occupant[sid] = nid;
 		ctx->node_to_slot_idx[nid] = sid;
-		write_slot_position(ctx->layout, nid, &ctx->grids[s].slots[sid]);
+		write_slot_position(ctx->layout, nid, &ctx->grids[s].slots[sid], ctx->sphere_rotation ? &ctx->sphere_rotation[4 * s] : NULL);
 	}
 }
 
@@ -452,13 +452,14 @@ void try_move_node(const igraph_t *ig, const igraph_matrix_t *layout, LayeredSph
 
 	if (delta < -0.001) {
 		int v = ctx->grids[s].slot_occupant[target_slot];
+		const double *quat = ctx->sphere_rotation ? &ctx->sphere_rotation[4 * s] : NULL;
 
-		write_slot_position(ctx->layout, u, &ctx->grids[s].slots[target_slot]);
+		write_slot_position(ctx->layout, u, &ctx->grids[s].slots[target_slot], quat);
 		ctx->grids[s].slot_occupant[target_slot] = u;
 		ctx->node_to_slot_idx[u] = target_slot;
 
 		if (v != -1) {
-			write_slot_position(ctx->layout, v, &ctx->grids[s].slots[current_slot]);
+			write_slot_position(ctx->layout, v, &ctx->grids[s].slots[current_slot], quat);
 			ctx->grids[s].slot_occupant[current_slot] = v;
 			ctx->node_to_slot_idx[v] = current_slot;
 		} else {

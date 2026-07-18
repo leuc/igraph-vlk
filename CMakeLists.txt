@@ -119,6 +119,7 @@ add_executable(
 	src/graph/dyn_core_tree_order.c
 	src/graph/dyn_leiden.c
 	src/graph/dyn_layered_sphere.c
+	src/graph/dyn_ls_sphere_rotation.c
 	src/graph/community_simhash.c
 	src/graph/graph_filter.c
 	src/graph/graph_filter_visibility.c
@@ -237,7 +238,7 @@ endif()
 add_test(NAME layered_sphere_common_test COMMAND layered_sphere_common_test)
 
 # Standalone test for dynamic (streaming) Layered Sphere layout maintenance (not installed)
-add_executable(dyn_layered_sphere_test tests/dyn_layered_sphere_test.c src/graph/dyn_layered_sphere.c src/graph/layered_sphere_common.c src/graph/dyn_k-core.c src/graph/dyn_core_tree.c src/graph/dyn_core_tree_order.c src/graph/dyn_leiden.c)
+add_executable(dyn_layered_sphere_test tests/dyn_layered_sphere_test.c src/graph/dyn_layered_sphere.c src/graph/dyn_ls_sphere_rotation.c src/graph/layered_sphere_common.c src/graph/dyn_k-core.c src/graph/dyn_core_tree.c src/graph/dyn_core_tree_order.c src/graph/dyn_leiden.c)
 target_include_directories(dyn_layered_sphere_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${IGRAPH_INCLUDE_DIRS})
 target_link_libraries(dyn_layered_sphere_test PRIVATE igraph::igraph)
 if(NOT MSVC)

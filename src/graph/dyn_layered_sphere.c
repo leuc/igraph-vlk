@@ -47,6 +47,17 @@
  * unchanged — with all intra_degree equal, that comparator reduces exactly
  * to (community asc, density asc).
  *
+ * Each sphere also carries a persistent rigid rotation (a unit quaternion),
+ * updated once per recompute for every dirty sphere with inter-sphere edges,
+ * via dyn_ls_rotate_sphere_step (graph/dyn_ls_sphere_rotation.h): the net
+ * torque of the sphere's inter-sphere edges is turned into a damped,
+ * clamped rotation increment composed onto the sphere's quaternion, then
+ * dyn_ls_apply_sphere_rotation re-writes that sphere's occupants' layout
+ * positions under the updated quaternion. Rotation is a pure coordinate
+ * transform applied at write_slot_position time (layered_sphere_common.h)
+ * — it never touches SphereGrid slot/occupancy geometry or Hilbert order,
+ * so rotating a sphere never triggers a reseed or grid rebuild.
+ *
  * The sphere GEOMETRY persists across recomputes: each grid is sized with a
  * large occupancy headroom (DYN_LS_SLOT_HEADROOM_BASE, applied to both the
  * radius and the slot count) when built, and a recompute only re-seeds
@@ -76,6 +87,7 @@
  */
 
 #include "graph/dyn_layered_sphere.h"
+#include "graph/dyn_ls_sphere_rotation.h"
 #include "graph/layered_sphere_common.h"
 
 #include <igraph_step.h>
@@ -103,6 +115,10 @@ struct DynLayeredSphere
 	igraph_integer_t last_seen_vcount; // vcount as of the end of the previous on_update/init call (append or recompute) — used to find newly-arrived vertices
 	int *level_to_sphere;			   // persistent: level_to_sphere[level] = sphere index that coreness level currently maps to, -1 if that level is unpopulated. Indexed by coreness level (grown as the graph's max coreness grows). Read by the fast-append path for O(1) sphere lookup; compared against the freshly recomputed mapping every recompute to detect rank-shifting renumbering (point 3 in the file header).
 	int level_to_sphere_cap;		   // capacity of level_to_sphere[] (levels 0..cap-1 representable)
+	double *sphere_rotation;		   // persistent: 4 doubles/sphere (w,x,y,z unit quaternion), identity when unrotated — see graph/dyn_ls_sphere_rotation.h
+	double *sphere_prev_omega;		   // persistent: 3 doubles/sphere (previous rotation-step direction), for oscillation damping
+	int *sphere_rotation_steps;		   // persistent: per-sphere count of successfully applied rotation steps, for the damping schedule
+	int sphere_rotation_capacity;	   // capacity of the three rotation arrays above, in SPHERES (not doubles)
 };
 
 // ============================================================================
@@ -205,11 +221,13 @@ static bool dyn_ls_append_disconnected(DynLayeredSphere *dls, igraph_integer_t n
 {
 	if (dls->num_spheres == 0)
 		return false;
-	SphereGrid *grid = &dls->grids[dls->num_spheres - 1];
+	int s = dls->num_spheres - 1;
+	SphereGrid *grid = &dls->grids[s];
+	const double *quat = dls->sphere_rotation ? &dls->sphere_rotation[4 * s] : NULL;
 	for (int slot = grid->max_slots - 1; slot >= 0; slot--) {
 		if (grid->slot_occupant[slot] == -1) {
 			grid->slot_occupant[slot] = (int)node_id;
-			write_slot_position(layout, node_id, &grid->slots[slot]);
+			write_slot_position(layout, node_id, &grid->slots[slot], quat);
 			return true;
 		}
 	}
@@ -273,7 +291,7 @@ static bool dyn_ls_try_local_append(DynLayeredSphere *dls, const DynCoreTree *ct
 	if (slot < 0)
 		return false; // sphere full — local overflow
 	grid->slot_occupant[slot] = (int)node_id;
-	write_slot_position(layout, node_id, &grid->slots[slot]);
+	write_slot_position(layout, node_id, &grid->slots[slot], dls->sphere_rotation ? &dls->sphere_rotation[4 * s] : NULL);
 	return true;
 }
 
@@ -477,6 +495,14 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 		fprintf(stderr, "dyn_layered_sphere: %s — rebuilding grids for %d sphere(s) (had %d)\n", renumbered ? "level ranks shifted" : "sphere overflow", num_spheres, dls->num_spheres);
 		dyn_ls_free_grid_contents(dls);
 		ok = dyn_ls_build_grids(dls, sphere_count, num_spheres);
+		// A sphere index can now represent a completely different level's
+		// population than it did last time — reset every sphere's rotation
+		// state rather than trying to carry a rotation across a re-ranked
+		// sphere index.
+		ok = ok && dyn_ls_rotation_ensure_capacity(&dls->sphere_rotation, &dls->sphere_prev_omega, &dls->sphere_rotation_steps, &dls->sphere_rotation_capacity, num_spheres);
+		if (ok)
+			for (int s = 0; s < num_spheres; s++)
+				dyn_ls_rotation_reset(dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps, s);
 		for (int s = 0; s < num_spheres; s++)
 			sphere_changed[s] = true;
 	} else {
@@ -559,12 +585,21 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 		ctx.node_to_slot_idx = node_to_slot;
 		ctx.layout = layout;
 		ctx.vcount = (int)vcount;
+		ctx.sphere_rotation = dls->sphere_rotation; // seeds vertices already under each sphere's persisted rotation, avoiding a pop-then-correct jitter
 
 		bool has_timestamp = igraph_cattribute_has_attr(g, IGRAPH_ATTRIBUTE_VERTEX, DYN_LS_TIMESTAMP_ATTR);
 		for (int s = 0; s < num_spheres && ok; s++) {
 			if (sphere_count[s] == 0 || !sphere_changed[s])
 				continue;
 			ok = dyn_ls_seed_sphere(g, &ctx, ct, order, s, sphere_to_level[s], sphere_count[s], community, has_timestamp);
+			if (ok) {
+				// TopoLayout-style torque rotation, adapted to 3D: rotate
+				// sphere s as a rigid body to reduce its inter-sphere edge
+				// stress, then re-apply the (possibly just-updated)
+				// quaternion to s's freshly-seeded occupants.
+				dyn_ls_rotate_sphere_step(g, &ctx, s, dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps);
+				dyn_ls_apply_sphere_rotation(&ctx, s, dls->sphere_rotation);
+			}
 		}
 	}
 
@@ -627,7 +662,13 @@ bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, cons
 	// arrived vertex is appended into its level's sphere (connected) or the
 	// outermost sphere's tail (disconnected) with no re-sort. If any
 	// vertex's append fails (new level, full sphere, no sphere built yet),
-	// we fall through to the full recompute.
+	// we fall through to the full recompute. Sphere rotation is deliberately
+	// NOT recomputed here — dyn_ls_rotate_sphere_step's cost scales with a
+	// whole sphere's inter-sphere edge count, not with the arrival batch
+	// size, so running it on every fast append would regress this path's
+	// near-O(1) guarantee; each append still writes under its sphere's
+	// CURRENT rotation (see dyn_ls_append_disconnected/dyn_ls_try_local_append)
+	// so a fast-appended node never visibly pops relative to its sphere-mates.
 	if (vcount > old_vcount) {
 		bool all_local = true;
 		for (igraph_integer_t v = old_vcount; v < vcount && all_local; v++) {
@@ -664,5 +705,8 @@ void dyn_layered_sphere_destroy(DynLayeredSphere *dls)
 	dyn_ls_free_grid_contents(dls);
 	free(dls->grids);
 	free(dls->level_to_sphere);
+	free(dls->sphere_rotation);
+	free(dls->sphere_prev_omega);
+	free(dls->sphere_rotation_steps);
 	free(dls);
 }

@@ -52,14 +52,35 @@ typedef struct
 	igraph_vector_int_t neis;
 } SphereGrid;
 
-// Writes a sphere slot's 3D coordinates into the layout matrix for node_id.
-// Shared by every placement path (seed, local-append, disconnected-append,
-// try_move_node) so the MATRIX(...) triple isn't repeated at each call site.
-static inline void write_slot_position(igraph_matrix_t *layout, igraph_integer_t node_id, const SpherePoint *p)
+// Rotates point (x,y,z) by unit quaternion q (w,x,y,z) via the standard
+// v' = v + 2*w*(qv x v) + 2*(qv x (qv x v)) formula, qv = q's vector part.
+static inline void quat_rotate_point(const double q[4], double x, double y, double z, double *ox, double *oy, double *oz)
 {
-	MATRIX(*layout, node_id, 0) = p->x;
-	MATRIX(*layout, node_id, 1) = p->y;
-	MATRIX(*layout, node_id, 2) = p->z;
+	double qw = q[0], qx = q[1], qy = q[2], qz = q[3];
+	double t0 = qy * z - qz * y;
+	double t1 = qz * x - qx * z;
+	double t2 = qx * y - qy * x;
+	double u0 = qy * t2 - qz * t1;
+	double u1 = qz * t0 - qx * t2;
+	double u2 = qx * t1 - qy * t0;
+	*ox = x + 2.0 * (qw * t0 + u0);
+	*oy = y + 2.0 * (qw * t1 + u1);
+	*oz = z + 2.0 * (qw * t2 + u2);
+}
+
+// Writes a sphere slot's 3D coordinates into the layout matrix for node_id,
+// applying an optional per-sphere rotation quaternion (w,x,y,z) first — quat
+// NULL means unrotated. Shared by every placement path (seed, local-append,
+// disconnected-append, try_move_node) so the MATRIX(...) triple isn't
+// repeated at each call site.
+static inline void write_slot_position(igraph_matrix_t *layout, igraph_integer_t node_id, const SpherePoint *p, const double *quat)
+{
+	double x = p->x, y = p->y, z = p->z;
+	if (quat)
+		quat_rotate_point(quat, x, y, z, &x, &y, &z);
+	MATRIX(*layout, node_id, 0) = x;
+	MATRIX(*layout, node_id, 1) = y;
+	MATRIX(*layout, node_id, 2) = z;
 }
 
 typedef enum { PHASE_INIT = 0, PHASE_INTRA_SPHERE = 1, PHASE_INTER_SPHERE = 2, PHASE_DONE = 3 } LayoutPhase;
@@ -76,6 +97,7 @@ typedef struct LayeredSphereContext
 	int inter_sphere_pass;
 	int vcount;
 	igraph_matrix_t *layout;
+	const double *sphere_rotation; // optional: flat 4*num_spheres array of per-sphere unit quaternions (w,x,y,z), NULL if no sphere is rotated. Owned by the caller (e.g. DynLayeredSphere); write_slot_position call sites read &sphere_rotation[4*s] for their own sphere s.
 } LayeredSphereContext;
 
 double geodesic_distance(double ux, double uy, double uz, double nx, double ny, double nz, double radius);

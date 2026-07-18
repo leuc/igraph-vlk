@@ -274,6 +274,56 @@ static int test_bootstrap_then_stream(void)
 	return 0;
 }
 
+// Stress test for the per-sphere rotation state (graph/dyn_ls_sphere_rotation.h):
+// a fixed K5 nucleus (coreness 4, one sphere) plus a steadily growing outer
+// chain, each new outer vertex connected both to the previous outer vertex
+// and to a nucleus vertex — giving every recompute plenty of inter-sphere
+// edges to accumulate torque from. Rotation only touches sphere_rotation's
+// persistent quaternion internally (no external accessor exists — see the
+// file header), so this can only be checked indirectly: check_placement_invariants
+// would catch a corrupted (NaN/Inf/non-positive) radius, and a quaternion
+// that drifted off the unit sphere without renormalization would visibly
+// scale a rotated node's radius away from its sphere's exact value, breaking
+// the "every vertex on the same sphere shares that sphere's exact radius"
+// invariant count_distinct_radii relies on elsewhere in this file. Running
+// many small batches (not one big one) exercises many independent
+// dyn_ls_rotate_sphere_step calls across real recomputes, which is what
+// actually stresses drift/renormalization over time.
+static int test_many_recomputes_stress_rotation(void)
+{
+	Fixture f;
+	IGRAPH_ASSERT(fixture_init(&f));
+
+	static const igraph_integer_t k5[] = {0, 1, 0, 2, 0, 3, 0, 4, 1, 2, 1, 3, 1, 4, 2, 3, 2, 4, 3, 4};
+	IGRAPH_ASSERT(fixture_add_batch(&f, k5, sizeof(k5) / sizeof(k5[0]), 5));
+	IGRAPH_ASSERT(check_placement_invariants(&f.layout));
+
+	igraph_integer_t prev_outer = -1;
+	for (int i = 0; i < 30; i++) {
+		igraph_integer_t v = 5 + i;
+		igraph_integer_t nucleus_v = i % 5;
+		igraph_integer_t edges[4];
+		size_t n_ints;
+		if (prev_outer < 0) {
+			edges[0] = v;
+			edges[1] = nucleus_v;
+			n_ints = 2;
+		} else {
+			edges[0] = v;
+			edges[1] = nucleus_v;
+			edges[2] = v;
+			edges[3] = prev_outer;
+			n_ints = 4;
+		}
+		IGRAPH_ASSERT(fixture_add_batch(&f, edges, n_ints, v + 1));
+		IGRAPH_ASSERT(check_placement_invariants(&f.layout));
+		prev_outer = v;
+	}
+
+	fixture_destroy(&f);
+	return 0;
+}
+
 int main(void)
 {
 	RUN_TEST(test_triangle);
@@ -281,6 +331,7 @@ int main(void)
 	RUN_TEST(test_two_disparate_communities);
 	RUN_TEST(test_isolated_new_vertices);
 	RUN_TEST(test_bootstrap_then_stream);
+	RUN_TEST(test_many_recomputes_stress_rotation);
 
 	printf("all tests passed\n");
 	return EXIT_SUCCESS;
