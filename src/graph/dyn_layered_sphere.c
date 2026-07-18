@@ -4,67 +4,58 @@
  *
  * Dynamic (streaming) Layered Sphere layout maintenance, insertion-only.
  *
- * Mirrors src/graph/layered_sphere.c's PHASE_INIT and shares its actual code
- * where the inputs allow: sphere_radius_for, build_sphere_grid,
- * compare_nodes_placement, and seed_slots_for_sphere are all called from
- * layered_sphere_common.c unmodified (bucket_communities_into_spheres is
- * NOT shared here — see below). Differences from the batch algorithm:
+ * Shares its per-sphere placement primitives (sphere_radius_for,
+ * build_sphere_grid, compare_nodes_placement, seed_slots_for_sphere) with
+ * src/graph/layered_sphere.c via layered_sphere_common.c.
  *
- * 1. Sphere assignment is read directly from a DynCoreTree (dyn_core_tree.h)
- *    instead of being approximated: every currently-populated coreness LEVEL
- *    gets exactly one sphere (strict 1:1, no capacity-based packing of
- *    adjacent levels, unlike the batch path's bucket_communities_into_spheres
- *    or this file's own older avg-coreness/community aggregation), ranked
- *    DESCENDING — the highest populated level is sphere 0 (the nucleus),
- *    level 0 (the tree root: coreness-0/isolated vertices) is always the
- *    outermost sphere. Multiple disjoint same-level tree nodes (unconnected
- *    components at the same coreness) still share one sphere, preserving
- *    "shell = degree of centrality" rather than switching to a
- *    connectivity-based grouping. Community membership is still read live
- *    from DynLeiden (O(1) per-vertex lookups) and is the intra-shell
- *    grouping/ordering key, not the shell-assignment key.
- * 2. Change detection is exact, not approximated: dyn_core_tree_on_edges'
- *    touched_levels output says precisely which spheres' populations moved
- *    (radial change), and DynLeiden's community_changed output says which
- *    vertices' community label moved without necessarily changing coreness
- *    (angular-only change) — both are unioned into a per-sphere dirty flag.
- *    Because the tree is exact (not approximated the way the old SimHash-
- *    based cache was), an UNTOUCHED sphere is provably unchanged as long as
- *    no RENUMBERING occurred (see point 3) — so, unlike the old design,
- *    there is no need to defensively clear/reseed every sphere "outward" of
- *    the innermost change; only the individually dirty spheres are touched.
- * 3. A previously-unpopulated level becoming populated (or vice versa) can
- *    shift every OTHER already-populated level's sphere rank even though
- *    that level's own membership never moved — e.g. populated levels
- *    {2,3,7} -> {2,7,8} leaves the sphere COUNT unchanged (3) but shifts
- *    level 7 from rank 2 to rank 1. dyn_ls_recompute detects this by
- *    comparing the freshly computed level->sphere mapping against the
- *    persisted one from last time (dls->level_to_sphere[]) and forces a full
- *    rebuild on any mismatch, since a sphere index can then represent a
- *    completely different level's population than it did last time.
- * 4. There is no annealed relaxation phase (PHASE_INTRA_SPHERE/
- *    PHASE_INTER_SPHERE): within a sphere, members are grouped by community
- *    and ordered purely by arrival timestamp, then each connected node gets
- *    a single one-shot refinement move toward its neighbors
- *    (dyn_ls_refine_connected). The timestamp rides in NodePlacement.density
- *    (with intra_degree pinned to 0) so the shared compare_nodes_placement
- *    comparator and seed_slots_for_sphere seeder apply unchanged — with all
- *    intra_degree equal, that comparator reduces exactly to (community asc,
- *    timestamp asc). The timestamp itself is the "timestamp" igraph vertex
- *    attribute (set in graph/stream.c's ensure_vertex from wall-clock
- *    arrival time), falling back to the vertex id when the attribute is
- *    absent.
+ * Sphere assignment is read directly from a DynCoreTree (dyn_core_tree.h):
+ * every currently-populated coreness LEVEL gets exactly one sphere (strict
+ * 1:1), ranked DESCENDING — the highest populated level is sphere 0 (the
+ * nucleus), level 0 (the tree root: coreness-0/isolated vertices) is always
+ * the outermost sphere. Multiple disjoint same-level tree nodes (unconnected
+ * components at the same coreness) still share one sphere, preserving
+ * "shell = degree of centrality" rather than a connectivity-based grouping.
+ * Community membership is read live from DynLeiden (O(1) per-vertex lookups)
+ * and is the intra-shell grouping/ordering key, not the shell-assignment key.
  *
- * The sphere GEOMETRY persists across recomputes exactly as before: each
- * grid is sized with a large occupancy headroom (DYN_LS_SLOT_HEADROOM_BASE,
- * applied to both the radius and the slot count) when built, and a recompute
- * only re-seeds occupants into the existing slots. Grids are torn down and
- * rebuilt ONLY on sphere overflow or level-rank renumbering (see the `fits`
- * check in dyn_ls_recompute). Two more shortcuts: a batch of arrivals that
- * are ALL still disconnected (degree 0) is appended straight onto the end of
- * the outermost sphere's curve with no recompute at all
- * (dyn_layered_sphere_on_update), and last_seen_vcount tracks which
- * vertices are new arrivals.
+ * Change detection is exact: dyn_core_tree_on_edges' touched_levels output
+ * says precisely which spheres' populations moved (radial change), and
+ * DynLeiden's community_changed output says which vertices' community label
+ * moved without necessarily changing coreness (angular-only change) — both
+ * are unioned into a per-sphere dirty flag, and only dirty spheres are
+ * cleared and re-seeded; an untouched sphere is provably unchanged as long as
+ * no RENUMBERING occurred (see below).
+ *
+ * A previously-unpopulated level becoming populated (or vice versa) can shift
+ * every OTHER already-populated level's sphere rank even though that level's
+ * own membership never moved — e.g. populated levels {2,3,7} -> {2,7,8}
+ * leaves the sphere COUNT unchanged (3) but shifts level 7 from rank 2 to
+ * rank 1. dyn_ls_recompute detects this by comparing the freshly computed
+ * level->sphere mapping against the persisted one from last time
+ * (dls->level_to_sphere[]) and forces a full rebuild on any mismatch, since a
+ * sphere index can then represent a completely different level's population
+ * than it did last time.
+ *
+ * Within a sphere, members are grouped by community and ordered by the
+ * crossing-reduction rank maintained by DynCoreTreeOrder
+ * (dyn_core_tree_order.h) when available, falling back to arrival timestamp
+ * (or vertex id if the "timestamp" attribute is absent) otherwise. Each
+ * connected node then gets a single one-shot refinement move toward its
+ * neighbors (dyn_ls_refine_connected). The ordering key rides in
+ * NodePlacement.density (with intra_degree pinned to 0) so the shared
+ * compare_nodes_placement comparator and seed_slots_for_sphere seeder apply
+ * unchanged — with all intra_degree equal, that comparator reduces exactly
+ * to (community asc, density asc).
+ *
+ * The sphere GEOMETRY persists across recomputes: each grid is sized with a
+ * large occupancy headroom (DYN_LS_SLOT_HEADROOM_BASE, applied to both the
+ * radius and the slot count) when built, and a recompute only re-seeds
+ * occupants into the existing slots. Grids are torn down and rebuilt ONLY on
+ * sphere overflow or level-rank renumbering (see the `fits` check in
+ * dyn_ls_recompute). A batch of arrivals that are ALL still disconnected
+ * (degree 0) is appended straight onto the end of the outermost sphere's
+ * curve with no recompute at all (dyn_layered_sphere_on_update), and
+ * last_seen_vcount tracks which vertices are new arrivals.
  *
  * Simplified Local Buffers (connected-arrival fast path): the shared seeder
  * interleaves each sphere's headroom as gaps across its slots, so a newly
@@ -74,15 +65,14 @@
  * falls through to the full recompute) when the vertex starts a brand-new
  * level, or its sphere has no free slot left. dls->level_to_sphere[] (kept up
  * to date by every recompute) makes the level->sphere lookup O(1) on the fast
- * path — it is always authoritative (the tree cannot go stale), so unlike the
- * old community-keyed cache there is no fallback scan needed at all.
- * Disconnected-only batches take the cheaper dyn_ls_append_disconnected path
- * instead. As with the old design, the fast path does not itself consult
- * touched_levels/community_changed — if every new vertex places locally, the
- * whole call returns early without a full recompute, the same accepted
- * heuristic tradeoff (favoring speed for the common case over reacting to
- * rarer coreness-ripple side effects on already-existing vertices) this file
- * already made before this integration.
+ * path — it is always authoritative (the tree cannot go stale), so no
+ * fallback scan is needed. Disconnected-only batches take the cheaper
+ * dyn_ls_append_disconnected path instead. The fast path does not itself
+ * consult touched_levels/community_changed — if every new vertex places
+ * locally, the whole call returns early without a full recompute, an
+ * accepted heuristic tradeoff favoring speed for the common case over
+ * reacting to rarer coreness-ripple side effects on already-existing
+ * vertices.
  */
 
 #include "graph/dyn_layered_sphere.h"
@@ -317,10 +307,10 @@ static void dyn_ls_refine_connected(const igraph_t *g, LayeredSphereContext *ctx
 // persistent) grid: members are gathered by walking the tree directly
 // (O(this level's occupancy), not O(vcount)), ordered via the shared
 // compare_nodes_placement (density carries the crossing-reduction rank from
-// DynCoreTreeOrder when available, else falls back to the timestamp/vertex-id
-// ordering used before that module existed; intra_degree is 0 — see the file
-// header), seeded via the shared seed_slots_for_sphere, then refined via
-// dyn_ls_refine_connected. Never touches the grid's geometry.
+// DynCoreTreeOrder when available, else falls back to timestamp/vertex-id;
+// intra_degree is 0 — see the file header), seeded via the shared
+// seed_slots_for_sphere, then refined via dyn_ls_refine_connected. Never
+// touches the grid's geometry.
 static bool dyn_ls_seed_sphere(const igraph_t *g, LayeredSphereContext *ctx, const DynCoreTree *ct, const DynCoreTreeOrder *order, int s, int target_level, int n_in_group, const igraph_integer_t *community, bool has_timestamp)
 {
 	NodePlacement *grp = malloc(sizeof(NodePlacement) * (size_t)n_in_group);
@@ -351,9 +341,8 @@ static bool dyn_ls_seed_sphere(const igraph_t *g, LayeredSphereContext *ctx, con
 
 // ============================================================================
 // Full recompute: orchestration only — enumerate populated levels from the
-// tree (shared bucket_communities_into_spheres is NOT used here — that
-// approximates a hierarchy the tree already gives exactly), map, re-seed the
-// persistent grids (rebuilding them ONLY on sphere overflow or renumbering).
+// tree, map them to spheres, and re-seed the persistent grids (rebuilding
+// them ONLY on sphere overflow or renumbering).
 // ============================================================================
 
 static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const DynCoreTree *ct, const DynCoreTreeOrder *order, const igraph_integer_t *community, igraph_matrix_t *layout, const igraph_vector_int_t *touched_levels, const igraph_vector_int_t *community_changed)
@@ -491,10 +480,9 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 		for (int s = 0; s < num_spheres; s++)
 			sphere_changed[s] = true;
 	} else {
-		// Exact, precise invalidation: because the tree is exact (not
-		// approximated) and no renumbering occurred, an untouched sphere is
-		// PROVABLY unchanged — no defensive "clear everything outward"
-		// needed, unlike the old SimHash-approximated design.
+		// Exact, precise invalidation: because the tree is exact and no
+		// renumbering occurred, an untouched sphere is PROVABLY unchanged —
+		// no defensive "clear everything outward" needed.
 		if (touched_levels) {
 			igraph_integer_t n = igraph_vector_int_size(touched_levels);
 			for (igraph_integer_t i = 0; i < n; i++) {
@@ -542,12 +530,10 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 	}
 
 	// Node -> sphere map plus per-slot map, one O(V)-sized array populated by
-	// walking the (much smaller) tree instead of scanning community[]. Still
-	// touches every vertex once — required by the shared LayeredSphereContext
-	// API, which node_hilbert_target/try_move_node use to look up ANY
-	// neighbor's sphere during refinement, not just same-sphere ones — but
-	// the expensive per-community aggregation/sort/hashing this replaced no
-	// longer happens at all.
+	// walking the (much smaller) tree. Still touches every vertex once —
+	// required by the shared LayeredSphereContext API, which
+	// node_hilbert_target/try_move_node use to look up ANY neighbor's sphere
+	// during refinement, not just same-sphere ones.
 	node_to_sphere = malloc((size_t)vcount * sizeof(int));
 	node_to_slot = malloc((size_t)vcount * sizeof(int));
 	if (!node_to_sphere || !node_to_slot) {
