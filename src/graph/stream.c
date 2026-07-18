@@ -15,6 +15,7 @@
 #include "app_state.h"
 #include "graph/community_simhash.h"
 #include "graph/dyn_core_tree.h"
+#include "graph/dyn_core_tree_order.h"
 #include "graph/dyn_k-core.h"
 #include "graph/dyn_layered_sphere.h"
 #include "graph/dyn_leiden.h"
@@ -151,15 +152,16 @@ struct GraphStream
 {
 	OsStreamReader *reader;
 	NameMap names;
-	DynKCore *kcore;				  // live coreness maintenance; NULL if init failed (non-fatal)
-	int last_max_core;				  // max coreness at the last node-size mapping
-	DynCoreTree *core_tree;			  // live k-core hierarchy maintenance (consumed by layered_sphere for sphere assignment); NULL if init failed (non-fatal). Independent of kcore above — see graph/dyn_core_tree.h's own DynKCore instance; the redundant coreness computation is an accepted tradeoff (dyn_core_tree.h's file header explains why it can't share kcore's).
-	DynLeiden *leiden;				  // live community maintenance; NULL if init failed (non-fatal)
-	DynLayeredSphere *layered_sphere; // live Layered Sphere layout maintenance; NULL if init failed (non-fatal)
-	bool layered_sphere_enabled;	  // user-toggled, on by default (see "Data/Stream > [x] Live Layered Sphere")
-	uint32_t node_capacity;			  // amortized capacity of data->nodes[]
-	uint32_t edge_capacity;			  // amortized capacity of data->edges[]
-	bool fatal_error;				  // set on unrecoverable error; poll() becomes a no-op
+	DynKCore *kcore;				   // live coreness maintenance; NULL if init failed (non-fatal)
+	int last_max_core;				   // max coreness at the last node-size mapping
+	DynCoreTree *core_tree;			   // live k-core hierarchy maintenance (consumed by layered_sphere for sphere assignment); NULL if init failed (non-fatal). Independent of kcore above — see graph/dyn_core_tree.h's own DynKCore instance; the redundant coreness computation is an accepted tradeoff (dyn_core_tree.h's file header explains why it can't share kcore's).
+	DynCoreTreeOrder *core_tree_order; // live heuristic crossing-reduction rank per vertex, derived from core_tree (consumed by layered_sphere as its intra-sphere ordering key in place of arrival timestamp); NULL if init failed (non-fatal) or core_tree itself is NULL.
+	DynLeiden *leiden;				   // live community maintenance; NULL if init failed (non-fatal)
+	DynLayeredSphere *layered_sphere;  // live Layered Sphere layout maintenance; NULL if init failed (non-fatal)
+	bool layered_sphere_enabled;	   // user-toggled, on by default (see "Data/Stream > [x] Live Layered Sphere")
+	uint32_t node_capacity;			   // amortized capacity of data->nodes[]
+	uint32_t edge_capacity;			   // amortized capacity of data->edges[]
+	bool fatal_error;				   // set on unrecoverable error; poll() becomes a no-op
 
 	// Debug totals: running counts since streaming started, reported to
 	// stderr on a throttle (see stream_debug_report()).
@@ -368,7 +370,11 @@ GraphStream *graph_stream_init(GraphData *data)
 	if (!gs->core_tree)
 		fprintf(stderr, "graph_stream_init: dynamic k-core hierarchy maintenance unavailable\n");
 
-	gs->layered_sphere = dyn_layered_sphere_init(&data->g, gs->core_tree, gs->leiden ? dyn_leiden_membership(gs->leiden) : NULL, &data->current_layout);
+	gs->core_tree_order = gs->core_tree ? dyn_core_tree_order_init(&data->g, gs->core_tree) : NULL;
+	if (!gs->core_tree_order)
+		fprintf(stderr, "graph_stream_init: heuristic crossing-reduction ordering unavailable\n");
+
+	gs->layered_sphere = dyn_layered_sphere_init(&data->g, gs->core_tree, gs->core_tree_order, gs->leiden ? dyn_leiden_membership(gs->leiden) : NULL, &data->current_layout);
 	if (!gs->layered_sphere)
 		fprintf(stderr, "graph_stream_init: dynamic Layered Sphere layout maintenance unavailable\n");
 	gs->layered_sphere_enabled = true;
@@ -378,6 +384,7 @@ GraphStream *graph_stream_init(GraphData *data)
 		fprintf(stderr, "graph_stream_init: failed to start stdin reader thread\n");
 		dyn_kcore_destroy(gs->kcore);
 		dyn_core_tree_destroy(gs->core_tree);
+		dyn_core_tree_order_destroy(gs->core_tree_order);
 		dyn_leiden_destroy(gs->leiden);
 		dyn_layered_sphere_destroy(gs->layered_sphere);
 		name_map_destroy(&gs->names);
@@ -666,6 +673,17 @@ bool graph_stream_poll(GraphStream *gs, GraphData *data)
 			fprintf(stderr, "graph_stream_poll: dynamic k-core hierarchy maintenance failed — disabling\n");
 			dyn_core_tree_destroy(gs->core_tree);
 			gs->core_tree = NULL;
+			dyn_core_tree_order_destroy(gs->core_tree_order);
+			gs->core_tree_order = NULL;
+		} else if (gs->core_tree_order) {
+			// Ranks only brand-new vertices this batch (see dyn_core_tree_order.h's
+			// v1 scope note) — must run after dyn_core_tree_on_edges above so any
+			// new vertex's tree node/parent are already final for this batch.
+			if (!dyn_core_tree_order_on_update(gs->core_tree_order, &data->g, gs->core_tree)) {
+				fprintf(stderr, "graph_stream_poll: heuristic crossing-reduction ordering failed — disabling\n");
+				dyn_core_tree_order_destroy(gs->core_tree_order);
+				gs->core_tree_order = NULL;
+			}
 		}
 	}
 
@@ -678,7 +696,7 @@ bool graph_stream_poll(GraphStream *gs, GraphData *data)
 	if (gs->layered_sphere && gs->layered_sphere_enabled) {
 		const igraph_integer_t *comm_values = gs->leiden ? dyn_leiden_membership(gs->leiden) : NULL;
 		if (gs->core_tree && comm_values) {
-			if (!dyn_layered_sphere_on_update(gs->layered_sphere, &data->g, gs->core_tree, have_touched_levels ? &touched_levels : NULL, comm_values, have_community_changed ? &community_changed : NULL, &data->current_layout)) {
+			if (!dyn_layered_sphere_on_update(gs->layered_sphere, &data->g, gs->core_tree, have_touched_levels ? &touched_levels : NULL, gs->core_tree_order, comm_values, have_community_changed ? &community_changed : NULL, &data->current_layout)) {
 				fprintf(stderr, "graph_stream_poll: dynamic Layered Sphere maintenance failed — disabling\n");
 				dyn_layered_sphere_destroy(gs->layered_sphere);
 				gs->layered_sphere = NULL;
@@ -717,6 +735,7 @@ void graph_stream_destroy(GraphStream *stream)
 
 	dyn_kcore_destroy(stream->kcore);
 	dyn_core_tree_destroy(stream->core_tree);
+	dyn_core_tree_order_destroy(stream->core_tree_order);
 	dyn_leiden_destroy(stream->leiden);
 	dyn_layered_sphere_destroy(stream->layered_sphere);
 	name_map_destroy(&stream->names);

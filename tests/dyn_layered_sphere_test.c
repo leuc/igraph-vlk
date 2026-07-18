@@ -49,7 +49,7 @@ static int fixture_init(Fixture *f)
 		return 0;
 	f->ct = dyn_core_tree_init(&f->g);
 	f->dl = dyn_leiden_init(&f->g);
-	f->dls = dyn_layered_sphere_init(&f->g, f->ct, f->dl ? dyn_leiden_membership(f->dl) : NULL, &f->layout);
+	f->dls = dyn_layered_sphere_init(&f->g, f->ct, NULL, f->dl ? dyn_leiden_membership(f->dl) : NULL, &f->layout);
 	return f->ct && f->dl && f->dls;
 }
 
@@ -85,7 +85,7 @@ static int fixture_add_batch(Fixture *f, const igraph_integer_t *edges, size_t n
 
 	IGRAPH_ASSERT(dyn_core_tree_on_edges(f->ct, &f->g, has_edges ? &batch : NULL, &touched_levels));
 	IGRAPH_ASSERT(dyn_leiden_on_edges(f->dl, &f->g, has_edges ? &batch : NULL, &community_changed));
-	IGRAPH_ASSERT(dyn_layered_sphere_on_update(f->dls, &f->g, f->ct, &touched_levels, dyn_leiden_membership(f->dl), &community_changed, &f->layout));
+	IGRAPH_ASSERT(dyn_layered_sphere_on_update(f->dls, &f->g, f->ct, &touched_levels, NULL, dyn_leiden_membership(f->dl), &community_changed, &f->layout));
 
 	igraph_vector_int_destroy(&community_changed);
 	igraph_vector_int_destroy(&touched_levels);
@@ -245,7 +245,7 @@ static int test_bootstrap_then_stream(void)
 	DynLeiden *dl = dyn_leiden_init(&g);
 	igraph_matrix_t layout;
 	IGRAPH_ASSERT(igraph_matrix_init(&layout, igraph_vcount(&g), 3) == IGRAPH_SUCCESS);
-	DynLayeredSphere *dls = dyn_layered_sphere_init(&g, ct, dl ? dyn_leiden_membership(dl) : NULL, &layout);
+	DynLayeredSphere *dls = dyn_layered_sphere_init(&g, ct, NULL, dl ? dyn_leiden_membership(dl) : NULL, &layout);
 	IGRAPH_ASSERT(ct && dl && dls);
 	IGRAPH_ASSERT(check_placement_invariants(&layout));
 
@@ -260,7 +260,7 @@ static int test_bootstrap_then_stream(void)
 
 	IGRAPH_ASSERT(dyn_core_tree_on_edges(ct, &g, &batch, &touched_levels));
 	IGRAPH_ASSERT(dyn_leiden_on_edges(dl, &g, &batch, &community_changed));
-	IGRAPH_ASSERT(dyn_layered_sphere_on_update(dls, &g, ct, &touched_levels, dyn_leiden_membership(dl), &community_changed, &layout));
+	IGRAPH_ASSERT(dyn_layered_sphere_on_update(dls, &g, ct, &touched_levels, NULL, dyn_leiden_membership(dl), &community_changed, &layout));
 	IGRAPH_ASSERT(check_placement_invariants(&layout));
 
 	igraph_vector_int_destroy(&community_changed);

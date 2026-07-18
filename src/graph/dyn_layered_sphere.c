@@ -316,10 +316,12 @@ static void dyn_ls_refine_connected(const igraph_t *g, LayeredSphereContext *ctx
 // level<->sphere mapping is strictly 1:1) into its (already-built,
 // persistent) grid: members are gathered by walking the tree directly
 // (O(this level's occupancy), not O(vcount)), ordered via the shared
-// compare_nodes_placement (density carries the timestamp, intra_degree is 0
-// — see the file header), seeded via the shared seed_slots_for_sphere, then
-// refined via dyn_ls_refine_connected. Never touches the grid's geometry.
-static bool dyn_ls_seed_sphere(const igraph_t *g, LayeredSphereContext *ctx, const DynCoreTree *ct, int s, int target_level, int n_in_group, const igraph_integer_t *community, bool has_timestamp)
+// compare_nodes_placement (density carries the crossing-reduction rank from
+// DynCoreTreeOrder when available, else falls back to the timestamp/vertex-id
+// ordering used before that module existed; intra_degree is 0 — see the file
+// header), seeded via the shared seed_slots_for_sphere, then refined via
+// dyn_ls_refine_connected. Never touches the grid's geometry.
+static bool dyn_ls_seed_sphere(const igraph_t *g, LayeredSphereContext *ctx, const DynCoreTree *ct, const DynCoreTreeOrder *order, int s, int target_level, int n_in_group, const igraph_integer_t *community, bool has_timestamp)
 {
 	NodePlacement *grp = malloc(sizeof(NodePlacement) * (size_t)n_in_group);
 	if (!grp) {
@@ -334,7 +336,7 @@ static bool dyn_ls_seed_sphere(const igraph_t *g, LayeredSphereContext *ctx, con
 		for (igraph_integer_t v = dyn_core_tree_first_member(ct, id); v != -1; v = dyn_core_tree_next_member(ct, v)) {
 			grp[m].id = (int)v;
 			grp[m].community_id = (int)community[v];
-			grp[m].density = has_timestamp ? VAN(g, DYN_LS_TIMESTAMP_ATTR, v) : (double)v;
+			grp[m].density = order ? dyn_core_tree_order_rank(order, v) : (has_timestamp ? VAN(g, DYN_LS_TIMESTAMP_ATTR, v) : (double)v);
 			grp[m].intra_degree = 0;
 			m++;
 		}
@@ -354,7 +356,7 @@ static bool dyn_ls_seed_sphere(const igraph_t *g, LayeredSphereContext *ctx, con
 // persistent grids (rebuilding them ONLY on sphere overflow or renumbering).
 // ============================================================================
 
-static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const DynCoreTree *ct, const igraph_integer_t *community, igraph_matrix_t *layout, const igraph_vector_int_t *touched_levels, const igraph_vector_int_t *community_changed)
+static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const DynCoreTree *ct, const DynCoreTreeOrder *order, const igraph_integer_t *community, igraph_matrix_t *layout, const igraph_vector_int_t *touched_levels, const igraph_vector_int_t *community_changed)
 {
 	igraph_integer_t vcount = igraph_vcount(g);
 	if (vcount == 0 || !ct || !community) {
@@ -576,7 +578,7 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 		for (int s = 0; s < num_spheres && ok; s++) {
 			if (sphere_count[s] == 0 || !sphere_changed[s])
 				continue;
-			ok = dyn_ls_seed_sphere(g, &ctx, ct, s, sphere_to_level[s], sphere_count[s], community, has_timestamp);
+			ok = dyn_ls_seed_sphere(g, &ctx, ct, order, s, sphere_to_level[s], sphere_count[s], community, has_timestamp);
 		}
 	}
 
@@ -612,14 +614,14 @@ cleanup:
 // Public API
 // ============================================================================
 
-DynLayeredSphere *dyn_layered_sphere_init(const igraph_t *g, const DynCoreTree *ct, const igraph_integer_t *community, igraph_matrix_t *layout)
+DynLayeredSphere *dyn_layered_sphere_init(const igraph_t *g, const DynCoreTree *ct, const DynCoreTreeOrder *order, const igraph_integer_t *community, igraph_matrix_t *layout)
 {
 	DynLayeredSphere *dls = calloc(1, sizeof(DynLayeredSphere));
 	if (!dls) {
 		fprintf(stderr, "dyn_layered_sphere_init: allocation failed\n");
 		return NULL;
 	}
-	if (!dyn_ls_recompute(dls, g, ct, community, layout, NULL, NULL)) {
+	if (!dyn_ls_recompute(dls, g, ct, order, community, layout, NULL, NULL)) {
 		dyn_layered_sphere_destroy(dls);
 		return NULL;
 	}
@@ -627,7 +629,7 @@ DynLayeredSphere *dyn_layered_sphere_init(const igraph_t *g, const DynCoreTree *
 	return dls;
 }
 
-bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, const DynCoreTree *ct, const igraph_vector_int_t *touched_levels, const igraph_integer_t *community, const igraph_vector_int_t *community_changed, igraph_matrix_t *layout)
+bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, const DynCoreTree *ct, const igraph_vector_int_t *touched_levels, const DynCoreTreeOrder *order, const igraph_integer_t *community, const igraph_vector_int_t *community_changed, igraph_matrix_t *layout)
 {
 	if (!dls)
 		return false;
@@ -666,7 +668,7 @@ bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, cons
 	}
 
 	dls->last_seen_vcount = vcount;
-	return dyn_ls_recompute(dls, g, ct, community, layout, touched_levels, community_changed);
+	return dyn_ls_recompute(dls, g, ct, order, community, layout, touched_levels, community_changed);
 }
 
 void dyn_layered_sphere_destroy(DynLayeredSphere *dls)
