@@ -82,10 +82,28 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define DYN_LS_TIMESTAMP_ATTR "timestamp"
 #define DYN_LS_SLOT_HEADROOM_BASE 4.0		// every sphere's radius and slot count are sized for this multiple of its occupancy at build time, so grids absorb growth without resizing
 #define DYN_LS_SLOT_HEADROOM_PER_SPHERE 0.5 // extra headroom fraction added on top per sphere index further from the nucleus, so outer spheres end up progressively sparser
+
+// Simple high-resolution timer for performance breakdown logging.
+// Times are in microseconds; phases are labelled by index (0 = total).
+#define DYN_LS_NUM_TIMERS 8
+#define DYN_LS_T_AGGREGATE 0
+#define DYN_LS_T_SIMHASH 1
+#define DYN_LS_T_OVPASS 2
+#define DYN_LS_T_SPHERECHG 3
+#define DYN_LS_T_SEED 4
+#define DYN_LS_T_BUCKET 5
+#define DYN_LS_T_FITS 6
+#define DYN_LS_T_STEP 7
+
+static inline double dyn_ls_timer_us(const struct timespec *start, const struct timespec *end)
+{
+	return (double)(end->tv_sec - start->tv_sec) * 1000000.0 + (double)(end->tv_nsec - start->tv_nsec) / 1000.0;
+}
 
 struct DynLayeredSphere
 {
@@ -446,6 +464,9 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 		return true;
 	}
 
+	struct timespec t0 = {0}, t1 = {0}, t2 = {0}, t3 = {0}, t4 = {0}, t5 = {0}, t6 = {0};
+	clock_gettime(CLOCK_MONOTONIC_RAW, &t0);
+
 	int num_communities;
 	CommData *comms = dyn_ls_aggregate_communities(coreness, community, vcount, &num_communities);
 	if (!comms)
@@ -466,13 +487,21 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 		free(comm_to_sphere);
 		return false;
 	}
+	clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
 
-	// Compute SimHash for every live community using the shared API. Each
-	// call scans the full membership array (O(vcount)), so for C communities
-	// this is O(V*C) — the shared hash is reused, no logic duplicated.
+	// Compute SimHash for every live, unstable community using the shared
+	// batch API: one O(vcount) pass over the membership array accumulates
+	// every requested community's hash bits simultaneously (vs. calling
+	// community_simhash_from_membership once per community, which would scan
+	// membership from scratch each time — O(V*C) for C communities). Reuses
+	// the exact same per-bit projection, so hash values are identical either
+	// way; only the loop shape changes.
 	uint64_t *simhash_now = calloc((size_t)vcount, sizeof(uint64_t));
-	if (!simhash_now) {
+	igraph_integer_t *unstable_ids = malloc((size_t)num_communities * sizeof(igraph_integer_t));
+	if (!simhash_now || (num_communities > 0 && !unstable_ids)) {
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
+		free(simhash_now);
+		free(unstable_ids);
 		free(comms);
 		free(comm_to_sphere);
 		return false;
@@ -481,9 +510,12 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 	for (int i = 0; i < num_communities; i++) {
 		if (comms[i].avg_kcore > k_max)
 			continue; // topologically insulated — member set unchanged by theorem
-		num_unstable++;
-		simhash_now[comms[i].comm_id] = community_simhash_from_membership(community, vcount, comms[i].comm_id);
+		unstable_ids[num_unstable++] = comms[i].comm_id;
 	}
+	if (num_unstable > 0)
+		community_simhash_batch(community, vcount, unstable_ids, num_unstable, simhash_now);
+	free(unstable_ids);
+	clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
 
 	// Node -> sphere map plus per-sphere group sizes, one O(V) pass.
 	int *node_to_sphere = malloc((size_t)vcount * sizeof(int));
@@ -573,6 +605,7 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 
 	free(comms);
 	free(comm_to_sphere);
+	clock_gettime(CLOCK_MONOTONIC_RAW, &t3);
 
 	// Sphere overflow check: the persistent grids are reused as long as
 	// every sphere's members still fit in its (headroom-sized) slots and no
@@ -603,6 +636,7 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 			for (int k = 0; k < dls->grids[s].max_slots; k++)
 				dls->grids[s].slot_occupant[k] = -1;
 	}
+	clock_gettime(CLOCK_MONOTONIC_RAW, &t4);
 
 	// Debug: one-line summary of optimization decisions (throttled to avoid
 	// flooding stderr on every poll). k_max is the blast-radius threshold;
@@ -640,6 +674,7 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 			ok = dyn_ls_seed_sphere(g, &ctx, s, sphere_count[s], community, has_timestamp);
 		}
 	}
+	clock_gettime(CLOCK_MONOTONIC_RAW, &t5);
 
 	free(simhash_now);
 	free(sphere_changed);
@@ -649,7 +684,22 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 	if (!ok)
 		return false;
 
-	return igraph_step(layout, NULL) == IGRAPH_SUCCESS;
+	bool step_ok = igraph_step(layout, NULL) == IGRAPH_SUCCESS;
+	clock_gettime(CLOCK_MONOTONIC_RAW, &t6);
+	{
+		static int log_counter = 0;
+		if (++log_counter % 32 == 1) {
+			double us_agg = dyn_ls_timer_us(&t0, &t1);
+			double us_sim = dyn_ls_timer_us(&t1, &t2);
+			double us_ov = dyn_ls_timer_us(&t2, &t3);
+			double us_chg = dyn_ls_timer_us(&t3, &t4);
+			double us_seed = dyn_ls_timer_us(&t4, &t5);
+			double us_step = dyn_ls_timer_us(&t5, &t6);
+			double us_tot = dyn_ls_timer_us(&t0, &t6);
+			fprintf(stderr, "dyn_ls_t: agg=%.0f bkt_sim=%.0f ovpass=%.0f chg=%.0f seed=%.0f step=%.0f tot=%.0f us\n", us_agg, us_sim, us_ov, us_chg, us_seed, us_step, us_tot);
+		}
+	}
+	return step_ok;
 }
 
 // ============================================================================
@@ -683,17 +733,17 @@ bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, cons
 	// arrived vertices (those added since the previous call). An insertion can
 	// only alter coreness/community for vertices with coreness <= k_max, so a
 	// sphere whose minimum community coreness strictly exceeds k_max is
-	// insulated and needs no rebuild. No new vertices (shouldn't happen on an
-	// insertion) defaults to INT_MAX so everything recomputes.
-	int k_max = INT_MAX;
+	// insulated and needs no rebuild. Default -1 means no blast radius
+	// (edge-only batch with no new vertices — nothing is automatically
+	// unstable). When there ARE new vertices but coreness is unavailable,
+	// fall back to INT_MAX so everything recomputes defensively.
+	int k_max = -1;
 	if (vcount > old_vcount) {
-		k_max = -1;
 		for (igraph_integer_t v = old_vcount; v < vcount; v++)
 			if (coreness && coreness[v] > k_max)
 				k_max = coreness[v];
-		// If coreness array was entirely NULL the loop never updates k_max
-		// and it stays at -1, which would freeze everything (avg_kcore >= 0
-		// is never <= -1). Default to full rebuild in that case.
+		// coreness was entirely NULL — can't determine blast radius,
+		// default to full rebuild.
 		if (k_max < 0)
 			k_max = INT_MAX;
 	}

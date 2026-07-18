@@ -9,6 +9,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 // Two independent 64-bit integer hashes (SplitMix64-style) used to project a
 // member id onto each SimHash bit's sign. Different seeds give independent
@@ -67,6 +68,60 @@ uint64_t community_simhash_from_membership(const igraph_integer_t *membership, i
 	uint64_t hash = community_simhash_from_members(buf, n);
 	free(buf);
 	return hash;
+}
+
+void community_simhash_batch(const igraph_integer_t *membership, igraph_integer_t vcount, const igraph_integer_t *comm_ids, int num_comm_ids, uint64_t *out)
+{
+	if (!membership || vcount <= 0 || !comm_ids || num_comm_ids <= 0 || !out)
+		return;
+
+	// comm_id -> compact index into acc[]/comm_ids[], -1 if not requested.
+	int *comm_to_idx = malloc((size_t)vcount * sizeof(int));
+	if (!comm_to_idx)
+		return;
+	for (igraph_integer_t c = 0; c < vcount; c++)
+		comm_to_idx[c] = -1;
+	for (int i = 0; i < num_comm_ids; i++) {
+		igraph_integer_t c = comm_ids[i];
+		if (c >= 0 && c < vcount)
+			comm_to_idx[c] = i;
+	}
+
+	// One signed accumulator per (requested community, bit), same projection
+	// as community_simhash_from_members's per-member loop.
+	int64_t *acc = calloc((size_t)num_comm_ids * 64, sizeof(int64_t));
+	if (!acc) {
+		free(comm_to_idx);
+		return;
+	}
+
+	for (igraph_integer_t v = 0; v < vcount; v++) {
+		igraph_integer_t c = membership[v];
+		if (c < 0 || c >= vcount)
+			continue;
+		int idx = comm_to_idx[c];
+		if (idx < 0)
+			continue;
+		uint64_t id = (uint64_t)v;
+		int64_t *bits = &acc[(size_t)idx * 64];
+		for (int b = 0; b < 64; b++) {
+			uint64_t h1 = simhash_mix(id, 0x100000000ULL + (uint64_t)b * 0x9E3779B9ULL);
+			uint64_t h2 = simhash_mix(id, 0x200000000ULL + (uint64_t)b * 0x85EBCA77ULL);
+			bits[b] += (int64_t)(h1 > h2 ? 1 : -1);
+		}
+	}
+
+	for (int i = 0; i < num_comm_ids; i++) {
+		int64_t *bits = &acc[(size_t)i * 64];
+		uint64_t hash = 0;
+		for (int b = 0; b < 64; b++)
+			if (bits[b] >= 0)
+				hash |= (1ULL << b);
+		out[comm_ids[i]] = hash;
+	}
+
+	free(acc);
+	free(comm_to_idx);
 }
 
 int community_simhash_hamming(uint64_t a, uint64_t b)

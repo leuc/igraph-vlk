@@ -30,6 +30,14 @@ uint64_t community_simhash_from_members(const igraph_integer_t *members, int cou
 // membership array for vertices whose community equals comm_id (O(vcount)).
 // Avoids reaching into dynamic-Leiden's internal linked lists.
 uint64_t community_simhash_from_membership(const igraph_integer_t *membership, igraph_integer_t vcount, igraph_integer_t comm_id);
+// Computes the SimHash of every community listed in comm_ids in a single
+// O(vcount) pass over membership (vs. calling community_simhash_from_membership
+// once per community, which is O(vcount) per call — O(vcount * num_comm_ids)
+// overall). Uses the same projection as community_simhash_from_members, so
+// results are bit-identical to hashing each community individually. Writes
+// out[comm_ids[i]] for each i; entries not listed in comm_ids are left
+// untouched.
+void community_simhash_batch(const igraph_integer_t *membership, igraph_integer_t vcount, const igraph_integer_t *comm_ids, int num_comm_ids, uint64_t *out);
 // Hamming distance between two SimHashes (number of differing bits).
 int community_simhash_hamming(uint64_t a, uint64_t b);
 
