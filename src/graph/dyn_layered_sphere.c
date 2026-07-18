@@ -60,6 +60,17 @@
  * slot mappings entirely — only the outer spheres are cleared and re-seeded.
  * A grid overflow rebuild (fits == false) wipes all slot data, so it forces
  * min_sphere_to_rebuild back to 0 (full re-seed) regardless of k_max.
+ *
+ * Simplified Local Buffers (connected-arrival fast path): the shared seeder
+ * interleaves each sphere's headroom as gaps across its slots, so a newly
+ * arrived vertex that is already connected can often be appended straight
+ * into its community's sphere (dyn_ls_try_local_append) without any re-sort
+ * or recompute — it just fills one of those gaps. The attempt only fails (and
+ * falls through to the full recompute) when the vertex starts a brand-new
+ * community, or its community's sphere has no free slot left. A persistent
+ * comm_sphere[] map (community id -> sphere, rebuilt every recompute) makes
+ * the community->sphere lookup O(1) on the fast path. Disconnected-only
+ * batches take the cheaper dyn_ls_append_disconnected path instead.
  */
 
 #include "graph/dyn_layered_sphere.h"
@@ -81,6 +92,8 @@ struct DynLayeredSphere
 	int grids_capacity;				   // capacity of grids[]
 	int num_spheres;				   // grids currently built (for cleanup/reuse bookkeeping)
 	igraph_integer_t last_seen_vcount; // vcount as of the end of the previous on_update/init call (append or recompute) — used to find newly-arrived vertices
+	int *comm_sphere;				   // persistent: comm_sphere[comm_id] = sphere index of that community's members (-1 if the community is absent/new). Rebuilt from the live community map on every recompute; lets the fast-path local append locate a vertex's sphere without rescanning. comm_id is a vertex id (sparse, up to vcount).
+	igraph_integer_t comm_sphere_cap;  // capacity of comm_sphere[] (== current vcount after the latest recompute)
 };
 
 // ============================================================================
@@ -117,6 +130,25 @@ static bool dyn_ls_ensure_grids_capacity(DynLayeredSphere *dls, int needed)
 	}
 	dls->grids = grown;
 	dls->grids_capacity = cap;
+	return true;
+}
+
+// Grows comm_sphere[] to hold at least vcount entries (indexed by community
+// ids, which are vertex ids up to vcount). Returns true on success.
+static bool dyn_ls_ensure_comm_sphere(DynLayeredSphere *dls, igraph_integer_t vcount)
+{
+	if (vcount <= dls->comm_sphere_cap)
+		return true;
+	igraph_integer_t cap = dls->comm_sphere_cap ? dls->comm_sphere_cap : 16;
+	while (cap < vcount)
+		cap *= 2;
+	int *grown = realloc(dls->comm_sphere, sizeof(int) * (size_t)cap);
+	if (!grown) {
+		fprintf(stderr, "dyn_layered_sphere: realloc comm_sphere to capacity %lld failed\n", (long long)cap);
+		return false;
+	}
+	dls->comm_sphere = grown;
+	dls->comm_sphere_cap = cap;
 	return true;
 }
 
@@ -168,6 +200,49 @@ static bool dyn_ls_append_disconnected(DynLayeredSphere *dls, igraph_integer_t n
 		}
 	}
 	return false;
+}
+
+// ============================================================================
+// Connected-arrival fast path (local-buffer append)
+// ============================================================================
+
+// Attempts to place a newly-arrived, connected vertex into the persistent
+// grid that already holds its community, in a free (-1) slot near that
+// community's existing members — no re-sort, no recompute. This is the
+// "Simplified Local Buffers" fast path: headroom is already interleaved
+// across every sphere's slots by the shared seeder, so an in-community
+// arrival just fills one of those gaps.
+//
+// Returns false (and the caller falls through to a full recompute) when:
+//   - comm_id has no sphere yet (a brand-new community), or
+//   - the community's sphere has no free slot left (local/overall overflow).
+// Only ever writes a free slot, so placement stays collision-free.
+static bool dyn_ls_try_local_append(DynLayeredSphere *dls, igraph_integer_t node_id, igraph_integer_t comm_id, igraph_matrix_t *layout)
+{
+	if (comm_id < 0 || comm_id >= dls->comm_sphere_cap)
+		return false; // out of range — treat as unknown community
+	int s = dls->comm_sphere[comm_id];
+	if (s < 0 || s >= dls->num_spheres || !dls->grids[s].slot_occupant)
+		return false; // new community, or its sphere isn't built — cannot local-append
+	SphereGrid *grid = &dls->grids[s];
+
+	// Headroom is interleaved across every sphere's slots by the shared
+	// seeder, so a free (-1) slot on this sphere is already a valid gap near
+	// the community's members. Take the first one. (Refinement is skipped on
+	// the fast path; the next full recompute re-sorts when it eventually
+	// runs.) Only a free slot is ever written, so placement stays
+	// collision-free.
+	int slot;
+	for (slot = 0; slot < grid->max_slots; slot++)
+		if (grid->slot_occupant[slot] == -1)
+			break;
+	if (slot == grid->max_slots)
+		return false; // sphere full — local overflow
+	grid->slot_occupant[slot] = (int)node_id;
+	MATRIX(*layout, node_id, 0) = grid->slots[slot].x;
+	MATRIX(*layout, node_id, 1) = grid->slots[slot].y;
+	MATRIX(*layout, node_id, 2) = grid->slots[slot].z;
+	return true;
 }
 
 // ============================================================================
@@ -342,9 +417,23 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 		free(sphere_count);
 		return false;
 	}
+	if (!dyn_ls_ensure_comm_sphere(dls, vcount)) {
+		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
+		free(comm_to_sphere);
+		free(node_to_sphere);
+		free(node_to_slot);
+		free(sphere_count);
+		return false;
+	}
+	// Reset the community->sphere map; the O(V) pass below repopulates it for
+	// every community that currently has members. A brand-new community (not
+	// yet present) keeps -1, which the fast-path append reads as "new".
+	for (igraph_integer_t c = 0; c < vcount; c++)
+		dls->comm_sphere[c] = -1;
 	for (igraph_integer_t i = 0; i < vcount; i++) {
 		node_to_sphere[i] = comm_to_sphere[community[i]];
 		sphere_count[node_to_sphere[i]]++;
+		dls->comm_sphere[community[i]] = node_to_sphere[i];
 	}
 	free(comm_to_sphere);
 
@@ -441,6 +530,34 @@ bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, cons
 				k_max = coreness[v];
 	}
 
+	// Connected-arrival fast path (Simplified Local Buffers): each newly
+	// arrived vertex that is already connected (degree > 0) is appended into
+	// its community's existing sphere via dyn_ls_try_local_append — filling
+	// one of that sphere's interleaved headroom gaps with no re-sort. If any
+	// arrival is a brand-new community or its sphere is full, the attempt
+	// fails and we fall through to the full recompute (whose fits check still
+	// handles global sphere-full rebuilds). Disconnected-only batches go
+	// through the cheaper disconnected append below instead.
+	if (vcount > old_vcount) {
+		bool any_connected = false;
+		bool all_local = true;
+		for (igraph_integer_t v = old_vcount; v < vcount && all_local; v++) {
+			igraph_integer_t deg;
+			if (igraph_degree_1(g, &deg, v, IGRAPH_ALL, IGRAPH_NO_LOOPS) != IGRAPH_SUCCESS || deg == 0)
+				continue; // disconnected arrivals are handled by the block below
+			any_connected = true;
+			if (!dyn_ls_try_local_append(dls, v, community[v], layout))
+				all_local = false;
+		}
+		// Only take the fast path when at least one connected arrival was
+		// actually attempted (otherwise a disconnected-only batch would be
+		// claimed here with all_local trivially true and nothing placed).
+		if (any_connected && all_local) {
+			dls->last_seen_vcount = vcount;
+			return igraph_step(layout, NULL) == IGRAPH_SUCCESS;
+		}
+	}
+
 	// Simple condition: if every vertex that arrived since the last call is
 	// still disconnected (degree 0), just append each one to the end of the
 	// outermost sphere's curve directly — no re-sort. A single connected
@@ -472,5 +589,6 @@ void dyn_layered_sphere_destroy(DynLayeredSphere *dls)
 		return;
 	dyn_ls_free_grid_contents(dls);
 	free(dls->grids);
+	free(dls->comm_sphere);
 	free(dls);
 }
