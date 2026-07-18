@@ -26,12 +26,10 @@
 
 // 64-bit order-independent fingerprint of an explicit community member list.
 uint64_t community_simhash_from_members(const igraph_integer_t *members, int count);
-
 // 64-bit fingerprint of the community comm_id, found by scanning the full
 // membership array for vertices whose community equals comm_id (O(vcount)).
 // Avoids reaching into dynamic-Leiden's internal linked lists.
 uint64_t community_simhash_from_membership(const igraph_integer_t *membership, igraph_integer_t vcount, igraph_integer_t comm_id);
-
 // Hamming distance between two SimHashes (number of differing bits).
 int community_simhash_hamming(uint64_t a, uint64_t b);
 
