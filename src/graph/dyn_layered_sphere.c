@@ -49,12 +49,24 @@
  * outermost sphere's curve with no recompute at all
  * (dyn_layered_sphere_on_update), and last_seen_vcount tracks which
  * vertices are new arrivals.
+ *
+ * Topological blast radius (stable core): an insertion (a new edge, or a new
+ * vertex) only alters the coreness/community of vertices whose coreness is
+ * <= k_max, the highest coreness among the newly arrived vertices. comms is
+ * sorted by avg coreness descending and bucketed into contiguous,
+ * non-decreasing sphere indices, so finding the first community at or below
+ * k_max yields the innermost sphere that must be rebuilt (min_sphere_to_rebuild);
+ * every sphere inside that radius is topologically insulated and keeps its
+ * slot mappings entirely — only the outer spheres are cleared and re-seeded.
+ * A grid overflow rebuild (fits == false) wipes all slot data, so it forces
+ * min_sphere_to_rebuild back to 0 (full re-seed) regardless of k_max.
  */
 
 #include "graph/dyn_layered_sphere.h"
 #include "graph/layered_sphere_common.h"
 
 #include <igraph_step.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -277,7 +289,7 @@ static bool dyn_ls_seed_sphere(const igraph_t *g, LayeredSphereContext *ctx, int
 // Rerun on every connected arrival.
 // ============================================================================
 
-static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int *coreness, const igraph_integer_t *community, igraph_matrix_t *layout)
+static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int *coreness, const igraph_integer_t *community, igraph_matrix_t *layout, int k_max)
 {
 	igraph_integer_t vcount = igraph_vcount(g);
 	if (vcount == 0 || !coreness || !community) {
@@ -297,6 +309,25 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 		return false;
 	}
 	int num_spheres = bucket_communities_into_spheres(comms, num_communities, (int)vcount, comm_to_sphere);
+
+	// Topological blast radius (stable core): an insertion only alters the
+	// coreness/community of vertices whose coreness is <= k_max (the highest
+	// coreness among the newly arrived vertices), so any community whose avg
+	// coreness strictly exceeds k_max is topologically insulated. comms is
+	// sorted by avg_kcore descending and bucketed into contiguous,
+	// non-decreasing sphere indices, so the first community at or below k_max
+	// marks the innermost sphere that must be rebuilt; every sphere inside
+	// that radius keeps its slot mappings entirely. No such community means
+	// the whole core is frozen. comms is read here, so it must not be freed
+	// until after this scan.
+	int min_sphere_to_rebuild = num_spheres;
+	for (int i = 0; i < num_communities; i++) {
+		if (comms[i].avg_kcore <= k_max) {
+			min_sphere_to_rebuild = comm_to_sphere[comms[i].comm_id];
+			break;
+		}
+	}
+
 	free(comms);
 
 	// Node -> sphere map plus per-sphere group sizes, one O(V) pass.
@@ -330,11 +361,16 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 		fprintf(stderr, "dyn_layered_sphere: sphere overflow — rebuilding grids for %d sphere(s) (had %d)\n", num_spheres, dls->num_spheres);
 		dyn_ls_free_grid_contents(dls);
 		ok = dyn_ls_build_grids(dls, sphere_count, num_spheres);
+		// Grids were just torn down and rebuilt: all persistent slot data was
+		// wiped, so the entire graph must be re-seeded regardless of k_max.
+		min_sphere_to_rebuild = 0;
 	} else {
 		// Reuse: clear occupants only; geometry (radius, slots) is untouched.
-		// All built grids are cleared — members may have moved between
-		// spheres, and spheres beyond num_spheres may hold stale occupants.
-		for (int s = 0; s < dls->num_spheres; s++)
+		// Only spheres at or outside the blast radius are cleared — members
+		// may have moved between spheres, and spheres beyond num_spheres may
+		// hold stale occupants. Frozen inner spheres (strictly inside the
+		// radius) keep their slot mappings entirely.
+		for (int s = min_sphere_to_rebuild; s < dls->num_spheres; s++)
 			for (int k = 0; k < dls->grids[s].max_slots; k++)
 				dls->grids[s].slot_occupant[k] = -1;
 	}
@@ -348,7 +384,7 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const int
 		ctx.vcount = (int)vcount;
 
 		bool has_timestamp = igraph_cattribute_has_attr(g, IGRAPH_ATTRIBUTE_VERTEX, DYN_LS_TIMESTAMP_ATTR);
-		for (int s = 0; s < num_spheres && ok; s++) {
+		for (int s = min_sphere_to_rebuild; s < num_spheres && ok; s++) {
 			if (sphere_count[s] == 0)
 				continue;
 			ok = dyn_ls_seed_sphere(g, &ctx, s, sphere_count[s], community, has_timestamp);
@@ -375,7 +411,7 @@ DynLayeredSphere *dyn_layered_sphere_init(const igraph_t *g, const int *coreness
 		fprintf(stderr, "dyn_layered_sphere_init: allocation failed\n");
 		return NULL;
 	}
-	if (!dyn_ls_recompute(dls, g, coreness, community, layout)) {
+	if (!dyn_ls_recompute(dls, g, coreness, community, layout, INT_MAX)) {
 		dyn_layered_sphere_destroy(dls);
 		return NULL;
 	}
@@ -390,6 +426,20 @@ bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, cons
 
 	igraph_integer_t vcount = igraph_vcount(g);
 	igraph_integer_t old_vcount = dls->last_seen_vcount;
+
+	// Topological blast radius: k_max is the highest coreness among the newly
+	// arrived vertices (those added since the previous call). An insertion can
+	// only alter coreness/community for vertices with coreness <= k_max, so a
+	// sphere whose minimum community coreness strictly exceeds k_max is
+	// insulated and needs no rebuild. No new vertices (shouldn't happen on an
+	// insertion) defaults to INT_MAX so everything recomputes.
+	int k_max = INT_MAX;
+	if (vcount > old_vcount) {
+		k_max = -1;
+		for (igraph_integer_t v = old_vcount; v < vcount; v++)
+			if (coreness && coreness[v] > k_max)
+				k_max = coreness[v];
+	}
 
 	// Simple condition: if every vertex that arrived since the last call is
 	// still disconnected (degree 0), just append each one to the end of the
@@ -413,7 +463,7 @@ bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, cons
 	}
 
 	dls->last_seen_vcount = vcount;
-	return dyn_ls_recompute(dls, g, coreness, community, layout);
+	return dyn_ls_recompute(dls, g, coreness, community, layout, k_max);
 }
 
 void dyn_layered_sphere_destroy(DynLayeredSphere *dls)
