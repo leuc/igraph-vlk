@@ -9,8 +9,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define DYN_LS_ROTATION_DAMP_HORIZON 20.0 // sphere_rotation_steps[s] reaching this many applied-rotation events is treated as fully warmed up, saturating the damping factor at 1.0
-#define DYN_LS_ROTATION_MAX_STEP_RAD 0.15 // hard cap on a single recompute's rotation magnitude, since a streaming recompute gets one shot rather than an iterative convergence loop
+#define DYN_LS_ROTATION_DAMP_HORIZON 20.0	 // sphere_rotation_steps[s] reaching this many applied-rotation events is treated as fully warmed up, saturating the damping factor at 1.0
+#define DYN_LS_ROTATION_MAX_STEP_RAD 0.15	 // angular-step budget at DYN_LS_ROTATION_REFERENCE_RADIUS; a streaming recompute gets one shot rather than an iterative convergence loop
+#define DYN_LS_ROTATION_REFERENCE_RADIUS 5.0 // sphere_radius_for()'s floor, i.e. the innermost/smallest sphere's radius
 
 // out = a * b (Hamilton product); a is the rotation applied SECOND to a
 // vector already rotated by b (i.e. combined = a . b applies b then a).
@@ -167,13 +168,21 @@ void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ct
 		apply_z *= damp;
 	}
 
+	// Cap by arc length (angle * radius) rather than angle alone, so every sphere sweeps
+	// roughly the same surface distance per step: the small inner sphere gets a large
+	// angular budget (rotates fast/far), the large outer ones get a small one (barely
+	// creep), which is what actually reads as "settled" vs. "spinning" on screen.
+	double max_step_rad = DYN_LS_ROTATION_MAX_STEP_RAD * (DYN_LS_ROTATION_REFERENCE_RADIUS / grid->radius);
+	if (max_step_rad > DYN_LS_ROTATION_MAX_STEP_RAD)
+		max_step_rad = DYN_LS_ROTATION_MAX_STEP_RAD; // never exceed the reference sphere's own budget
+
 	double apply_angle = sqrt(apply_x * apply_x + apply_y * apply_y + apply_z * apply_z);
-	if (apply_angle > DYN_LS_ROTATION_MAX_STEP_RAD) {
-		double clamp_scale = DYN_LS_ROTATION_MAX_STEP_RAD / apply_angle;
+	if (apply_angle > max_step_rad) {
+		double clamp_scale = max_step_rad / apply_angle;
 		apply_x *= clamp_scale;
 		apply_y *= clamp_scale;
 		apply_z *= clamp_scale;
-		apply_angle = DYN_LS_ROTATION_MAX_STEP_RAD;
+		apply_angle = max_step_rad;
 	}
 
 	// Store the undamped/unclamped direction for the NEXT step's oscillation

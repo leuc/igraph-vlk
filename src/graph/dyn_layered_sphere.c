@@ -85,14 +85,6 @@ static void dyn_ls_report_event_log(const DynLsEventLog *elog, int num_spheres, 
 	fprintf(stderr, "dyn_ls_recompute: spheres=%d slots=%d %s=%d %s=%d %s=%d/%d/%d(built/overflow/rescaled) %s=%d(rotations=%d) %s=%d | rank=%.0f geometry=%.0f dirty_mark=%.0f remap=%.0f seed_or_reflow=%.0f tot=%.0f us\n", num_spheres, grid_slot_count, dyn_ls_event_name(DYN_LS_EVENT_LEVEL_TOUCHED), elog->level_touched, dyn_ls_event_name(DYN_LS_EVENT_COMMUNITY_REASSIGNED), elog->community_reassigned, dyn_ls_event_name(DYN_LS_EVENT_SPHERE_GEOMETRY_DIRTY), elog->sphere_geometry_built, elog->sphere_geometry_overflow, elog->sphere_geometry_rescaled, dyn_ls_event_name(DYN_LS_EVENT_SPHERE_RESEEDED), elog->sphere_reseeded, elog->sphere_rotation_applied, dyn_ls_event_name(DYN_LS_EVENT_SPHERE_UNCHANGED), elog->sphere_unchanged, us_rank, us_geometry, us_dirty_mark, us_remap, us_seed_or_reflow, us_total);
 }
 
-static void dyn_ls_report_batch_no_op(void)
-{
-	static int log_counter = 0;
-	if (++log_counter % 32 != 1)
-		return;
-	fprintf(stderr, "dyn_ls_on_update: %s — skipped layout maintenance entirely\n", dyn_ls_event_name(DYN_LS_EVENT_BATCH_NO_OP));
-}
-
 struct DynLayeredSphere
 {
 	SphereGrid *grids;
@@ -632,10 +624,8 @@ bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, cons
 	bool batch_has_other_dirt = (touched_levels && igraph_vector_int_size(touched_levels) > 0) || (community_changed && igraph_vector_int_size(community_changed) > 0);
 
 	/* DYN_LS_EVENT_BATCH_NO_OP: no new vertices and no coreness/community dirt at all — nothing for this module to do. */
-	if (vcount == old_vcount && !batch_has_other_dirt) {
-		dyn_ls_report_batch_no_op();
+	if (vcount == old_vcount && !batch_has_other_dirt)
 		return igraph_step(layout, NULL) == IGRAPH_SUCCESS;
-	}
 
 	if (vcount > old_vcount && !batch_has_other_dirt) {
 		bool all_local = true;
