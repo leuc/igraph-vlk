@@ -43,18 +43,20 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
 		uint32_t segs = (uint32_t)segments;
 		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(mat4) * 2, sizeof(uint32_t), &segs);
-		VkBuffer eBs[] = {r->edge.position, r->edge.attribute};
-		VkDeviceSize eOs[] = {0, 0};
-		vkCmdBindVertexBuffers(cmd, 0, 2, eBs, eOs);
+		VkBuffer prevEdgeBuf = r->edge.position;
+		VkBuffer eBs[] = {r->edge.position, r->edge.attribute, prevEdgeBuf};
+		VkDeviceSize eOs[] = {0, 0, 0};
+		vkCmdBindVertexBuffers(cmd, 0, 3, eBs, eOs);
 		vkCmdDraw(cmd, r->edge.vertex_count, 1, 0, 0);
 	}
 	if (r->showNodes && r->node.count > 0) {
 		float a = 1.0f;
 		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 4, &a);
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.node);
-		VkBuffer vbs[] = {r->nodeVertexBuffer, r->node.position, r->node.attribute};
-		VkDeviceSize vos[] = {0, 0, 0};
-		vkCmdBindVertexBuffers(cmd, 0, 3, vbs, vos);
+		VkBuffer prevNodeBuf = (r->transition.active && r->transition.prev_node_position != VK_NULL_HANDLE) ? r->transition.prev_node_position : r->node.position;
+		VkBuffer vbs[] = {r->nodeVertexBuffer, r->node.position, r->node.attribute, prevNodeBuf};
+		VkDeviceSize vos[] = {0, 0, 0, 0};
+		vkCmdBindVertexBuffers(cmd, 0, 4, vbs, vos);
 		vkCmdDraw(cmd, 3, r->node.count, 0, 0);
 	}
 	// Node labels (opaque, depth-writing) — draw before menu so menu occludes them

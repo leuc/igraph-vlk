@@ -26,6 +26,7 @@
 #include "vulkan/renderer_draw.h"
 #include "vulkan/renderer_labels.h"
 #include "vulkan/renderer_lifecycle.h"
+#include "vulkan/renderer_transition.h"
 
 #ifdef USE_OPENXR
 #include "xr/openxr_frame.h"
@@ -219,6 +220,7 @@ int main(int argc, char **argv)
 
 		// Push timing to renderer — before update_app_state() so SPLC/BCGL init reads fresh time
 		renderer_anim_update(&app.renderer, app.time, app.delta_time, app.frame_count);
+		renderer_transition_update(&app.renderer, app.delta_time);
 
 		// FPS calculation
 		app.fps_timer += app.delta_time;
@@ -262,10 +264,11 @@ int main(int argc, char **argv)
 		// the same live igraph_t on a background thread)
 		if (app.graph_stream && !app.job_in_progress && !app.graph_stream_paused) {
 			if (graph_stream_poll(app.graph_stream, &app.current_graph)) {
-				// New/changed nodes always carry attribute changes (color,
-				// size incl. live k-core mapping, degree) — not just positions.
+				fprintf(stderr, "[Main] stream_poll changed: nodes=%u edges=%u\n", app.current_graph.node_count, app.current_graph.edge_count);
 				app.renderer.needsAttributeUpload = VK_TRUE;
+				renderer_transition_begin(&app.renderer, 5.0f);
 				renderer_update_graph(&app.renderer, &app.current_graph);
+				renderer_transition_reconcile(&app.renderer, &app.current_graph);
 			}
 		}
 

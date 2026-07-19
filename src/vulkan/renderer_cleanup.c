@@ -13,6 +13,7 @@
 #include "vulkan/render_pass.h"
 #include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_bcgl.h"
+#include "vulkan/renderer_transition.h"
 #include "vulkan/swapchain.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
@@ -171,6 +172,7 @@ void renderer_cleanup(Renderer *r)
 	renderer_anim_cleanup(r);
 	cleanup_compute_context(r);
 	renderer_cleanup_bcgl(r);
+	renderer_transition_cleanup(r);
 	cleanup_geometry_buffers(r);
 	cleanup_menu_label_atlases(r);
 	cleanup_xr_resources(r);

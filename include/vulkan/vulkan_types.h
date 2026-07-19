@@ -217,6 +217,7 @@ typedef struct
 	float delta_time;
 	uint32_t frame_count;
 	float _pad;
+	float transition_t;
 } GlobalAnimState;
 
 typedef struct
@@ -363,6 +364,21 @@ typedef struct
 
 typedef struct
 {
+	VkBuffer prev_node_position;
+	VkDeviceMemory prev_node_position_memory;
+	uint32_t prev_node_count;
+	uint32_t prev_node_capacity;
+	VkBuffer prev_edge_position;
+	VkDeviceMemory prev_edge_position_memory;
+	uint32_t prev_edge_vertex_count;
+	uint32_t prev_edge_capacity;
+	float t;
+	float duration;
+	bool active;
+} TransitionState;
+
+typedef struct
+{
 	VkBuffer position;
 	VkDeviceMemory position_memory;
 	VkBuffer attribute;
@@ -470,6 +486,8 @@ typedef struct Renderer
 	NodeBuffers node;
 
 	EdgeBuffers edge;
+
+	TransitionState transition;
 
 	bool needsAttributeUpload;
 

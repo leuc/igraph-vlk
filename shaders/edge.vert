@@ -14,6 +14,7 @@ layout(binding = 4) uniform GlobalAnimState
 	float delta_time;
 	uint frame_count;
 	float _pad;
+	float transition_t;
 }
 anim;
 
@@ -59,6 +60,7 @@ layout(location = 1) in vec3 inColor;
 layout(location = 2) in float inSelected;
 layout(location = 3) in float inNormalizedPos;
 layout(location = 4) in float inVisible;
+layout(location = 5) in vec3 prevInPosition;
 
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out float fragSelected;
@@ -67,7 +69,8 @@ layout(location = 3) out float fragVisible;
 
 void main()
 {
-	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
+	vec3 pos = mix(prevInPosition, inPosition, anim.transition_t);
+	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(pos, 1.0);
 
 	float max_w = uintBitsToFloat(global_max_weight_uint);
 

@@ -55,6 +55,8 @@ typedef struct
 	struct AppState *app_state;
 	// Cancellation flag set by main thread to abort worker
 	bool running;
+	// Transition duration for layout morphing (0 = snap, >0 = smooth transition)
+	float transition_duration;
 } ExecutionContext;
 
 // --- The Action Node (Leaf in the menu) ---

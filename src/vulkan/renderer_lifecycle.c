@@ -19,6 +19,7 @@
 #include "vulkan/renderer_compute.h"
 #include "vulkan/renderer_geometry.h"
 #include "vulkan/renderer_pipelines.h"
+#include "vulkan/renderer_transition.h"
 #include "vulkan/swapchain.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
@@ -190,6 +191,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 		VK_CHECK(vkCreateFence(r->core.device, &VK_SIGNALED_FENCE_INFO, NULL, &r->graphUpdateFences[i]), "Failed to create graph update fence");
 	}
 
+	renderer_transition_init(r);
 	renderer_update_graph(r, graph);
 	r->label.tree_needs_rebuild = true;
 

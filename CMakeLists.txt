@@ -109,6 +109,7 @@ add_executable(
 	src/vulkan/renderer_update_node_labels.c
 	src/vulkan/renderer_init_splc_buffers.c
 	src/vulkan/renderer_bcgl.c
+	src/vulkan/renderer_transition.c
 	# Graph modules
 	src/graph/graph_core.c
 	src/graph/graph_io.c

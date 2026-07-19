@@ -13,6 +13,8 @@ layout(binding = 4) uniform GlobalAnimState
 	float time;
 	float delta_time;
 	uint frame_count;
+	float _pad;
+	float transition_t;
 }
 anim;
 

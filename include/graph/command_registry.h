@@ -45,6 +45,7 @@ typedef struct CommandDef
 	IgraphGpuPollFunc gpu_poll_func;   // NULL = CPU-only, non-NULL = GPU job
 	const CommandParamDef *param_defs; // NULL if no params
 	int num_params;
+	float transition_duration; // 0 = snap, >0 = smooth morph in seconds
 } CommandDef;
 
 extern const CommandDef g_command_registry[];

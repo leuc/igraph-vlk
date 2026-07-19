@@ -10,6 +10,7 @@
 #include "interaction/state.h"
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_anim.h"
+#include "vulkan/renderer_transition.h"
 #include <float.h>
 #include <igraph.h>
 #include <igraph_constants.h>
@@ -172,6 +173,13 @@ void apply_layout_matrix(ExecutionContext *ctx, void *result_data)
 		// printf("[Layout Bounds] X: [%.3f, %.3f] Y: [%.3f, %.3f] Z: [%.3f, %.3f]\n", min_x, max_x, min_y, max_y, min_z, max_z);
 	}
 
+	if (ctx->transition_duration > 0.0f) {
+		renderer_transition_begin(renderer, ctx->transition_duration);
+	}
+
 	renderer_update_graph(renderer, data);
-	// printf("[apply_layout_matrix] Layout applied and renderer refreshed\n");
+
+	if (ctx->transition_duration > 0.0f) {
+		renderer_transition_reconcile(renderer, data);
+	}
 }

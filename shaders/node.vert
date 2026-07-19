@@ -13,6 +13,8 @@ layout(binding = 4) uniform GlobalAnimState
 	float time;
 	float delta_time;
 	uint frame_count;
+	float _pad;
+	float transition_t;
 }
 anim;
 
@@ -27,6 +29,7 @@ layout(location = 3) in float instanceSize;
 layout(location = 4) in int instanceDegree;
 layout(location = 5) in float instanceSelected;
 layout(location = 6) in float instanceVisible;
+layout(location = 7) in vec3 prevInstancePos;
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec3 fragColor;
@@ -39,9 +42,11 @@ void main()
 {
 	float finalSize = 0.5 * instanceSize;
 
+	vec3 pos = mix(prevInstancePos, instancePos, anim.transition_t);
+
 	// Orient the tile flat on the surface of the layout sphere
-	vec3 normal = normalize(instancePos);
-	if (length(instancePos) < 0.001)
+	vec3 normal = normalize(pos);
+	if (length(pos) < 0.001)
 		normal = vec3(0.0, 1.0, 0.0);
 
 	vec3 upGuide = vec3(0.0, 1.0, 0.0);
@@ -53,7 +58,7 @@ void main()
 
 	// Flatten geometry into a 2D tile mapped along the tangent plane
 	vec3 flatPos = rightVec * inPosition.x + upVec * inPosition.y;
-	vec3 worldPos = (flatPos * finalSize) + instancePos;
+	vec3 worldPos = (flatPos * finalSize) + pos;
 
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(worldPos, 1.0);
 
