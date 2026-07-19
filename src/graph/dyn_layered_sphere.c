@@ -20,6 +20,67 @@ static inline double dyn_ls_timer_us(const struct timespec *start, const struct 
 	return (double)(end->tv_sec - start->tv_sec) * 1000000.0 + (double)(end->tv_nsec - start->tv_nsec) / 1000.0;
 }
 
+/* Every reactive branch in this file corresponds to exactly one of these; each has a single dyn_ls_handle_<event> handler. */
+typedef enum {
+	DYN_LS_EVENT_NODE_PAIR_CONNECTED,	/* new vertex arrived already wired to the graph (degree > 0) */
+	DYN_LS_EVENT_NODE_DISJOINT_ADDED,	/* new vertex arrived isolated (degree == 0) */
+	DYN_LS_EVENT_LEVEL_TOUCHED,			/* a coreness level's tree membership changed */
+	DYN_LS_EVENT_COMMUNITY_REASSIGNED,	/* a vertex's community changed */
+	DYN_LS_EVENT_SPHERE_GEOMETRY_DIRTY, /* a sphere's grid is new/overflowed and needs rebuild/rescale */
+	DYN_LS_EVENT_SPHERE_RESEEDED,		/* a dirty sphere was fully re-seeded this batch */
+	DYN_LS_EVENT_SPHERE_UNCHANGED,		/* a sphere has no dirty event this batch; positions are re-emitted as-is */
+} DynLsEventType;
+
+static const char *dyn_ls_event_name(DynLsEventType type)
+{
+	switch (type) {
+	case DYN_LS_EVENT_NODE_PAIR_CONNECTED:
+		return "node_pair_connected";
+	case DYN_LS_EVENT_NODE_DISJOINT_ADDED:
+		return "node_disjoint_added";
+	case DYN_LS_EVENT_LEVEL_TOUCHED:
+		return "level_touched";
+	case DYN_LS_EVENT_COMMUNITY_REASSIGNED:
+		return "community_reassigned";
+	case DYN_LS_EVENT_SPHERE_GEOMETRY_DIRTY:
+		return "sphere_geometry_dirty";
+	case DYN_LS_EVENT_SPHERE_RESEEDED:
+		return "sphere_reseeded";
+	case DYN_LS_EVENT_SPHERE_UNCHANGED:
+		return "sphere_unchanged";
+	default:
+		return "unknown";
+	}
+}
+
+static DynLsEventType dyn_ls_classify_node_arrival(const igraph_t *g, igraph_integer_t v)
+{
+	igraph_integer_t deg;
+	if (igraph_degree_1(g, &deg, v, IGRAPH_ALL, IGRAPH_NO_LOOPS) != IGRAPH_SUCCESS)
+		deg = 0;
+	return deg > 0 ? DYN_LS_EVENT_NODE_PAIR_CONNECTED : DYN_LS_EVENT_NODE_DISJOINT_ADDED;
+}
+
+/* Per-recompute-call tally, one bucket per DynLsEventType, reported as a single consolidated line instead of scattering a print per occurrence. */
+typedef struct
+{
+	int level_touched;
+	int community_reassigned;
+	int sphere_geometry_built;
+	int sphere_geometry_overflow;
+	int sphere_geometry_rescaled;
+	int sphere_reseeded;
+	int sphere_unchanged;
+} DynLsEventLog;
+
+static void dyn_ls_report_event_log(const DynLsEventLog *elog, int num_spheres, int grid_slot_count, double us_rank, double us_geometry, double us_dirty_mark, double us_reseed, double us_total)
+{
+	static int log_counter = 0;
+	if (++log_counter % 32 != 1)
+		return;
+	fprintf(stderr, "dyn_ls_recompute: spheres=%d slots=%d %s=%d %s=%d %s=%d/%d/%d(built/overflow/rescaled) %s=%d %s=%d | rank=%.0f geometry=%.0f dirty_mark=%.0f reseed=%.0f tot=%.0f us\n", num_spheres, grid_slot_count, dyn_ls_event_name(DYN_LS_EVENT_LEVEL_TOUCHED), elog->level_touched, dyn_ls_event_name(DYN_LS_EVENT_COMMUNITY_REASSIGNED), elog->community_reassigned, dyn_ls_event_name(DYN_LS_EVENT_SPHERE_GEOMETRY_DIRTY), elog->sphere_geometry_built, elog->sphere_geometry_overflow, elog->sphere_geometry_rescaled, dyn_ls_event_name(DYN_LS_EVENT_SPHERE_RESEEDED), elog->sphere_reseeded, dyn_ls_event_name(DYN_LS_EVENT_SPHERE_UNCHANGED), elog->sphere_unchanged, us_rank, us_geometry, us_dirty_mark, us_reseed, us_total);
+}
+
 struct DynLayeredSphere
 {
 	SphereGrid *grids;
@@ -102,7 +163,7 @@ static bool dyn_ls_rebuild_one_slot(DynLayeredSphere *dls, int slot, int capacit
 	return true;
 }
 
-static bool dyn_ls_append_disconnected(DynLayeredSphere *dls, igraph_integer_t node_id, igraph_matrix_t *layout)
+static bool dyn_ls_handle_node_disjoint_added(DynLayeredSphere *dls, igraph_integer_t node_id, igraph_matrix_t *layout)
 {
 	if (dls->level_to_grid_slot_cap == 0)
 		return false;
@@ -121,7 +182,7 @@ static bool dyn_ls_append_disconnected(DynLayeredSphere *dls, igraph_integer_t n
 	return false;
 }
 
-static bool dyn_ls_try_local_append(DynLayeredSphere *dls, const DynCoreTree *ct, igraph_integer_t node_id, const igraph_integer_t *community, igraph_integer_t vcount, igraph_matrix_t *layout)
+static bool dyn_ls_handle_node_pair_connected(DynLayeredSphere *dls, const DynCoreTree *ct, igraph_integer_t node_id, const igraph_integer_t *community, igraph_integer_t vcount, igraph_matrix_t *layout)
 {
 	int level = dyn_core_tree_level(ct, dyn_core_tree_node_of(ct, node_id));
 	int s = (level >= 0 && level < dls->level_to_grid_slot_cap) ? dls->level_to_grid_slot[level] : -1;
@@ -205,13 +266,119 @@ static bool dyn_ls_seed_sphere(const igraph_t *g, LayeredSphereContext *ctx, con
 		seed_count = ctx->grids[s].max_slots;
 		static int ctr = 0;
 		if (++ctr % 16 == 1)
-			fprintf(stderr, "dyn_layered_sphere: sphere slot=%d level=%d population %d exceeds grid capacity %d, seeding only the first %d\n", s, target_level, m, ctx->grids[s].max_slots, seed_count);
+			fprintf(stderr, "dyn_ls[%s]: sphere slot=%d level=%d population %d exceeds grid capacity %d, seeding only the first %d\n", dyn_ls_event_name(DYN_LS_EVENT_SPHERE_RESEEDED), s, target_level, m, ctx->grids[s].max_slots, seed_count);
 	}
 	seed_slots_for_sphere(ctx, s, grp, seed_count);
 
 	dyn_ls_refine_connected(g, ctx, s, grp, seed_count);
 	free(grp);
 	return true;
+}
+
+static bool dyn_ls_assign_grid_slots_for_ranks(DynLayeredSphere *dls, const int *sphere_to_level, int num_spheres)
+{
+	for (int rank = 0; rank < num_spheres; rank++) {
+		int l = sphere_to_level[rank];
+		if (dls->level_to_grid_slot[l] >= 0)
+			continue;
+		if (!dyn_ls_ensure_grids_capacity(dls, dls->grid_slot_count + 1) || !dyn_ls_rotation_ensure_capacity(&dls->sphere_rotation, &dls->sphere_prev_omega, &dls->sphere_rotation_steps, &dls->sphere_rotation_capacity, dls->grid_slot_count + 1)) {
+			fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
+			return false;
+		}
+		int slot = dls->grid_slot_count++;
+		memset(&dls->grids[slot], 0, sizeof(SphereGrid));
+		dls->level_to_grid_slot[l] = slot;
+	}
+	return true;
+}
+
+/* DYN_LS_EVENT_SPHERE_GEOMETRY_DIRTY: a sphere's grid is new/overflowed and needs rebuild/rescale. */
+static bool dyn_ls_handle_sphere_geometry_dirty(DynLayeredSphere *dls, const int *sphere_to_level, const int *level_count, int num_spheres, bool *sphere_changed, int *n_built, int *n_overflow, int *n_rescaled)
+{
+	double prev_radius = 0.0;
+	for (int rank = 0; rank < num_spheres; rank++) {
+		int l = sphere_to_level[rank];
+		int slot = dls->level_to_grid_slot[l];
+		int occ = level_count[l];
+		double new_radius = sphere_radius_for(rank, occ, prev_radius);
+		prev_radius = new_radius;
+
+		SphereGrid *grid = &dls->grids[slot];
+		bool is_new = (grid->slots == NULL);
+		bool overflow = !is_new && occ > grid->max_slots && grid->max_slots < DYN_LS_MAX_GRID_SLOTS;
+
+		if (is_new || overflow) {
+			int capacity_n = (int)((double)occ * (DYN_LS_SLOT_HEADROOM_BASE + rank * DYN_LS_SLOT_HEADROOM_PER_SPHERE));
+			if (!dyn_ls_rebuild_one_slot(dls, slot, capacity_n, new_radius))
+				return false;
+			sphere_changed[slot] = true;
+			if (is_new)
+				(*n_built)++;
+			else
+				(*n_overflow)++;
+		} else if (fabs(new_radius - grid->radius) > DYN_LS_RADIUS_EPS) {
+			double scale = new_radius / grid->radius;
+			for (int k = 0; k < grid->max_slots; k++) {
+				grid->slots[k].x *= scale;
+				grid->slots[k].y *= scale;
+				grid->slots[k].z *= scale;
+			}
+			grid->radius = new_radius;
+			(*n_rescaled)++;
+		}
+	}
+	return true;
+}
+
+/* DYN_LS_EVENT_LEVEL_TOUCHED: a coreness level's tree membership changed. */
+static void dyn_ls_handle_level_touched(DynLayeredSphere *dls, const igraph_vector_int_t *touched_levels, bool *sphere_changed)
+{
+	igraph_integer_t n = igraph_vector_int_size(touched_levels);
+	for (igraph_integer_t i = 0; i < n; i++) {
+		int lvl = (int)VECTOR(*touched_levels)[i];
+		if (lvl >= 0 && lvl < dls->level_to_grid_slot_cap && dls->level_to_grid_slot[lvl] >= 0)
+			sphere_changed[dls->level_to_grid_slot[lvl]] = true;
+	}
+}
+
+/* DYN_LS_EVENT_COMMUNITY_REASSIGNED: a vertex's community changed. */
+static void dyn_ls_handle_community_reassigned(DynLayeredSphere *dls, const DynCoreTree *ct, const igraph_vector_int_t *community_changed, bool *sphere_changed)
+{
+	igraph_integer_t n = igraph_vector_int_size(community_changed);
+	for (igraph_integer_t i = 0; i < n; i++) {
+		igraph_integer_t v = VECTOR(*community_changed)[i];
+		int lvl = dyn_core_tree_level(ct, dyn_core_tree_node_of(ct, v));
+		if (lvl >= 0 && lvl < dls->level_to_grid_slot_cap && dls->level_to_grid_slot[lvl] >= 0)
+			sphere_changed[dls->level_to_grid_slot[lvl]] = true;
+	}
+}
+
+/* DYN_LS_EVENT_SPHERE_RESEEDED: the union outcome of DYN_LS_EVENT_SPHERE_GEOMETRY_DIRTY / LEVEL_TOUCHED / COMMUNITY_REASSIGNED having marked sphere_changed[slot]. */
+static bool dyn_ls_reseed_sphere(const igraph_t *g, LayeredSphereContext *ctx, const DynCoreTree *ct, const DynCoreTreeOrder *order, DynLayeredSphere *dls, int slot, int l, int occ, const igraph_integer_t *community, bool has_timestamp)
+{
+	bool ok;
+	{
+		const double *saved_rotation = ctx->sphere_rotation;
+		ctx->sphere_rotation = NULL;
+		ok = dyn_ls_seed_sphere(g, ctx, ct, order, slot, l, occ, community, has_timestamp);
+		ctx->sphere_rotation = saved_rotation;
+	}
+	if (ok) {
+		dyn_ls_apply_sphere_rotation(ctx, slot, dls->sphere_rotation);
+		dyn_ls_rotate_sphere_step(g, ctx, slot, dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps);
+		dyn_ls_apply_sphere_rotation(ctx, slot, dls->sphere_rotation);
+	}
+	return ok;
+}
+
+/* DYN_LS_EVENT_SPHERE_UNCHANGED: no dirty event this batch; positions are re-emitted as-is. */
+static void dyn_ls_handle_sphere_unchanged(igraph_matrix_t *layout, SphereGrid *grid, const double *quat)
+{
+	for (int k = 0; k < grid->max_slots; k++) {
+		int occupant = grid->slot_occupant[k];
+		if (occupant != -1)
+			write_slot_position(layout, occupant, &grid->slots[k], quat);
+	}
 }
 
 static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const DynCoreTree *ct, const DynCoreTreeOrder *order, const igraph_integer_t *community, igraph_matrix_t *layout, const igraph_vector_int_t *touched_levels, const igraph_vector_int_t *community_changed)
@@ -287,17 +454,9 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
 		goto cleanup;
 	}
-	for (int rank = 0; rank < num_spheres; rank++) {
-		int l = sphere_to_level[rank];
-		if (dls->level_to_grid_slot[l] >= 0)
-			continue;
-		if (!dyn_ls_ensure_grids_capacity(dls, dls->grid_slot_count + 1) || !dyn_ls_rotation_ensure_capacity(&dls->sphere_rotation, &dls->sphere_prev_omega, &dls->sphere_rotation_steps, &dls->sphere_rotation_capacity, dls->grid_slot_count + 1)) {
-			fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
-			goto cleanup;
-		}
-		int slot = dls->grid_slot_count++;
-		memset(&dls->grids[slot], 0, sizeof(SphereGrid));
-		dls->level_to_grid_slot[l] = slot;
+	if (!dyn_ls_assign_grid_slots_for_ranks(dls, sphere_to_level, num_spheres)) {
+		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
+		goto cleanup;
 	}
 
 	sphere_changed = calloc((size_t)dls->grid_slot_count, sizeof(bool));
@@ -306,74 +465,25 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 		goto cleanup;
 	}
 
-	{
-		bool ok = true;
-		double prev_radius = 0.0;
-		int n_built = 0, n_overflow = 0, n_rescaled = 0;
-		for (int rank = 0; rank < num_spheres && ok; rank++) {
-			int l = sphere_to_level[rank];
-			int slot = dls->level_to_grid_slot[l];
-			int occ = level_count[l];
-			double new_radius = sphere_radius_for(rank, occ, prev_radius);
-			prev_radius = new_radius;
-
-			SphereGrid *grid = &dls->grids[slot];
-			bool is_new = (grid->slots == NULL);
-			bool overflow = !is_new && occ > grid->max_slots && grid->max_slots < DYN_LS_MAX_GRID_SLOTS;
-
-			if (is_new || overflow) {
-				int capacity_n = (int)((double)occ * (DYN_LS_SLOT_HEADROOM_BASE + rank * DYN_LS_SLOT_HEADROOM_PER_SPHERE));
-				ok = dyn_ls_rebuild_one_slot(dls, slot, capacity_n, new_radius);
-				sphere_changed[slot] = true;
-				if (is_new)
-					n_built++;
-				else
-					n_overflow++;
-			} else if (fabs(new_radius - grid->radius) > DYN_LS_RADIUS_EPS) {
-				double scale = new_radius / grid->radius;
-				for (int k = 0; k < grid->max_slots; k++) {
-					grid->slots[k].x *= scale;
-					grid->slots[k].y *= scale;
-					grid->slots[k].z *= scale;
-				}
-				grid->radius = new_radius;
-				n_rescaled++;
-			}
-		}
-		if (!ok) {
-			fprintf(stderr, "dyn_layered_sphere: grid (re)build failed\n");
-			goto cleanup;
-		}
-		clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
-
-		if (touched_levels) {
-			igraph_integer_t n = igraph_vector_int_size(touched_levels);
-			for (igraph_integer_t i = 0; i < n; i++) {
-				int lvl = (int)VECTOR(*touched_levels)[i];
-				if (lvl >= 0 && lvl < dls->level_to_grid_slot_cap && dls->level_to_grid_slot[lvl] >= 0)
-					sphere_changed[dls->level_to_grid_slot[lvl]] = true;
-			}
-		}
-		if (community_changed) {
-			igraph_integer_t n = igraph_vector_int_size(community_changed);
-			for (igraph_integer_t i = 0; i < n; i++) {
-				igraph_integer_t v = VECTOR(*community_changed)[i];
-				int lvl = dyn_core_tree_level(ct, dyn_core_tree_node_of(ct, v));
-				if (lvl >= 0 && lvl < dls->level_to_grid_slot_cap && dls->level_to_grid_slot[lvl] >= 0)
-					sphere_changed[dls->level_to_grid_slot[lvl]] = true;
-			}
-		}
-		for (int slot = 0; slot < dls->grid_slot_count; slot++)
-			if (sphere_changed[slot])
-				for (int k = 0; k < dls->grids[slot].max_slots; k++)
-					dls->grids[slot].slot_occupant[k] = -1;
-
-		{
-			static int log_counter = 0;
-			if (++log_counter % 32 == 1)
-				fprintf(stderr, "dyn_ls: recompute spheres=%d slots=%d built=%d overflow=%d rescaled=%d\n", num_spheres, dls->grid_slot_count, n_built, n_overflow, n_rescaled);
-		}
+	DynLsEventLog elog = {0};
+	if (!dyn_ls_handle_sphere_geometry_dirty(dls, sphere_to_level, level_count, num_spheres, sphere_changed, &elog.sphere_geometry_built, &elog.sphere_geometry_overflow, &elog.sphere_geometry_rescaled)) {
+		fprintf(stderr, "dyn_layered_sphere: grid (re)build failed\n");
+		goto cleanup;
 	}
+	clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
+
+	if (touched_levels) {
+		elog.level_touched = (int)igraph_vector_int_size(touched_levels);
+		dyn_ls_handle_level_touched(dls, touched_levels, sphere_changed);
+	}
+	if (community_changed) {
+		elog.community_reassigned = (int)igraph_vector_int_size(community_changed);
+		dyn_ls_handle_community_reassigned(dls, ct, community_changed, sphere_changed);
+	}
+	for (int slot = 0; slot < dls->grid_slot_count; slot++)
+		if (sphere_changed[slot])
+			for (int k = 0; k < dls->grids[slot].max_slots; k++)
+				dls->grids[slot].slot_occupant[k] = -1;
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t3);
 
 	node_to_sphere = malloc((size_t)vcount * sizeof(int));
@@ -453,48 +563,14 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 			int slot = dls->level_to_grid_slot[l];
 			int occ = level_count[l];
 			if (occ > 0 && sphere_changed[slot]) {
-				{
-					static int ctr = 0;
-					if (++ctr % 16 == 1)
-						fprintf(stderr, "DRTY slot=%d occ=%d rad=%.2f quat=[%.4f %.4f %.4f %.4f] rank=%d\n", slot, occ, dls->grids[slot].radius, dls->sphere_rotation[4 * slot + 0], dls->sphere_rotation[4 * slot + 1], dls->sphere_rotation[4 * slot + 2], dls->sphere_rotation[4 * slot + 3], rank);
-				}
-				{
-					const double *saved_rotation = ctx.sphere_rotation;
-					ctx.sphere_rotation = NULL;
-					ok = dyn_ls_seed_sphere(g, &ctx, ct, order, slot, l, occ, community, has_timestamp);
-					ctx.sphere_rotation = saved_rotation;
-				}
-				if (ok) {
-					dyn_ls_apply_sphere_rotation(&ctx, slot, dls->sphere_rotation);
-					dyn_ls_rotate_sphere_step(g, &ctx, slot, dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps);
-					{
-						static int ctr = 0;
-						if (++ctr % 16 == 1)
-							fprintf(stderr, "DRTY-post-rot slot=%d quat=[%.4f %.4f %.4f %.4f]\n", slot, dls->sphere_rotation[4 * slot + 0], dls->sphere_rotation[4 * slot + 1], dls->sphere_rotation[4 * slot + 2], dls->sphere_rotation[4 * slot + 3]);
-					}
-					dyn_ls_apply_sphere_rotation(&ctx, slot, dls->sphere_rotation);
-				}
+				ok = dyn_ls_reseed_sphere(g, &ctx, ct, order, dls, slot, l, occ, community, has_timestamp);
+				if (ok)
+					elog.sphere_reseeded++;
 			} else {
 				SphereGrid *grid = &dls->grids[slot];
 				const double *quat = dls->sphere_rotation ? &dls->sphere_rotation[4 * slot] : NULL;
-				{
-					static int ctr = 0;
-					if (++ctr % 16 == 1)
-						fprintf(stderr, "ND slot=%d occ=%d rad=%.2f quat=%s rank=%d\n", slot, occ, grid->radius, quat ? "yes" : "NULL", rank);
-				}
-				int n_written = 0;
-				for (int k = 0; k < grid->max_slots; k++) {
-					int occupant = grid->slot_occupant[k];
-					if (occupant != -1) {
-						write_slot_position(layout, occupant, &grid->slots[k], quat);
-						n_written++;
-					}
-				}
-				{
-					static int ctr = 0;
-					if (++ctr % 16 == 1)
-						fprintf(stderr, "ND-wrote slot=%d n=%d/%d\n", slot, n_written, occ);
-				}
+				dyn_ls_handle_sphere_unchanged(layout, grid, quat);
+				elog.sphere_unchanged++;
 			}
 		}
 		if (!ok)
@@ -503,17 +579,7 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 
 	result = igraph_step(layout, NULL) == IGRAPH_SUCCESS;
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t4);
-	{
-		static int log_counter = 0;
-		if (++log_counter % 32 == 1) {
-			double us_levels = dyn_ls_timer_us(&t0, &t1);
-			double us_occ = dyn_ls_timer_us(&t1, &t2);
-			double us_geom = dyn_ls_timer_us(&t2, &t3);
-			double us_seed = dyn_ls_timer_us(&t3, &t4);
-			double us_tot = dyn_ls_timer_us(&t0, &t4);
-			fprintf(stderr, "dyn_ls_t: levels=%.0f occ=%.0f geom=%.0f seed=%.0f tot=%.0f us\n", us_levels, us_occ, us_geom, us_seed, us_tot);
-		}
-	}
+	dyn_ls_report_event_log(&elog, num_spheres, dls->grid_slot_count, dyn_ls_timer_us(&t0, &t1), dyn_ls_timer_us(&t1, &t2), dyn_ls_timer_us(&t2, &t3), dyn_ls_timer_us(&t3, &t4), dyn_ls_timer_us(&t0, &t4));
 
 cleanup:
 	free(populated);
@@ -552,20 +618,21 @@ bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, cons
 
 	if (vcount > old_vcount && !batch_has_other_dirt) {
 		bool all_local = true;
+		int n_connected = 0, n_disjoint = 0;
 		for (igraph_integer_t v = old_vcount; v < vcount && all_local; v++) {
-			igraph_integer_t deg;
-			if (igraph_degree_1(g, &deg, v, IGRAPH_ALL, IGRAPH_NO_LOOPS) != IGRAPH_SUCCESS)
-				deg = 0;
-			if (deg > 0) {
-				if (!dyn_ls_try_local_append(dls, ct, v, community, vcount, layout))
-					all_local = false;
-			} else {
-				if (!dyn_ls_append_disconnected(dls, v, layout))
-					all_local = false;
+			DynLsEventType kind = dyn_ls_classify_node_arrival(g, v);
+			bool ok = (kind == DYN_LS_EVENT_NODE_PAIR_CONNECTED) ? dyn_ls_handle_node_pair_connected(dls, ct, v, community, vcount, layout) : dyn_ls_handle_node_disjoint_added(dls, v, layout);
+			if (!ok) {
+				all_local = false;
+				break;
 			}
+			if (kind == DYN_LS_EVENT_NODE_PAIR_CONNECTED)
+				n_connected++;
+			else
+				n_disjoint++;
 		}
 		if (all_local) {
-			fprintf(stderr, "dyn_ls: fast local-append %lld new vertices\n", (long long)(vcount - old_vcount));
+			fprintf(stderr, "dyn_ls_on_update: fast-path %s=%d %s=%d\n", dyn_ls_event_name(DYN_LS_EVENT_NODE_PAIR_CONNECTED), n_connected, dyn_ls_event_name(DYN_LS_EVENT_NODE_DISJOINT_ADDED), n_disjoint);
 			dls->last_seen_vcount = vcount;
 			return igraph_step(layout, NULL) == IGRAPH_SUCCESS;
 		}
