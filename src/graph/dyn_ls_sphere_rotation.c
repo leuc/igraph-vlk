@@ -234,7 +234,7 @@ void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ct
 	// Throttled globally (not per-slot) so it can't get stuck re-logging a slot that's actually done.
 	{
 		static int log_ctr = 0;
-		if (++log_ctr % 16 == 1)
+		if (++log_ctr % 512 == 1)
 			fprintf(stderr, "dyn_ls_rotate: slot=%d radius=%.2f edges=%d want_angle=%.6f settle_delta=%.6f applied_angle=%.6f cap=%.5f damp=%.2f%s%s streak=%d steps=%d\n", s, grid->radius, edge_count, want_angle, settle_delta, apply_angle, max_step_rad, damp, (dot < 0.0) ? " osc" : "", clamped ? " clamped" : "", sphere_settled_streak[s], sphere_rotation_steps[s]);
 	}
 

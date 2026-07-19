@@ -65,12 +65,16 @@
 bool dyn_ls_rotation_ensure_capacity(double **sphere_rotation, double **sphere_prev_omega, int **sphere_rotation_steps, int **sphere_settled_streak, int *capacity, int needed);
 
 // Resets sphere (grid slot) s's rotation state to identity/zero (including
-// its settled streak) — call whenever dyn_layered_sphere.c (re)builds that
-// slot's grid from scratch (its level populated for the first time, or its
-// existing grid overflowed), since the slot's geometry — and therefore any
-// prior rotation's meaning — no longer applies. A slot whose grid was NOT
-// rebuilt (e.g. a pure rank shift, handled as an in-place radius rescale)
-// keeps its rotation state untouched.
+// its settled streak) — call only when dyn_layered_sphere.c (re)builds that
+// slot's grid because its level is populated for the very first time, where
+// no prior rotation exists to preserve. Deliberately NOT called for a grid
+// rebuilt due to overflow (more members than capacity) or rescaled in place
+// (radius change from a rank shift): both are the same conceptual sphere
+// growing/shrinking, not a new one, and resetting rotation there produced a
+// visible "snap back to unrotated" every batch-triggered rebuild even though
+// member placement barely changed — keeping the already-converged
+// quaternion/prev_omega/settled state across those lets freshly (re)seeded
+// occupants get placed and then immediately rotated to match instead.
 void dyn_ls_rotation_reset(double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps, int *sphere_settled_streak, int s);
 
 // Computes and applies one damped rotation increment to sphere s's

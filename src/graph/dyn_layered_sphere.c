@@ -174,7 +174,7 @@ static bool dyn_ls_ensure_node_to_sphere_capacity(DynLayeredSphere *dls, int nee
 	return true;
 }
 
-static bool dyn_ls_rebuild_one_slot(DynLayeredSphere *dls, int slot, int capacity_n, double radius)
+static bool dyn_ls_rebuild_one_slot(DynLayeredSphere *dls, int slot, int capacity_n, double radius, bool reset_rotation)
 {
 	SphereGrid *grid = &dls->grids[slot];
 	free(grid->slots);
@@ -185,7 +185,14 @@ static bool dyn_ls_rebuild_one_slot(DynLayeredSphere *dls, int slot, int capacit
 	memset(grid, 0, sizeof(SphereGrid));
 	if (!build_sphere_grid(grid, capacity_n, radius, HILBERT_RES))
 		return false;
-	dyn_ls_rotation_reset(dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps, dls->sphere_settled_streak, slot);
+	// Only a genuinely new sphere (its level never had one before) gets a fresh identity
+	// orientation. An overflow rebuild is the same conceptual sphere growing its grid, not a new
+	// one — resetting rotation there is what caused the visible "snap back to unrotated" jump on
+	// every batch-triggered rebuild even though member placement barely changed; keeping the
+	// already-converged quaternion/prev_omega/settled state means the newly-seeded occupants (see
+	// dyn_ls_reseed_sphere) get placed and then immediately rotated to match, not shown unrotated.
+	if (reset_rotation)
+		dyn_ls_rotation_reset(dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps, dls->sphere_settled_streak, slot);
 	return true;
 }
 
@@ -337,7 +344,7 @@ static bool dyn_ls_handle_sphere_geometry_dirty(DynLayeredSphere *dls, const int
 
 		if (is_new || overflow) {
 			int capacity_n = (int)((double)occ * (DYN_LS_SLOT_HEADROOM_BASE + rank * DYN_LS_SLOT_HEADROOM_PER_SPHERE));
-			if (!dyn_ls_rebuild_one_slot(dls, slot, capacity_n, new_radius))
+			if (!dyn_ls_rebuild_one_slot(dls, slot, capacity_n, new_radius, is_new))
 				return false;
 			sphere_changed[slot] = true;
 			if (is_new)
