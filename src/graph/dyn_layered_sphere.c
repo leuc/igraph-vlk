@@ -70,6 +70,7 @@ typedef struct
 	int sphere_geometry_overflow;
 	int sphere_geometry_rescaled;
 	int sphere_reseeded;
+	int sphere_rotation_applied;
 	int sphere_unchanged;
 } DynLsEventLog;
 
@@ -78,7 +79,7 @@ static void dyn_ls_report_event_log(const DynLsEventLog *elog, int num_spheres, 
 	static int log_counter = 0;
 	if (++log_counter % 32 != 1)
 		return;
-	fprintf(stderr, "dyn_ls_recompute: spheres=%d slots=%d %s=%d %s=%d %s=%d/%d/%d(built/overflow/rescaled) %s=%d %s=%d | rank=%.0f geometry=%.0f dirty_mark=%.0f reseed=%.0f tot=%.0f us\n", num_spheres, grid_slot_count, dyn_ls_event_name(DYN_LS_EVENT_LEVEL_TOUCHED), elog->level_touched, dyn_ls_event_name(DYN_LS_EVENT_COMMUNITY_REASSIGNED), elog->community_reassigned, dyn_ls_event_name(DYN_LS_EVENT_SPHERE_GEOMETRY_DIRTY), elog->sphere_geometry_built, elog->sphere_geometry_overflow, elog->sphere_geometry_rescaled, dyn_ls_event_name(DYN_LS_EVENT_SPHERE_RESEEDED), elog->sphere_reseeded, dyn_ls_event_name(DYN_LS_EVENT_SPHERE_UNCHANGED), elog->sphere_unchanged, us_rank, us_geometry, us_dirty_mark, us_reseed, us_total);
+	fprintf(stderr, "dyn_ls_recompute: spheres=%d slots=%d %s=%d %s=%d %s=%d/%d/%d(built/overflow/rescaled) %s=%d(rotations=%d) %s=%d | rank=%.0f geometry=%.0f dirty_mark=%.0f reseed=%.0f tot=%.0f us\n", num_spheres, grid_slot_count, dyn_ls_event_name(DYN_LS_EVENT_LEVEL_TOUCHED), elog->level_touched, dyn_ls_event_name(DYN_LS_EVENT_COMMUNITY_REASSIGNED), elog->community_reassigned, dyn_ls_event_name(DYN_LS_EVENT_SPHERE_GEOMETRY_DIRTY), elog->sphere_geometry_built, elog->sphere_geometry_overflow, elog->sphere_geometry_rescaled, dyn_ls_event_name(DYN_LS_EVENT_SPHERE_RESEEDED), elog->sphere_reseeded, elog->sphere_rotation_applied, dyn_ls_event_name(DYN_LS_EVENT_SPHERE_UNCHANGED), elog->sphere_unchanged, us_rank, us_geometry, us_dirty_mark, us_reseed, us_total);
 }
 
 struct DynLayeredSphere
@@ -354,7 +355,7 @@ static void dyn_ls_handle_community_reassigned(DynLayeredSphere *dls, const DynC
 }
 
 /* DYN_LS_EVENT_SPHERE_RESEEDED: the union outcome of DYN_LS_EVENT_SPHERE_GEOMETRY_DIRTY / LEVEL_TOUCHED / COMMUNITY_REASSIGNED having marked sphere_changed[slot]. */
-static bool dyn_ls_reseed_sphere(const igraph_t *g, LayeredSphereContext *ctx, const DynCoreTree *ct, const DynCoreTreeOrder *order, DynLayeredSphere *dls, int slot, int l, int occ, const igraph_integer_t *community, bool has_timestamp)
+static bool dyn_ls_reseed_sphere(const igraph_t *g, LayeredSphereContext *ctx, const DynCoreTree *ct, const DynCoreTreeOrder *order, DynLayeredSphere *dls, int slot, int l, int occ, const igraph_integer_t *community, bool has_timestamp, DynLsEventLog *elog)
 {
 	bool ok;
 	{
@@ -365,8 +366,10 @@ static bool dyn_ls_reseed_sphere(const igraph_t *g, LayeredSphereContext *ctx, c
 	}
 	if (ok) {
 		dyn_ls_apply_sphere_rotation(ctx, slot, dls->sphere_rotation);
+		elog->sphere_rotation_applied++;
 		dyn_ls_rotate_sphere_step(g, ctx, slot, dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps);
 		dyn_ls_apply_sphere_rotation(ctx, slot, dls->sphere_rotation);
+		elog->sphere_rotation_applied++;
 	}
 	return ok;
 }
@@ -563,7 +566,7 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 			int slot = dls->level_to_grid_slot[l];
 			int occ = level_count[l];
 			if (occ > 0 && sphere_changed[slot]) {
-				ok = dyn_ls_reseed_sphere(g, &ctx, ct, order, dls, slot, l, occ, community, has_timestamp);
+				ok = dyn_ls_reseed_sphere(g, &ctx, ct, order, dls, slot, l, occ, community, has_timestamp, &elog);
 				if (ok)
 					elog.sphere_reseeded++;
 			} else {

@@ -206,17 +206,10 @@ void dyn_ls_apply_sphere_rotation(LayeredSphereContext *ctx, int s, const double
 {
 	SphereGrid *grid = &ctx->grids[s];
 	const double *quat = &sphere_rotation[4 * s];
-	int n_app = 0;
 	for (int k = 0; k < grid->max_slots; k++) {
 		int occ = grid->slot_occupant[k];
 		if (occ < 0)
 			continue;
 		write_slot_position(ctx->layout, occ, &grid->slots[k], quat);
-		n_app++;
-	}
-	{
-		static int ctr = 0;
-		if (++ctr % 16 == 1)
-			fprintf(stderr, "APPLY-ROT slot=%d n=%d quat=[%.4f %.4f %.4f %.4f]\n", s, n_app, quat[0], quat[1], quat[2], quat[3]);
 	}
 }
