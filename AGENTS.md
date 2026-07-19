@@ -166,8 +166,7 @@ Mimic existing patterns strictly. Run `clang-format` after edits.
 - **Globals**: Avoid; use `AppContext` state.
 
 ### Comments
-- Inline: `// comment`.
-- Todos: `// TODO: desc` (sparse).
+Keep comments minimal, essential, preceise and bare - no seperators - no headers, no deviders
 
 ### Includes
 - Order: Local quoted > C std > extern. Not alpha.
