@@ -56,22 +56,22 @@
  * ============================================================================ */
 
 // Quaternion layout throughout: 4 doubles per sphere, (w, x, y, z), identity
-// = {1,0,0,0}. sphere_rotation/sphere_prev_omega/sphere_rotation_steps are
-// all indexed by dyn_layered_sphere.c's stable per-level grid slot id (not
-// rank — a sphere's rank can shift without its rotation state moving) and
-// must have at least `needed` spheres' worth of capacity; grows (or
-// allocates, if *sphere_rotation is NULL) via the same doubling pattern as
-// dyn_layered_sphere.c's own arrays.
-bool dyn_ls_rotation_ensure_capacity(double **sphere_rotation, double **sphere_prev_omega, int **sphere_rotation_steps, int *capacity, int needed);
+// = {1,0,0,0}. sphere_rotation/sphere_prev_omega/sphere_rotation_steps/
+// sphere_settled_streak are all indexed by dyn_layered_sphere.c's stable
+// per-level grid slot id (not rank — a sphere's rank can shift without its
+// rotation state moving) and must have at least `needed` spheres' worth of
+// capacity; grows (or allocates, if *sphere_rotation is NULL) via the same
+// doubling pattern as dyn_layered_sphere.c's own arrays.
+bool dyn_ls_rotation_ensure_capacity(double **sphere_rotation, double **sphere_prev_omega, int **sphere_rotation_steps, int **sphere_settled_streak, int *capacity, int needed);
 
-// Resets sphere (grid slot) s's rotation state to identity/zero — call
-// whenever dyn_layered_sphere.c (re)builds that slot's grid from scratch
-// (its level populated for the first time, or its existing grid overflowed),
-// since the slot's geometry — and therefore any prior rotation's meaning —
-// no longer applies. A slot whose grid was NOT rebuilt (e.g. a pure rank
-// shift, handled as an in-place radius rescale) keeps its rotation state
-// untouched.
-void dyn_ls_rotation_reset(double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps, int s);
+// Resets sphere (grid slot) s's rotation state to identity/zero (including
+// its settled streak) — call whenever dyn_layered_sphere.c (re)builds that
+// slot's grid from scratch (its level populated for the first time, or its
+// existing grid overflowed), since the slot's geometry — and therefore any
+// prior rotation's meaning — no longer applies. A slot whose grid was NOT
+// rebuilt (e.g. a pure rank shift, handled as an in-place radius rescale)
+// keeps its rotation state untouched.
+void dyn_ls_rotation_reset(double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps, int *sphere_settled_streak, int s);
 
 // Computes and applies one damped rotation increment to sphere s's
 // persistent quaternion, from the net torque of its inter-sphere edges (see
@@ -83,7 +83,17 @@ void dyn_ls_rotation_reset(double *sphere_rotation, double *sphere_prev_omega, i
 // nonzero rotation was actually applied. Does NOT itself re-write any node's
 // layout position — call dyn_ls_apply_sphere_rotation afterward to make the
 // updated quaternion visible.
-void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ctx, int s, double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps);
+//
+// Convergence: this is a live per-tick feedback loop, not integration toward
+// a fixed target, so its residual torque can settle into a small nonzero
+// steady state instead of exactly zero (observed in practice — see
+// DYN_LS_ROTATION_SETTLED_ANGLE_RAD in the .c file). sphere_settled_streak[s]
+// counts consecutive ticks whose torque stays below that threshold; once it
+// reaches DYN_LS_ROTATION_SETTLED_STREAK, this function stops touching the
+// quaternion (and sphere_rotation_steps[s]) entirely until a fresh disturbance
+// (new members, a moved neighbor) pushes the torque back above threshold,
+// which resets the streak and resumes rotation.
+void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ctx, int s, double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps, int *sphere_settled_streak);
 
 // Re-walks sphere s's occupied slots and re-writes each occupant's layout
 // position via write_slot_position under sphere_rotation[4*s..]'s current

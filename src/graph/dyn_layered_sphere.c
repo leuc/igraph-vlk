@@ -97,6 +97,7 @@ struct DynLayeredSphere
 	double *sphere_rotation;
 	double *sphere_prev_omega;
 	int *sphere_rotation_steps;
+	int *sphere_settled_streak;
 	int sphere_rotation_capacity;
 };
 
@@ -184,7 +185,7 @@ static bool dyn_ls_rebuild_one_slot(DynLayeredSphere *dls, int slot, int capacit
 	memset(grid, 0, sizeof(SphereGrid));
 	if (!build_sphere_grid(grid, capacity_n, radius, HILBERT_RES))
 		return false;
-	dyn_ls_rotation_reset(dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps, slot);
+	dyn_ls_rotation_reset(dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps, dls->sphere_settled_streak, slot);
 	return true;
 }
 
@@ -308,7 +309,7 @@ static bool dyn_ls_assign_grid_slots_for_ranks(DynLayeredSphere *dls, const int 
 		int l = sphere_to_level[rank];
 		if (dls->level_to_grid_slot[l] >= 0)
 			continue;
-		if (!dyn_ls_ensure_grids_capacity(dls, dls->grid_slot_count + 1) || !dyn_ls_rotation_ensure_capacity(&dls->sphere_rotation, &dls->sphere_prev_omega, &dls->sphere_rotation_steps, &dls->sphere_rotation_capacity, dls->grid_slot_count + 1)) {
+		if (!dyn_ls_ensure_grids_capacity(dls, dls->grid_slot_count + 1) || !dyn_ls_rotation_ensure_capacity(&dls->sphere_rotation, &dls->sphere_prev_omega, &dls->sphere_rotation_steps, &dls->sphere_settled_streak, &dls->sphere_rotation_capacity, dls->grid_slot_count + 1)) {
 			fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
 			return false;
 		}
@@ -637,7 +638,7 @@ static void dyn_ls_tick_rotation(DynLayeredSphere *dls, const igraph_t *g, igrap
 	for (int slot = 0; slot < dls->grid_slot_count; slot++) {
 		if (!dls->grids[slot].slot_occupant)
 			continue;
-		dyn_ls_rotate_sphere_step(g, &ctx, slot, dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps);
+		dyn_ls_rotate_sphere_step(g, &ctx, slot, dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps, dls->sphere_settled_streak);
 		dyn_ls_apply_sphere_rotation(&ctx, slot, dls->sphere_rotation);
 	}
 }
@@ -718,5 +719,6 @@ void dyn_layered_sphere_destroy(DynLayeredSphere *dls)
 	free(dls->sphere_rotation);
 	free(dls->sphere_prev_omega);
 	free(dls->sphere_rotation_steps);
+	free(dls->sphere_settled_streak);
 	free(dls);
 }

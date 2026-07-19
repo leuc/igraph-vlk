@@ -9,9 +9,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define DYN_LS_ROTATION_DAMP_HORIZON 20.0	 // sphere_rotation_steps[s] reaching this many applied-rotation events is treated as fully warmed up, saturating the damping factor at 1.0
-#define DYN_LS_ROTATION_MAX_STEP_RAD 0.15	 // angular-step budget at DYN_LS_ROTATION_REFERENCE_RADIUS; a streaming recompute gets one shot rather than an iterative convergence loop
-#define DYN_LS_ROTATION_REFERENCE_RADIUS 5.0 // sphere_radius_for()'s floor, i.e. the innermost/smallest sphere's radius
+#define DYN_LS_ROTATION_DAMP_HORIZON 20.0		// sphere_rotation_steps[s] reaching this many applied-rotation events is treated as fully warmed up, saturating the damping factor at 1.0
+#define DYN_LS_ROTATION_MAX_STEP_RAD 0.15		// angular-step budget at DYN_LS_ROTATION_REFERENCE_RADIUS; a streaming recompute gets one shot rather than an iterative convergence loop
+#define DYN_LS_ROTATION_REFERENCE_RADIUS 5.0	// sphere_radius_for()'s floor, i.e. the innermost/smallest sphere's radius
+#define DYN_LS_ROTATION_SETTLED_DELTA_RAD 0.001 // tick-to-tick CHANGE in torque (want vector) below this means the torque has converged to a steady value; observed in practice: some spheres' torque plateaus at a stable NONZERO value (e.g. structurally asymmetric edge layout with no exact zero-torque orientation) rather than shrinking to 0, so magnitude alone can't detect convergence — only whether it has stopped moving can
+#define DYN_LS_ROTATION_SETTLED_STREAK 8		// consecutive below-delta ticks required before a sphere is treated as settled, so one lucky small-delta sample mid-correction doesn't false-trigger
 
 // out = a * b (Hamilton product); a is the rotation applied SECOND to a
 // vector already rotated by b (i.e. combined = a . b applies b then a).
@@ -37,7 +39,7 @@ static void quat_normalize(double q[4])
 	q[3] /= len;
 }
 
-void dyn_ls_rotation_reset(double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps, int s)
+void dyn_ls_rotation_reset(double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps, int *sphere_settled_streak, int s)
 {
 	sphere_rotation[4 * s + 0] = 1.0;
 	sphere_rotation[4 * s + 1] = 0.0;
@@ -47,9 +49,10 @@ void dyn_ls_rotation_reset(double *sphere_rotation, double *sphere_prev_omega, i
 	sphere_prev_omega[3 * s + 1] = 0.0;
 	sphere_prev_omega[3 * s + 2] = 0.0;
 	sphere_rotation_steps[s] = 0;
+	sphere_settled_streak[s] = 0;
 }
 
-bool dyn_ls_rotation_ensure_capacity(double **sphere_rotation, double **sphere_prev_omega, int **sphere_rotation_steps, int *capacity, int needed)
+bool dyn_ls_rotation_ensure_capacity(double **sphere_rotation, double **sphere_prev_omega, int **sphere_rotation_steps, int **sphere_settled_streak, int *capacity, int needed)
 {
 	if (needed <= *capacity)
 		return true;
@@ -60,24 +63,27 @@ bool dyn_ls_rotation_ensure_capacity(double **sphere_rotation, double **sphere_p
 	double *rot_grown = realloc(*sphere_rotation, sizeof(double) * 4 * (size_t)cap);
 	double *prev = realloc(*sphere_prev_omega, sizeof(double) * 3 * (size_t)cap);
 	int *steps = realloc(*sphere_rotation_steps, sizeof(int) * (size_t)cap);
+	int *streak = realloc(*sphere_settled_streak, sizeof(int) * (size_t)cap);
 	if (rot_grown)
 		*sphere_rotation = rot_grown;
 	if (prev)
 		*sphere_prev_omega = prev;
 	if (steps)
 		*sphere_rotation_steps = steps;
-	if (!rot_grown || !prev || !steps) {
+	if (streak)
+		*sphere_settled_streak = streak;
+	if (!rot_grown || !prev || !steps || !streak) {
 		fprintf(stderr, "dyn_ls_sphere_rotation: realloc rotation state to capacity %d failed\n", cap);
 		return false;
 	}
 
 	for (int s = *capacity; s < cap; s++)
-		dyn_ls_rotation_reset(*sphere_rotation, *sphere_prev_omega, *sphere_rotation_steps, s);
+		dyn_ls_rotation_reset(*sphere_rotation, *sphere_prev_omega, *sphere_rotation_steps, *sphere_settled_streak, s);
 	*capacity = cap;
 	return true;
 }
 
-void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ctx, int s, double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps)
+void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ctx, int s, double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps, int *sphere_settled_streak)
 {
 	const SphereGrid *grid = &ctx->grids[s];
 	double sum_x = 0.0, sum_y = 0.0, sum_z = 0.0;
@@ -148,17 +154,40 @@ void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ct
 	double want_x = sum_x / edge_count;
 	double want_y = sum_y / edge_count;
 	double want_z = sum_z / edge_count;
+	double want_angle = sqrt(want_x * want_x + want_y * want_y + want_z * want_z);
 
 	double *prev = &sphere_prev_omega[3 * s];
+	double delta_x = want_x - prev[0], delta_y = want_y - prev[1], delta_z = want_z - prev[2];
+	double settle_delta = sqrt(delta_x * delta_x + delta_y * delta_y + delta_z * delta_z);
+
+	if (settle_delta < DYN_LS_ROTATION_SETTLED_DELTA_RAD) {
+		if (sphere_settled_streak[s] < DYN_LS_ROTATION_SETTLED_STREAK)
+			sphere_settled_streak[s]++;
+	} else {
+		sphere_settled_streak[s] = 0;
+	}
+	if (sphere_settled_streak[s] >= DYN_LS_ROTATION_SETTLED_STREAK) {
+		// Settled: stop touching the quaternion (and sphere_rotation_steps) until a fresh
+		// disturbance pushes the torque somewhere new (settle_delta back above threshold), which
+		// resets the streak above and resumes rotation next tick. Still track the baseline
+		// direction so the first post-settlement tick's delta/oscillation checks compare against
+		// something recent, not stale.
+		prev[0] = want_x;
+		prev[1] = want_y;
+		prev[2] = want_z;
+		return;
+	}
+
 	double dot = want_x * prev[0] + want_y * prev[1] + want_z * prev[2];
 
 	double apply_x = want_x, apply_y = want_y, apply_z = want_z;
+	double damp = 1.0; // reported as-is in the diagnostic below; 1.0 means "not oscillating, undamped"
 	if (dot < 0.0) {
 		// Reversed direction since the last step — oscillating around a good
 		// orientation (GEM-style detection). Damp harder the earlier this
 		// sphere still is in its own rotation history, easing back toward
 		// full strength as it accumulates more (successfully applied) steps.
-		double damp = sphere_rotation_steps[s] / DYN_LS_ROTATION_DAMP_HORIZON;
+		damp = sphere_rotation_steps[s] / DYN_LS_ROTATION_DAMP_HORIZON;
 		if (damp < 0.05)
 			damp = 0.05;
 		if (damp > 1.0)
@@ -177,7 +206,8 @@ void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ct
 		max_step_rad = DYN_LS_ROTATION_MAX_STEP_RAD; // never exceed the reference sphere's own budget
 
 	double apply_angle = sqrt(apply_x * apply_x + apply_y * apply_y + apply_z * apply_z);
-	if (apply_angle > max_step_rad) {
+	bool clamped = apply_angle > max_step_rad; // pre-clamp vs. post-clamp applied_angle in the log below shows whether the cap (vs. the torque itself) is what's keeping this sphere in motion
+	if (clamped) {
 		double clamp_scale = max_step_rad / apply_angle;
 		apply_x *= clamp_scale;
 		apply_y *= clamp_scale;
@@ -193,7 +223,20 @@ void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ct
 	prev[2] = want_z;
 
 	if (apply_angle < 1e-9)
-		return; // negligible — leave the quaternion and step counter untouched
+		return; // negligible — leave the quaternion and step counter untouched; a sphere that reliably lands here has actually converged and drops out of the log below
+
+	// Identifies which sphere(s) never settle: only real (non-negligible) rotation reaches this
+	// line, so a slot that keeps appearing here call after call genuinely never satisfies the
+	// settled_delta<threshold streak above, rather than just being caught mid-convergence. Watch
+	// want_angle/settle_delta together: a slot with roughly constant want_angle but tiny
+	// settle_delta is the "plateaued at a stable nonzero torque" case the streak above exists to
+	// catch; still increasing settle_delta means it's genuinely still moving toward something.
+	// Throttled globally (not per-slot) so it can't get stuck re-logging a slot that's actually done.
+	{
+		static int log_ctr = 0;
+		if (++log_ctr % 16 == 1)
+			fprintf(stderr, "dyn_ls_rotate: slot=%d radius=%.2f edges=%d want_angle=%.6f settle_delta=%.6f applied_angle=%.6f cap=%.5f damp=%.2f%s%s streak=%d steps=%d\n", s, grid->radius, edge_count, want_angle, settle_delta, apply_angle, max_step_rad, damp, (dot < 0.0) ? " osc" : "", clamped ? " clamped" : "", sphere_settled_streak[s], sphere_rotation_steps[s]);
+	}
 
 	double axis_x = apply_x / apply_angle, axis_y = apply_y / apply_angle, axis_z = apply_z / apply_angle;
 	double half = apply_angle * 0.5;
