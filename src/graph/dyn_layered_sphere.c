@@ -18,23 +18,47 @@
  * Community membership is read live from DynLeiden (O(1) per-vertex lookups)
  * and is the intra-shell grouping/ordering key, not the shell-assignment key.
  *
+ * Storage is keyed by LEVEL, not by rank. dls->level_to_grid_slot[level] maps
+ * a coreness level to a stable grid-array index ("grid slot"), assigned once
+ * the first time that level is ever populated and never reassigned — not
+ * even if the level later becomes unpopulated (see "Idle slots" below). Rank
+ * (0 = nucleus, increasing outward) is recomputed fresh every call purely to
+ * walk spheres nucleus-outward for sphere_radius_for's prev_radius
+ * recurrence; it is never used as a storage index. This decoupling is what
+ * lets dyn_ls_recompute react to a level's rank changing (because some OTHER
+ * level became/stopped being populated, shifting everyone outward of it)
+ * without touching any sphere whose own membership didn't change: a rank
+ * shift only ever changes a sphere's RADIUS, and since a SphereGrid's
+ * slots[k].{x,y,z} are simply radius * unit_direction(k) (compute_slot_point,
+ * layered_sphere_common.c) with the unit direction — and therefore Hilbert
+ * order and slot_occupant[] assignment — independent of radius, a pure rank
+ * shift is handled as an in-place O(occupancy) coordinate rescale: no grid
+ * teardown, no reseed, no Hilbert resort, no rotation reset (rotation and
+ * uniform scaling commute, since write_slot_position rotates AFTER reading
+ * slots[k]).
+ *
+ * Idle slots: vertices/edges are never deleted (insertion-only), but a
+ * level's last tree node CAN still become empty and be removed — e.g. a
+ * coreness lift reparents a vertex away, emptying its old tree node
+ * (dyn_core_tree.c). When that happens the level simply drops out of the
+ * "populated" set on the next recompute; nothing below ever visits an
+ * unpopulated level's grid slot (the radius walk and dirty-detection both
+ * iterate populated levels only), so its SphereGrid just sits allocated and
+ * untouched. If that same level value is ever populated again later (by
+ * different vertices), it is picked up by the ordinary "slot already exists"
+ * path below — including the overflow check, which rebuilds it if the new
+ * membership no longer fits, and the dirty-reseed path, which already clears
+ * slot_occupant[] before reseeding regardless of what was left over. No
+ * explicit free/reuse bookkeeping is needed. dls->grid_slot_count (the
+ * number of distinct levels ever populated) is bounded by the graph's
+ * maximum coreness ever reached, not by stream length.
+ *
  * Change detection is exact: dyn_core_tree_on_edges' touched_levels output
  * says precisely which spheres' populations moved (radial change), and
  * DynLeiden's community_changed output says which vertices' community label
  * moved without necessarily changing coreness (angular-only change) — both
- * are unioned into a per-sphere dirty flag, and only dirty spheres are
- * cleared and re-seeded; an untouched sphere is provably unchanged as long as
- * no RENUMBERING occurred (see below).
- *
- * A previously-unpopulated level becoming populated (or vice versa) can shift
- * every OTHER already-populated level's sphere rank even though that level's
- * own membership never moved — e.g. populated levels {2,3,7} -> {2,7,8}
- * leaves the sphere COUNT unchanged (3) but shifts level 7 from rank 2 to
- * rank 1. dyn_ls_recompute detects this by comparing the freshly computed
- * level->sphere mapping against the persisted one from last time
- * (dls->level_to_sphere[]) and forces a full rebuild on any mismatch, since a
- * sphere index can then represent a completely different level's population
- * than it did last time.
+ * are unioned into a per-slot dirty flag, and only dirty slots are cleared
+ * and re-seeded; an untouched, non-dirty slot is provably unchanged.
  *
  * Within a sphere, members are grouped by community and ordered by the
  * crossing-reduction rank maintained by DynCoreTreeOrder
@@ -56,17 +80,20 @@
  * positions under the updated quaternion. Rotation is a pure coordinate
  * transform applied at write_slot_position time (layered_sphere_common.h)
  * — it never touches SphereGrid slot/occupancy geometry or Hilbert order,
- * so rotating a sphere never triggers a reseed or grid rebuild.
+ * so rotating a sphere never triggers a reseed or grid rebuild. Rotation
+ * state is indexed by grid slot (like everything else here), so it survives
+ * a pure rank shift undisturbed.
  *
- * The sphere GEOMETRY persists across recomputes: each grid is sized with a
- * large occupancy headroom (DYN_LS_SLOT_HEADROOM_BASE, applied to both the
- * radius and the slot count) when built, and a recompute only re-seeds
- * occupants into the existing slots. Grids are torn down and rebuilt ONLY on
- * sphere overflow or level-rank renumbering (see the `fits` check in
- * dyn_ls_recompute). A batch of arrivals that are ALL still disconnected
- * (degree 0) is appended straight onto the end of the outermost sphere's
- * curve with no recompute at all (dyn_layered_sphere_on_update), and
- * last_seen_vcount tracks which vertices are new arrivals.
+ * The sphere GEOMETRY persists across recomputes: each newly-built grid is
+ * sized with a large occupancy headroom (DYN_LS_SLOT_HEADROOM_BASE, applied
+ * to both the radius and the slot count), and an ordinary recompute only
+ * re-seeds occupants into the existing slots or rescales them in place. A
+ * grid is torn down and rebuilt only when its own occupancy exceeds its
+ * headroom (overflow) or the first time its level is populated. A batch of
+ * arrivals that are ALL still disconnected (degree 0) is appended straight
+ * onto the end of the outermost sphere's curve with no recompute at all
+ * (dyn_layered_sphere_on_update), and last_seen_vcount tracks which vertices
+ * are new arrivals.
  *
  * Simplified Local Buffers (connected-arrival fast path): the shared seeder
  * interleaves each sphere's headroom as gaps across its slots, so a newly
@@ -74,9 +101,9 @@
  * into its community's sphere (dyn_ls_try_local_append) without any re-sort
  * or recompute — it just fills one of those gaps. The attempt only fails (and
  * falls through to the full recompute) when the vertex starts a brand-new
- * level, or its sphere has no free slot left. dls->level_to_sphere[] (kept up
- * to date by every recompute) makes the level->sphere lookup O(1) on the fast
- * path — it is always authoritative (the tree cannot go stale), so no
+ * level, or its sphere has no free slot left. dls->level_to_grid_slot[] (kept
+ * up to date by every recompute) makes the level->sphere lookup O(1) on the
+ * fast path — it is always authoritative (the tree cannot go stale), so no
  * fallback scan is needed. Disconnected-only batches take the cheaper
  * dyn_ls_append_disconnected path instead. The fast path does not itself
  * consult touched_levels/community_changed — if every new vertex places
@@ -91,6 +118,7 @@
 #include "graph/layered_sphere_common.h"
 
 #include <igraph_step.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -98,7 +126,8 @@
 
 #define DYN_LS_TIMESTAMP_ATTR "timestamp"
 #define DYN_LS_SLOT_HEADROOM_BASE 4.0		// every sphere's radius and slot count are sized for this multiple of its occupancy at build time, so grids absorb growth without resizing
-#define DYN_LS_SLOT_HEADROOM_PER_SPHERE 0.5 // extra headroom fraction added on top per sphere index further from the nucleus, so outer spheres end up progressively sparser
+#define DYN_LS_SLOT_HEADROOM_PER_SPHERE 0.5 // extra headroom fraction added on top per rank further from the nucleus, so outer spheres end up progressively sparser
+#define DYN_LS_RADIUS_EPS 1e-9				 // below this, a freshly-computed radius is treated as "unchanged" (sphere_radius_for is a deterministic function of unchanged inputs, so this only guards against incidental floating-point noise)
 
 // Simple high-resolution timer for performance breakdown logging, in
 // microseconds (see the phase timestamps t0..t4 in dyn_ls_recompute).
@@ -109,36 +138,38 @@ static inline double dyn_ls_timer_us(const struct timespec *start, const struct 
 
 struct DynLayeredSphere
 {
-	SphereGrid *grids;				   // persistent: built with headroom, reused across recomputes, torn down and rebuilt ONLY on sphere overflow or renumbering (see dyn_ls_recompute's fits check)
+	SphereGrid *grids;				   // persistent, indexed by GRID SLOT (stable per level, not rank — see file header): built with headroom, reused across recomputes, torn down and rebuilt only on that one slot's overflow or first population
 	int grids_capacity;				   // capacity of grids[]
-	int num_spheres;				   // grids currently built (for cleanup/reuse bookkeeping)
+	int grid_slot_count;			   // number of distinct levels ever populated over this graph's lifetime (== live extent of grids[]/rotation arrays); only grows, never shrinks (see "Idle slots" in the file header)
 	igraph_integer_t last_seen_vcount; // vcount as of the end of the previous on_update/init call (append or recompute) — used to find newly-arrived vertices
-	int *level_to_sphere;			   // persistent: level_to_sphere[level] = sphere index that coreness level currently maps to, -1 if that level is unpopulated. Indexed by coreness level (grown as the graph's max coreness grows). Read by the fast-append path for O(1) sphere lookup; compared against the freshly recomputed mapping every recompute to detect rank-shifting renumbering (point 3 in the file header).
-	int level_to_sphere_cap;		   // capacity of level_to_sphere[] (levels 0..cap-1 representable)
-	double *sphere_rotation;		   // persistent: 4 doubles/sphere (w,x,y,z unit quaternion), identity when unrotated — see graph/dyn_ls_sphere_rotation.h
-	double *sphere_prev_omega;		   // persistent: 3 doubles/sphere (previous rotation-step direction), for oscillation damping
-	int *sphere_rotation_steps;		   // persistent: per-sphere count of successfully applied rotation steps, for the damping schedule
-	int sphere_rotation_capacity;	   // capacity of the three rotation arrays above, in SPHERES (not doubles)
+	int *level_to_grid_slot;		   // persistent: level_to_grid_slot[level] = grid slot index that coreness level maps to, -1 if that level has never been populated. Indexed by coreness level (grown as the graph's max coreness grows). Read by the fast-append path for O(1) sphere lookup. Once set for a level it is NEVER cleared, even if that level later becomes unpopulated (see file header).
+	int level_to_grid_slot_cap;	   // capacity of level_to_grid_slot[] (levels 0..cap-1 representable)
+	double *sphere_rotation;		   // persistent, indexed by GRID SLOT: 4 doubles/slot (w,x,y,z unit quaternion), identity when unrotated — see graph/dyn_ls_sphere_rotation.h
+	double *sphere_prev_omega;		   // persistent, indexed by GRID SLOT: 3 doubles/slot (previous rotation-step direction), for oscillation damping
+	int *sphere_rotation_steps;	   // persistent, indexed by GRID SLOT: per-slot count of successfully applied rotation steps, for the damping schedule
+	int sphere_rotation_capacity;	   // capacity of the three rotation arrays above, in SLOTS (not doubles)
 };
 
 // ============================================================================
 // Grid lifecycle
 // ============================================================================
 
-// Frees every currently-built grid's contents (not the grids[] array
-// itself, which is kept for reuse) — mirrors layered_sphere_cleanup's
-// per-grid teardown. Called only on sphere overflow/renumbering (before a
-// rebuild) and on destroy, never on an ordinary recompute.
+// Frees the contents of every grid slot ever allocated (not the grids[]
+// array itself, which is kept for reuse), resetting grid_slot_count to 0 —
+// mirrors layered_sphere_cleanup's per-grid teardown. Called only on
+// destroy and on "graph went empty" reset; never on an ordinary recompute
+// (see file header — a normal recompute only ever touches ONE slot's
+// contents at a time, via dyn_ls_rebuild_one_slot below).
 static void dyn_ls_free_grid_contents(DynLayeredSphere *dls)
 {
-	for (int s = 0; s < dls->num_spheres; s++) {
+	for (int s = 0; s < dls->grid_slot_count; s++) {
 		free(dls->grids[s].slots);
 		if (dls->grids[s].slot_occupant) {
 			free(dls->grids[s].slot_occupant);
 			igraph_vector_int_destroy(&dls->grids[s].neis);
 		}
 	}
-	dls->num_spheres = 0;
+	dls->grid_slot_count = 0;
 }
 
 static bool dyn_ls_ensure_grids_capacity(DynLayeredSphere *dls, int needed)
@@ -158,50 +189,47 @@ static bool dyn_ls_ensure_grids_capacity(DynLayeredSphere *dls, int needed)
 	return true;
 }
 
-// Grows level_to_sphere[] to hold at least `needed` levels (0..needed-1),
-// zeroing (as -1, "unpopulated") the newly grown region so a query for a
+// Grows level_to_grid_slot[] to hold at least `needed` levels (0..needed-1),
+// zeroing (as -1, "never populated") the newly grown region so a query for a
 // level not yet seen by any recompute reads as absent rather than garbage.
-static bool dyn_ls_ensure_level_to_sphere(DynLayeredSphere *dls, int needed)
+static bool dyn_ls_ensure_level_to_grid_slot(DynLayeredSphere *dls, int needed)
 {
-	if (needed <= dls->level_to_sphere_cap)
+	if (needed <= dls->level_to_grid_slot_cap)
 		return true;
-	int old_cap = dls->level_to_sphere_cap;
-	int cap = dls->level_to_sphere_cap ? dls->level_to_sphere_cap : 16;
+	int old_cap = dls->level_to_grid_slot_cap;
+	int cap = dls->level_to_grid_slot_cap ? dls->level_to_grid_slot_cap : 16;
 	while (cap < needed)
 		cap *= 2;
-	int *grown = realloc(dls->level_to_sphere, sizeof(int) * (size_t)cap);
+	int *grown = realloc(dls->level_to_grid_slot, sizeof(int) * (size_t)cap);
 	if (!grown) {
-		fprintf(stderr, "dyn_layered_sphere: realloc level_to_sphere to capacity %d failed\n", cap);
+		fprintf(stderr, "dyn_layered_sphere: realloc level_to_grid_slot to capacity %d failed\n", cap);
 		return false;
 	}
 	for (int l = old_cap; l < cap; l++)
 		grown[l] = -1;
-	dls->level_to_sphere = grown;
-	dls->level_to_sphere_cap = cap;
+	dls->level_to_grid_slot = grown;
+	dls->level_to_grid_slot_cap = cap;
 	return true;
 }
 
-// Builds all num_spheres grids from the current per-sphere occupancy, each
-// sized — radius AND slot count — for DYN_LS_SLOT_HEADROOM_BASE (+ the
-// per-sphere extra) times its actual occupancy, so subsequent recomputes and
-// appends fit into the existing slots without any resizing. Only called on
-// sphere overflow/renumbering; the previous grids must already be freed.
-static bool dyn_ls_build_grids(DynLayeredSphere *dls, const int *sphere_count, int num_spheres)
+// Frees slot `s`'s current grid contents (if any — a no-op for a slot that
+// was only just allocated this call, i.e. is_new) and rebuilds it at
+// `capacity_n`/`radius`, resetting the slot's rotation state. Used for both
+// "level populated for the first time" and "existing slot overflowed" —
+// the two cases where a slot's own geometry (not just its radius) must
+// change.
+static bool dyn_ls_rebuild_one_slot(DynLayeredSphere *dls, int slot, int capacity_n, double radius)
 {
-	if (!dyn_ls_ensure_grids_capacity(dls, num_spheres))
-		return false;
-	memset(dls->grids, 0, sizeof(SphereGrid) * (size_t)num_spheres);
-	dls->num_spheres = num_spheres; // set now so a mid-loop failure still lets dyn_ls_free_grid_contents clean up safely (build_sphere_grid nulls out a failed grid's own pointers)
-
-	double current_radius = 0.0;
-	for (int s = 0; s < num_spheres; s++) {
-		if (sphere_count[s] == 0)
-			continue; // defensive: a rank with zero occupancy should never occur (every populated level has >=1 member)
-		int capacity_n = (int)((double)sphere_count[s] * (DYN_LS_SLOT_HEADROOM_BASE + s * DYN_LS_SLOT_HEADROOM_PER_SPHERE));
-		current_radius = sphere_radius_for(s, capacity_n, current_radius);
-		if (!build_sphere_grid(&dls->grids[s], capacity_n, current_radius, HILBERT_RES))
-			return false;
+	SphereGrid *grid = &dls->grids[slot];
+	free(grid->slots);
+	if (grid->slot_occupant) {
+		free(grid->slot_occupant);
+		igraph_vector_int_destroy(&grid->neis);
 	}
+	memset(grid, 0, sizeof(SphereGrid));
+	if (!build_sphere_grid(grid, capacity_n, radius, HILBERT_RES))
+		return false;
+	dyn_ls_rotation_reset(dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps, slot);
 	return true;
 }
 
@@ -214,14 +242,19 @@ static bool dyn_ls_build_grids(DynLayeredSphere *dls, const int *sphere_count, i
 // other vertex's position: no re-sort, no recompute. Correct only because
 // level 0 (coreness-0/isolated vertices) always ranks last (see the file
 // header's descending-rank point): a fresh disconnected vertex is always
-// coreness 0, so the outermost sphere is always the right target. Returns
-// false if there's no sphere to append into yet, or the outermost sphere is
-// full; either way the caller falls back to a full recompute.
+// coreness 0, so the outermost sphere is always the right target — found by
+// looking up level 0's grid slot directly (level 0 is always populated once
+// vcount > 0), NOT by assuming it's the highest array index (grids are no
+// longer stored in rank order — see file header). Returns false if level 0
+// has no slot built yet, or that sphere is full; either way the caller
+// falls back to a full recompute.
 static bool dyn_ls_append_disconnected(DynLayeredSphere *dls, igraph_integer_t node_id, igraph_matrix_t *layout)
 {
-	if (dls->num_spheres == 0)
+	if (dls->level_to_grid_slot_cap == 0)
 		return false;
-	int s = dls->num_spheres - 1;
+	int s = dls->level_to_grid_slot[0];
+	if (s < 0 || s >= dls->grid_slot_count || !dls->grids[s].slot_occupant)
+		return false;
 	SphereGrid *grid = &dls->grids[s];
 	const double *quat = dls->sphere_rotation ? &dls->sphere_rotation[4 * s] : NULL;
 	for (int slot = grid->max_slots - 1; slot >= 0; slot--) {
@@ -252,8 +285,8 @@ static bool dyn_ls_append_disconnected(DynLayeredSphere *dls, igraph_integer_t n
 static bool dyn_ls_try_local_append(DynLayeredSphere *dls, const DynCoreTree *ct, igraph_integer_t node_id, const igraph_integer_t *community, igraph_integer_t vcount, igraph_matrix_t *layout)
 {
 	int level = dyn_core_tree_level(ct, dyn_core_tree_node_of(ct, node_id));
-	int s = (level >= 0 && level < dls->level_to_sphere_cap) ? dls->level_to_sphere[level] : -1;
-	if (s < 0 || s >= dls->num_spheres || !dls->grids[s].slot_occupant)
+	int s = (level >= 0 && level < dls->level_to_grid_slot_cap) ? dls->level_to_grid_slot[level] : -1;
+	if (s < 0 || s >= dls->grid_slot_count || !dls->grids[s].slot_occupant)
 		return false; // brand-new level with no sphere yet -> fall through to recompute
 
 	SphereGrid *grid = &dls->grids[s];
@@ -299,8 +332,8 @@ static bool dyn_ls_try_local_append(DynLayeredSphere *dls, const DynCoreTree *ct
 // Recompute stage 1: per-sphere placement
 // ============================================================================
 
-// One-shot neighbor refinement for sphere s: each connected node in grp gets
-// a single direct move toward its neighbors via the shared
+// One-shot neighbor refinement for sphere (grid slot) s: each connected node
+// in grp gets a single direct move toward its neighbors via the shared
 // node_hilbert_target/try_move_node pair (no damping schedule, no iteration).
 // Disconnected nodes are skipped outright. Takes the already-gathered
 // membership list from dyn_ls_seed_sphere rather than re-scanning for it.
@@ -320,15 +353,15 @@ static void dyn_ls_refine_connected(const igraph_t *g, LayeredSphereContext *ctx
 	}
 }
 
-// Seeds sphere s (which holds exactly the tree's target_level, since the
-// level<->sphere mapping is strictly 1:1) into its (already-built,
+// Seeds sphere (grid slot) s, which holds exactly the tree's target_level
+// (the level<->slot mapping is strictly 1:1), into its (already-built,
 // persistent) grid: members are gathered by walking the tree directly
 // (O(this level's occupancy), not O(vcount)), ordered via the shared
 // compare_nodes_placement (density carries the crossing-reduction rank from
 // DynCoreTreeOrder when available, else falls back to timestamp/vertex-id;
 // intra_degree is 0 — see the file header), seeded via the shared
 // seed_slots_for_sphere, then refined via dyn_ls_refine_connected. Never
-// touches the grid's geometry.
+// touches the grid's geometry (radius/slot count).
 static bool dyn_ls_seed_sphere(const igraph_t *g, LayeredSphereContext *ctx, const DynCoreTree *ct, const DynCoreTreeOrder *order, int s, int target_level, int n_in_group, const igraph_integer_t *community, bool has_timestamp)
 {
 	NodePlacement *grp = malloc(sizeof(NodePlacement) * (size_t)n_in_group);
@@ -359,8 +392,8 @@ static bool dyn_ls_seed_sphere(const igraph_t *g, LayeredSphereContext *ctx, con
 
 // ============================================================================
 // Full recompute: orchestration only — enumerate populated levels from the
-// tree, map them to spheres, and re-seed the persistent grids (rebuilding
-// them ONLY on sphere overflow or renumbering).
+// tree, assign/reuse each one's stable grid slot, walk them nucleus-outward
+// to (re)compute radii, and re-seed only the slots that actually need it.
 // ============================================================================
 
 static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const DynCoreTree *ct, const DynCoreTreeOrder *order, const igraph_integer_t *community, igraph_matrix_t *layout, const igraph_vector_int_t *touched_levels, const igraph_vector_int_t *community_changed)
@@ -380,13 +413,12 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 	// is a no-op) instead of each failure branch hand-listing its own subset.
 	bool result = false;
 	bool *populated = NULL;
-	int *fresh_level_to_sphere = NULL;
-	int *sphere_to_level = NULL;
-	int *sphere_count = NULL;
+	int *level_count = NULL;	// occupancy per LEVEL (0..level_cap-1), unlike sphere_to_level this is stable regardless of rank
+	int *sphere_to_level = NULL; // rank -> level, transient, used only to walk the radius recurrence in nucleus-outward order
 	int *node_to_sphere = NULL;
 	int *node_to_slot = NULL;
-	bool *sphere_changed = NULL;
-	int num_spheres = 0;
+	bool *sphere_changed = NULL; // indexed by GRID SLOT, sized to dls->grid_slot_count AFTER slot assignment below
+	int num_spheres = 0;		  // count of currently populated levels (== count of ranks this call)
 
 	// 1. Enumerate populated coreness levels directly from the tree (O(tree
 	// node count), not O(V)): every alive node's level is a populated level.
@@ -406,14 +438,17 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 	int level_cap = max_level + 1;
 
 	populated = calloc((size_t)level_cap, sizeof(bool));
-	if (!populated) {
+	level_count = calloc((size_t)level_cap, sizeof(int));
+	if (!populated || !level_count) {
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
 		goto cleanup;
 	}
 	for (int id = 0; id < node_count; id++) {
 		int lvl = dyn_core_tree_level(ct, id);
-		if (lvl >= 0)
-			populated[lvl] = true;
+		if (lvl < 0)
+			continue;
+		populated[lvl] = true;
+		level_count[lvl] += (int)dyn_core_tree_member_count(ct, id);
 	}
 	for (int l = 0; l < level_cap; l++)
 		if (populated[l])
@@ -423,98 +458,107 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 		goto cleanup;
 	}
 
-	// Descending rank: the highest populated level is sphere 0 (the
-	// nucleus), level 0 (isolated/coreness-0 vertices, always populated once
-	// vcount > 0) is always the last/outermost sphere index.
-	fresh_level_to_sphere = malloc(sizeof(int) * (size_t)level_cap);
+	// Descending rank, nucleus-outward walk order (transient — see file
+	// header: rank is never stored, only used to thread sphere_radius_for's
+	// prev_radius recurrence below).
 	sphere_to_level = malloc(sizeof(int) * (size_t)num_spheres);
-	if (!fresh_level_to_sphere || !sphere_to_level) {
+	if (!sphere_to_level) {
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
 		goto cleanup;
 	}
 	{
 		int rank = 0;
-		for (int l = level_cap - 1; l >= 0; l--) {
-			if (populated[l]) {
-				fresh_level_to_sphere[l] = rank;
-				sphere_to_level[rank] = l;
-				rank++;
-			} else {
-				fresh_level_to_sphere[l] = -1;
-			}
-		}
+		for (int l = level_cap - 1; l >= 0; l--)
+			if (populated[l])
+				sphere_to_level[rank++] = l;
 	}
 	free(populated);
 	populated = NULL;
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
 
-	// 2. Per-sphere occupancy: sum of member_count over every tree node at
-	// that sphere's level (another O(tree node count) pass).
-	sphere_count = calloc((size_t)num_spheres, sizeof(int));
-	if (!sphere_count) {
+	// 2. Slot assignment: ensure every currently-populated level has a grid
+	// slot, allocating a fresh one only for a level populated for the first
+	// time ever (see file header — an existing slot, even an idle one from a
+	// since-depopulated level, is always reused, never reassigned).
+	if (!dyn_ls_ensure_level_to_grid_slot(dls, level_cap)) {
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
 		goto cleanup;
 	}
-	for (int id = 0; id < node_count; id++) {
-		int lvl = dyn_core_tree_level(ct, id);
-		if (lvl < 0)
-			continue;
-		sphere_count[fresh_level_to_sphere[lvl]] += (int)dyn_core_tree_member_count(ct, id);
+	for (int rank = 0; rank < num_spheres; rank++) {
+		int l = sphere_to_level[rank];
+		if (dls->level_to_grid_slot[l] >= 0)
+			continue; // already has a slot (whether built this call or reused from before)
+		if (!dyn_ls_ensure_grids_capacity(dls, dls->grid_slot_count + 1) ||
+			!dyn_ls_rotation_ensure_capacity(&dls->sphere_rotation, &dls->sphere_prev_omega, &dls->sphere_rotation_steps, &dls->sphere_rotation_capacity, dls->grid_slot_count + 1)) {
+			fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
+			goto cleanup;
+		}
+		int slot = dls->grid_slot_count++;
+		memset(&dls->grids[slot], 0, sizeof(SphereGrid));
+		dls->level_to_grid_slot[l] = slot;
 	}
 
-	// 3. Renumbering check: compare the freshly computed level->sphere
-	// mapping against the persisted one from the last recompute. Coreness is
-	// monotonically non-decreasing (insertion-only), so max_level here is
-	// always >= any previously seen max_level — a mismatch can only mean a
-	// level's rank shifted, never that it vanished from the representable
-	// range.
-	bool renumbered = false;
-	for (int l = 0; l < level_cap && !renumbered; l++) {
-		int old_s = (l < dls->level_to_sphere_cap) ? dls->level_to_sphere[l] : -1;
-		if (old_s != fresh_level_to_sphere[l])
-			renumbered = true;
-	}
-
-	// 4. Sphere overflow check: only meaningful when nothing renumbered — the
-	// persistent grids are reused as long as every sphere's members still
-	// fit in its (headroom-sized) slots and no new sphere is needed.
-	bool fits = !renumbered && num_spheres <= dls->num_spheres;
-	for (int s = 0; fits && s < num_spheres; s++)
-		if (sphere_count[s] > dls->grids[s].max_slots)
-			fits = false;
-	clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
-
-	sphere_changed = calloc((size_t)num_spheres, sizeof(bool));
+	sphere_changed = calloc((size_t)dls->grid_slot_count, sizeof(bool));
 	if (!sphere_changed) {
 		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
 		goto cleanup;
 	}
 
-	bool ok = true;
-	if (!fits) {
-		fprintf(stderr, "dyn_layered_sphere: %s — rebuilding grids for %d sphere(s) (had %d)\n", renumbered ? "level ranks shifted" : "sphere overflow", num_spheres, dls->num_spheres);
-		dyn_ls_free_grid_contents(dls);
-		ok = dyn_ls_build_grids(dls, sphere_count, num_spheres);
-		// A sphere index can now represent a completely different level's
-		// population than it did last time — reset every sphere's rotation
-		// state rather than trying to carry a rotation across a re-ranked
-		// sphere index.
-		ok = ok && dyn_ls_rotation_ensure_capacity(&dls->sphere_rotation, &dls->sphere_prev_omega, &dls->sphere_rotation_steps, &dls->sphere_rotation_capacity, num_spheres);
-		if (ok)
-			for (int s = 0; s < num_spheres; s++)
-				dyn_ls_rotation_reset(dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps, s);
-		for (int s = 0; s < num_spheres; s++)
-			sphere_changed[s] = true;
-	} else {
-		// Exact, precise invalidation: because the tree is exact and no
-		// renumbering occurred, an untouched sphere is PROVABLY unchanged —
-		// no defensive "clear everything outward" needed.
+	// 3. Radius walk, nucleus outward: reproduces the exact same radii as
+	// before (same formula, same inputs), but now DECIDES per slot whether
+	// that requires a full rebuild (new slot / overflow) or just an in-place
+	// rescale (pure or partial rank shift) — see file header for why a
+	// rescale is safe to do without touching slot_occupant[]/rotation.
+	{
+		bool ok = true;
+		double prev_radius = 0.0;
+		int n_built = 0, n_overflow = 0, n_rescaled = 0;
+		for (int rank = 0; rank < num_spheres && ok; rank++) {
+			int l = sphere_to_level[rank];
+			int slot = dls->level_to_grid_slot[l];
+			int occ = level_count[l];
+			double new_radius = sphere_radius_for(rank, occ, prev_radius);
+			prev_radius = new_radius;
+
+			SphereGrid *grid = &dls->grids[slot];
+			bool is_new = (grid->slots == NULL);
+			bool overflow = !is_new && occ > grid->max_slots;
+
+			if (is_new || overflow) {
+				int capacity_n = (int)((double)occ * (DYN_LS_SLOT_HEADROOM_BASE + rank * DYN_LS_SLOT_HEADROOM_PER_SPHERE));
+				ok = dyn_ls_rebuild_one_slot(dls, slot, capacity_n, new_radius);
+				sphere_changed[slot] = true;
+				if (is_new)
+					n_built++;
+				else
+					n_overflow++;
+			} else if (fabs(new_radius - grid->radius) > DYN_LS_RADIUS_EPS) {
+				double scale = new_radius / grid->radius;
+				for (int k = 0; k < grid->max_slots; k++) {
+					grid->slots[k].x *= scale;
+					grid->slots[k].y *= scale;
+					grid->slots[k].z *= scale;
+				}
+				grid->radius = new_radius;
+				n_rescaled++;
+			}
+		}
+		if (!ok) {
+			fprintf(stderr, "dyn_layered_sphere: grid (re)build failed\n");
+			goto cleanup;
+		}
+		clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
+
+		// 4. Exact, precise dirty-slot detection: because the tree is exact,
+		// a slot untouched by touched_levels/community_changed AND whose
+		// radius didn't change above is PROVABLY unchanged — no defensive
+		// "mark everything dirty" needed.
 		if (touched_levels) {
 			igraph_integer_t n = igraph_vector_int_size(touched_levels);
 			for (igraph_integer_t i = 0; i < n; i++) {
 				int lvl = (int)VECTOR(*touched_levels)[i];
-				if (lvl >= 0 && lvl < level_cap && fresh_level_to_sphere[lvl] >= 0)
-					sphere_changed[fresh_level_to_sphere[lvl]] = true;
+				if (lvl >= 0 && lvl < dls->level_to_grid_slot_cap && dls->level_to_grid_slot[lvl] >= 0)
+					sphere_changed[dls->level_to_grid_slot[lvl]] = true;
 			}
 		}
 		if (community_changed) {
@@ -522,38 +566,24 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 			for (igraph_integer_t i = 0; i < n; i++) {
 				igraph_integer_t v = VECTOR(*community_changed)[i];
 				int lvl = dyn_core_tree_level(ct, dyn_core_tree_node_of(ct, v));
-				if (lvl >= 0 && lvl < level_cap && fresh_level_to_sphere[lvl] >= 0)
-					sphere_changed[fresh_level_to_sphere[lvl]] = true;
+				if (lvl >= 0 && lvl < dls->level_to_grid_slot_cap && dls->level_to_grid_slot[lvl] >= 0)
+					sphere_changed[dls->level_to_grid_slot[lvl]] = true;
 			}
 		}
-		for (int s = 0; s < num_spheres; s++)
-			if (sphere_changed[s])
-				for (int k = 0; k < dls->grids[s].max_slots; k++)
-					dls->grids[s].slot_occupant[k] = -1;
-	}
+		for (int slot = 0; slot < dls->grid_slot_count; slot++)
+			if (sphere_changed[slot])
+				for (int k = 0; k < dls->grids[slot].max_slots; k++)
+					dls->grids[slot].slot_occupant[k] = -1;
 
-	// Persist the fresh mapping for the fast-append path and next
-	// recompute's renumbering check.
-	if (!dyn_ls_ensure_level_to_sphere(dls, level_cap)) {
-		fprintf(stderr, "dyn_layered_sphere: allocation failed\n");
-		goto cleanup;
-	}
-	for (int l = 0; l < level_cap; l++)
-		dls->level_to_sphere[l] = fresh_level_to_sphere[l];
-	clock_gettime(CLOCK_MONOTONIC_RAW, &t3);
-
-	// Debug: one-line summary of optimization decisions (throttled to avoid
-	// flooding stderr on every poll).
-	{
-		static int log_counter = 0;
-		if (++log_counter % 32 == 1) {
-			int to_seed = 0;
-			for (int s = 0; s < num_spheres; s++)
-				if (sphere_count[s] > 0 && sphere_changed[s])
-					to_seed++;
-			fprintf(stderr, "dyn_ls: recompute spheres=%d/%d fits=%d renumbered=%d seed=%d\n", num_spheres, dls->num_spheres, fits, renumbered, to_seed);
+		// Debug: one-line summary of optimization decisions (throttled to
+		// avoid flooding stderr on every poll).
+		{
+			static int log_counter = 0;
+			if (++log_counter % 32 == 1)
+				fprintf(stderr, "dyn_ls: recompute spheres=%d slots=%d built=%d overflow=%d rescaled=%d\n", num_spheres, dls->grid_slot_count, n_built, n_overflow, n_rescaled);
 		}
 	}
+	clock_gettime(CLOCK_MONOTONIC_RAW, &t3);
 
 	// Node -> sphere map plus per-slot map, one O(V)-sized array populated by
 	// walking the (much smaller) tree. Still touches every vertex once —
@@ -572,13 +602,14 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 		int lvl = dyn_core_tree_level(ct, id);
 		if (lvl < 0)
 			continue;
-		int s = fresh_level_to_sphere[lvl];
+		int s = dls->level_to_grid_slot[lvl];
 		for (igraph_integer_t v = dyn_core_tree_first_member(ct, id); v != -1; v = dyn_core_tree_next_member(ct, v))
 			if (v < vcount)
 				node_to_sphere[v] = s;
 	}
 
-	if (ok) {
+	{
+		bool ok = true;
 		LayeredSphereContext ctx = {0};
 		ctx.grids = dls->grids;
 		ctx.node_to_sphere_id = node_to_sphere;
@@ -588,23 +619,39 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 		ctx.sphere_rotation = dls->sphere_rotation; // seeds vertices already under each sphere's persisted rotation, avoiding a pop-then-correct jitter
 
 		bool has_timestamp = igraph_cattribute_has_attr(g, IGRAPH_ATTRIBUTE_VERTEX, DYN_LS_TIMESTAMP_ATTR);
-		for (int s = 0; s < num_spheres && ok; s++) {
-			if (sphere_count[s] == 0 || !sphere_changed[s])
+		for (int rank = 0; rank < num_spheres && ok; rank++) {
+			int l = sphere_to_level[rank];
+			int slot = dls->level_to_grid_slot[l];
+			int occ = level_count[l];
+			if (occ == 0)
 				continue;
-			ok = dyn_ls_seed_sphere(g, &ctx, ct, order, s, sphere_to_level[s], sphere_count[s], community, has_timestamp);
-			if (ok) {
-				// TopoLayout-style torque rotation, adapted to 3D: rotate
-				// sphere s as a rigid body to reduce its inter-sphere edge
-				// stress, then re-apply the (possibly just-updated)
-				// quaternion to s's freshly-seeded occupants.
-				dyn_ls_rotate_sphere_step(g, &ctx, s, dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps);
-				dyn_ls_apply_sphere_rotation(&ctx, s, dls->sphere_rotation);
+			if (sphere_changed[slot]) {
+				ok = dyn_ls_seed_sphere(g, &ctx, ct, order, slot, l, occ, community, has_timestamp);
+				if (ok) {
+					// TopoLayout-style torque rotation, adapted to 3D: rotate
+					// sphere `slot` as a rigid body to reduce its
+					// inter-sphere edge stress, then re-apply the (possibly
+					// just-updated) quaternion to its freshly-seeded
+					// occupants.
+					dyn_ls_rotate_sphere_step(g, &ctx, slot, dls->sphere_rotation, dls->sphere_prev_omega, dls->sphere_rotation_steps);
+					dyn_ls_apply_sphere_rotation(&ctx, slot, dls->sphere_rotation);
+				}
+			} else {
+				// Not dirty, but its radius may have changed in the walk
+				// above (a pure rank shift) — rewrite occupants' positions
+				// under the SAME (unreset) rotation quaternion, no reseed.
+				SphereGrid *grid = &dls->grids[slot];
+				const double *quat = dls->sphere_rotation ? &dls->sphere_rotation[4 * slot] : NULL;
+				for (int k = 0; k < grid->max_slots; k++) {
+					int occupant = grid->slot_occupant[k];
+					if (occupant != -1)
+						write_slot_position(layout, occupant, &grid->slots[k], quat);
+				}
 			}
 		}
+		if (!ok)
+			goto cleanup; // result stays false
 	}
-
-	if (!ok)
-		goto cleanup; // result stays false
 
 	result = igraph_step(layout, NULL) == IGRAPH_SUCCESS;
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t4);
@@ -622,9 +669,8 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 
 cleanup:
 	free(populated);
-	free(fresh_level_to_sphere);
+	free(level_count);
 	free(sphere_to_level);
-	free(sphere_count);
 	free(node_to_sphere);
 	free(node_to_slot);
 	free(sphere_changed);
@@ -704,7 +750,7 @@ void dyn_layered_sphere_destroy(DynLayeredSphere *dls)
 		return;
 	dyn_ls_free_grid_contents(dls);
 	free(dls->grids);
-	free(dls->level_to_sphere);
+	free(dls->level_to_grid_slot);
 	free(dls->sphere_rotation);
 	free(dls->sphere_prev_omega);
 	free(dls->sphere_rotation_steps);

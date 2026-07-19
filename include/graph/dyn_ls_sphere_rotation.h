@@ -57,15 +57,20 @@
 
 // Quaternion layout throughout: 4 doubles per sphere, (w, x, y, z), identity
 // = {1,0,0,0}. sphere_rotation/sphere_prev_omega/sphere_rotation_steps are
-// all indexed by sphere rank and must have at least `needed` spheres'
-// worth of capacity; grows (or allocates, if *sphere_rotation is NULL) via
-// the same doubling pattern as dyn_layered_sphere.c's own arrays.
+// all indexed by dyn_layered_sphere.c's stable per-level grid slot id (not
+// rank — a sphere's rank can shift without its rotation state moving) and
+// must have at least `needed` spheres' worth of capacity; grows (or
+// allocates, if *sphere_rotation is NULL) via the same doubling pattern as
+// dyn_layered_sphere.c's own arrays.
 bool dyn_ls_rotation_ensure_capacity(double **sphere_rotation, double **sphere_prev_omega, int **sphere_rotation_steps, int *capacity, int needed);
 
-// Resets sphere s's rotation state to identity/zero — call for every sphere
-// whenever dyn_layered_sphere.c rebuilds its grids (renumbering/overflow),
-// since a sphere index can then represent a completely different level's
-// population than it did last time.
+// Resets sphere (grid slot) s's rotation state to identity/zero — call
+// whenever dyn_layered_sphere.c (re)builds that slot's grid from scratch
+// (its level populated for the first time, or its existing grid overflowed),
+// since the slot's geometry — and therefore any prior rotation's meaning —
+// no longer applies. A slot whose grid was NOT rebuilt (e.g. a pure rank
+// shift, handled as an in-place radius rescale) keeps its rotation state
+// untouched.
 void dyn_ls_rotation_reset(double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps, int s);
 
 // Computes and applies one damped rotation increment to sphere s's

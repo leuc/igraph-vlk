@@ -324,6 +324,92 @@ static int test_many_recomputes_stress_rotation(void)
 	return 0;
 }
 
+// A pure rank shift (a new, higher-coreness clique appears elsewhere,
+// pushing every existing level's rank outward by one) must move an
+// untouched sphere's occupants by an in-place RADIUS RESCALE, not a
+// teardown + reseed. The target sphere here is a set of permanently
+// isolated vertices (level 0): building a new higher-coreness clique from
+// scratch necessarily sweeps its OWN transient tree node through every
+// intermediate coreness level on the way up (empirically confirmed via
+// touched_levels while writing this test), which — since dirty-tracking is
+// per LEVEL, not per tree node — dirties every OTHER already-populated
+// level's sphere too (K5, hangers) as a documented, pre-existing side
+// effect unrelated to this change. Level 0 is the one level exempt from
+// that: new vertices only ever LEAVE the always-present root node, they
+// never "create" it, so it's never reported in touched_levels — while its
+// RANK still increases every time a new higher level appears. That makes
+// it the one sphere in this scenario that can cleanly demonstrate the
+// rescale-not-rebuild path. (It can't also demonstrate rotation surviving
+// a reset: isolated vertices have no inter-sphere edges, so their rotation
+// quaternion is trivially identity throughout, before and after — this
+// test verifies the rescale code path itself, via the same-direction
+// invariant below, not rotation specifically.)
+static int test_rank_shift_rescales_in_place(void)
+{
+	Fixture f;
+	IGRAPH_ASSERT(fixture_init(&f));
+
+	// 5 permanently isolated vertices (never given edges) — the target sphere.
+	IGRAPH_ASSERT(fixture_add_batch(&f, NULL, 0, 5));
+
+	// K5 nucleus (coreness 4) plus a growing set of degree-1 hangers
+	// (coreness 1), purely so the graph has several populated levels before
+	// the rank-shifting event below.
+	static const igraph_integer_t k5[] = {5, 6, 5, 7, 5, 8, 5, 9, 6, 7, 6, 8, 6, 9, 7, 8, 7, 9, 8, 9};
+	IGRAPH_ASSERT(fixture_add_batch(&f, k5, sizeof(k5) / sizeof(k5[0]), 10));
+	igraph_integer_t next_v = 10;
+	for (int i = 0; i < 15; i++) {
+		igraph_integer_t nucleus_v = 5 + (i % 5);
+		igraph_integer_t edges[2] = {next_v, nucleus_v};
+		IGRAPH_ASSERT(fixture_add_batch(&f, edges, 2, next_v + 1));
+		next_v++;
+	}
+	IGRAPH_ASSERT(check_placement_invariants(&f.layout));
+
+	double before[5][3];
+	for (igraph_integer_t v = 0; v < 5; v++)
+		for (int c = 0; c < 3; c++)
+			before[v][c] = MATRIX(f.layout, v, c);
+	int radii_before = count_distinct_radii(&f.layout);
+
+	// A brand-new 6-clique (coreness 5) — a new highest level, shifting
+	// every existing populated level's rank outward by one, including
+	// level 0's.
+	igraph_integer_t k6[30];
+	int k = 0;
+	for (igraph_integer_t i = next_v; i < next_v + 6; i++)
+		for (igraph_integer_t j = i + 1; j < next_v + 6; j++) {
+			k6[k++] = i;
+			k6[k++] = j;
+		}
+	IGRAPH_ASSERT(fixture_add_batch(&f, k6, (size_t)k, next_v + 6));
+	IGRAPH_ASSERT(check_placement_invariants(&f.layout));
+	int radii_after = count_distinct_radii(&f.layout);
+	IGRAPH_ASSERT(radii_after > radii_before); // sanity: a new level (hence a rank shift) actually happened
+
+	double after[5][3];
+	for (igraph_integer_t v = 0; v < 5; v++)
+		for (int c = 0; c < 3; c++)
+			after[v][c] = MATRIX(f.layout, v, c);
+
+	// The scale ratio must be the same, nontrivial, positive constant for
+	// every isolated vertex, and each one's direction must be exactly
+	// preserved (after == ratio * before, componentwise) — a full
+	// rebuild+reseed would place vertices at unrelated slots instead, with
+	// no such relationship to their prior positions.
+	double norm_before0 = sqrt(before[0][0] * before[0][0] + before[0][1] * before[0][1] + before[0][2] * before[0][2]);
+	double norm_after0 = sqrt(after[0][0] * after[0][0] + after[0][1] * after[0][1] + after[0][2] * after[0][2]);
+	double ratio = norm_after0 / norm_before0;
+	IGRAPH_ASSERT(fabs(ratio - 1.0) > 1e-6); // sanity: radius actually changed, this isn't a vacuous pass
+
+	for (igraph_integer_t v = 0; v < 5; v++)
+		for (int c = 0; c < 3; c++)
+			IGRAPH_ASSERT(fabs(after[v][c] - ratio * before[v][c]) < 1e-6);
+
+	fixture_destroy(&f);
+	return 0;
+}
+
 int main(void)
 {
 	RUN_TEST(test_triangle);
@@ -332,6 +418,7 @@ int main(void)
 	RUN_TEST(test_isolated_new_vertices);
 	RUN_TEST(test_bootstrap_then_stream);
 	RUN_TEST(test_many_recomputes_stress_rotation);
+	RUN_TEST(test_rank_shift_rescales_in_place);
 
 	printf("all tests passed\n");
 	return EXIT_SUCCESS;
