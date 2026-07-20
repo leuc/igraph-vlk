@@ -556,6 +556,7 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 			node_to_slot[occ] = k;
 		}
 	}
+	int n_reflowed = 0;
 	for (int rank = 0; rank < num_spheres; rank++) {
 		int l = sphere_to_level[rank];
 		int slot = dls->level_to_grid_slot[l];
@@ -578,6 +579,7 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 					continue;
 				grid->slot_occupant[free_slot] = (int)v;
 				node_to_slot[v] = free_slot;
+				n_reflowed++;
 			}
 		}
 	}
@@ -614,7 +616,7 @@ static bool dyn_ls_recompute(DynLayeredSphere *dls, const igraph_t *g, const Dyn
 	}
 
 	result = true;
-	if (elog.sphere_reseeded > 0)
+	if (elog.sphere_reseeded > 0 || elog.sphere_geometry_rescaled > 0 || n_reflowed > 0)
 		*out_changed = true;
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t4);
 	dyn_ls_report_event_log(&elog, num_spheres, dls->grid_slot_count, dyn_ls_timer_us(&t0, &t1), dyn_ls_timer_us(&t1, &t2), dyn_ls_timer_us(&t2, &t3), dyn_ls_timer_us(&t3, &t3b), dyn_ls_timer_us(&t3b, &t4), dyn_ls_timer_us(&t0, &t4));

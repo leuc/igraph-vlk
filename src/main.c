@@ -265,7 +265,7 @@ int main(int argc, char **argv)
 		if (app.graph_stream && !app.job_in_progress && !app.graph_stream_paused) {
 			if (graph_stream_poll(app.graph_stream, &app.current_graph)) {
 				app.renderer.needsAttributeUpload = VK_TRUE;
-				renderer_transition_request(&app.renderer, TRANSITION_SOURCE_STREAM, 5.0f, &app.current_graph);
+				renderer_transition_request(&app.renderer, TRANSITION_SOURCE_STREAM, 1.0f, &app.current_graph);
 			}
 		}
 
