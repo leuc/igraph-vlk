@@ -86,30 +86,15 @@ static void transition_start(Renderer *r, TransitionSource source, float duratio
 	r->transition.prev_edge_vertex_count = ecount;
 }
 
-// Retarget by the current owner: advance prev to the in-flight interpolated
-// position so the new target morphs from where the visuals actually are,
-// instead of snapping or resetting progress.
+// Retarget by the current owner: snapshot the currently-displayed (curr)
+// positions as the new prev baseline, so the new target morphs from where
+// the visuals actually are, instead of resetting progress.
 static void transition_retarget(Renderer *r, float duration)
 {
 	uint32_t ncount = r->node.count;
 	uint32_t ecount = r->edge.vertex_count;
 	VkDeviceSize node_size = sizeof(NodePosition) * (ncount > 0 ? ncount : 1);
 	VkDeviceSize edge_size = sizeof(EdgePosition) * (ecount > 0 ? ecount : 1);
-
-	float t = r->transition.t;
-	float eased_t = SMOOTHSTEP(t);
-
-	uint32_t lerp_count = ncount < r->transition.prev_node_count ? ncount : r->transition.prev_node_count;
-
-	NodePosition *old_prev = NULL;
-	uint32_t old_prev_count = r->transition.prev_node_count;
-	if (old_prev_count > 0 && r->transition.prev_node_position != VK_NULL_HANDLE) {
-		old_prev = malloc(sizeof(NodePosition) * old_prev_count);
-		void *old_mapped;
-		VK_CHECK(vkMapMemory(r->core.device, r->transition.prev_node_position_memory, 0, sizeof(NodePosition) * old_prev_count, 0, &old_mapped), "transition retarget read old");
-		memcpy(old_prev, old_mapped, sizeof(NodePosition) * old_prev_count);
-		vkUnmapMemory(r->core.device, r->transition.prev_node_position_memory);
-	}
 
 	if (r->transition.prev_node_capacity < ncount || r->transition.prev_node_position == VK_NULL_HANDLE) {
 		destroy_prev_node_position(r);
@@ -122,40 +107,14 @@ static void transition_retarget(Renderer *r, float duration)
 		VK_CHECK(vkMapMemory(r->core.device, r->node.position_memory, 0, node_size, 0, &curr_mapped), "transition retarget map curr");
 		void *prev_mapped;
 		VK_CHECK(vkMapMemory(r->core.device, r->transition.prev_node_position_memory, 0, node_size, 0, &prev_mapped), "transition retarget map prev");
-
-		vec3 *curr = (vec3 *)curr_mapped;
-		vec3 *prev = (vec3 *)prev_mapped;
-
-		for (uint32_t i = 0; i < lerp_count && old_prev; i++) {
-			prev[i][0] = old_prev[i].pos[0];
-			prev[i][1] = old_prev[i].pos[1];
-			prev[i][2] = old_prev[i].pos[2];
-			glm_vec3_lerp(prev[i], curr[i], eased_t, prev[i]);
-		}
-		for (uint32_t i = lerp_count; i < ncount; i++) {
-			glm_vec3_copy(curr[i], prev[i]);
-		}
-
+		memcpy(prev_mapped, curr_mapped, sizeof(NodePosition) * ncount);
 		vkUnmapMemory(r->core.device, r->node.position_memory);
 		vkUnmapMemory(r->core.device, r->transition.prev_node_position_memory);
 	}
 
-	free(old_prev);
 	r->transition.prev_node_count = ncount;
 	r->transition.duration = duration;
 	r->transition.owner_generation++;
-
-	uint32_t edge_lerp_count = ecount < r->transition.prev_edge_vertex_count ? ecount : r->transition.prev_edge_vertex_count;
-
-	EdgePosition *old_edge_prev = NULL;
-	uint32_t old_edge_prev_count = r->transition.prev_edge_vertex_count;
-	if (old_edge_prev_count > 0 && r->transition.prev_edge_position != VK_NULL_HANDLE) {
-		old_edge_prev = malloc(sizeof(EdgePosition) * old_edge_prev_count);
-		void *old_mapped;
-		VK_CHECK(vkMapMemory(r->core.device, r->transition.prev_edge_position_memory, 0, sizeof(EdgePosition) * old_edge_prev_count, 0, &old_mapped), "transition retarget read old edge");
-		memcpy(old_edge_prev, old_mapped, sizeof(EdgePosition) * old_edge_prev_count);
-		vkUnmapMemory(r->core.device, r->transition.prev_edge_position_memory);
-	}
 
 	if (r->transition.prev_edge_capacity < ecount || r->transition.prev_edge_position == VK_NULL_HANDLE) {
 		destroy_prev_edge_position(r);
@@ -168,25 +127,11 @@ static void transition_retarget(Renderer *r, float duration)
 		VK_CHECK(vkMapMemory(r->core.device, r->edge.position_memory, 0, edge_size, 0, &curr_mapped), "transition retarget map curr edge");
 		void *prev_mapped;
 		VK_CHECK(vkMapMemory(r->core.device, r->transition.prev_edge_position_memory, 0, edge_size, 0, &prev_mapped), "transition retarget map prev edge");
-
-		vec3 *curr = (vec3 *)curr_mapped;
-		vec3 *prev = (vec3 *)prev_mapped;
-
-		for (uint32_t i = 0; i < edge_lerp_count && old_edge_prev; i++) {
-			prev[i][0] = old_edge_prev[i].pos[0];
-			prev[i][1] = old_edge_prev[i].pos[1];
-			prev[i][2] = old_edge_prev[i].pos[2];
-			glm_vec3_lerp(prev[i], curr[i], eased_t, prev[i]);
-		}
-		for (uint32_t i = edge_lerp_count; i < ecount; i++) {
-			glm_vec3_copy(curr[i], prev[i]);
-		}
-
+		memcpy(prev_mapped, curr_mapped, sizeof(EdgePosition) * ecount);
 		vkUnmapMemory(r->core.device, r->edge.position_memory);
 		vkUnmapMemory(r->core.device, r->transition.prev_edge_position_memory);
 	}
 
-	free(old_edge_prev);
 	r->transition.prev_edge_vertex_count = ecount;
 }
 
