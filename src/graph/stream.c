@@ -696,11 +696,12 @@ bool graph_stream_poll(GraphStream *gs, GraphData *data)
 	if (gs->layered_sphere && gs->layered_sphere_enabled) {
 		const igraph_integer_t *comm_values = gs->leiden ? dyn_leiden_membership(gs->leiden) : NULL;
 		if (gs->core_tree && comm_values) {
-			if (!dyn_layered_sphere_on_update(gs->layered_sphere, &data->g, gs->core_tree, have_touched_levels ? &touched_levels : NULL, gs->core_tree_order, comm_values, have_community_changed ? &community_changed : NULL, &data->current_layout)) {
+			bool ls_changed = false;
+			if (!dyn_layered_sphere_on_update(gs->layered_sphere, &data->g, gs->core_tree, have_touched_levels ? &touched_levels : NULL, gs->core_tree_order, comm_values, have_community_changed ? &community_changed : NULL, &data->current_layout, &ls_changed)) {
 				fprintf(stderr, "graph_stream_poll: dynamic Layered Sphere maintenance failed — disabling\n");
 				dyn_layered_sphere_destroy(gs->layered_sphere);
 				gs->layered_sphere = NULL;
-			} else {
+			} else if (ls_changed) {
 				stream_mirror_layered_sphere_positions(data);
 				changed = true;
 			}

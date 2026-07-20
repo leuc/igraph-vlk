@@ -83,7 +83,7 @@ bool dyn_ls_rotation_ensure_capacity(double **sphere_rotation, double **sphere_p
 	return true;
 }
 
-void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ctx, int s, double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps, int *sphere_settled_streak)
+bool dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ctx, int s, double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps, int *sphere_settled_streak)
 {
 	const SphereGrid *grid = &ctx->grids[s];
 	double sum_x = 0.0, sum_y = 0.0, sum_z = 0.0;
@@ -91,7 +91,7 @@ void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ct
 
 	igraph_vector_int_t neis;
 	if (igraph_vector_int_init(&neis, 0) != IGRAPH_SUCCESS)
-		return;
+		return false;
 
 	for (int k = 0; k < grid->max_slots; k++) {
 		int u = grid->slot_occupant[k];
@@ -149,7 +149,7 @@ void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ct
 	igraph_vector_int_destroy(&neis);
 
 	if (edge_count == 0)
-		return;
+		return false;
 
 	double want_x = sum_x / edge_count;
 	double want_y = sum_y / edge_count;
@@ -175,7 +175,7 @@ void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ct
 		prev[0] = want_x;
 		prev[1] = want_y;
 		prev[2] = want_z;
-		return;
+		return false;
 	}
 
 	double dot = want_x * prev[0] + want_y * prev[1] + want_z * prev[2];
@@ -223,7 +223,7 @@ void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ct
 	prev[2] = want_z;
 
 	if (apply_angle < 1e-9)
-		return; // negligible — leave the quaternion and step counter untouched; a sphere that reliably lands here has actually converged and drops out of the log below
+		return false; // negligible — leave the quaternion and step counter untouched; a sphere that reliably lands here has actually converged and drops out of the log below
 
 	// Identifies which sphere(s) never settle: only real (non-negligible) rotation reaches this
 	// line, so a slot that keeps appearing here call after call genuinely never satisfies the
@@ -252,6 +252,7 @@ void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ct
 	q[3] = result[3];
 
 	sphere_rotation_steps[s]++;
+	return true;
 }
 
 void dyn_ls_apply_sphere_rotation(LayeredSphereContext *ctx, int s, const double *sphere_rotation)

@@ -86,10 +86,15 @@ DynLayeredSphere *dyn_layered_sphere_init(const igraph_t *g, const DynCoreTree *
  *                        community reassignment happened).
  * @param layout          Caller-owned matrix to write positions into; grown
  *                        by the caller to igraph_vcount(g) x 3 beforehand.
+ * @param out_changed     Set to true iff any node position actually changed
+ *                        this call (reseed, new vertex placement, or a
+ *                        sphere rotation step that wasn't a no-op/settled
+ *                        tick); false on a fully quiescent call. May be NULL
+ *                        if the caller doesn't need it.
  * @return false on unrecoverable failure (the maintainer is then stale;
  *         re-create it via dyn_layered_sphere_init), true otherwise.
  */
-bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, const DynCoreTree *ct, const igraph_vector_int_t *touched_levels, const DynCoreTreeOrder *order, const igraph_integer_t *community, const igraph_vector_int_t *community_changed, igraph_matrix_t *layout);
+bool dyn_layered_sphere_on_update(DynLayeredSphere *dls, const igraph_t *g, const DynCoreTree *ct, const igraph_vector_int_t *touched_levels, const DynCoreTreeOrder *order, const igraph_integer_t *community, const igraph_vector_int_t *community_changed, igraph_matrix_t *layout, bool *out_changed);
 
 /**
  * Free the maintainer (never touches the graph or the layout matrix).

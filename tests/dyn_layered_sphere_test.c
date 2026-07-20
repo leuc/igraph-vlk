@@ -85,7 +85,7 @@ static int fixture_add_batch(Fixture *f, const igraph_integer_t *edges, size_t n
 
 	IGRAPH_ASSERT(dyn_core_tree_on_edges(f->ct, &f->g, has_edges ? &batch : NULL, &touched_levels));
 	IGRAPH_ASSERT(dyn_leiden_on_edges(f->dl, &f->g, has_edges ? &batch : NULL, &community_changed));
-	IGRAPH_ASSERT(dyn_layered_sphere_on_update(f->dls, &f->g, f->ct, &touched_levels, NULL, dyn_leiden_membership(f->dl), &community_changed, &f->layout));
+	IGRAPH_ASSERT(dyn_layered_sphere_on_update(f->dls, &f->g, f->ct, &touched_levels, NULL, dyn_leiden_membership(f->dl), &community_changed, &f->layout, NULL));
 
 	igraph_vector_int_destroy(&community_changed);
 	igraph_vector_int_destroy(&touched_levels);
@@ -260,7 +260,7 @@ static int test_bootstrap_then_stream(void)
 
 	IGRAPH_ASSERT(dyn_core_tree_on_edges(ct, &g, &batch, &touched_levels));
 	IGRAPH_ASSERT(dyn_leiden_on_edges(dl, &g, &batch, &community_changed));
-	IGRAPH_ASSERT(dyn_layered_sphere_on_update(dls, &g, ct, &touched_levels, NULL, dyn_leiden_membership(dl), &community_changed, &layout));
+	IGRAPH_ASSERT(dyn_layered_sphere_on_update(dls, &g, ct, &touched_levels, NULL, dyn_leiden_membership(dl), &community_changed, &layout, NULL));
 	IGRAPH_ASSERT(check_placement_invariants(&layout));
 
 	igraph_vector_int_destroy(&community_changed);

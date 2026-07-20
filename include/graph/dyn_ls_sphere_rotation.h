@@ -86,7 +86,8 @@ void dyn_ls_rotation_reset(double *sphere_rotation, double *sphere_prev_omega, i
 // sphere_prev_omega[3*s..], and increments sphere_rotation_steps[s] iff a
 // nonzero rotation was actually applied. Does NOT itself re-write any node's
 // layout position — call dyn_ls_apply_sphere_rotation afterward to make the
-// updated quaternion visible.
+// updated quaternion visible. Returns true iff the quaternion was actually
+// changed (i.e. sphere_rotation_steps[s] was incremented) this call.
 //
 // Convergence: this is a live per-tick feedback loop, not integration toward
 // a fixed target, so its residual torque can settle into a small nonzero
@@ -97,7 +98,7 @@ void dyn_ls_rotation_reset(double *sphere_rotation, double *sphere_prev_omega, i
 // quaternion (and sphere_rotation_steps[s]) entirely until a fresh disturbance
 // (new members, a moved neighbor) pushes the torque back above threshold,
 // which resets the streak and resumes rotation.
-void dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ctx, int s, double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps, int *sphere_settled_streak);
+bool dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ctx, int s, double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps, int *sphere_settled_streak);
 
 // Re-walks sphere s's occupied slots and re-writes each occupant's layout
 // position via write_slot_position under sphere_rotation[4*s..]'s current
