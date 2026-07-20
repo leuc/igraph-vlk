@@ -425,10 +425,3 @@ Requires `curl` and `jq`. Handles both single-version (flat `analyses`) and mult
 | `src/xr/openxr_frame.c` | Frame loop, predicted display times |
 | `include/xr/openxr_context.h` | `XrContext` type, XR context API |
 | `include/xr/openxr_frame.h` | XR frame API |
-
-### Build System
-
-| File | Role |
-|------|------|
-| `CMakeLists.txt` | Project config, dependency detection, shader compilation, OpenXR toggle |
-| `shaders/compile.py` | SPIR-V compilation script |

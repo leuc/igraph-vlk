@@ -1,5 +1,6 @@
 #include "vulkan/renderer_transition.h"
 #include "vulkan/buffers.h"
+#include "vulkan/renderer.h"
 #include "vulkan/utils.h"
 #include <cglm/cglm.h>
 #include <stdio.h>
@@ -7,9 +8,6 @@
 #include <string.h>
 
 #define SMOOTHSTEP(t) ((t) * (t) * (3.0f - 2.0f * (t)))
-
-#define TRANSITION_DEFAULT_DURATION 0.4f
-#define STREAM_TRANSITION_DURATION 0.12f
 
 void renderer_transition_init(Renderer *r)
 {
@@ -39,106 +37,37 @@ bool renderer_transition_is_active(Renderer *r)
 	return r->transition.active;
 }
 
-void renderer_transition_begin(Renderer *r, float duration)
+// First transition for this owner: snapshot current GPU positions -> prev buffer.
+static void transition_start(Renderer *r, TransitionSource source, float duration)
 {
-	if (duration <= 0.0f) {
-		duration = TRANSITION_DEFAULT_DURATION;
-	}
-
 	uint32_t ncount = r->node.count;
 	uint32_t ecount = r->edge.vertex_count;
-	fprintf(stderr, "[Transition] begin: nodes=%u edges=%u duration=%.2fs was_active=%d\n", ncount, ecount, duration, r->transition.active);
-
 	VkDeviceSize node_size = sizeof(NodePosition) * (ncount > 0 ? ncount : 1);
 	VkDeviceSize edge_size = sizeof(EdgePosition) * (ecount > 0 ? ecount : 1);
 
-	bool interrupting = r->transition.active && r->transition.prev_node_position != VK_NULL_HANDLE && r->node.position != VK_NULL_HANDLE;
-
-	if (interrupting) {
-		// Seamless interruption: advance prev to current interpolated position
-		float t = r->transition.t;
-		float eased_t = SMOOTHSTEP(t);
-
-		uint32_t lerp_count = ncount < r->transition.prev_node_count ? ncount : r->transition.prev_node_count;
-
-		// Handle buffer resize: read old prev into temp before destroy
-		NodePosition *old_prev = NULL;
-		uint32_t old_prev_count = r->transition.prev_node_count;
-		if (old_prev_count > 0 && r->transition.prev_node_position != VK_NULL_HANDLE) {
-			old_prev = malloc(sizeof(NodePosition) * old_prev_count);
-			void *old_mapped;
-			VK_CHECK(vkMapMemory(r->core.device, r->transition.prev_node_position_memory, 0, sizeof(NodePosition) * old_prev_count, 0, &old_mapped), "transition interrupt read old");
-			memcpy(old_prev, old_mapped, sizeof(NodePosition) * old_prev_count);
-			vkUnmapMemory(r->core.device, r->transition.prev_node_position_memory);
-		}
-
-		// Grow prev buffer if needed
-		if (r->transition.prev_node_capacity < ncount || r->transition.prev_node_position == VK_NULL_HANDLE) {
-			destroy_prev_node_position(r);
-			VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, node_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->transition.prev_node_position, &r->transition.prev_node_position_memory);
-			r->transition.prev_node_capacity = ncount;
-		}
-
-		// Write interpolated positions: for existing nodes, lerp old_prev → curr
-		if (ncount > 0 && r->node.position != VK_NULL_HANDLE) {
-			void *curr_mapped;
-			VK_CHECK(vkMapMemory(r->core.device, r->node.position_memory, 0, node_size, 0, &curr_mapped), "transition interrupt map curr");
-			void *prev_mapped;
-			VK_CHECK(vkMapMemory(r->core.device, r->transition.prev_node_position_memory, 0, node_size, 0, &prev_mapped), "transition interrupt map prev");
-
-			vec3 *curr = (vec3 *)curr_mapped;
-			vec3 *prev = (vec3 *)prev_mapped;
-
-			// Lerp existing nodes: prev = interpolated position
-			for (uint32_t i = 0; i < lerp_count && old_prev; i++) {
-				prev[i][0] = old_prev[i].pos[0];
-				prev[i][1] = old_prev[i].pos[1];
-				prev[i][2] = old_prev[i].pos[2];
-				glm_vec3_lerp(prev[i], curr[i], eased_t, prev[i]);
-			}
-			// New nodes (if count grew): appear in place
-			for (uint32_t i = lerp_count; i < ncount; i++) {
-				glm_vec3_copy(curr[i], prev[i]);
-			}
-
-			vkUnmapMemory(r->core.device, r->node.position_memory);
-			vkUnmapMemory(r->core.device, r->transition.prev_node_position_memory);
-		}
-
-		free(old_prev);
-		r->transition.prev_node_count = ncount;
-
-		// Don't reset t — continue from current progress toward the new target
-		// Just update duration if needed
-		r->transition.duration = duration;
-		fprintf(stderr, "[Transition] interrupt: kept t=%.3f\n", r->transition.t);
-	} else {
-		// First transition: snapshot current GPU positions → prev buffer
-		if (r->transition.prev_node_capacity < ncount || r->transition.prev_node_position == VK_NULL_HANDLE) {
-			destroy_prev_node_position(r);
-			VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, node_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->transition.prev_node_position, &r->transition.prev_node_position_memory);
-			r->transition.prev_node_capacity = ncount;
-		}
-
-		if (ncount > 0 && r->node.position != VK_NULL_HANDLE) {
-			void *src_mapped;
-			VK_CHECK(vkMapMemory(r->core.device, r->node.position_memory, 0, node_size, 0, &src_mapped), "transition begin map src");
-			void *dst_mapped;
-			VK_CHECK(vkMapMemory(r->core.device, r->transition.prev_node_position_memory, 0, node_size, 0, &dst_mapped), "transition begin map dst");
-			memcpy(dst_mapped, src_mapped, sizeof(NodePosition) * ncount);
-			vkUnmapMemory(r->core.device, r->node.position_memory);
-			vkUnmapMemory(r->core.device, r->transition.prev_node_position_memory);
-		}
-		r->transition.prev_node_count = ncount;
-
-		r->transition.t = 0.0f;
-		r->transition.duration = duration;
-		r->transition.active = true;
+	if (r->transition.prev_node_capacity < ncount || r->transition.prev_node_position == VK_NULL_HANDLE) {
+		destroy_prev_node_position(r);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, node_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->transition.prev_node_position, &r->transition.prev_node_position_memory);
+		r->transition.prev_node_capacity = ncount;
 	}
 
-	// Edge prev buffer: always snapshot current GPU positions into prev.
-	// Edges are rebuilt from node positions each frame (no stable identity),
-	// so we always take the latest snapshot as the "from" for the lerp.
+	if (ncount > 0 && r->node.position != VK_NULL_HANDLE) {
+		void *src_mapped;
+		VK_CHECK(vkMapMemory(r->core.device, r->node.position_memory, 0, node_size, 0, &src_mapped), "transition start map src");
+		void *dst_mapped;
+		VK_CHECK(vkMapMemory(r->core.device, r->transition.prev_node_position_memory, 0, node_size, 0, &dst_mapped), "transition start map dst");
+		memcpy(dst_mapped, src_mapped, sizeof(NodePosition) * ncount);
+		vkUnmapMemory(r->core.device, r->node.position_memory);
+		vkUnmapMemory(r->core.device, r->transition.prev_node_position_memory);
+	}
+	r->transition.prev_node_count = ncount;
+
+	r->transition.t = 0.0f;
+	r->transition.duration = duration;
+	r->transition.active = true;
+	r->transition.owner = source;
+	r->transition.owner_generation++;
+
 	if (r->transition.prev_edge_capacity < ecount || r->transition.prev_edge_position == VK_NULL_HANDLE) {
 		destroy_prev_edge_position(r);
 		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, edge_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->transition.prev_edge_position, &r->transition.prev_edge_position_memory);
@@ -147,9 +76,9 @@ void renderer_transition_begin(Renderer *r, float duration)
 
 	if (ecount > 0 && r->edge.position != VK_NULL_HANDLE) {
 		void *src_mapped;
-		VK_CHECK(vkMapMemory(r->core.device, r->edge.position_memory, 0, edge_size, 0, &src_mapped), "transition edge begin map src");
+		VK_CHECK(vkMapMemory(r->core.device, r->edge.position_memory, 0, edge_size, 0, &src_mapped), "transition start edge map src");
 		void *dst_mapped;
-		VK_CHECK(vkMapMemory(r->core.device, r->transition.prev_edge_position_memory, 0, edge_size, 0, &dst_mapped), "transition edge begin map dst");
+		VK_CHECK(vkMapMemory(r->core.device, r->transition.prev_edge_position_memory, 0, edge_size, 0, &dst_mapped), "transition start edge map dst");
 		memcpy(dst_mapped, src_mapped, sizeof(EdgePosition) * ecount);
 		vkUnmapMemory(r->core.device, r->edge.position_memory);
 		vkUnmapMemory(r->core.device, r->transition.prev_edge_position_memory);
@@ -157,21 +86,96 @@ void renderer_transition_begin(Renderer *r, float duration)
 	r->transition.prev_edge_vertex_count = ecount;
 }
 
-void renderer_transition_reconcile(Renderer *r, GraphData *graph)
+// Retarget by the current owner: advance prev to the in-flight interpolated
+// position so the new target morphs from where the visuals actually are,
+// instead of snapping or resetting progress.
+static void transition_retarget(Renderer *r, float duration)
 {
-	if (!r->transition.active)
-		return;
+	uint32_t ncount = r->node.count;
+	uint32_t ecount = r->edge.vertex_count;
+	VkDeviceSize node_size = sizeof(NodePosition) * (ncount > 0 ? ncount : 1);
+	VkDeviceSize edge_size = sizeof(EdgePosition) * (ecount > 0 ? ecount : 1);
 
+	float t = r->transition.t;
+	float eased_t = SMOOTHSTEP(t);
+
+	uint32_t lerp_count = ncount < r->transition.prev_node_count ? ncount : r->transition.prev_node_count;
+
+	NodePosition *old_prev = NULL;
+	uint32_t old_prev_count = r->transition.prev_node_count;
+	if (old_prev_count > 0 && r->transition.prev_node_position != VK_NULL_HANDLE) {
+		old_prev = malloc(sizeof(NodePosition) * old_prev_count);
+		void *old_mapped;
+		VK_CHECK(vkMapMemory(r->core.device, r->transition.prev_node_position_memory, 0, sizeof(NodePosition) * old_prev_count, 0, &old_mapped), "transition retarget read old");
+		memcpy(old_prev, old_mapped, sizeof(NodePosition) * old_prev_count);
+		vkUnmapMemory(r->core.device, r->transition.prev_node_position_memory);
+	}
+
+	if (r->transition.prev_node_capacity < ncount || r->transition.prev_node_position == VK_NULL_HANDLE) {
+		destroy_prev_node_position(r);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, node_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->transition.prev_node_position, &r->transition.prev_node_position_memory);
+		r->transition.prev_node_capacity = ncount;
+	}
+
+	if (ncount > 0 && r->node.position != VK_NULL_HANDLE) {
+		void *curr_mapped;
+		VK_CHECK(vkMapMemory(r->core.device, r->node.position_memory, 0, node_size, 0, &curr_mapped), "transition retarget map curr");
+		void *prev_mapped;
+		VK_CHECK(vkMapMemory(r->core.device, r->transition.prev_node_position_memory, 0, node_size, 0, &prev_mapped), "transition retarget map prev");
+
+		vec3 *curr = (vec3 *)curr_mapped;
+		vec3 *prev = (vec3 *)prev_mapped;
+
+		for (uint32_t i = 0; i < lerp_count && old_prev; i++) {
+			prev[i][0] = old_prev[i].pos[0];
+			prev[i][1] = old_prev[i].pos[1];
+			prev[i][2] = old_prev[i].pos[2];
+			glm_vec3_lerp(prev[i], curr[i], eased_t, prev[i]);
+		}
+		for (uint32_t i = lerp_count; i < ncount; i++) {
+			glm_vec3_copy(curr[i], prev[i]);
+		}
+
+		vkUnmapMemory(r->core.device, r->node.position_memory);
+		vkUnmapMemory(r->core.device, r->transition.prev_node_position_memory);
+	}
+
+	free(old_prev);
+	r->transition.prev_node_count = ncount;
+	r->transition.duration = duration;
+	r->transition.owner_generation++;
+
+	if (r->transition.prev_edge_capacity < ecount || r->transition.prev_edge_position == VK_NULL_HANDLE) {
+		destroy_prev_edge_position(r);
+		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, edge_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->transition.prev_edge_position, &r->transition.prev_edge_position_memory);
+		r->transition.prev_edge_capacity = ecount;
+	}
+
+	if (ecount > 0 && r->edge.position != VK_NULL_HANDLE) {
+		void *src_mapped;
+		VK_CHECK(vkMapMemory(r->core.device, r->edge.position_memory, 0, edge_size, 0, &src_mapped), "transition retarget edge map src");
+		void *dst_mapped;
+		VK_CHECK(vkMapMemory(r->core.device, r->transition.prev_edge_position_memory, 0, edge_size, 0, &dst_mapped), "transition retarget edge map dst");
+		memcpy(dst_mapped, src_mapped, sizeof(EdgePosition) * ecount);
+		vkUnmapMemory(r->core.device, r->edge.position_memory);
+		vkUnmapMemory(r->core.device, r->transition.prev_edge_position_memory);
+	}
+	r->transition.prev_edge_vertex_count = ecount;
+}
+
+// Edges have no stable identity (rebuilt from node positions each frame). If
+// the vertex count changed, snap edge prev to target -- can't lerp across
+// different topologies.
+static void transition_reconcile(Renderer *r, GraphData *graph)
+{
+	(void)graph;
 	uint32_t new_node_count = r->node.count;
-	fprintf(stderr, "[Transition] reconcile: prev_nodes=%u new_nodes=%u prev_edges=%u new_edges=%u\n", r->transition.prev_node_count, new_node_count, r->transition.prev_edge_vertex_count, r->edge.vertex_count);
 
-	// Reconcile node prev buffer
 	if (r->transition.prev_node_count < new_node_count) {
 		uint32_t old_count = r->transition.prev_node_count;
 		VkDeviceSize old_size = sizeof(NodePosition) * (old_count > 0 ? old_count : 1);
 		VkDeviceSize new_size = sizeof(NodePosition) * (new_node_count > 0 ? new_node_count : 1);
 
-		// Read old prev data before destroying
 		NodePosition *old_prev = NULL;
 		if (old_count > 0 && r->transition.prev_node_position != VK_NULL_HANDLE) {
 			old_prev = malloc(old_size);
@@ -181,12 +185,10 @@ void renderer_transition_reconcile(Renderer *r, GraphData *graph)
 			vkUnmapMemory(r->core.device, r->transition.prev_node_position_memory);
 		}
 
-		// Reallocate
 		destroy_prev_node_position(r);
 		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, new_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->transition.prev_node_position, &r->transition.prev_node_position_memory);
 		r->transition.prev_node_capacity = new_node_count;
 
-		// Map new buffer
 		if (new_node_count > 0 && r->node.position != VK_NULL_HANDLE) {
 			void *curr_mapped;
 			VK_CHECK(vkMapMemory(r->core.device, r->node.position_memory, 0, new_size, 0, &curr_mapped), "transition reconcile map curr");
@@ -196,7 +198,6 @@ void renderer_transition_reconcile(Renderer *r, GraphData *graph)
 			vec3 *curr = (vec3 *)curr_mapped;
 			vec3 *prev = (vec3 *)prev_mapped;
 
-			// Copy old prev positions for existing nodes
 			if (old_prev) {
 				for (uint32_t i = 0; i < old_count; i++) {
 					prev[i][0] = old_prev[i].pos[0];
@@ -204,7 +205,6 @@ void renderer_transition_reconcile(Renderer *r, GraphData *graph)
 					prev[i][2] = old_prev[i].pos[2];
 				}
 			}
-			// New nodes spawn in place (prev = target)
 			for (uint32_t i = old_count; i < new_node_count; i++) {
 				glm_vec3_copy(curr[i], prev[i]);
 			}
@@ -219,7 +219,6 @@ void renderer_transition_reconcile(Renderer *r, GraphData *graph)
 		r->transition.prev_node_count = new_node_count;
 	}
 
-	// For edges: if count changed, set prev = target (snap edges, can't lerp different topologies)
 	uint32_t new_edge_vertex_count = r->edge.vertex_count;
 	if (r->transition.prev_edge_vertex_count != new_edge_vertex_count && r->edge.position != VK_NULL_HANDLE) {
 		VkDeviceSize e_new_size = sizeof(EdgePosition) * new_edge_vertex_count;
@@ -239,6 +238,39 @@ void renderer_transition_reconcile(Renderer *r, GraphData *graph)
 	}
 }
 
+// Single entry point for callers that want their graph update to (optionally)
+// morph in. Ownership: a transition has one owner (by source). A request from
+// the current owner retargets in place; a request from a different source
+// while one is active is parked in a depth-1 pending slot (newest wins) and
+// only applied once the active transition completes -- no cross-source blend.
+void renderer_transition_request(Renderer *r, TransitionSource source, float duration, GraphData *graph)
+{
+	if (duration <= 0.0f) {
+		renderer_update_graph(r, graph);
+		return;
+	}
+
+	if (!r->transition.active) {
+		transition_start(r, source, duration);
+		renderer_update_graph(r, graph);
+		transition_reconcile(r, graph);
+		r->transition.has_pending = false;
+		return;
+	}
+
+	if (r->transition.owner == source) {
+		transition_retarget(r, duration);
+		renderer_update_graph(r, graph);
+		transition_reconcile(r, graph);
+		return;
+	}
+
+	r->transition.has_pending = true;
+	r->transition.pending_source = source;
+	r->transition.pending_duration = duration;
+	r->transition.pending_graph = graph;
+}
+
 void renderer_transition_update(Renderer *r, float delta_time)
 {
 	if (!r->transition.active) {
@@ -250,7 +282,7 @@ void renderer_transition_update(Renderer *r, float delta_time)
 	if (r->transition.t >= 1.0f) {
 		r->transition.t = 1.0f;
 		r->transition.active = false;
-		fprintf(stderr, "[Transition] complete\n");
+		r->transition.owner = TRANSITION_SOURCE_NONE;
 	}
 
 	float eased_t = SMOOTHSTEP(r->transition.t);
@@ -280,5 +312,12 @@ void renderer_transition_update(Renderer *r, float delta_time)
 		vkUnmapMemory(r->core.device, r->transition.prev_edge_position_memory);
 	}
 
-	fprintf(stderr, "[Transition] update: t=%.3f eased=%.3f active=%d\n", r->transition.t, r->anim.data.transition_t, r->transition.active);
+	if (!r->transition.active && r->transition.has_pending) {
+		TransitionSource src = r->transition.pending_source;
+		float dur = r->transition.pending_duration;
+		GraphData *graph = r->transition.pending_graph;
+		r->transition.has_pending = false;
+		r->transition.pending_graph = NULL;
+		renderer_transition_request(r, src, dur, graph);
+	}
 }

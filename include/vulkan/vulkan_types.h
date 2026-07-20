@@ -362,6 +362,12 @@ typedef struct
 	uint32_t capacity;
 } NodeBuffers;
 
+typedef enum {
+	TRANSITION_SOURCE_NONE = 0,
+	TRANSITION_SOURCE_LAYOUT,
+	TRANSITION_SOURCE_STREAM,
+} TransitionSource;
+
 typedef struct
 {
 	VkBuffer prev_node_position;
@@ -375,6 +381,12 @@ typedef struct
 	float t;
 	float duration;
 	bool active;
+	TransitionSource owner;
+	uint32_t owner_generation;
+	bool has_pending;
+	TransitionSource pending_source;
+	float pending_duration;
+	GraphData *pending_graph; // must remain valid/current until promoted; safe because both callers always pass the single persistent app graph and the main loop is single-threaded
 } TransitionState;
 
 typedef struct
