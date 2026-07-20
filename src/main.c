@@ -264,7 +264,6 @@ int main(int argc, char **argv)
 		// the same live igraph_t on a background thread)
 		if (app.graph_stream && !app.job_in_progress && !app.graph_stream_paused) {
 			if (graph_stream_poll(app.graph_stream, &app.current_graph)) {
-				fprintf(stderr, "[Main] stream_poll changed: nodes=%u edges=%u\n", app.current_graph.node_count, app.current_graph.edge_count);
 				app.renderer.needsAttributeUpload = VK_TRUE;
 				renderer_transition_request(&app.renderer, TRANSITION_SOURCE_STREAM, 5.0f, &app.current_graph);
 			}
