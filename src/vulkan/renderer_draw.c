@@ -5,6 +5,7 @@
 
 #include "vulkan/renderer_draw.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "vulkan/renderer.h"
@@ -43,7 +44,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
 		uint32_t segs = (uint32_t)segments;
 		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(mat4) * 2, sizeof(uint32_t), &segs);
-		VkBuffer prevEdgeBuf = r->edge.position;
+		VkBuffer prevEdgeBuf = (r->transition.active && r->transition.prev_edge_position != VK_NULL_HANDLE) ? r->transition.prev_edge_position : r->edge.position;
 		VkBuffer eBs[] = {r->edge.position, r->edge.attribute, prevEdgeBuf};
 		VkDeviceSize eOs[] = {0, 0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 3, eBs, eOs);
