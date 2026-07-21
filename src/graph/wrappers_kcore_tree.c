@@ -68,22 +68,25 @@ void *compute_kcore_tree_trigger(ExecutionContext *ctx)
 
 	// Grow the scratch graph and the hierarchy in lockstep: dyn_core_tree_on_edges
 	// requires the graph to already contain the batch being inserted.
+	igraph_vector_int_t batch;
+	if (igraph_vector_int_init(&batch, KCORE_TREE_BOOTSTRAP_CHUNK * 2) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "[KCoreTree] batch alloc failed\n");
+		igraph_destroy(&scratch);
+		dyn_core_tree_destroy(ct);
+		return NULL;
+	}
+
 	for (igraph_integer_t base = 0; base < ecount;) {
 		if (!ctx->running) {
 			fprintf(stderr, "[KCoreTree] cancelled at edge %lld/%lld\n", (long long)base, (long long)ecount);
+			igraph_vector_int_destroy(&batch);
 			igraph_destroy(&scratch);
 			dyn_core_tree_destroy(ct);
 			return NULL;
 		}
 
 		igraph_integer_t n = (ecount - base < KCORE_TREE_BOOTSTRAP_CHUNK) ? (ecount - base) : KCORE_TREE_BOOTSTRAP_CHUNK;
-		igraph_vector_int_t batch;
-		if (igraph_vector_int_init(&batch, n * 2) != IGRAPH_SUCCESS) {
-			fprintf(stderr, "[KCoreTree] batch alloc failed\n");
-			igraph_destroy(&scratch);
-			dyn_core_tree_destroy(ct);
-			return NULL;
-		}
+		igraph_vector_int_resize(&batch, n * 2);
 		for (igraph_integer_t i = 0; i < n; i++) {
 			igraph_integer_t from, to;
 			igraph_edge(graph, base + i, &from, &to);
@@ -94,9 +97,9 @@ void *compute_kcore_tree_trigger(ExecutionContext *ctx)
 		bool ok = igraph_add_edges(&scratch, &batch, NULL) == IGRAPH_SUCCESS;
 		if (ok)
 			ok = dyn_core_tree_on_edges(ct, &scratch, &batch, NULL);
-		igraph_vector_int_destroy(&batch);
 		if (!ok) {
 			fprintf(stderr, "[KCoreTree] failed processing batch at edge %lld\n", (long long)base);
+			igraph_vector_int_destroy(&batch);
 			igraph_destroy(&scratch);
 			dyn_core_tree_destroy(ct);
 			return NULL;
@@ -109,6 +112,7 @@ void *compute_kcore_tree_trigger(ExecutionContext *ctx)
 		snprintf(msg, sizeof(msg), "K-Core Tree: %lld/%lld edges (%d tree nodes)", (long long)base, (long long)ecount, dyn_core_tree_node_count(ct));
 		worker_thread_set_status_message(msg);
 	}
+	igraph_vector_int_destroy(&batch);
 	igraph_destroy(&scratch);
 
 	worker_thread_set_status_message("K-Core Tree: computing reveal order...");
