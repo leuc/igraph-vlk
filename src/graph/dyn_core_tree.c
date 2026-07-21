@@ -547,76 +547,69 @@ static bool insert_edge(DynCoreTree *ct, const igraph_t *g, igraph_integer_t x1,
 	// starting node to begin with.
 	merge_ancestors(ct, node1, node2, touched);
 
-	// Partition V* by the node each vertex CURRENTLY sits in (evaluated now,
-	// after the ancestor merge above, which may have relocated some of them
-	// via merge_nodes — e.g. a self-loop's second internal lift pass can pull
-	// in vertices that started in a node entirely unrelated to node1/node2,
-	// discovered because the first pass's survivors happened to already be
-	// adjacent to that other node). The paper's own single-layer V* always
-	// forms exactly one such group (Theorem 3); a multi-layer V* from a
-	// self-loop's two internal passes can span more than one, each requiring
-	// its own independent application of lines 14-25 against its own n' —
-	// reusing a single n' for all of V* (as if Theorem 3 still held) would
-	// silently drop or corrupt whichever subset didn't actually start in
-	// that one node.
-	igraph_vector_int_t group_source;
-	if (igraph_vector_int_init(&group_source, vstar_n) != IGRAPH_SUCCESS) {
-		igraph_vector_int_destroy(&vstar);
-		igraph_vector_int_destroy(&vstar_level);
-		return false;
-	}
-	for (igraph_integer_t i = 0; i < vstar_n; i++)
-		VECTOR(group_source)[i] = ct->node_of[VECTOR(vstar)[i]];
-
-	bool ok2 = true;
-	igraph_vector_int_t handled;
-	if (igraph_vector_int_init(&handled, 0) != IGRAPH_SUCCESS) {
-		igraph_vector_int_destroy(&group_source);
+	// Partition V* by the node each vertex CURRENTLY sits in, re-read FRESH
+	// right before each group is formed — NOT from a single snapshot taken
+	// before any group is processed. A self-loop's multi-layer V* can span
+	// more than one group, each requiring its own independent application of
+	// lines 14-25 against its own n' (the paper's own single-layer V* always
+	// forms exactly one such group, Theorem 3). Snapshotting every vertex's
+	// node once up front is unsound once more than one group exists: an
+	// earlier group's apply_group call can relocate members via its own NC/
+	// merge step (merge_nodes/reparent_node) — including members that belong
+	// to a LATER, not-yet-processed group — and apply_group only picks up
+	// members it finds by walking its n_prime's CURRENT list, so a group
+	// processed against a stale n_prime silently loses whichever of its
+	// members got moved out from under it by an earlier group in the same
+	// insert_edge call (observed directly: a vertex snapshotted as residing
+	// in node 223 already showed a different, moved-to node_of by the time
+	// that group's turn came up, and was never lifted to its true final
+	// coreness as a result). Re-reading node_of fresh for both the group's
+	// representative vertex and the membership scan, right before forming
+	// each group, keeps every group's view of "who is currently here"
+	// accurate regardless of what earlier groups in this same call did.
+	bool *processed = calloc((size_t)vstar_n, sizeof(bool));
+	if (!processed) {
 		igraph_vector_int_destroy(&vstar);
 		igraph_vector_int_destroy(&vstar_level);
 		return false;
 	}
 	igraph_vector_int_t gstar, gstar_level;
 	if (igraph_vector_int_init(&gstar, 0) != IGRAPH_SUCCESS) {
-		igraph_vector_int_destroy(&handled);
-		igraph_vector_int_destroy(&group_source);
+		free(processed);
 		igraph_vector_int_destroy(&vstar);
 		igraph_vector_int_destroy(&vstar_level);
 		return false;
 	}
 	if (igraph_vector_int_init(&gstar_level, 0) != IGRAPH_SUCCESS) {
 		igraph_vector_int_destroy(&gstar);
-		igraph_vector_int_destroy(&handled);
-		igraph_vector_int_destroy(&group_source);
+		free(processed);
 		igraph_vector_int_destroy(&vstar);
 		igraph_vector_int_destroy(&vstar_level);
 		return false;
 	}
+	bool ok2 = true;
 	for (igraph_integer_t i = 0; i < vstar_n && ok2; i++) {
-		int src = (int)VECTOR(group_source)[i];
-		bool already = false;
-		for (igraph_integer_t k = 0; k < igraph_vector_int_size(&handled); k++)
-			if (VECTOR(handled)[k] == src) {
-				already = true;
-				break;
-			}
-		if (already)
+		if (processed[i])
 			continue;
-		igraph_vector_int_push_back(&handled, src);
+		int src = ct->node_of[VECTOR(vstar)[i]]; // fresh read
 
 		igraph_vector_int_clear(&gstar);
 		igraph_vector_int_clear(&gstar_level);
-		for (igraph_integer_t j = i; j < vstar_n; j++)
-			if ((int)VECTOR(group_source)[j] == src) {
-				igraph_vector_int_push_back(&gstar, VECTOR(vstar)[j]);
+		for (igraph_integer_t j = i; j < vstar_n; j++) {
+			if (processed[j])
+				continue;
+			igraph_integer_t vj = VECTOR(vstar)[j];
+			if (ct->node_of[vj] == src) { // fresh read
+				igraph_vector_int_push_back(&gstar, vj);
 				igraph_vector_int_push_back(&gstar_level, VECTOR(vstar_level)[j]);
+				processed[j] = true;
 			}
+		}
 		ok2 = apply_group(ct, g, src, &gstar, &gstar_level, touched);
 	}
 	igraph_vector_int_destroy(&gstar_level);
 	igraph_vector_int_destroy(&gstar);
-	igraph_vector_int_destroy(&handled);
-	igraph_vector_int_destroy(&group_source);
+	free(processed);
 	igraph_vector_int_destroy(&vstar);
 	igraph_vector_int_destroy(&vstar_level);
 	return ok2;
@@ -673,10 +666,20 @@ DynCoreTree *dyn_core_tree_init(const igraph_t *g)
 	if (ecount == 0)
 		return ct;
 
-	// Replay g's own edges into a scratch graph grown in lockstep, driving
-	// the exact same incremental path dyn_core_tree_on_edges uses (see the
-	// header comment for why there is no dedicated static-construction
-	// algorithm here).
+	// Replay g's own edges into a scratch graph grown in batches, driving the
+	// exact same incremental path dyn_core_tree_on_edges uses (see the header
+	// comment for why there is no dedicated static-construction algorithm
+	// here). Edges are added BOOTSTRAP_CHUNK at a time, not one at a time:
+	// igraph_add_edges' per-call cost scales with the CURRENT size of the
+	// graph (its internal indices are rebuilt on mutation), so a single-edge
+	// igraph_add_edges call repeated m times costs O(m^2) overall, not O(m) —
+	// confirmed empirically (a standalone harness with zero dyn_core_tree.c
+	// involvement reproduced the exact same stall from single-edge
+	// igraph_add_edges calls alone; batching into chunks of a few thousand
+	// eliminated it, ~1000x). dyn_core_tree_on_edges already requires its
+	// caller to have added the batch to `g` first — batching here is just
+	// reusing that existing, already-tested contract instead of the private
+	// single-edge insert_edge() path.
 	igraph_t scratch;
 	if (igraph_empty(&scratch, 0, IGRAPH_UNDIRECTED) != IGRAPH_SUCCESS) {
 		dyn_core_tree_destroy(ct);
@@ -687,29 +690,44 @@ DynCoreTree *dyn_core_tree_init(const igraph_t *g)
 		dyn_core_tree_destroy(ct);
 		return NULL;
 	}
+
+	const igraph_integer_t bootstrap_chunk = 4096;
+	igraph_vector_int_t batch;
+	if (igraph_vector_int_init(&batch, 0) != IGRAPH_SUCCESS) {
+		igraph_destroy(&scratch);
+		dyn_core_tree_destroy(ct);
+		return NULL;
+	}
 	for (igraph_integer_t eid = 0; eid < ecount; eid++) {
 		igraph_integer_t from, to;
 		if (igraph_edge(g, eid, &from, &to) != IGRAPH_SUCCESS) {
+			igraph_vector_int_destroy(&batch);
 			igraph_destroy(&scratch);
 			dyn_core_tree_destroy(ct);
 			return NULL;
 		}
-		igraph_vector_int_t one;
-		if (igraph_vector_int_init(&one, 2) != IGRAPH_SUCCESS) {
+		if (igraph_vector_int_push_back(&batch, from) != IGRAPH_SUCCESS || igraph_vector_int_push_back(&batch, to) != IGRAPH_SUCCESS) {
+			igraph_vector_int_destroy(&batch);
 			igraph_destroy(&scratch);
 			dyn_core_tree_destroy(ct);
 			return NULL;
 		}
-		VECTOR(one)[0] = from;
-		VECTOR(one)[1] = to;
-		bool ok = igraph_add_edges(&scratch, &one, NULL) == IGRAPH_SUCCESS;
-		igraph_vector_int_destroy(&one);
-		if (!ok || !insert_edge(ct, &scratch, from, to, NULL)) {
-			igraph_destroy(&scratch);
-			dyn_core_tree_destroy(ct);
-			return NULL;
+
+		bool flush = (igraph_vector_int_size(&batch) / 2 >= bootstrap_chunk) || (eid + 1 == ecount);
+		if (flush) {
+			bool ok = igraph_add_edges(&scratch, &batch, NULL) == IGRAPH_SUCCESS;
+			if (ok)
+				ok = dyn_core_tree_on_edges(ct, &scratch, &batch, NULL);
+			igraph_vector_int_clear(&batch);
+			if (!ok) {
+				igraph_vector_int_destroy(&batch);
+				igraph_destroy(&scratch);
+				dyn_core_tree_destroy(ct);
+				return NULL;
+			}
 		}
 	}
+	igraph_vector_int_destroy(&batch);
 	igraph_destroy(&scratch);
 	return ct;
 }

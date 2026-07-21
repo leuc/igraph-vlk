@@ -190,6 +190,10 @@ void renderer_anim_compute_bfs(Renderer *r, GraphData *graph)
 	free(from);
 }
 
+// ── K-Core Tree reveal is computed off the main thread; see
+// src/graph/wrappers_kcore_tree.c (compute_kcore_tree_trigger /
+// apply_kcore_tree_trigger), which uploads via the generic helpers above.
+
 // ── Reset nodes (reveal all immediately) ─────────────────────────────────────
 
 void renderer_anim_reset_nodes(Renderer *r, GraphData *graph)

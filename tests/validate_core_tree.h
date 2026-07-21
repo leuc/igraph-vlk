@@ -30,6 +30,14 @@ static void validate_core_tree(const DynCoreTree *ct, const igraph_t *g)
 	for (igraph_integer_t v = 0; v < vcount; v++) {
 		int node = dyn_core_tree_node_of(ct, v);
 		IGRAPH_ASSERT(node >= 0);
+		if (dyn_core_tree_level(ct, node) != (int)VECTOR(coreness)[v]) {
+			fprintf(stderr, "[DIAG] mismatch: v=%lld node=%d node_level=%d expected_coreness=%d\n", (long long)v, node, dyn_core_tree_level(ct, node), (int)VECTOR(coreness)[v]);
+			int walk = node;
+			while (walk != -1) {
+				fprintf(stderr, "[DIAG]   ancestor node=%d level=%d members=%lld\n", walk, dyn_core_tree_level(ct, walk), (long long)dyn_core_tree_member_count(ct, walk));
+				walk = dyn_core_tree_parent(ct, walk);
+			}
+		}
 		IGRAPH_ASSERT(dyn_core_tree_level(ct, node) == (int)VECTOR(coreness)[v]);
 	}
 	igraph_vector_int_destroy(&coreness);
@@ -71,6 +79,7 @@ static void validate_core_tree(const DynCoreTree *ct, const igraph_t *g)
 
 		igraph_integer_t counted = 0;
 		for (igraph_integer_t v = dyn_core_tree_first_member(ct, node); v != -1; v = dyn_core_tree_next_member(ct, v)) {
+			IGRAPH_ASSERT(counted <= vcount); // would only fail on a cycle
 			IGRAPH_ASSERT(dyn_core_tree_node_of(ct, v) == node);
 			IGRAPH_ASSERT(claimed_by[v] == -1);
 			claimed_by[v] = node;

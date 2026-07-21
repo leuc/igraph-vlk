@@ -391,6 +391,60 @@ static int test_oracle_family(void)
 	return 0;
 }
 
+// Reproduction for a member-list corruption bug: production replays a real
+// self-loop-containing graph through dyn_core_tree_init's large-batch
+// bootstrap (thousands of edges per dyn_core_tree_on_edges call), which
+// test_oracle_family's Zachary-scale (34 vertices, single call, well under
+// one batch) self-loop coverage happens to never exercise in a way that
+// triggers it. This uses a fixed seed and a single deterministic graph (not
+// a size sweep) at a scale large enough to plausibly produce the same
+// multi-group self-loop lift pattern seen in production.
+static int test_self_loops_large_batch(void)
+{
+	igraph_rng_seed(igraph_rng_default(), 2026);
+
+	// Hub-heavy base graph (preferential attachment, closer to a real social
+	// graph than uniform-random), large enough for several 4096-edge internal
+	// batches.
+	igraph_t base;
+	IGRAPH_ASSERT(igraph_barabasi_game(&base, 5000, 1.0, 3, NULL, 0, 1.0, IGRAPH_UNDIRECTED, IGRAPH_BARABASI_PSUMTREE, NULL) == IGRAPH_SUCCESS);
+	igraph_integer_t base_ecount = igraph_ecount(&base);
+
+	// Interleave self-loops (on every 5th vertex) THROUGHOUT the edge order
+	// (not appended after the fact) so they land scattered across different
+	// internal batches, alongside different regular edges, instead of all
+	// clustering into the final batch.
+	igraph_vector_int_t edges;
+	IGRAPH_ASSERT(igraph_vector_int_init(&edges, 0) == IGRAPH_SUCCESS);
+	for (igraph_integer_t e = 0; e < base_ecount; e++) {
+		igraph_integer_t from, to;
+		IGRAPH_ASSERT(igraph_edge(&base, e, &from, &to) == IGRAPH_SUCCESS);
+		IGRAPH_ASSERT(igraph_vector_int_push_back(&edges, from) == IGRAPH_SUCCESS);
+		IGRAPH_ASSERT(igraph_vector_int_push_back(&edges, to) == IGRAPH_SUCCESS);
+		if (e % 5 == 0) {
+			igraph_integer_t v = e % igraph_vcount(&base);
+			IGRAPH_ASSERT(igraph_vector_int_push_back(&edges, v) == IGRAPH_SUCCESS);
+			IGRAPH_ASSERT(igraph_vector_int_push_back(&edges, v) == IGRAPH_SUCCESS);
+		}
+	}
+	igraph_integer_t vcount = igraph_vcount(&base);
+	igraph_destroy(&base);
+
+	igraph_t g;
+	IGRAPH_ASSERT(igraph_create(&g, &edges, vcount, IGRAPH_UNDIRECTED) == IGRAPH_SUCCESS);
+	igraph_vector_int_destroy(&edges);
+
+	// dyn_core_tree_init replays g's edges in large (4096-edge) batches, the
+	// same shape compute_kcore_tree_trigger and stream.c use in production.
+	DynCoreTree *ct = dyn_core_tree_init(&g);
+	IGRAPH_ASSERT(ct != NULL);
+	validate_core_tree(ct, &g);
+
+	dyn_core_tree_destroy(ct);
+	igraph_destroy(&g);
+	return 0;
+}
+
 int main(void)
 {
 	RUN_TEST(test_empty_and_singleton);
@@ -400,6 +454,7 @@ int main(void)
 	RUN_TEST(test_touched_levels_survive_same_batch_reuse);
 	RUN_TEST(test_random_multigraph);
 	RUN_TEST(test_oracle_family);
+	RUN_TEST(test_self_loops_large_batch);
 
 	printf("all tests passed\n");
 	return EXIT_SUCCESS;

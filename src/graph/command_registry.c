@@ -12,6 +12,7 @@
 #include "graph/wrappers_cycles.h"
 #include "graph/wrappers_filter.h"
 #include "graph/wrappers_flow.h"
+#include "graph/wrappers_kcore_tree.h"
 #include "graph/wrappers_layout.h"
 #include "graph/wrappers_paths.h"
 #include "graph/wrappers_splc.h"
@@ -118,6 +119,7 @@ const CommandDef g_command_registry[] = {
 	{"Follow", "bfs_trigger", "Breadth-first search from single source", compute_inline_pass, apply_bfs_trigger, free_noop},
 	{"Follow", "dfs_trigger", "Depth-first search from single source", compute_inline_pass, apply_dfs_trigger, free_noop},
 	{"Follow", "topo_trigger", "Topological sort", compute_inline_pass, apply_topo_trigger, free_noop},
+	{"Follow", "kcore_tree_trigger", "K-Core Tree", compute_kcore_tree_trigger, apply_kcore_tree_trigger, free_kcore_tree_result},
 	{"Follow", "splc_animation", "Search Path Link Count", compute_splc_animation, apply_splc_animation, free_noop, poll_splc_gpu},
 	{"Follow", "maxflow_sampled", "Max Flow (Sampled Pairs)", compute_maxflow_sampling, apply_maxflow_sampling, free_maxflow_result},
 

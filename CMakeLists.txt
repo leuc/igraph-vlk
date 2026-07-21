@@ -152,6 +152,7 @@ add_executable(
 	src/graph/wrappers_cycles.c
 	src/graph/wrappers_filter.c
 	src/graph/wrappers_flow.c
+	src/graph/wrappers_kcore_tree.c
 	src/graph/wrappers_paths.c
 	src/graph/wrappers_splc.c
 	src/graph/wrappers_structural.c
