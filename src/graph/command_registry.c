@@ -14,6 +14,7 @@
 #include "graph/wrappers_flow.h"
 #include "graph/wrappers_kcore_tree.h"
 #include "graph/wrappers_layout.h"
+#include "graph/wrappers_path_cover.h"
 #include "graph/wrappers_paths.h"
 #include "graph/wrappers_splc.h"
 #include "graph/wrappers_structural.h"
@@ -122,6 +123,9 @@ const CommandDef g_command_registry[] = {
 	{"Follow", "kcore_tree_trigger", "K-Core Tree", compute_kcore_tree_trigger, apply_kcore_tree_trigger, free_kcore_tree_result},
 	{"Follow", "splc_animation", "Search Path Link Count", compute_splc_animation, apply_splc_animation, free_noop, poll_splc_gpu},
 	{"Follow", "maxflow_sampled", "Max Flow (Sampled Pairs)", compute_maxflow_sampling, apply_maxflow_sampling, free_maxflow_result},
+	{"Follow", "min_path_cover_trigger", "Minimum Path Cover", compute_min_path_cover_trigger, apply_path_cover_result, free_path_cover_result},
+	{"Follow", "max_antichain_trigger", "Maximum Antichain", compute_max_antichain_trigger, apply_path_cover_result, free_path_cover_result},
+	{"Follow", "min_chain_cover_trigger", "Minimum Chain Cover", compute_min_chain_cover_trigger, apply_path_cover_result, free_path_cover_result},
 
 	{"", "graph_properties", "Properties", compute_graph_properties, apply_info_card, info_card_free},
 
