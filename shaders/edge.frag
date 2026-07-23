@@ -22,7 +22,7 @@ void main()
 	if (fragVisible < 0.5)
 		discard;
 
-	float alpha = 0.8;
+	float alpha = 1.0;
 	vec3 finalColor = fragColor;
 
 	if (fragSelected > 0.5) {

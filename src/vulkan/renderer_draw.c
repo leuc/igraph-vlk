@@ -41,7 +41,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	if (r->showEdges && r->edge.count > 0) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.edge);
 		// Push segments per edge for edge index calculation
-		int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
+		int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? EDGE_WIDTH_LINES : 15;
 		uint32_t segs = (uint32_t)segments;
 		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(mat4) * 2, sizeof(uint32_t), &segs);
 		VkBuffer prevEdgeBuf = (r->transition.active && r->transition.prev_edge_position != VK_NULL_HANDLE) ? r->transition.prev_edge_position : r->edge.position;

@@ -23,6 +23,12 @@
 #define MAX_VIEWS 3
 #define GRAPH_UPDATE_RING_SIZE 3
 
+// Straight-mode edges are faked wide by drawing this many parallel offset
+// copies of the same segment (blended together); must match between
+// renderer_geometry.c (vertex build) and renderer_draw.c (segmentsPerEdge push constant).
+#define EDGE_WIDTH_LINES 3
+#define EDGE_WIDTH_BASE 0.01f
+
 typedef enum { ROUTING_MODE_STRAIGHT = 0, ROUTING_MODE_SPHERICAL_PCB = 1 } EdgeRoutingMode;
 
 // SPLC compute buffer types
