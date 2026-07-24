@@ -37,7 +37,11 @@ void *compute_remove_feedback_arc_set(ExecutionContext *ctx)
 	if (!is_dag) {
 		igraph_vector_int_t fas;
 		igraph_vector_int_init(&fas, 0);
-		igraph_error_t ret = igraph_feedback_arc_set(graph, &fas, NULL, IGRAPH_FAS_APPROX_EADES);
+		igraph_vector_t weights;
+		bool has_weights = graph_build_edge_weights(graph, &weights);
+		igraph_error_t ret = igraph_feedback_arc_set(graph, &fas, has_weights ? &weights : NULL, IGRAPH_FAS_APPROX_EADES);
+		if (has_weights)
+			igraph_vector_destroy(&weights);
 		if (ret == IGRAPH_SUCCESS) {
 			igraph_integer_t n_fas = igraph_vector_int_size(&fas);
 			if (n_fas > 0) {

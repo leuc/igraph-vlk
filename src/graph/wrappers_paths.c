@@ -24,11 +24,18 @@ void *compute_igraph_diameter(ExecutionContext *ctx)
 
 	if (graph && igraph_vcount(graph) > 0) {
 		igraph_real_t diam = 0.0;
-		igraph_diameter(graph, NULL, &diam, NULL, NULL, NULL, NULL, 0, 1);
+		igraph_vector_t weights;
+		bool has_weights = graph_build_edge_weights(graph, &weights);
+		igraph_diameter(graph, has_weights ? &weights : NULL, &diam, NULL, NULL, NULL, NULL, 0, 1);
+		if (has_weights)
+			igraph_vector_destroy(&weights);
 
 		data->num_pairs = 1;
 		strncpy(data->pairs[0].key, "Diameter", 31);
-		snprintf(data->pairs[0].value, 63, "%d", (int)diam);
+		if (has_weights)
+			snprintf(data->pairs[0].value, 63, "%.4f", diam);
+		else
+			snprintf(data->pairs[0].value, 63, "%d", (int)diam);
 	}
 
 	return data;
@@ -52,7 +59,13 @@ void *compute_igraph_radius(ExecutionContext *ctx)
 		igraph_bool_t directed = igraph_is_directed(graph);
 		igraph_neimode_t mode = directed ? IGRAPH_OUT : IGRAPH_ALL;
 
-		if (igraph_radius(graph, NULL, &radius, mode) != IGRAPH_SUCCESS) {
+		igraph_vector_t weights;
+		bool has_weights = graph_build_edge_weights(graph, &weights);
+		igraph_error_t code = igraph_radius(graph, has_weights ? &weights : NULL, &radius, mode);
+		if (has_weights)
+			igraph_vector_destroy(&weights);
+
+		if (code != IGRAPH_SUCCESS) {
 			free(data);
 			return NULL;
 		}
@@ -82,7 +95,13 @@ void *compute_igraph_average_path_length(ExecutionContext *ctx)
 		igraph_real_t apl = 0.0;
 		igraph_bool_t directed = igraph_is_directed(graph);
 
-		if (igraph_average_path_length(graph, NULL, &apl, NULL, directed, true) != IGRAPH_SUCCESS) {
+		igraph_vector_t weights;
+		bool has_weights = graph_build_edge_weights(graph, &weights);
+		igraph_error_t code = igraph_average_path_length(graph, has_weights ? &weights : NULL, &apl, NULL, directed, true);
+		if (has_weights)
+			igraph_vector_destroy(&weights);
+
+		if (code != IGRAPH_SUCCESS) {
 			free(data);
 			return NULL;
 		}

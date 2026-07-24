@@ -42,7 +42,12 @@ static bool path_cover_ensure_dag(igraph_t *graph, const char *label)
 			fprintf(stderr, "[%s] failed to initialize fas vector\n", label);
 			return false;
 		}
-		if (igraph_feedback_arc_set(graph, &fas, NULL, IGRAPH_FAS_APPROX_EADES) == IGRAPH_SUCCESS) {
+		igraph_vector_t weights;
+		bool has_weights = graph_build_edge_weights(graph, &weights);
+		igraph_error_t fas_ret = igraph_feedback_arc_set(graph, &fas, has_weights ? &weights : NULL, IGRAPH_FAS_APPROX_EADES);
+		if (has_weights)
+			igraph_vector_destroy(&weights);
+		if (fas_ret == IGRAPH_SUCCESS) {
 			if (igraph_vector_int_size(&fas) > 0) {
 				igraph_es_t es = igraph_ess_vector(&fas);
 				igraph_delete_edges(graph, es);

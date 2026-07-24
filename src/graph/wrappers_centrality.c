@@ -64,7 +64,13 @@ void *compute_igraph_closeness_cutoff(ExecutionContext *ctx)
 	}
 
 	igraph_bool_t all_reach;
-	igraph_error_t code = igraph_closeness_cutoff(graph, result, NULL, &all_reach, igraph_vss_all(), IGRAPH_ALL, NULL, 1, 0);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_closeness_cutoff(graph, result, NULL, &all_reach, igraph_vss_all(), IGRAPH_ALL, has_weights ? &weights : NULL, 1, 0);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);
@@ -89,7 +95,13 @@ void *compute_igraph_betweenness(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_betweenness(graph, NULL, result, igraph_vss_all(), igraph_is_directed(graph) ? IGRAPH_DIRECTED : IGRAPH_UNDIRECTED, 1);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_betweenness(graph, has_weights ? &weights : NULL, result, igraph_vss_all(), igraph_is_directed(graph) ? IGRAPH_DIRECTED : IGRAPH_UNDIRECTED, 1);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);
@@ -114,7 +126,13 @@ void *compute_igraph_eigenvector_centrality(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_eigenvector_centrality(graph, result, NULL, IGRAPH_ALL, NULL, NULL);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_eigenvector_centrality(graph, result, NULL, IGRAPH_ALL, has_weights ? &weights : NULL, NULL);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);
@@ -139,7 +157,13 @@ void *compute_igraph_pagerank(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_pagerank(graph, NULL, result, NULL, 0.85, igraph_is_directed(graph) ? IGRAPH_DIRECTED : IGRAPH_UNDIRECTED, igraph_vss_all(), IGRAPH_PAGERANK_ALGO_PRPACK, NULL);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_pagerank(graph, has_weights ? &weights : NULL, result, NULL, 0.85, igraph_is_directed(graph) ? IGRAPH_DIRECTED : IGRAPH_UNDIRECTED, igraph_vss_all(), IGRAPH_PAGERANK_ALGO_PRPACK, NULL);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);
@@ -166,9 +190,14 @@ void *compute_igraph_hub_and_authority_scores(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	if (!igraph_is_directed(graph)) {
 		// For undirected graphs, HITS reduces to eigenvector centrality
-		igraph_error_t code = igraph_eigenvector_centrality(graph, result, NULL, IGRAPH_ALL, NULL, NULL);
+		igraph_error_t code = igraph_eigenvector_centrality(graph, result, NULL, IGRAPH_ALL, has_weights ? &weights : NULL, NULL);
+		if (has_weights)
+			igraph_vector_destroy(&weights);
 		if (code != IGRAPH_SUCCESS) {
 			igraph_vector_destroy(result);
 			IGRAPH_FREE(result);
@@ -180,7 +209,10 @@ void *compute_igraph_hub_and_authority_scores(ExecutionContext *ctx)
 		igraph_vector_init(&hub_scores, vcount);
 		igraph_vector_init(&authority_scores, vcount);
 
-		igraph_error_t code = igraph_hub_and_authority_scores(graph, &hub_scores, &authority_scores, NULL, NULL, NULL);
+		igraph_error_t code = igraph_hub_and_authority_scores(graph, &hub_scores, &authority_scores, NULL, has_weights ? &weights : NULL, NULL);
+
+		if (has_weights)
+			igraph_vector_destroy(&weights);
 
 		if (code != IGRAPH_SUCCESS) {
 			igraph_vector_destroy(&hub_scores);
@@ -217,7 +249,13 @@ void *compute_igraph_harmonic_centrality(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_harmonic_centrality(graph, result, igraph_vss_all(), IGRAPH_ALL, NULL, 1);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_harmonic_centrality(graph, result, igraph_vss_all(), IGRAPH_ALL, has_weights ? &weights : NULL, 1);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);
@@ -311,7 +349,13 @@ void *compute_igraph_constraint(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_constraint(graph, result, igraph_vss_all(), NULL);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_constraint(graph, result, igraph_vss_all(), has_weights ? &weights : NULL);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);

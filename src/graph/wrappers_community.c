@@ -41,7 +41,13 @@ void *compute_igraph_community_multilevel(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_community_multilevel(graph, NULL, 1.0, membership, NULL, &modularity);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_community_multilevel(graph, has_weights ? &weights : NULL, 1.0, membership, NULL, &modularity);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	igraph_vector_destroy(&modularity);
 
@@ -75,14 +81,20 @@ void *compute_igraph_community_leiden(ExecutionContext *ctx)
 	double graph_density = (vcount > 1) ? (2.0 * ecount) / ((double)vcount * (vcount - 1)) : 0.0;
 	double cpm_resolution = fmax(graph_density * 3.0, 0.001);
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	igraph_error_t code;
 	if (igraph_is_directed(graph)) {
 		// For directed graphs, use full leiden with vertex weights
-		code = igraph_community_leiden(graph, NULL, NULL, NULL, cpm_resolution, 0.01, 0, -1, membership, &nb_clusters, &quality);
+		code = igraph_community_leiden(graph, has_weights ? &weights : NULL, NULL, NULL, cpm_resolution, 0.01, 0, -1, membership, &nb_clusters, &quality);
 	} else {
 		// For undirected graphs, use leiden_simple without vertex weights
-		code = igraph_community_leiden_simple(graph, NULL, IGRAPH_LEIDEN_OBJECTIVE_CPM, cpm_resolution, 0.01, 0, -1, membership, &nb_clusters, &quality);
+		code = igraph_community_leiden_simple(graph, has_weights ? &weights : NULL, IGRAPH_LEIDEN_OBJECTIVE_CPM, cpm_resolution, 0.01, 0, -1, membership, &nb_clusters, &quality);
 	}
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_int_destroy(membership);
@@ -121,7 +133,13 @@ void *compute_igraph_community_walktrap(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_community_walktrap(graph, NULL, 4, &merges, &modularity, membership);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_community_walktrap(graph, has_weights ? &weights : NULL, 4, &merges, &modularity, membership);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	igraph_matrix_int_destroy(&merges);
 	igraph_vector_destroy(&modularity);
@@ -190,7 +208,13 @@ void *compute_igraph_community_edge_betweenness(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_community_edge_betweenness(graph, &removed_edges, &edge_betweenness, &merges, &bridges, &modularity, membership, igraph_is_directed(graph), NULL, NULL);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_community_edge_betweenness(graph, &removed_edges, &edge_betweenness, &merges, &bridges, &modularity, membership, igraph_is_directed(graph), has_weights ? &weights : NULL, NULL);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	igraph_vector_int_destroy(&removed_edges);
 	igraph_vector_destroy(&edge_betweenness);
@@ -235,7 +259,13 @@ void *compute_igraph_community_fastgreedy(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_community_fastgreedy(graph, NULL, &merges, &modularity, membership);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_community_fastgreedy(graph, has_weights ? &weights : NULL, &merges, &modularity, membership);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	igraph_matrix_int_destroy(&merges);
 	igraph_vector_destroy(&modularity);
@@ -265,7 +295,13 @@ void *compute_igraph_community_infomap(ExecutionContext *ctx)
 
 	igraph_real_t codelength;
 
-	igraph_error_t code = igraph_community_infomap(graph, NULL, NULL, 10, 0, 0.0, membership, &codelength);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_community_infomap(graph, has_weights ? &weights : NULL, NULL, 10, 0, 0.0, membership, &codelength);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_int_destroy(membership);
@@ -290,7 +326,13 @@ void *compute_igraph_community_label_propagation(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_community_label_propagation(graph, membership, IGRAPH_ALL, NULL, NULL, NULL, IGRAPH_LPA_FAST);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_community_label_propagation(graph, membership, IGRAPH_ALL, has_weights ? &weights : NULL, NULL, NULL, IGRAPH_LPA_FAST);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_int_destroy(membership);
@@ -327,7 +369,14 @@ void *compute_igraph_community_spinglass(ExecutionContext *ctx)
 	// Parameters: weights, modularity, temperature, membership, csize, spins, parupdate, starttemp, stoptemp, coolfact, update_rule, gamma, implementation, gamma_minus
 	// Use number of vertices as number of spins, must be at least 2
 	igraph_int_t spins = vcount > 2 ? vcount : 2;
-	igraph_error_t code = igraph_community_spinglass(graph, NULL, &modularity, &temperature, membership, &csize, spins, 0, 1.0, 0.01, 0.5, IGRAPH_SPINCOMM_UPDATE_SIMPLE, 1.0, IGRAPH_SPINCOMM_IMP_ORIG, 0.5);
+
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_community_spinglass(graph, has_weights ? &weights : NULL, &modularity, &temperature, membership, &csize, spins, 0, 1.0, 0.01, 0.5, IGRAPH_SPINCOMM_UPDATE_SIMPLE, 1.0, IGRAPH_SPINCOMM_IMP_ORIG, 0.5);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	igraph_vector_int_destroy(&csize);
 
@@ -391,7 +440,13 @@ void *compute_igraph_community_leading_eigenvector(ExecutionContext *ctx)
 	igraph_real_t modularity;
 	igraph_bool_t start = 0;
 
-	igraph_error_t code = igraph_community_leading_eigenvector(graph, NULL, &merges, membership, 100, &options, &modularity, start, &eigenvalues, &eigenvectors, &history, NULL, NULL);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_community_leading_eigenvector(graph, has_weights ? &weights : NULL, &merges, membership, 100, &options, &modularity, start, &eigenvalues, &eigenvectors, &history, NULL, NULL);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	igraph_matrix_int_destroy(&merges);
 	igraph_vector_destroy(&eigenvalues);
@@ -423,7 +478,13 @@ void *compute_igraph_community_optimal_modularity(ExecutionContext *ctx)
 
 	igraph_real_t modularity;
 
-	igraph_error_t code = igraph_community_optimal_modularity(graph, NULL, 1.0, &modularity, membership);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_community_optimal_modularity(graph, has_weights ? &weights : NULL, 1.0, &modularity, membership);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_int_destroy(membership);
@@ -456,7 +517,13 @@ void *compute_igraph_community_voronoi(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_community_voronoi(graph, membership, &generators, &modularity, NULL, NULL, IGRAPH_ALL, -1.0);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_community_voronoi(graph, membership, &generators, &modularity, NULL, has_weights ? &weights : NULL, IGRAPH_ALL, -1.0);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	igraph_vector_int_destroy(&generators);
 

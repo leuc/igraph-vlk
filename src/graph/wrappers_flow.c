@@ -65,6 +65,9 @@ void *compute_maxflow_sampling(ExecutionContext *ctx)
 
 	igraph_rng_seed(igraph_rng_default(), (igraph_uint_t)(size_t)time(NULL));
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	int num_pairs = 5;
 	int pair_idx = 0;
 	igraph_integer_t primary_source = -1;
@@ -99,7 +102,7 @@ void *compute_maxflow_sampling(ExecutionContext *ctx)
 			continue;
 
 		igraph_real_t flow_value;
-		igraph_error_t code = igraph_maxflow(graph, &flow_value, &flow, NULL, NULL, NULL, source, target, NULL, NULL);
+		igraph_error_t code = igraph_maxflow(graph, &flow_value, &flow, NULL, NULL, NULL, source, target, has_weights ? &weights : NULL, NULL);
 
 		if (code == IGRAPH_SUCCESS && igraph_vector_size(&flow) == m) {
 			result->max_flow_value = fmaxf(result->max_flow_value, (float)flow_value);
@@ -118,6 +121,9 @@ void *compute_maxflow_sampling(ExecutionContext *ctx)
 		igraph_vector_destroy(&flow);
 		pair_idx++;
 	}
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (primary_source < 0)
 		primary_source = 0;
