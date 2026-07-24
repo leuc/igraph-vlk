@@ -45,11 +45,17 @@ void *compute_igraph_layout_drl(ExecutionContext *ctx)
 	igraph_layout_drl_options_t options;
 	igraph_layout_drl_options_init(&options, IGRAPH_LAYOUT_DRL_DEFAULT);
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	igraph_error_t code = igraph_layout_drl(graph, result,
-											0,		  // use_seed
-											&options, // options: default template
-											NULL	  // weights: NULL = unweighted
+											0,							  // use_seed
+											&options,					  // options: default template
+											has_weights ? &weights : NULL // weights: NULL = unweighted
 	);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);
@@ -83,11 +89,17 @@ void *compute_igraph_layout_drl_3d(ExecutionContext *ctx)
 	igraph_layout_drl_options_t options;
 	igraph_layout_drl_options_init(&options, IGRAPH_LAYOUT_DRL_DEFAULT);
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	igraph_error_t code = igraph_layout_drl_3d(graph, result,
-											   0,		 // use_seed
-											   &options, // options
-											   NULL		 // weights
+											   0,							 // use_seed
+											   &options,					 // options
+											   has_weights ? &weights : NULL // weights
 	);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);

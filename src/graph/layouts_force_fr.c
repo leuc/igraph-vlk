@@ -85,17 +85,23 @@ void *compute_igraph_layout_fruchterman_reingold(ExecutionContext *ctx)
 	igraph_int_t niter = (igraph_int_t)(300 + 10 * sqrt((double)vcount));
 	igraph_layout_grid_t grid = (vcount > 1000) ? IGRAPH_LAYOUT_GRID : IGRAPH_LAYOUT_AUTOGRID;
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	igraph_error_t code = igraph_layout_fruchterman_reingold(graph, result,
-															 use_seed,	 // use_seed
-															 niter,		 // niter: more iterations for larger graphs
-															 start_temp, // start_temp: scaled to graph size
-															 grid,		 // grid: use grid optimization for large graphs
-															 NULL,		 // weights: NULL = all edges have weight 1
-															 NULL,		 // minx: no constraint
-															 NULL,		 // maxx: no constraint
-															 NULL,		 // miny: no constraint
-															 NULL		 // maxy: no constraint
+															 use_seed,						// use_seed
+															 niter,							// niter: more iterations for larger graphs
+															 start_temp,					// start_temp: scaled to graph size
+															 grid,							// grid: use grid optimization for large graphs
+															 has_weights ? &weights : NULL, // weights: NULL = all edges have weight 1
+															 NULL,							// minx: no constraint
+															 NULL,							// maxx: no constraint
+															 NULL,							// miny: no constraint
+															 NULL							// maxy: no constraint
 	);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);
@@ -138,13 +144,19 @@ void *compute_igraph_layout_fruchterman_reingold_3d(ExecutionContext *ctx)
 	igraph_real_t start_temp = (igraph_real_t)(10.0 + sqrt((double)vcount));
 	igraph_int_t niter = (igraph_int_t)(300 + 10 * sqrt((double)vcount));
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	igraph_error_t code = igraph_layout_fruchterman_reingold_3d(graph, result,
 																use_seed,						   // use_seed
 																niter,							   // niter: scaled to graph size
 																start_temp,						   // start_temp: allows exploration
-																NULL,							   // weights: NULL = unit weight
+																has_weights ? &weights : NULL,	   // weights: NULL = unit weight
 																NULL, NULL, NULL, NULL, NULL, NULL // bounds: unconstrained
 	);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);
@@ -199,14 +211,20 @@ void *compute_igraph_layout_kamada_kawai(ExecutionContext *ctx)
 	igraph_real_t epsilon = 0.0;
 	igraph_real_t kkconst = (igraph_real_t)vcount;
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	igraph_error_t code = igraph_layout_kamada_kawai(graph, result,
-													 use_seed,				// use_seed
-													 maxiter,				// maxiter: 10*vcount as per docs
-													 epsilon,				// epsilon: run all iterations
-													 kkconst,				// kkconst: typical value = vcount
-													 NULL,					// weights: NULL = unit weights in distance calc
-													 NULL, NULL, NULL, NULL // bounds: unconstrained
+													 use_seed,						// use_seed
+													 maxiter,						// maxiter: 10*vcount as per docs
+													 epsilon,						// epsilon: run all iterations
+													 kkconst,						// kkconst: typical value = vcount
+													 has_weights ? &weights : NULL, // weights: NULL = unit weights in distance calc
+													 NULL, NULL, NULL, NULL			// bounds: unconstrained
 	);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);
@@ -245,14 +263,20 @@ void *compute_igraph_layout_kamada_kawai_3d(ExecutionContext *ctx)
 	igraph_real_t epsilon = 0.0;
 	igraph_real_t kkconst = (igraph_real_t)vcount;
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	igraph_error_t code = igraph_layout_kamada_kawai_3d(graph, result,
 														use_seed,						   // use_seed
 														maxiter,						   // maxiter: 10*vcount
 														epsilon,						   // epsilon
 														kkconst,						   // kkconst: vcount
-														NULL,							   // weights
+														has_weights ? &weights : NULL,	   // weights
 														NULL, NULL, NULL, NULL, NULL, NULL // bounds
 	);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);

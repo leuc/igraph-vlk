@@ -114,14 +114,20 @@ void *compute_igraph_layout_sugiyama(ExecutionContext *ctx)
 		igraph_vector_bool_destroy(&visited);
 	}
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	igraph_error_t code = igraph_layout_sugiyama(graph, result,
-												 &routing, // routing: store edge waypoints
-												 &layers,  // layers: BFS-computed layers
-												 1.0,	   // hgap: horizontal spacing
-												 1.0,	   // vgap: vertical spacing
-												 100,	   // maxiter: crossing minimization iterations
-												 NULL	   // weights: unweighted
+												 &routing,					   // routing: store edge waypoints
+												 &layers,					   // layers: BFS-computed layers
+												 1.0,						   // hgap: horizontal spacing
+												 1.0,						   // vgap: vertical spacing
+												 100,						   // maxiter: crossing minimization iterations
+												 has_weights ? &weights : NULL // weights: unweighted
 	);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	igraph_matrix_list_destroy(&routing);
 	igraph_vector_int_destroy(&layers);
@@ -226,7 +232,13 @@ void *compute_igraph_layout_sugiyama_radial(ExecutionContext *ctx)
 		igraph_vector_bool_destroy(&visited);
 	}
 
-	igraph_error_t code = igraph_layout_sugiyama_radial(graph, result, &routing, &layers, 1.0, 1.0, 100, NULL);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_layout_sugiyama_radial(graph, result, &routing, &layers, 1.0, 1.0, 100, has_weights ? &weights : NULL);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	igraph_matrix_list_destroy(&routing);
 	igraph_vector_int_destroy(&layers);

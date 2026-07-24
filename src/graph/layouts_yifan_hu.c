@@ -62,19 +62,25 @@ void *compute_igraph_layout_yifan_hu(ExecutionContext *ctx)
 	igraph_quadtree_scheme_t quadtree_scheme = IGRAPH_QUADTREE_NORMAL;
 	igraph_bool_t beautify_leaves = 0;
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	igraph_error_t code = igraph_layout_yifan_hu(graph, result,
-												 use_seed,				// use_seed
-												 maxiter,				// maxiter: 500
-												 repulsive_exponent,	// -1 = auto
-												 natural_length,		// -1 = auto
-												 step,					// step: 0.1
-												 adaptive_cooling,		// adaptive cooling
-												 tolerance,				// tolerance
-												 quadtree_scheme,		// quadtree
-												 beautify_leaves,		// beautify
-												 NULL,					// weights
-												 NULL, NULL, NULL, NULL // bounds
+												 use_seed,						// use_seed
+												 maxiter,						// maxiter: 500
+												 repulsive_exponent,			// -1 = auto
+												 natural_length,				// -1 = auto
+												 step,							// step: 0.1
+												 adaptive_cooling,				// adaptive cooling
+												 tolerance,						// tolerance
+												 quadtree_scheme,				// quadtree
+												 beautify_leaves,				// beautify
+												 has_weights ? &weights : NULL, // weights
+												 NULL, NULL, NULL, NULL			// bounds
 	);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);
@@ -118,9 +124,15 @@ void *compute_igraph_layout_yifan_hu_3d(ExecutionContext *ctx)
 	igraph_quadtree_scheme_t quadtree_scheme = IGRAPH_QUADTREE_NORMAL;
 	igraph_bool_t beautify_leaves = 0;
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	igraph_error_t code = igraph_layout_yifan_hu_3d(graph, result, use_seed, maxiter, repulsive_exponent, natural_length, step, adaptive_cooling, tolerance, quadtree_scheme, beautify_leaves,
-													NULL // weights
+													has_weights ? &weights : NULL // weights
 	);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);

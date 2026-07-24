@@ -52,13 +52,19 @@ void *compute_igraph_layout_umap(ExecutionContext *ctx)
 
 	igraph_simplify(graph, true, true, NULL);
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	igraph_error_t code = igraph_layout_umap(graph, result,
-											 use_seed, // use_seed
-											 NULL,	   // distances: compute from graph
-											 min_dist, // min_dist: 0.5 default
-											 epochs,   // epochs: 500 default
-											 0		   // distances_are_weights: false
+											 use_seed,						// use_seed
+											 has_weights ? &weights : NULL, // distances: NULL = compute from graph
+											 min_dist,						// min_dist: 0.5 default
+											 epochs,						// epochs: 500 default
+											 has_weights ? 1 : 0			// distances_are_weights: treat our weights as edge weights, not precomputed distances
 	);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);

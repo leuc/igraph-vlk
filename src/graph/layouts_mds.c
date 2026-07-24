@@ -50,8 +50,14 @@ void *compute_igraph_layout_mds(ExecutionContext *ctx)
 	igraph_vs_t all_vs;
 	igraph_vs_all(&all_vs);
 
-	igraph_error_t dist_result = igraph_distances_dijkstra(graph, &dist_matrix, all_vs, all_vs, NULL, IGRAPH_ALL);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t dist_result = igraph_distances_dijkstra(graph, &dist_matrix, all_vs, all_vs, has_weights ? &weights : NULL, IGRAPH_ALL);
 	igraph_vs_destroy(&all_vs);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (dist_result != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(&dist_matrix);
@@ -113,8 +119,14 @@ void *compute_igraph_layout_mds_3d(ExecutionContext *ctx)
 	igraph_vs_t all_vs;
 	igraph_vs_all(&all_vs);
 
-	igraph_error_t dist_result = igraph_distances_dijkstra(graph, &dist_matrix, all_vs, all_vs, NULL, IGRAPH_ALL);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t dist_result = igraph_distances_dijkstra(graph, &dist_matrix, all_vs, all_vs, has_weights ? &weights : NULL, IGRAPH_ALL);
 	igraph_vs_destroy(&all_vs);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (dist_result != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(&dist_matrix);

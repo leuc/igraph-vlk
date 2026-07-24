@@ -87,19 +87,25 @@ void *compute_igraph_layout_forceatlas2_3d(ExecutionContext *ctx)
 	}
 #endif
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	igraph_error_t code = igraph_layout_forceatlas2_3d(graph, result,
-													   1500,		  // iterations
-													   0,			  // LinLog
-													   0,			  // outbound_attraction_distribution
-													   0,			  // edge_weight_influence
-													   1.0,			  // jitter_tolerance
-													   1,			  // barnes_hut_optimize
-													   1.2,			  // barnes_hut_theta
-													   scaling_ratio, // scaling_ratio
-													   0,			  // strong_gravity_mode
-													   gravity,		  // gravity
-													   NULL			  // weights
+													   1500,						 // iterations
+													   0,							 // LinLog
+													   0,							 // outbound_attraction_distribution
+													   has_weights ? 1.0 : 0.0,		 // edge_weight_influence
+													   1.0,							 // jitter_tolerance
+													   1,							 // barnes_hut_optimize
+													   1.2,							 // barnes_hut_theta
+													   scaling_ratio,				 // scaling_ratio
+													   0,							 // strong_gravity_mode
+													   gravity,						 // gravity
+													   has_weights ? &weights : NULL // weights
 	);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);

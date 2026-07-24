@@ -45,11 +45,17 @@ void *compute_igraph_layout_bhtsne(ExecutionContext *ctx)
 	 */
 	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	igraph_error_t code = igraph_layout_bhtsne(graph, result,
-											   use_seed, // use_seed
-											   NULL,	 // weights: NULL = unit weight
-											   1000,	 // epochs: default value
-											   0.5);	 // theta: default value
+											   use_seed,					  // use_seed
+											   has_weights ? &weights : NULL, // weights: NULL = unit weight
+											   1000,						  // epochs: default value
+											   0.5);						  // theta: default value
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);
@@ -88,11 +94,17 @@ void *compute_igraph_layout_bhtsne_3d(ExecutionContext *ctx)
 	 */
 	igraph_bool_t use_seed = layout_fill_seed(ctx, result, vcount);
 
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
 	igraph_error_t code = igraph_layout_bhtsne_3d(graph, result,
-												  use_seed, // use_seed
-												  NULL,		// weights: NULL = unit weight
-												  1000,		// epochs: default value
-												  0.5);		// theta: default value
+												  use_seed,						 // use_seed
+												  has_weights ? &weights : NULL, // weights: NULL = unit weight
+												  1000,							 // epochs: default value
+												  0.5);							 // theta: default value
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_matrix_destroy(result);
