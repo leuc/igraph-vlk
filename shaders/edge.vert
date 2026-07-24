@@ -61,11 +61,13 @@ layout(location = 2) in float inSelected;
 layout(location = 3) in float inNormalizedPos;
 layout(location = 4) in float inVisible;
 layout(location = 5) in vec3 prevInPosition;
+layout(location = 6) in float inAlpha;
 
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out float fragSelected;
 layout(location = 2) out float fragNormalizedPos;
 layout(location = 3) out float fragVisible;
+layout(location = 4) out float fragAlpha;
 
 void main()
 {
@@ -95,4 +97,5 @@ void main()
 	fragSelected = inSelected;
 	fragNormalizedPos = inNormalizedPos;
 	fragVisible = inVisible;
+	fragAlpha = inAlpha;
 }

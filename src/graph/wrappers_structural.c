@@ -75,6 +75,11 @@ void *compute_graph_properties(ExecutionContext *ctx)
 	strncpy(data->pairs[5].value, bool_res ? "Yes" : "No", 63);
 	data->num_pairs++;
 
+	// 7. Weighted
+	strncpy(data->pairs[6].key, "Weighted", 31);
+	strncpy(data->pairs[6].value, igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_EDGE, "weight") ? "Yes" : "No", 63);
+	data->num_pairs++;
+
 	return data;
 }
 

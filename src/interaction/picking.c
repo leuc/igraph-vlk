@@ -105,7 +105,35 @@ void interaction_pick_object(AppState *state, bool is_double_click)
 		state->last_picked_node = hit_node;
 	} else if (hit_edge != -1) {
 		state->current_graph.edges[hit_edge].selected = 1.0f;
-		printf("%s Clicked Edge %d: %d -> %d\n", is_double_click ? "Double" : "Single", hit_edge, state->current_graph.edges[hit_edge].from, state->current_graph.edges[hit_edge].to);
+		Edge *e = &state->current_graph.edges[hit_edge];
+		printf("%s Clicked Edge %d: %d -> %d\n", is_double_click ? "Double" : "Single", hit_edge, e->from, e->to);
+		printf("  selected=%.0f weight=%g\n", e->selected, e->weight);
+
+		igraph_strvector_t enames;
+		igraph_vector_int_t etypes;
+		igraph_strvector_init(&enames, 0);
+		igraph_vector_int_init(&etypes, 0);
+		if (igraph_cattribute_list(&state->current_graph.g, NULL, NULL, NULL, NULL, &enames, &etypes) == IGRAPH_SUCCESS) {
+			for (igraph_integer_t a = 0; a < igraph_strvector_size(&enames); a++) {
+				const char *name = igraph_strvector_get(&enames, a);
+				switch ((igraph_attribute_type_t)VECTOR(etypes)[a]) {
+				case IGRAPH_ATTRIBUTE_NUMERIC:
+					printf("  %s=%g\n", name, EAN(&state->current_graph.g, name, hit_edge));
+					break;
+				case IGRAPH_ATTRIBUTE_BOOLEAN:
+					printf("  %s=%s\n", name, EAB(&state->current_graph.g, name, hit_edge) ? "true" : "false");
+					break;
+				case IGRAPH_ATTRIBUTE_STRING:
+					printf("  %s=%s\n", name, EAS(&state->current_graph.g, name, hit_edge));
+					break;
+				default:
+					break;
+				}
+			}
+		}
+		igraph_vector_int_destroy(&etypes);
+		igraph_strvector_destroy(&enames);
+
 		state->last_picked_node = -1; // Clear node selection
 	} else {
 		state->last_picked_node = -1;

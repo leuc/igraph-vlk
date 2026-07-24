@@ -42,4 +42,12 @@ bool graph_rebuild_edges(GraphData *data);
  */
 bool graph_import_layout_pos(GraphData *data);
 
+/**
+ * Build an edge-id-ordered weight vector from the igraph "weight" edge attribute.
+ * @param graph Graph to read the attribute from
+ * @param out_weights Initialized on success (caller must igraph_vector_destroy); untouched on failure
+ * @return true if the graph has a "weight" edge attribute and out_weights was populated, false otherwise
+ */
+bool graph_build_edge_weights(const igraph_t *graph, igraph_vector_t *out_weights);
+
 #endif // GRAPH_CORE_H

@@ -242,7 +242,13 @@ void *compute_igraph_strength(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	igraph_error_t code = igraph_strength(graph, result, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS, NULL);
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_strength(graph, result, igraph_vss_all(), IGRAPH_ALL, IGRAPH_LOOPS, has_weights ? &weights : NULL);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
 
 	if (code != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);

@@ -206,12 +206,13 @@ bool graph_build_visualization(GraphData *data)
 	data->edges = malloc(sizeof(Edge) * data->edge_count);
 	if (!data->edges && data->edge_count > 0)
 		return false;
+	bool has_weight = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_EDGE, "weight");
 	for (int i = 0; i < data->edge_count; i++) {
 		igraph_integer_t from, to;
 		igraph_edge(&data->g, i, &from, &to);
 		data->edges[i].from = (uint32_t)from;
 		data->edges[i].to = (uint32_t)to;
-		data->edges[i].weight = 0.0f;
+		data->edges[i].weight = has_weight ? (float)EAN(&data->g, "weight", i) : 0.0f;
 	}
 	return true;
 }
@@ -231,12 +232,13 @@ bool graph_rebuild_edges(GraphData *data)
 	data->edges = malloc(sizeof(Edge) * data->edge_count);
 	if (!data->edges && data->edge_count > 0)
 		return false;
+	bool has_weight = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_EDGE, "weight");
 	for (int i = 0; i < data->edge_count; i++) {
 		igraph_integer_t from, to;
 		igraph_edge(&data->g, i, &from, &to);
 		data->edges[i].from = (uint32_t)from;
 		data->edges[i].to = (uint32_t)to;
-		data->edges[i].weight = 0.0f;
+		data->edges[i].weight = has_weight ? (float)EAN(&data->g, "weight", i) : 0.0f;
 	}
 
 	// Recompute degree on existing nodes — it affects node shape rendering
@@ -317,5 +319,21 @@ bool graph_import_layout_pos(GraphData *data)
 		MATRIX(data->current_layout, i, 2) = z;
 	}
 	layout_center_and_autoscale(&data->current_layout);
+	return true;
+}
+
+// ============================================================================
+// Build an edge-id-ordered weight vector from the igraph "weight" edge attribute
+// ============================================================================
+bool graph_build_edge_weights(const igraph_t *graph, igraph_vector_t *out_weights)
+{
+	if (!igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_EDGE, "weight"))
+		return false;
+	if (igraph_vector_init(out_weights, igraph_ecount(graph)) != IGRAPH_SUCCESS)
+		return false;
+	if (igraph_cattribute_EANV(graph, "weight", igraph_ess_all(IGRAPH_EDGEORDER_ID), out_weights) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(out_weights);
+		return false;
+	}
 	return true;
 }
