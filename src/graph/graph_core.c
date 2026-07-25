@@ -14,6 +14,134 @@
 #include "graph/wrappers_layout.h"
 
 // ============================================================================
+// (Re)scan vertex attributes for low-cardinality string/boolean ones and
+// populate data->filterable_attrs (backs the Node > Filter menu).
+// ============================================================================
+void graph_detect_filterable_attrs(GraphData *data)
+{
+	if (data->filterable_attrs) {
+		for (int a = 0; a < data->num_filterable_attrs; a++) {
+			free(data->filterable_attrs[a].name);
+			for (int v = 0; v < data->filterable_attrs[a].num_values; v++)
+				free(data->filterable_attrs[a].values[v]);
+			free(data->filterable_attrs[a].values);
+		}
+		free(data->filterable_attrs);
+		data->filterable_attrs = NULL;
+		data->num_filterable_attrs = 0;
+	}
+
+	igraph_error_handler_t *prev_handler = igraph_set_error_handler(igraph_error_handler_printignore);
+	igraph_strvector_t vnames;
+	igraph_vector_int_t vtypes;
+	bool vnames_ok = igraph_strvector_init(&vnames, 0) == IGRAPH_SUCCESS;
+	bool vtypes_ok = igraph_vector_int_init(&vtypes, 0) == IGRAPH_SUCCESS;
+	if (!vnames_ok || !vtypes_ok) {
+		if (vnames_ok)
+			igraph_strvector_destroy(&vnames);
+		if (vtypes_ok)
+			igraph_vector_int_destroy(&vtypes);
+		igraph_set_error_handler(prev_handler);
+		return;
+	}
+
+	igraph_error_t verr = igraph_cattribute_list(&data->g, NULL, NULL, &vnames, &vtypes, NULL, NULL);
+	if (verr == IGRAPH_SUCCESS) {
+		int n_attrs = igraph_strvector_size(&vnames);
+		printf("[Filter] igraph_cattribute_list returned %d vertex attributes\n", n_attrs);
+		for (int a = 0; a < n_attrs; a++) {
+			const char *name = igraph_strvector_get(&vnames, a);
+			if (!name)
+				continue;
+			igraph_attribute_type_t atype = (igraph_attribute_type_t)VECTOR(vtypes)[a];
+			const char *type_str = (atype == IGRAPH_ATTRIBUTE_STRING) ? "string" : (atype == IGRAPH_ATTRIBUTE_BOOLEAN) ? "boolean" : "numeric";
+			if (atype != IGRAPH_ATTRIBUTE_STRING && atype != IGRAPH_ATTRIBUTE_BOOLEAN) {
+				printf("[Filter]   %s: %s (skipped - not string/boolean)\n", name, type_str);
+				continue;
+			}
+			// Collect distinct values, check every node has a value
+			char **values = NULL;
+			int num_values = 0;
+			int max_values = 20;
+			bool all_present = true;
+			for (int i = 0; i < data->node_count; i++) {
+				const char *val = NULL;
+				if (atype == IGRAPH_ATTRIBUTE_STRING) {
+					val = igraph_cattribute_VAS(&data->g, name, i);
+					if (!val)
+						all_present = false;
+				} else {
+					// Boolean — skip if any node lacks the attribute
+					if (!igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, name)) {
+						all_present = false;
+						break;
+					}
+					bool bv = igraph_cattribute_VAB(&data->g, name, i);
+					val = bv ? "true" : "false";
+				}
+				// Deduplicate
+				bool found = false;
+				for (int v = 0; v < num_values; v++) {
+					if (strcmp(values[v], val) == 0) {
+						found = true;
+						break;
+					}
+				}
+				if (!found) {
+					if (num_values >= max_values) {
+						all_present = false;
+						break;
+					}
+					char **tmp = realloc(values, sizeof(char *) * (num_values + 1));
+					if (!tmp) {
+						all_present = false;
+						break;
+					}
+					values = tmp;
+					values[num_values] = strdup(val);
+					num_values++;
+				}
+			}
+			if (all_present && num_values > 1 && num_values <= max_values) {
+				printf("[Filter]   %s: %d distinct values (accepted)\n", name, num_values);
+				FilterableAttr *tmp = realloc(data->filterable_attrs, sizeof(FilterableAttr) * (data->num_filterable_attrs + 1));
+				if (!tmp) {
+					for (int v = 0; v < num_values; v++)
+						free(values[v]);
+					free(values);
+					continue;
+				}
+				data->filterable_attrs = tmp;
+				data->filterable_attrs[data->num_filterable_attrs].name = strdup(name);
+				data->filterable_attrs[data->num_filterable_attrs].values = values;
+				data->filterable_attrs[data->num_filterable_attrs].num_values = num_values;
+				data->num_filterable_attrs++;
+			} else {
+				printf("[Filter]   %s: rejected (all_present=%d, num_values=%d)\n", name, all_present, num_values);
+				for (int v = 0; v < num_values; v++)
+					free(values[v]);
+				free(values);
+			}
+		}
+	}
+	igraph_strvector_destroy(&vnames);
+	igraph_vector_int_destroy(&vtypes);
+	igraph_set_error_handler(prev_handler);
+
+	if (data->num_filterable_attrs > 0) {
+		printf("[Filter] %d filterable attribute(s) detected:\n", data->num_filterable_attrs);
+		for (int a = 0; a < data->num_filterable_attrs; a++) {
+			printf("[Filter]   %s (%d values):", data->filterable_attrs[a].name, data->filterable_attrs[a].num_values);
+			for (int v = 0; v < data->filterable_attrs[a].num_values; v++)
+				printf(" \"%s\"", data->filterable_attrs[a].values[v]);
+			printf("\n");
+		}
+	} else {
+		printf("[Filter] No filterable attributes found\n");
+	}
+}
+
+// ============================================================================
 // Build the entire visualization arrays for a new graph.
 // Caller intention: "I have a completely new graph — build everything."
 // ============================================================================
@@ -81,126 +209,7 @@ bool graph_build_visualization(GraphData *data)
 	}
 
 	// Analyze filterable vertex attributes (low-cardinality string/boolean only)
-	if (data->filterable_attrs) {
-		for (int a = 0; a < data->num_filterable_attrs; a++) {
-			free(data->filterable_attrs[a].name);
-			for (int v = 0; v < data->filterable_attrs[a].num_values; v++)
-				free(data->filterable_attrs[a].values[v]);
-			free(data->filterable_attrs[a].values);
-		}
-		free(data->filterable_attrs);
-		data->filterable_attrs = NULL;
-		data->num_filterable_attrs = 0;
-	}
-	{
-		igraph_error_handler_t *prev_handler = igraph_set_error_handler(igraph_error_handler_printignore);
-		igraph_strvector_t vnames;
-		igraph_vector_int_t vtypes;
-		bool vnames_ok = igraph_strvector_init(&vnames, 0) == IGRAPH_SUCCESS;
-		bool vtypes_ok = igraph_vector_int_init(&vtypes, 0) == IGRAPH_SUCCESS;
-		if (!vnames_ok || !vtypes_ok) {
-			if (vnames_ok)
-				igraph_strvector_destroy(&vnames);
-			if (vtypes_ok)
-				igraph_vector_int_destroy(&vtypes);
-			igraph_set_error_handler(prev_handler);
-		} else {
-			igraph_error_t verr = igraph_cattribute_list(&data->g, NULL, NULL, &vnames, &vtypes, NULL, NULL);
-			if (verr == IGRAPH_SUCCESS) {
-				int n_attrs = igraph_strvector_size(&vnames);
-				printf("[Filter] igraph_cattribute_list returned %d vertex attributes\n", n_attrs);
-				for (int a = 0; a < n_attrs; a++) {
-					const char *name = igraph_strvector_get(&vnames, a);
-					if (!name)
-						continue;
-					igraph_attribute_type_t atype = (igraph_attribute_type_t)VECTOR(vtypes)[a];
-					const char *type_str = (atype == IGRAPH_ATTRIBUTE_STRING) ? "string" : (atype == IGRAPH_ATTRIBUTE_BOOLEAN) ? "boolean" : "numeric";
-					if (atype != IGRAPH_ATTRIBUTE_STRING && atype != IGRAPH_ATTRIBUTE_BOOLEAN) {
-						printf("[Filter]   %s: %s (skipped - not string/boolean)\n", name, type_str);
-						continue;
-					}
-					// Collect distinct values, check every node has a value
-					char **values = NULL;
-					int num_values = 0;
-					int max_values = 20;
-					bool all_present = true;
-					for (int i = 0; i < data->node_count; i++) {
-						const char *val = NULL;
-						if (atype == IGRAPH_ATTRIBUTE_STRING) {
-							val = igraph_cattribute_VAS(&data->g, name, i);
-							if (!val)
-								all_present = false;
-						} else {
-							// Boolean — skip if any node lacks the attribute
-							if (!igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, name)) {
-								all_present = false;
-								break;
-							}
-							bool bv = igraph_cattribute_VAB(&data->g, name, i);
-							val = bv ? "true" : "false";
-						}
-						// Deduplicate
-						bool found = false;
-						for (int v = 0; v < num_values; v++) {
-							if (strcmp(values[v], val) == 0) {
-								found = true;
-								break;
-							}
-						}
-						if (!found) {
-							if (num_values >= max_values) {
-								all_present = false;
-								break;
-							}
-							char **tmp = realloc(values, sizeof(char *) * (num_values + 1));
-							if (!tmp) {
-								all_present = false;
-								break;
-							}
-							values = tmp;
-							values[num_values] = strdup(val);
-							num_values++;
-						}
-					}
-					if (all_present && num_values > 1 && num_values <= max_values) {
-						printf("[Filter]   %s: %d distinct values (accepted)\n", name, num_values);
-						FilterableAttr *tmp = realloc(data->filterable_attrs, sizeof(FilterableAttr) * (data->num_filterable_attrs + 1));
-						if (!tmp) {
-							for (int v = 0; v < num_values; v++)
-								free(values[v]);
-							free(values);
-							continue;
-						}
-						data->filterable_attrs = tmp;
-						data->filterable_attrs[data->num_filterable_attrs].name = strdup(name);
-						data->filterable_attrs[data->num_filterable_attrs].values = values;
-						data->filterable_attrs[data->num_filterable_attrs].num_values = num_values;
-						data->num_filterable_attrs++;
-					} else {
-						printf("[Filter]   %s: rejected (all_present=%d, num_values=%d)\n", name, all_present, num_values);
-						for (int v = 0; v < num_values; v++)
-							free(values[v]);
-						free(values);
-					}
-				}
-			}
-			igraph_strvector_destroy(&vnames);
-			igraph_vector_int_destroy(&vtypes);
-			igraph_set_error_handler(prev_handler);
-		}
-	}
-
-	if (data->num_filterable_attrs > 0) {
-		printf("[Filter] %d filterable attribute(s) detected:\n", data->num_filterable_attrs);
-		for (int a = 0; a < data->num_filterable_attrs; a++) {
-			printf("[Filter]   %s (%d values):", data->filterable_attrs[a].name, data->filterable_attrs[a].num_values);
-			for (int v = 0; v < data->filterable_attrs[a].num_values; v++)
-				printf(" \"%s\"", data->filterable_attrs[a].values[v]);
-			printf("\n");
-		}
-	} else {
-		printf("[Filter] No filterable attributes found\n");
-	}
+	graph_detect_filterable_attrs(data);
 
 	// Build edges
 	data->edges = malloc(sizeof(Edge) * data->edge_count);

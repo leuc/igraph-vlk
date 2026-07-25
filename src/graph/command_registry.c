@@ -103,7 +103,7 @@ const CommandDef g_command_registry[] = {
 	{"Rank", "igraph_strength", "Strength (Weighted Degree)", compute_igraph_strength, apply_centrality_scores, centrality_scores_free},
 	{"Rank", "igraph_constraint", "Constraint (Structural Holes)", compute_igraph_constraint, apply_centrality_scores, centrality_scores_free},
 	{"Rank", "igraph_coreness", "Coreness (k-Core)", compute_igraph_coreness, apply_centrality_scores, centrality_scores_free},
-	{"Rank", "igraph_cd_index", "CD Index (Citation Disruption)", compute_igraph_cd_index, apply_centrality_scores, centrality_scores_free},
+	{"Rank", "igraph_cd_index", "CD Index (Citation Disruption)", compute_igraph_cd_index, apply_cd_index, centrality_scores_free},
 
 	{"Group", "igraph_community_multilevel", "Louvain Method (Multilevel)", compute_igraph_community_multilevel, apply_community_membership, free_community_membership},
 	{"Group", "igraph_community_leiden", "Leiden", compute_igraph_community_leiden, apply_community_membership, free_community_membership},

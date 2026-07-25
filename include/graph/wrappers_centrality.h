@@ -50,4 +50,8 @@ void *compute_igraph_cd_index(ExecutionContext *ctx);
 void apply_centrality_scores(ExecutionContext *ctx, void *result_data);
 void centrality_scores_free(void *result_data);
 
+// CD index apply: standard sizing, plus refreshes Node > Filter for the new
+// 'cd-index-type' attribute
+void apply_cd_index(ExecutionContext *ctx, void *result_data);
+
 #endif // GRAPH_WRAPPERS_CENTRALITY_H

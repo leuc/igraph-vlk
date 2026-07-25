@@ -5,7 +5,9 @@
 
 #include "graph/wrappers_centrality.h"
 #include "app_state.h"
+#include "graph/graph_core.h"
 #include "interaction/state.h"
+#include "ui/menu.h"
 #include "vulkan/renderer.h"
 #include <igraph.h>
 #include <math.h>
@@ -465,13 +467,23 @@ void *compute_igraph_cd_index(ExecutionContext *ctx)
 	// and NaN for vertices with no relevant future citations, neither of which
 	// suits a size mapping — magnitude of disruption drives size regardless of
 	// direction, NaN reads as "no signal" (smallest size), same as 0.
+	// "cd-index-type" buckets the sign into a low-cardinality string attribute
+	// (Node > Filter only works on those): "nan" for no relevant future
+	// citations, else "disruptive"/"consolidating" by sign (0 counts as
+	// consolidating).
 	for (igraph_integer_t i = 0; i < vcount; i++) {
 		igraph_real_t v = VECTOR(*result)[i];
+		bool is_nan = isnan(v);
 		if (SETVAN(graph, "cd-index", i, v) != IGRAPH_SUCCESS) {
 			fprintf(stderr, "CD index: SETVAN failed for vertex %lld\n", (long long)i);
 			break;
 		}
-		VECTOR(*result)[i] = isnan(v) ? 0.0 : fabs(v);
+		const char *type = is_nan ? "nan" : (v > 0.0 ? "disruptive" : "consolidating");
+		if (SETVAS(graph, "cd-index-type", i, type) != IGRAPH_SUCCESS) {
+			fprintf(stderr, "CD index: SETVAS failed for vertex %lld\n", (long long)i);
+			break;
+		}
+		VECTOR(*result)[i] = is_nan ? 0.0 : fabs(v);
 	}
 
 	return result;
@@ -522,6 +534,23 @@ void apply_centrality_scores(ExecutionContext *ctx, void *result_data)
 	renderer_update_graph(renderer, data);
 
 	printf("[apply_centrality_scores] Centrality applied\n");
+}
+
+// ============================================================================
+// Apply: CD index writes new 'cd-index'/'cd-index-type' vertex attributes as
+// a side effect (unlike every other Rank command), so on top of the shared
+// sizing logic this refreshes GraphData.filterable_attrs and repopulates the
+// Node > Filter menu so 'cd-index-type' shows up there right away.
+// ============================================================================
+void apply_cd_index(ExecutionContext *ctx, void *result_data)
+{
+	apply_centrality_scores(ctx, result_data);
+	if (!ctx || !ctx->app_state)
+		return;
+
+	AppState *state = ctx->app_state;
+	graph_detect_filterable_attrs(&state->current_graph);
+	menu_populate_attribute_filters(state->app_ctx.menu.root, &state->current_graph);
 }
 
 void centrality_scores_free(void *result_data)

@@ -27,6 +27,15 @@ void graph_free_data(GraphData *data);
 bool graph_build_visualization(GraphData *data);
 
 /**
+ * (Re)scan vertex attributes for low-cardinality string/boolean ones and
+ * populate data->filterable_attrs. Called by graph_build_visualization; call
+ * directly after an in-place op adds/changes vertex attributes without a
+ * full rebuild (e.g. CD index writing 'cd-index-type').
+ * @param data Pointer to GraphData whose filterable_attrs should be refreshed
+ */
+void graph_detect_filterable_attrs(GraphData *data);
+
+/**
  * Rebuild only the edge array and node degrees after in-place edge changes.
  * Does NOT touch node colors, labels, sizes, or positions.
  * @param data Pointer to GraphData whose edges changed
