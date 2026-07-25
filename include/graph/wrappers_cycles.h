@@ -16,13 +16,21 @@ void apply_remove_feedback_arc_set(ExecutionContext *ctx, void *result_data);
 // Graph simplification: remove multi-edges and loops
 void *compute_igraph_simplify(ExecutionContext *ctx);
 
+// Remove vertices whose 'date' attribute is missing or an empty string
+void *compute_remove_empty_date_nodes(ExecutionContext *ctx);
+
 // Graph direction conversion
 void *compute_to_directed(ExecutionContext *ctx);
 void *compute_to_undirected_collapse(ExecutionContext *ctx);
 void *compute_to_undirected_mutual(ExecutionContext *ctx);
 
-// Shared in-place apply for graph modifications (rebuild edges + update renderer)
+// Shared in-place apply for graph modifications that leave vertex count
+// unchanged (rebuild edges + update renderer)
 void apply_inplace_graph_update(ExecutionContext *ctx, void *result_data);
+
+// Shared in-place apply for graph modifications that change vertex count
+// (full rebuild + update renderer)
+void apply_inplace_graph_update_full(ExecutionContext *ctx, void *result_data);
 
 void free_noop(void *result_data);
 

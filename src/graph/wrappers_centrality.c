@@ -365,6 +365,118 @@ void *compute_igraph_constraint(ExecutionContext *ctx)
 	return result;
 }
 
+// CD index (citation disruption). Time window fixed to 5 years (1825 days),
+// matching "CD5", the window most commonly reported in the citation-disruption
+// literature (Funk & Owen-Smith 2017).
+#define CD_INDEX_DATE_ATTR "date"
+#define CD_INDEX_TIME_WINDOW_DAYS 1825
+
+// Days since 1970-01-01 for a proleptic Gregorian y/m/d (Howard Hinnant's
+// days_from_civil; plain integer arithmetic sidesteps struct tm/timegm's
+// timezone and year-range pitfalls).
+static long long cd_index_days_from_civil(int y, int m, int d)
+{
+	y -= m <= 2;
+	long long era = (y >= 0 ? y : y - 399) / 400;
+	unsigned yoe = (unsigned)(y - era * 400);
+	unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + (unsigned)d - 1;
+	unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+	return era * 146097 + (long long)doe - 719468;
+}
+
+static bool cd_index_parse_date(const char *s, igraph_integer_t *out_days)
+{
+	int y, m, d;
+	if (!s || sscanf(s, "%d-%d-%d", &y, &m, &d) != 3)
+		return false;
+	if (m < 1 || m > 12 || d < 1 || d > 31)
+		return false;
+	*out_days = (igraph_integer_t)cd_index_days_from_civil(y, m, d);
+	return true;
+}
+
+void *compute_igraph_cd_index(ExecutionContext *ctx)
+{
+	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
+	if (!graph || igraph_vcount(graph) == 0)
+		return NULL;
+
+	if (!igraph_is_directed(graph)) {
+		fprintf(stderr, "CD index requires a directed graph\n");
+		return NULL;
+	}
+
+	igraph_bool_t has_loops;
+	igraph_has_loop(graph, &has_loops);
+	if (has_loops) {
+		fprintf(stderr, "CD index does not support self-loops (run Simplify first)\n");
+		return NULL;
+	}
+
+	if (!igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_VERTEX, CD_INDEX_DATE_ATTR)) {
+		fprintf(stderr, "CD index requires a '%s' vertex attribute (ISO 8601, e.g. \"1999-07-05\")\n", CD_INDEX_DATE_ATTR);
+		return NULL;
+	}
+
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_vector_int_t timestamps;
+	if (igraph_vector_int_init(&timestamps, vcount) != IGRAPH_SUCCESS)
+		return NULL;
+
+	for (igraph_integer_t i = 0; i < vcount; i++) {
+		const char *s = igraph_cattribute_VAS(graph, CD_INDEX_DATE_ATTR, i);
+		igraph_integer_t days;
+		if (!cd_index_parse_date(s, &days)) {
+			fprintf(stderr, "CD index: vertex %lld has invalid '%s' value \"%s\" (expected ISO 8601, e.g. \"1999-07-05\")\n", (long long)i, CD_INDEX_DATE_ATTR, s ? s : "");
+			igraph_vector_int_destroy(&timestamps);
+			return NULL;
+		}
+		VECTOR(timestamps)[i] = days;
+	}
+
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
+	if (!result) {
+		igraph_vector_int_destroy(&timestamps);
+		return NULL;
+	}
+	if (igraph_vector_init(result, 0) != IGRAPH_SUCCESS) {
+		IGRAPH_FREE(result);
+		igraph_vector_int_destroy(&timestamps);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_cd_index(graph, &timestamps, result, NULL, NULL, igraph_vss_all(), CD_INDEX_TIME_WINDOW_DAYS);
+
+	igraph_vector_int_destroy(&timestamps);
+
+	if (code != IGRAPH_SUCCESS) {
+		fprintf(stderr, "igraph_cd_index failed\n");
+		igraph_vector_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
+
+	// Store the raw (signed, possibly NaN) score, but hand apply_centrality_scores
+	// |score| instead: CD index is bipolar (-1 disruptive .. 0 .. +1 consolidating)
+	// and NaN for vertices with no relevant future citations, neither of which
+	// suits a size mapping — magnitude of disruption drives size regardless of
+	// direction, NaN reads as "no signal" (smallest size), same as 0.
+	for (igraph_integer_t i = 0; i < vcount; i++) {
+		igraph_real_t v = VECTOR(*result)[i];
+		if (SETVAN(graph, "cd-index", i, v) != IGRAPH_SUCCESS) {
+			fprintf(stderr, "CD index: SETVAN failed for vertex %lld\n", (long long)i);
+			break;
+		}
+		VECTOR(*result)[i] = isnan(v) ? 0.0 : fabs(v);
+	}
+
+	return result;
+}
+
 // ============================================================================
 // Apply and Free Functions
 // ============================================================================

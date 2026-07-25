@@ -208,7 +208,91 @@ void *compute_to_undirected_mutual(ExecutionContext *ctx)
 }
 
 // ============================================================================
-// Shared apply: Refresh visualization after any in-place graph modification.
+// Worker: Remove vertices whose 'date' attribute is missing or an empty
+// string. Requires the graph to have a 'date' vertex attribute at all.
+// Modifies graph in-place. Unlike Simplify/to_directed/to_undirected_*, this
+// changes vertex count, so it also drops the same rows from current_layout
+// (highest id first, so earlier removals don't shift the indices of ones
+// still pending) — otherwise apply_inplace_graph_update_full's rebuild would
+// hand surviving vertices stale/mismatched positions from the old, larger
+// layout matrix. Returns graph pointer on success, NULL on failure.
+// ============================================================================
+void *compute_remove_empty_date_nodes(ExecutionContext *ctx)
+{
+	GraphData *data = &ctx->app_state->current_graph;
+	igraph_t *graph = &data->g;
+	if (!data->graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
+	if (igraph_vcount(graph) == 0)
+		return NULL;
+
+	if (!igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_VERTEX, "date")) {
+		fprintf(stderr, "Remove Nodes with Empty \"date\" requires a 'date' vertex attribute\n");
+		return NULL;
+	}
+
+	igraph_integer_t before_v = igraph_vcount(graph);
+	igraph_vector_int_t to_remove;
+	if (igraph_vector_int_init(&to_remove, 0) != IGRAPH_SUCCESS)
+		return NULL;
+
+	for (igraph_integer_t i = 0; i < before_v; i++) {
+		const char *s = igraph_cattribute_VAS(graph, "date", i);
+		if (!s || s[0] == '\0') {
+			if (igraph_vector_int_push_back(&to_remove, i) != IGRAPH_SUCCESS) {
+				fprintf(stderr, "[%s] push_back failed\n", __func__);
+				igraph_vector_int_destroy(&to_remove);
+				return NULL;
+			}
+		}
+	}
+
+	igraph_integer_t n_remove = igraph_vector_int_size(&to_remove);
+	if (n_remove == 0) {
+		igraph_vector_int_destroy(&to_remove);
+		printf("Removed 0 vertices with empty \"date\"\n");
+		return graph;
+	}
+
+	igraph_integer_t ncol = igraph_matrix_ncol(&data->current_layout);
+	igraph_matrix_t new_layout;
+	if (igraph_matrix_init(&new_layout, before_v - n_remove, ncol) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(&to_remove);
+		return NULL;
+	}
+	igraph_integer_t ri = 0, dst = 0;
+	for (igraph_integer_t i = 0; i < before_v; i++) {
+		if (ri < n_remove && VECTOR(to_remove)[ri] == i) {
+			ri++;
+			continue;
+		}
+		for (igraph_integer_t c = 0; c < ncol; c++)
+			MATRIX(new_layout, dst, c) = MATRIX(data->current_layout, i, c);
+		dst++;
+	}
+
+	igraph_vs_t vs = igraph_vss_vector(&to_remove);
+	if (igraph_delete_vertices(graph, vs) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "igraph_delete_vertices failed\n");
+		igraph_matrix_destroy(&new_layout);
+		igraph_vector_int_destroy(&to_remove);
+		return NULL;
+	}
+	igraph_vector_int_destroy(&to_remove);
+
+	igraph_matrix_destroy(&data->current_layout);
+	data->current_layout = new_layout;
+
+	printf("Removed %d vertices with empty \"date\": %d vertices -> %d vertices\n", (int)n_remove, (int)before_v, (int)(before_v - n_remove));
+
+	return graph;
+}
+
+// ============================================================================
+// Shared apply: Refresh visualization after any in-place graph modification
+// that leaves vertex count unchanged (edges/attributes only).
 // ============================================================================
 void apply_inplace_graph_update(ExecutionContext *ctx, void *result_data)
 {
@@ -235,4 +319,28 @@ void apply_inplace_graph_update(ExecutionContext *ctx, void *result_data)
 void free_noop(void *result_data)
 {
 	(void)result_data;
+}
+
+// ============================================================================
+// Shared apply: Refresh visualization after an in-place modification that
+// changed vertex count (full rebuild, not just edges — see
+// graph_build_visualization vs. graph_rebuild_edges in graph_core.c).
+// ============================================================================
+void apply_inplace_graph_update_full(ExecutionContext *ctx, void *result_data)
+{
+	if (!ctx || !ctx->app_state)
+		return;
+	(void)result_data;
+
+	AppState *state = ctx->app_state;
+	GraphData *data = &state->current_graph;
+
+	if (!graph_build_visualization(data)) {
+		fprintf(stderr, "[apply_inplace_graph_update_full] graph_build_visualization failed\n");
+		return;
+	}
+	renderer_update_graph(&state->renderer, data);
+	state->renderer.label.tree_needs_rebuild = true;
+
+	printf("[apply] Graph updated - %d vertices, %d edges\n", data->node_count, data->edge_count);
 }

@@ -103,6 +103,7 @@ const CommandDef g_command_registry[] = {
 	{"Rank", "igraph_strength", "Strength (Weighted Degree)", compute_igraph_strength, apply_centrality_scores, centrality_scores_free},
 	{"Rank", "igraph_constraint", "Constraint (Structural Holes)", compute_igraph_constraint, apply_centrality_scores, centrality_scores_free},
 	{"Rank", "igraph_coreness", "Coreness (k-Core)", compute_igraph_coreness, apply_centrality_scores, centrality_scores_free},
+	{"Rank", "igraph_cd_index", "CD Index (Citation Disruption)", compute_igraph_cd_index, apply_centrality_scores, centrality_scores_free},
 
 	{"Group", "igraph_community_multilevel", "Louvain Method (Multilevel)", compute_igraph_community_multilevel, apply_community_membership, free_community_membership},
 	{"Group", "igraph_community_leiden", "Leiden", compute_igraph_community_leiden, apply_community_membership, free_community_membership},
@@ -138,6 +139,7 @@ const CommandDef g_command_registry[] = {
 
 	{"Alter", "remove_feedback_arc_set", "Remove feedback arc set", compute_remove_feedback_arc_set, apply_remove_feedback_arc_set, free_noop},
 	{"Alter", "igraph_simplify", "Simplify (remove multi-edges & loops)", compute_igraph_simplify, apply_inplace_graph_update, free_noop},
+	{"Alter", "remove_empty_date_nodes", "Remove Nodes with Empty \"date\"", compute_remove_empty_date_nodes, apply_inplace_graph_update_full, free_noop},
 	{"Alter", "to_directed", "To directed", compute_to_directed, apply_inplace_graph_update, free_noop},
 	{"Alter", "to_undirected_collapse", "To undirected (collapse)", compute_to_undirected_collapse, apply_inplace_graph_update, free_noop},
 	{"Alter", "to_undirected_mutual", "To undirected (mutual)", compute_to_undirected_mutual, apply_inplace_graph_update, free_noop},
