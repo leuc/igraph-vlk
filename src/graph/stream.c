@@ -295,7 +295,7 @@ GraphStream *graph_stream_init(GraphData *data)
 {
 	igraph_set_attribute_table(&igraph_cattribute_table);
 
-	if (igraph_empty(&data->g, 0, IGRAPH_UNDIRECTED) != IGRAPH_SUCCESS) {
+	if (igraph_empty(&data->g, 0, IGRAPH_DIRECTED) != IGRAPH_SUCCESS) {
 		fprintf(stderr, "graph_stream_init: igraph_empty failed\n");
 		return NULL;
 	}
