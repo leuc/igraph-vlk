@@ -68,4 +68,37 @@ bool graph_import_layout_pos(GraphData *data);
  */
 bool graph_build_edge_weights(const igraph_t *graph, igraph_vector_t *out_weights);
 
+/**
+ * Load a numeric vertex attribute (if present) into an already-initialized
+ * vector, resizing it as needed. General-purpose compute-cache primitive:
+ * lets a worker function skip recomputation when a prior run already stored
+ * its result under this attribute name.
+ * @param graph Graph to read from
+ * @param name Vertex attribute name
+ * @param out Initialized vector to fill
+ * @return true if the attribute existed and out was populated, false otherwise
+ */
+bool graph_cache_load_vertex_attr(const igraph_t *graph, const char *name, igraph_vector_t *out);
+
+/**
+ * Store a numeric vertex attribute for all vertices, overwriting any
+ * existing values.
+ * @param graph Graph to write to
+ * @param name Vertex attribute name
+ * @param values Vector of per-vertex values (size must equal vertex count)
+ */
+void graph_cache_store_vertex_attr(igraph_t *graph, const char *name, const igraph_vector_t *values);
+
+/**
+ * Edge-side twin of graph_cache_load_vertex_attr(): loads a numeric edge
+ * attribute (if present), in edge-ID order.
+ */
+bool graph_cache_load_edge_attr(const igraph_t *graph, const char *name, igraph_vector_t *out);
+
+/**
+ * Edge-side twin of graph_cache_store_vertex_attr(): stores a numeric edge
+ * attribute for all edges, in edge-ID order.
+ */
+void graph_cache_store_edge_attr(igraph_t *graph, const char *name, const igraph_vector_t *values);
+
 #endif // GRAPH_CORE_H

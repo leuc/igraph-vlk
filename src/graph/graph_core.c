@@ -491,3 +491,40 @@ bool graph_build_edge_weights(const igraph_t *graph, igraph_vector_t *out_weight
 	}
 	return true;
 }
+
+// ============================================================================
+// General-purpose compute-cache: store/load a whole numeric vertex or edge
+// attribute in one call, so a worker function can skip recomputation when a
+// prior run already persisted its result under this attribute name.
+// ============================================================================
+bool graph_cache_load_vertex_attr(const igraph_t *graph, const char *name, igraph_vector_t *out)
+{
+	if (!igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_VERTEX, name))
+		return false;
+	if (VANV(graph, name, out) != IGRAPH_SUCCESS)
+		return false;
+	printf("[Cache] '%s' loaded from cached vertex attribute\n", name);
+	return true;
+}
+
+void graph_cache_store_vertex_attr(igraph_t *graph, const char *name, const igraph_vector_t *values)
+{
+	if (SETVANV(graph, name, values) != IGRAPH_SUCCESS)
+		fprintf(stderr, "[Cache] Failed to store '%s' vertex attribute\n", name);
+}
+
+bool graph_cache_load_edge_attr(const igraph_t *graph, const char *name, igraph_vector_t *out)
+{
+	if (!igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_EDGE, name))
+		return false;
+	if (EANV(graph, name, out) != IGRAPH_SUCCESS)
+		return false;
+	printf("[Cache] '%s' loaded from cached edge attribute\n", name);
+	return true;
+}
+
+void graph_cache_store_edge_attr(igraph_t *graph, const char *name, const igraph_vector_t *values)
+{
+	if (SETEANV(graph, name, values) != IGRAPH_SUCCESS)
+		fprintf(stderr, "[Cache] Failed to store '%s' edge attribute\n", name);
+}

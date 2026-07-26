@@ -74,4 +74,9 @@ void apply_edge_centrality_scores(ExecutionContext *ctx, void *result_data);
 // for the new 'convergence' attribute
 void apply_convergence_degree(ExecutionContext *ctx, void *result_data);
 
+// Removes every attribute a Rank command may have cached (see the name table
+// in wrappers_centrality.c), so the next Rank invocation recomputes instead of
+// reapplying values that are now stale. Call after any in-place graph edit.
+void centrality_clear_cached_attrs(igraph_t *graph);
+
 #endif // GRAPH_WRAPPERS_CENTRALITY_H

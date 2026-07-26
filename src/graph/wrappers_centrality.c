@@ -34,6 +34,9 @@ void *compute_igraph_degree(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_vertex_attr(graph, "degree", result))
+		return result;
+
 	igraph_vector_int_t degrees;
 	if (igraph_vector_int_init(&degrees, vcount) != IGRAPH_SUCCESS) {
 		igraph_vector_destroy(result);
@@ -47,6 +50,7 @@ void *compute_igraph_degree(ExecutionContext *ctx)
 	}
 
 	igraph_vector_int_destroy(&degrees);
+	graph_cache_store_vertex_attr(graph, "degree", result);
 	return result;
 }
 
@@ -65,6 +69,9 @@ void *compute_igraph_closeness_cutoff(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_vertex_attr(graph, "closeness", result))
+		return result;
+
 	igraph_bool_t all_reach;
 	igraph_vector_t weights;
 	bool has_weights = graph_build_edge_weights(graph, &weights);
@@ -79,6 +86,7 @@ void *compute_igraph_closeness_cutoff(ExecutionContext *ctx)
 		IGRAPH_FREE(result);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr(graph, "closeness", result);
 	return result;
 }
 
@@ -97,6 +105,9 @@ void *compute_igraph_betweenness(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_vertex_attr(graph, "betweenness", result))
+		return result;
+
 	igraph_vector_t weights;
 	bool has_weights = graph_build_edge_weights(graph, &weights);
 
@@ -110,6 +121,7 @@ void *compute_igraph_betweenness(ExecutionContext *ctx)
 		IGRAPH_FREE(result);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr(graph, "betweenness", result);
 	return result;
 }
 
@@ -128,6 +140,9 @@ void *compute_igraph_eigenvector_centrality(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_vertex_attr(graph, "eigenvector-centrality", result))
+		return result;
+
 	igraph_vector_t weights;
 	bool has_weights = graph_build_edge_weights(graph, &weights);
 
@@ -141,6 +156,7 @@ void *compute_igraph_eigenvector_centrality(ExecutionContext *ctx)
 		IGRAPH_FREE(result);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr(graph, "eigenvector-centrality", result);
 	return result;
 }
 
@@ -159,6 +175,9 @@ void *compute_igraph_pagerank(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_vertex_attr(graph, "pagerank", result))
+		return result;
+
 	igraph_vector_t weights;
 	bool has_weights = graph_build_edge_weights(graph, &weights);
 
@@ -172,6 +191,7 @@ void *compute_igraph_pagerank(ExecutionContext *ctx)
 		IGRAPH_FREE(result);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr(graph, "pagerank", result);
 	return result;
 }
 
@@ -191,6 +211,9 @@ void *compute_igraph_hub_and_authority_scores(ExecutionContext *ctx)
 		IGRAPH_FREE(result);
 		return NULL;
 	}
+
+	if (graph_cache_load_vertex_attr(graph, "hits-hub", result))
+		return result;
 
 	igraph_vector_t weights;
 	bool has_weights = graph_build_edge_weights(graph, &weights);
@@ -233,6 +256,7 @@ void *compute_igraph_hub_and_authority_scores(ExecutionContext *ctx)
 		igraph_vector_destroy(&authority_scores);
 	}
 
+	graph_cache_store_vertex_attr(graph, "hits-hub", result);
 	return result;
 }
 
@@ -251,6 +275,9 @@ void *compute_igraph_harmonic_centrality(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_vertex_attr(graph, "harmonic-centrality", result))
+		return result;
+
 	igraph_vector_t weights;
 	bool has_weights = graph_build_edge_weights(graph, &weights);
 
@@ -264,6 +291,7 @@ void *compute_igraph_harmonic_centrality(ExecutionContext *ctx)
 		IGRAPH_FREE(result);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr(graph, "harmonic-centrality", result);
 	return result;
 }
 
@@ -282,6 +310,9 @@ void *compute_igraph_strength(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_vertex_attr(graph, "strength", result))
+		return result;
+
 	igraph_vector_t weights;
 	bool has_weights = graph_build_edge_weights(graph, &weights);
 
@@ -295,6 +326,7 @@ void *compute_igraph_strength(ExecutionContext *ctx)
 		IGRAPH_FREE(result);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr(graph, "strength", result);
 	return result;
 }
 
@@ -312,6 +344,9 @@ void *compute_igraph_coreness(ExecutionContext *ctx)
 		IGRAPH_FREE(result);
 		return NULL;
 	}
+
+	if (graph_cache_load_vertex_attr(graph, "coreness", result))
+		return result;
 
 	igraph_vector_int_t coreness;
 	if (igraph_vector_int_init(&coreness, vcount) != IGRAPH_SUCCESS) {
@@ -333,6 +368,7 @@ void *compute_igraph_coreness(ExecutionContext *ctx)
 	}
 
 	igraph_vector_int_destroy(&coreness);
+	graph_cache_store_vertex_attr(graph, "coreness", result);
 	return result;
 }
 
@@ -351,6 +387,9 @@ void *compute_igraph_constraint(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_vertex_attr(graph, "constraint", result))
+		return result;
+
 	igraph_vector_t weights;
 	bool has_weights = graph_build_edge_weights(graph, &weights);
 
@@ -364,6 +403,7 @@ void *compute_igraph_constraint(ExecutionContext *ctx)
 		IGRAPH_FREE(result);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr(graph, "constraint", result);
 	return result;
 }
 
@@ -397,6 +437,19 @@ static bool cd_index_parse_date(const char *s, igraph_integer_t *out_days)
 	return true;
 }
 
+// CD index is bipolar (-1 disruptive .. 0 .. +1 consolidating) and NaN for
+// vertices with no relevant future citations, neither of which suits a size
+// mapping — magnitude of disruption drives size regardless of direction, NaN
+// reads as "no signal" (smallest size), same as 0. Applied identically after
+// a fresh compute and after loading the cached 'cd-index' attribute.
+static void cd_index_apply_display_transform(igraph_vector_t *result, igraph_integer_t vcount)
+{
+	for (igraph_integer_t i = 0; i < vcount; i++) {
+		igraph_real_t v = VECTOR(*result)[i];
+		VECTOR(*result)[i] = isnan(v) ? 0.0 : fabs(v);
+	}
+}
+
 void *compute_igraph_cd_index(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -406,9 +459,25 @@ void *compute_igraph_cd_index(ExecutionContext *ctx)
 	}
 	if (!graph || igraph_vcount(graph) == 0)
 		return NULL;
+	igraph_integer_t vcount = igraph_vcount(graph);
+
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
+	if (!result)
+		return NULL;
+	if (igraph_vector_init(result, 0) != IGRAPH_SUCCESS) {
+		IGRAPH_FREE(result);
+		return NULL;
+	}
+
+	if (graph_cache_load_vertex_attr(graph, "cd-index", result)) {
+		cd_index_apply_display_transform(result, vcount);
+		return result;
+	}
 
 	if (!igraph_is_directed(graph)) {
 		fprintf(stderr, "CD index requires a directed graph\n");
+		igraph_vector_destroy(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 
@@ -416,18 +485,24 @@ void *compute_igraph_cd_index(ExecutionContext *ctx)
 	igraph_has_loop(graph, &has_loops);
 	if (has_loops) {
 		fprintf(stderr, "CD index does not support self-loops (run Simplify first)\n");
+		igraph_vector_destroy(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 
 	if (!igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_VERTEX, CD_INDEX_DATE_ATTR)) {
 		fprintf(stderr, "CD index requires a '%s' vertex attribute (ISO 8601, e.g. \"1999-07-05\")\n", CD_INDEX_DATE_ATTR);
+		igraph_vector_destroy(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 
-	igraph_integer_t vcount = igraph_vcount(graph);
 	igraph_vector_int_t timestamps;
-	if (igraph_vector_int_init(&timestamps, vcount) != IGRAPH_SUCCESS)
+	if (igraph_vector_int_init(&timestamps, vcount) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(result);
+		IGRAPH_FREE(result);
 		return NULL;
+	}
 
 	for (igraph_integer_t i = 0; i < vcount; i++) {
 		const char *s = igraph_cattribute_VAS(graph, CD_INDEX_DATE_ATTR, i);
@@ -435,20 +510,11 @@ void *compute_igraph_cd_index(ExecutionContext *ctx)
 		if (!cd_index_parse_date(s, &days)) {
 			fprintf(stderr, "CD index: vertex %lld has invalid '%s' value \"%s\" (expected ISO 8601, e.g. \"1999-07-05\")\n", (long long)i, CD_INDEX_DATE_ATTR, s ? s : "");
 			igraph_vector_int_destroy(&timestamps);
+			igraph_vector_destroy(result);
+			IGRAPH_FREE(result);
 			return NULL;
 		}
 		VECTOR(timestamps)[i] = days;
-	}
-
-	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
-	if (!result) {
-		igraph_vector_int_destroy(&timestamps);
-		return NULL;
-	}
-	if (igraph_vector_init(result, 0) != IGRAPH_SUCCESS) {
-		IGRAPH_FREE(result);
-		igraph_vector_int_destroy(&timestamps);
-		return NULL;
 	}
 
 	igraph_error_t code = igraph_cd_index(graph, &timestamps, result, NULL, NULL, igraph_vss_all(), CD_INDEX_TIME_WINDOW_DAYS);
@@ -462,29 +528,21 @@ void *compute_igraph_cd_index(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	// Store the raw (signed, possibly NaN) score, but hand apply_centrality_scores
-	// |score| instead: CD index is bipolar (-1 disruptive .. 0 .. +1 consolidating)
-	// and NaN for vertices with no relevant future citations, neither of which
-	// suits a size mapping — magnitude of disruption drives size regardless of
-	// direction, NaN reads as "no signal" (smallest size), same as 0.
 	// "cd-index-type" buckets the sign into a low-cardinality string attribute
 	// (Filter > Node only works on those): "nan" for no relevant future
 	// citations, else "disruptive"/"consolidating" by sign (0 counts as
-	// consolidating).
+	// consolidating). Computed from the still-raw result, before the display
+	// transform below overwrites it.
 	for (igraph_integer_t i = 0; i < vcount; i++) {
 		igraph_real_t v = VECTOR(*result)[i];
-		bool is_nan = isnan(v);
-		if (SETVAN(graph, "cd-index", i, v) != IGRAPH_SUCCESS) {
-			fprintf(stderr, "CD index: SETVAN failed for vertex %lld\n", (long long)i);
-			break;
-		}
-		const char *type = is_nan ? "nan" : (v > 0.0 ? "disruptive" : "consolidating");
+		const char *type = isnan(v) ? "nan" : (v > 0.0 ? "disruptive" : "consolidating");
 		if (SETVAS(graph, "cd-index-type", i, type) != IGRAPH_SUCCESS) {
 			fprintf(stderr, "CD index: SETVAS failed for vertex %lld\n", (long long)i);
 			break;
 		}
-		VECTOR(*result)[i] = is_nan ? 0.0 : fabs(v);
 	}
+	graph_cache_store_vertex_attr(graph, "cd-index", result);
+	cd_index_apply_display_transform(result, vcount);
 
 	return result;
 }
@@ -504,6 +562,9 @@ void *compute_igraph_edge_betweenness(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_edge_attr(graph, "edge-betweenness", result))
+		return result;
+
 	igraph_vector_t weights;
 	bool has_weights = graph_build_edge_weights(graph, &weights);
 
@@ -517,6 +578,7 @@ void *compute_igraph_edge_betweenness(ExecutionContext *ctx)
 		IGRAPH_FREE(result);
 		return NULL;
 	}
+	graph_cache_store_edge_attr(graph, "edge-betweenness", result);
 	return result;
 }
 
@@ -524,6 +586,14 @@ void *compute_igraph_edge_betweenness(ExecutionContext *ctx)
 // side effect, then hands apply_edge_centrality_scores |degree| instead of the signed
 // value: visual intensity should track how convergent/divergent an edge is, not its
 // sign, same rationale as compute_igraph_cd_index for the vertex case.
+// Magnitude drives visual intensity regardless of sign — applied identically
+// after a fresh compute and after loading the cached 'convergence-degree' attribute.
+static void convergence_degree_apply_display_transform(igraph_vector_t *result, igraph_integer_t ecount)
+{
+	for (igraph_integer_t i = 0; i < ecount; i++)
+		VECTOR(*result)[i] = fabs(VECTOR(*result)[i]);
+}
+
 void *compute_igraph_convergence_degree(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -538,6 +608,11 @@ void *compute_igraph_convergence_degree(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_edge_attr(graph, "convergence-degree", result)) {
+		convergence_degree_apply_display_transform(result, ecount);
+		return result;
+	}
+
 	if (igraph_convergence_degree(graph, result, NULL, NULL) != IGRAPH_SUCCESS) {
 		fprintf(stderr, "igraph_convergence_degree failed\n");
 		igraph_vector_destroy(result);
@@ -545,19 +620,19 @@ void *compute_igraph_convergence_degree(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	// 'convergence' buckets the sign into a low-cardinality string attribute
+	// (Filter > Edge only works on those). Computed from the still-raw result,
+	// before the display transform below overwrites it.
 	for (igraph_integer_t i = 0; i < ecount; i++) {
 		igraph_real_t v = VECTOR(*result)[i];
-		if (SETEAN(graph, "convergence-degree", i, v) != IGRAPH_SUCCESS) {
-			fprintf(stderr, "Convergence degree: SETEAN failed for edge %lld\n", (long long)i);
-			break;
-		}
 		const char *label = (v > 0.0) ? "convergent" : (v < 0.0) ? "divergent" : "neutral";
 		if (SETEAS(graph, "convergence", i, label) != IGRAPH_SUCCESS) {
 			fprintf(stderr, "Convergence degree: SETEAS failed for edge %lld\n", (long long)i);
 			break;
 		}
-		VECTOR(*result)[i] = fabs(v);
 	}
+	graph_cache_store_edge_attr(graph, "convergence-degree", result);
+	convergence_degree_apply_display_transform(result, ecount);
 
 	return result;
 }
@@ -573,29 +648,35 @@ void *compute_igraph_trussness(ExecutionContext *ctx)
 		return NULL;
 	}
 	igraph_integer_t ecount = igraph_ecount(graph);
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
+	if (igraph_vector_init(result, ecount) != IGRAPH_SUCCESS) {
+		IGRAPH_FREE(result);
+		return NULL;
+	}
+
+	if (graph_cache_load_edge_attr(graph, "trussness", result))
+		return result;
 
 	igraph_vector_int_t truss;
-	if (igraph_vector_int_init(&truss, 0) != IGRAPH_SUCCESS)
+	if (igraph_vector_int_init(&truss, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(result);
+		IGRAPH_FREE(result);
 		return NULL;
+	}
 
 	igraph_error_t code = igraph_trussness(graph, &truss);
 	if (code != IGRAPH_SUCCESS) {
 		fprintf(stderr, "igraph_trussness failed: %s\n", igraph_strerror(code));
 		igraph_vector_int_destroy(&truss);
-		return NULL;
-	}
-
-	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
-	if (!result || igraph_vector_init(result, ecount) != IGRAPH_SUCCESS) {
-		if (result)
-			IGRAPH_FREE(result);
-		igraph_vector_int_destroy(&truss);
+		igraph_vector_destroy(result);
+		IGRAPH_FREE(result);
 		return NULL;
 	}
 	for (igraph_integer_t i = 0; i < ecount; i++)
 		VECTOR(*result)[i] = (igraph_real_t)VECTOR(truss)[i];
 
 	igraph_vector_int_destroy(&truss);
+	graph_cache_store_edge_attr(graph, "trussness", result);
 	return result;
 }
 
@@ -730,5 +811,34 @@ void centrality_scores_free(void *result_data)
 	if (result_data) {
 		igraph_vector_destroy((igraph_vector_t *)result_data);
 		IGRAPH_FREE(result_data);
+	}
+}
+
+// ============================================================================
+// Every attribute name a Rank command may have cached, so an in-place graph
+// edit (Alter menu) can wipe them all and force the next Rank click to
+// recompute rather than reapply now-stale values.
+// ============================================================================
+static const struct
+{
+	const char *name;
+	bool is_edge;
+} RANK_CACHED_ATTRS[] = {
+	{"degree", false}, {"closeness", false}, {"betweenness", false}, {"eigenvector-centrality", false}, {"pagerank", false}, {"hits-hub", false}, {"harmonic-centrality", false}, {"strength", false}, {"constraint", false}, {"coreness", false}, {"cd-index", false}, {"cd-index-type", false}, {"edge-betweenness", true}, {"trussness", true}, {"convergence-degree", true}, {"convergence", true},
+};
+
+void centrality_clear_cached_attrs(igraph_t *graph)
+{
+	if (!graph)
+		return;
+	for (size_t i = 0; i < sizeof(RANK_CACHED_ATTRS) / sizeof(RANK_CACHED_ATTRS[0]); i++) {
+		const char *name = RANK_CACHED_ATTRS[i].name;
+		igraph_attribute_elemtype_t kind = RANK_CACHED_ATTRS[i].is_edge ? IGRAPH_ATTRIBUTE_EDGE : IGRAPH_ATTRIBUTE_VERTEX;
+		if (!igraph_cattribute_has_attr(graph, kind, name))
+			continue;
+		if (RANK_CACHED_ATTRS[i].is_edge)
+			DELEA(graph, name);
+		else
+			DELVA(graph, name);
 	}
 }
