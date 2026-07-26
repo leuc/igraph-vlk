@@ -353,6 +353,7 @@ bool renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	igraph_integer_t max_level = calculate_dag_levels(&graph->g, &levels);
 	if (max_level < 0) {
 		igraph_vector_int_destroy(&levels);
+		r->splc.buffer_edge_count = (uint32_t)m;
 		splc_create_fallback_buffers(r, m);
 		splc_write_graphics_descriptors(r);
 		splc_destroy_buffer(r->core.device, old_bufs[1].buf, old_bufs[1].mem);
@@ -373,6 +374,7 @@ bool renderer_init_splc_buffers(Renderer *r, GraphData *graph)
 	uint32_t total_splc_edges;
 	splc_build_topology(&graph->g, n, &splc_nodes, &splc_edges, &traffic, &total_splc_edges);
 
+	r->splc.buffer_edge_count = total_splc_edges;
 	splc_create_gpu_buffers(r, n, total_splc_edges, splc_nodes, splc_edges, traffic);
 	splc_write_compute_descriptors(r);
 	splc_write_graphics_descriptors(r);
@@ -444,7 +446,7 @@ void renderer_readback_splc_weights(Renderer *r, GraphData *graph)
 	if (!r->core.has_atomic_float || r->splc.edges_memory == VK_NULL_HANDLE)
 		return;
 
-	VkDeviceSize edge_buf_size = sizeof(SPLCEdge) * graph->edge_count;
+	VkDeviceSize edge_buf_size = sizeof(SPLCEdge) * r->splc.buffer_edge_count;
 	void *mapped;
 	VK_CHECK(vkMapMemory(r->core.device, r->splc.edges_memory, 0, edge_buf_size, 0, &mapped), "Failed to map SPLC edges for readback");
 	SPLCEdge *splc_edges = malloc(edge_buf_size);

@@ -349,6 +349,11 @@ typedef struct
 	VkBuffer max_buffer;
 	VkDeviceMemory max_memory;
 	VkPipelineLayout pipeline_layout;
+	// Edge count the edges_buffer/edges_memory were actually sized for — the
+	// deduplicated (IGRAPH_NO_MULTIPLE) SPLC edge count, which is smaller than
+	// GraphData.edge_count whenever the graph has multi-edges. Readback must
+	// map by this, not graph->edge_count, or it oversteps the buffer.
+	uint32_t buffer_edge_count;
 } SPLCComputeContext;
 
 typedef struct
