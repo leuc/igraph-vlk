@@ -15,7 +15,7 @@
 
 // ============================================================================
 // (Re)scan vertex attributes for low-cardinality string/boolean ones and
-// populate data->filterable_attrs (backs the Node > Filter menu).
+// populate data->filterable_attrs (backs the Filter > Node menu).
 // ============================================================================
 void graph_detect_filterable_attrs(GraphData *data)
 {
@@ -143,7 +143,7 @@ void graph_detect_filterable_attrs(GraphData *data)
 
 // ============================================================================
 // (Re)scan edge attributes for low-cardinality string/boolean ones and
-// populate data->filterable_edge_attrs (backs the Edge > Filter menu).
+// populate data->filterable_edge_attrs (backs the Filter > Edge menu).
 // ============================================================================
 void graph_detect_filterable_edge_attrs(GraphData *data)
 {

@@ -104,6 +104,8 @@ const CommandDef g_command_registry[] = {
 	{"Rank", "igraph_constraint", "Constraint (Structural Holes)", compute_igraph_constraint, apply_centrality_scores, centrality_scores_free},
 	{"Rank", "igraph_coreness", "Coreness (k-Core)", compute_igraph_coreness, apply_centrality_scores, centrality_scores_free},
 	{"Rank", "igraph_cd_index", "CD Index (Citation Disruption)", compute_igraph_cd_index, apply_cd_index, centrality_scores_free},
+	{"Rank", "igraph_edge_betweenness", "Edge Betweenness", compute_igraph_edge_betweenness, apply_edge_centrality_scores, centrality_scores_free},
+	{"Rank", "igraph_convergence_degree", "Convergence Degree", compute_igraph_convergence_degree, apply_convergence_degree, centrality_scores_free},
 
 	{"Group", "igraph_community_multilevel", "Louvain Method (Multilevel)", compute_igraph_community_multilevel, apply_community_membership, free_community_membership},
 	{"Group", "igraph_community_leiden", "Leiden", compute_igraph_community_leiden, apply_community_membership, free_community_membership},
@@ -150,17 +152,16 @@ const CommandDef g_command_registry[] = {
 	// Data menu — Famous (display_name=NULL: built by dynamic population)
 	{"Data/Famous", "igraph_famous", NULL, compute_igraph_famous, apply_new_graph, free_new_graph, NULL, (const CommandParamDef[]){{"name", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 1},
 
-	// Show menu — Filter (display_name=NULL: built by dynamic population)
+	// Filter > Node (display_name=NULL: built by dynamic population)
 	{"Show", "filter_show_all", NULL, compute_inline_pass, apply_filter_reset, free_noop},
 	{"Show", "filter_by_attr", NULL, compute_filter_by_attr, apply_filter_by_attr, free_filter_params, NULL, (const CommandParamDef[]){{"attr_name", PARAM_TYPE_STRING, 0, 0, NULL, 0}, {"attr_value", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 2},
 
-	// Show menu — Edge Filter (display_name=NULL: built by dynamic population)
+	// Filter > Edge (display_name=NULL: built by dynamic population)
 	{"Show", "filter_edge_show_all", NULL, compute_inline_pass, apply_filter_edge_reset, free_noop},
 	{"Show", "filter_by_edge_attr", NULL, compute_filter_by_attr, apply_filter_by_edge_attr, free_filter_params, NULL, (const CommandParamDef[]){{"attr_name", PARAM_TYPE_STRING, 0, 0, NULL, 0}, {"attr_value", PARAM_TYPE_STRING, 0, 0, NULL, 0}}, 2},
 
 	// Root menu
-	{"", NULL, "Node", NULL, NULL, NULL}, // branch anchor
-	{"", NULL, "Edge", NULL, NULL, NULL}, // branch anchor
+	{"", NULL, "Filter", NULL, NULL, NULL}, // branch anchor
 	{"", "quit", "Quit", compute_inline_pass, apply_quit, free_noop},
 
 };

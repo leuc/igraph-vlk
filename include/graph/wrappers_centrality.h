@@ -46,12 +46,28 @@ void *compute_igraph_constraint(ExecutionContext *ctx);
 // and a 'date' vertex attribute (ISO 8601 string, e.g. "1999-07-05")
 void *compute_igraph_cd_index(ExecutionContext *ctx);
 
+// Edge betweenness centrality
+void *compute_igraph_edge_betweenness(ExecutionContext *ctx);
+
+// Convergence degree — signed per-edge value in (-1, 1); positive = convergent,
+// negative = divergent. Persists 'convergence' (string) and 'convergence-degree'
+// (numeric) edge attributes as a side effect.
+void *compute_igraph_convergence_degree(ExecutionContext *ctx);
+
 // Standard apply and free functions for centrality scores
 void apply_centrality_scores(ExecutionContext *ctx, void *result_data);
 void centrality_scores_free(void *result_data);
 
-// CD index apply: standard sizing, plus refreshes Node > Filter for the new
+// CD index apply: standard sizing, plus refreshes Filter > Node for the new
 // 'cd-index-type' attribute
 void apply_cd_index(ExecutionContext *ctx, void *result_data);
+
+// Standard apply for edge-based scores (min/max-normalizes onto Edge.weight,
+// which drives edge alpha in the renderer — the edge-side twin of apply_centrality_scores)
+void apply_edge_centrality_scores(ExecutionContext *ctx, void *result_data);
+
+// Convergence degree apply: standard edge sizing, plus refreshes Filter > Edge
+// for the new 'convergence' attribute
+void apply_convergence_degree(ExecutionContext *ctx, void *result_data);
 
 #endif // GRAPH_WRAPPERS_CENTRALITY_H

@@ -468,7 +468,7 @@ void *compute_igraph_cd_index(ExecutionContext *ctx)
 	// suits a size mapping — magnitude of disruption drives size regardless of
 	// direction, NaN reads as "no signal" (smallest size), same as 0.
 	// "cd-index-type" buckets the sign into a low-cardinality string attribute
-	// (Node > Filter only works on those): "nan" for no relevant future
+	// (Filter > Node only works on those): "nan" for no relevant future
 	// citations, else "disruptive"/"consolidating" by sign (0 counts as
 	// consolidating).
 	for (igraph_integer_t i = 0; i < vcount; i++) {
@@ -484,6 +484,79 @@ void *compute_igraph_cd_index(ExecutionContext *ctx)
 			break;
 		}
 		VECTOR(*result)[i] = is_nan ? 0.0 : fabs(v);
+	}
+
+	return result;
+}
+
+// Edge betweenness centrality
+void *compute_igraph_edge_betweenness(ExecutionContext *ctx)
+{
+	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
+	igraph_integer_t ecount = igraph_ecount(graph);
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
+	if (igraph_vector_init(result, ecount) != IGRAPH_SUCCESS) {
+		IGRAPH_FREE(result);
+		return NULL;
+	}
+
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code = igraph_edge_betweenness(graph, has_weights ? &weights : NULL, result, igraph_ess_all(IGRAPH_EDGEORDER_ID), igraph_is_directed(graph) ? IGRAPH_DIRECTED : IGRAPH_UNDIRECTED, 1);
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
+	return result;
+}
+
+// Convergence degree — writes 'convergence'/'convergence-degree' edge attributes as a
+// side effect, then hands apply_edge_centrality_scores |degree| instead of the signed
+// value: visual intensity should track how convergent/divergent an edge is, not its
+// sign, same rationale as compute_igraph_cd_index for the vertex case.
+void *compute_igraph_convergence_degree(ExecutionContext *ctx)
+{
+	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
+	igraph_integer_t ecount = igraph_ecount(graph);
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
+	if (igraph_vector_init(result, ecount) != IGRAPH_SUCCESS) {
+		IGRAPH_FREE(result);
+		return NULL;
+	}
+
+	if (igraph_convergence_degree(graph, result, NULL, NULL) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "igraph_convergence_degree failed\n");
+		igraph_vector_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
+
+	for (igraph_integer_t i = 0; i < ecount; i++) {
+		igraph_real_t v = VECTOR(*result)[i];
+		if (SETEAN(graph, "convergence-degree", i, v) != IGRAPH_SUCCESS) {
+			fprintf(stderr, "Convergence degree: SETEAN failed for edge %lld\n", (long long)i);
+			break;
+		}
+		const char *label = (v > 0.0) ? "convergent" : (v < 0.0) ? "divergent" : "neutral";
+		if (SETEAS(graph, "convergence", i, label) != IGRAPH_SUCCESS) {
+			fprintf(stderr, "Convergence degree: SETEAS failed for edge %lld\n", (long long)i);
+			break;
+		}
+		VECTOR(*result)[i] = fabs(v);
 	}
 
 	return result;
@@ -540,7 +613,7 @@ void apply_centrality_scores(ExecutionContext *ctx, void *result_data)
 // Apply: CD index writes new 'cd-index'/'cd-index-type' vertex attributes as
 // a side effect (unlike every other Rank command), so on top of the shared
 // sizing logic this refreshes GraphData.filterable_attrs and repopulates the
-// Node > Filter menu so 'cd-index-type' shows up there right away.
+// Filter > Node menu so 'cd-index-type' shows up there right away.
 // ============================================================================
 void apply_cd_index(ExecutionContext *ctx, void *result_data)
 {
@@ -551,6 +624,68 @@ void apply_cd_index(ExecutionContext *ctx, void *result_data)
 	AppState *state = ctx->app_state;
 	graph_detect_filterable_attrs(&state->current_graph);
 	menu_populate_attribute_filters(state->app_ctx.menu.root, &state->current_graph);
+}
+
+// ============================================================================
+// Apply: edge-side twin of apply_centrality_scores — min/max-normalizes the
+// score vector onto Edge.weight, which drives edge alpha in the renderer.
+// ============================================================================
+void apply_edge_centrality_scores(ExecutionContext *ctx, void *result_data)
+{
+	if (!ctx || !ctx->app_state || !result_data) {
+		fprintf(stderr, "[apply_edge_centrality_scores] Error: Invalid parameters\n");
+		return;
+	}
+
+	AppState *state = ctx->app_state;
+	GraphData *data = &state->current_graph;
+	Renderer *renderer = &state->renderer;
+	igraph_vector_t *scores = (igraph_vector_t *)result_data;
+
+	if (!data->graph_initialized) {
+		fprintf(stderr, "[apply_edge_centrality_scores] Error: Graph not initialized\n");
+		return;
+	}
+
+	if (igraph_vector_size(scores) != data->edge_count) {
+		fprintf(stderr, "[apply_edge_centrality_scores] Error: Scores size doesn't match edge count\n");
+		return;
+	}
+
+	// Find min/max for normalization
+	igraph_real_t min_v, max_v;
+	igraph_vector_minmax(scores, &min_v, &max_v);
+	igraph_real_t range = max_v - min_v;
+
+	// Map scores to edge weight (drives alpha in the renderer)
+	for (uint32_t i = 0; i < data->edge_count; i++) {
+		igraph_real_t val = VECTOR(*scores)[i];
+		float normalized = (range > 0) ? (float)((val - min_v) / range) : 1.0f;
+		data->edges[i].weight = normalized;
+	}
+
+	// Refresh renderer
+	renderer->needsAttributeUpload = VK_TRUE;
+	renderer_update_graph(renderer, data);
+
+	printf("[apply_edge_centrality_scores] Edge centrality applied\n");
+}
+
+// ============================================================================
+// Apply: Convergence degree writes new 'convergence'/'convergence-degree' edge
+// attributes as a side effect, so on top of the shared sizing logic this
+// refreshes GraphData.filterable_edge_attrs and repopulates the Filter > Edge
+// menu so 'convergence' shows up there right away.
+// ============================================================================
+void apply_convergence_degree(ExecutionContext *ctx, void *result_data)
+{
+	apply_edge_centrality_scores(ctx, result_data);
+	if (!ctx || !ctx->app_state)
+		return;
+
+	AppState *state = ctx->app_state;
+	graph_detect_filterable_edge_attrs(&state->current_graph);
+	menu_populate_attribute_edge_filters(state->app_ctx.menu.root, &state->current_graph);
 }
 
 void centrality_scores_free(void *result_data)

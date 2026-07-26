@@ -394,24 +394,24 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 	// Clear any existing filter entries to prevent duplicates
 	menu_clear_attribute_filters(root, data);
 
-	// Find "Node" branch (created by init_menu_tree from the branch anchor)
-	MenuNode *node_branch = find_child_branch(root, "Node");
-	if (!node_branch)
+	// Find "Filter" branch (created by init_menu_tree from the branch anchor)
+	MenuNode *filter_root = find_child_branch(root, "Filter");
+	if (!filter_root)
 		return;
 
-	// Find or create "Filter" sub-branch
-	MenuNode *filter_branch = find_child_branch(node_branch, "Filter");
-	if (!filter_branch) {
-		filter_branch = create_menu_node("Filter", NODE_BRANCH);
-		if (!filter_branch)
+	// Find or create "Node" sub-branch
+	MenuNode *node_branch = find_child_branch(filter_root, "Node");
+	if (!node_branch) {
+		node_branch = create_menu_node("Node", NODE_BRANCH);
+		if (!node_branch)
 			return;
-		MenuNode **tmp = realloc(node_branch->children, sizeof(MenuNode *) * (node_branch->num_children + 1));
+		MenuNode **tmp = realloc(filter_root->children, sizeof(MenuNode *) * (filter_root->num_children + 1));
 		if (!tmp) {
-			menu_tree_destroy(filter_branch);
+			menu_tree_destroy(node_branch);
 			return;
 		}
-		node_branch->children = tmp;
-		node_branch->children[node_branch->num_children++] = filter_branch;
+		filter_root->children = tmp;
+		filter_root->children[filter_root->num_children++] = node_branch;
 	}
 
 	// Add "Show All" leaf using registry CommandDef
@@ -422,13 +422,13 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 	show_all->command = create_command("filter_show_all", "Show All", 0);
 	show_all->command->cmd_def = show_all_def;
 	{
-		MenuNode **tmp = realloc(filter_branch->children, sizeof(MenuNode *) * (filter_branch->num_children + 1));
+		MenuNode **tmp = realloc(node_branch->children, sizeof(MenuNode *) * (node_branch->num_children + 1));
 		if (!tmp) {
 			menu_tree_destroy(show_all);
 			return;
 		}
-		filter_branch->children = tmp;
-		filter_branch->children[filter_branch->num_children++] = show_all;
+		node_branch->children = tmp;
+		node_branch->children[node_branch->num_children++] = show_all;
 	}
 
 	if (data->num_filterable_attrs == 0)
@@ -469,13 +469,13 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 		}
 
 		{
-			MenuNode **tmp = realloc(filter_branch->children, sizeof(MenuNode *) * (filter_branch->num_children + 1));
+			MenuNode **tmp = realloc(node_branch->children, sizeof(MenuNode *) * (node_branch->num_children + 1));
 			if (!tmp) {
 				menu_tree_destroy(attr_branch);
 				continue;
 			}
-			filter_branch->children = tmp;
-			filter_branch->children[filter_branch->num_children++] = attr_branch;
+			node_branch->children = tmp;
+			node_branch->children[node_branch->num_children++] = attr_branch;
 		}
 	}
 }
@@ -499,14 +499,14 @@ void menu_clear_attribute_filters(MenuNode *root, GraphData *data)
 		return;
 	(void)data;
 
-	// Find "Node" branch, then "Filter" sub-branch, clear its children
-	MenuNode *node_branch = find_child_branch(root, "Node");
+	// Find "Filter" branch, then "Node" sub-branch, clear its children
+	MenuNode *filter_root = find_child_branch(root, "Filter");
+	if (!filter_root)
+		return;
+	MenuNode *node_branch = find_child_branch(filter_root, "Node");
 	if (!node_branch)
 		return;
-	MenuNode *filter_branch = find_child_branch(node_branch, "Filter");
-	if (!filter_branch)
-		return;
-	menu_clear_children(filter_branch);
+	menu_clear_children(node_branch);
 }
 
 void menu_populate_attribute_edge_filters(MenuNode *root, GraphData *data)
@@ -517,24 +517,24 @@ void menu_populate_attribute_edge_filters(MenuNode *root, GraphData *data)
 	// Clear any existing filter entries to prevent duplicates
 	menu_clear_attribute_edge_filters(root, data);
 
-	// Find "Edge" branch (created by init_menu_tree from the branch anchor)
-	MenuNode *edge_branch = find_child_branch(root, "Edge");
-	if (!edge_branch)
+	// Find "Filter" branch (created by init_menu_tree from the branch anchor)
+	MenuNode *filter_root = find_child_branch(root, "Filter");
+	if (!filter_root)
 		return;
 
-	// Find or create "Filter" sub-branch
-	MenuNode *filter_branch = find_child_branch(edge_branch, "Filter");
-	if (!filter_branch) {
-		filter_branch = create_menu_node("Filter", NODE_BRANCH);
-		if (!filter_branch)
+	// Find or create "Edge" sub-branch
+	MenuNode *edge_branch = find_child_branch(filter_root, "Edge");
+	if (!edge_branch) {
+		edge_branch = create_menu_node("Edge", NODE_BRANCH);
+		if (!edge_branch)
 			return;
-		MenuNode **tmp = realloc(edge_branch->children, sizeof(MenuNode *) * (edge_branch->num_children + 1));
+		MenuNode **tmp = realloc(filter_root->children, sizeof(MenuNode *) * (filter_root->num_children + 1));
 		if (!tmp) {
-			menu_tree_destroy(filter_branch);
+			menu_tree_destroy(edge_branch);
 			return;
 		}
-		edge_branch->children = tmp;
-		edge_branch->children[edge_branch->num_children++] = filter_branch;
+		filter_root->children = tmp;
+		filter_root->children[filter_root->num_children++] = edge_branch;
 	}
 
 	// Add "Show All" leaf using registry CommandDef
@@ -545,13 +545,13 @@ void menu_populate_attribute_edge_filters(MenuNode *root, GraphData *data)
 	show_all->command = create_command("filter_edge_show_all", "Show All", 0);
 	show_all->command->cmd_def = show_all_def;
 	{
-		MenuNode **tmp = realloc(filter_branch->children, sizeof(MenuNode *) * (filter_branch->num_children + 1));
+		MenuNode **tmp = realloc(edge_branch->children, sizeof(MenuNode *) * (edge_branch->num_children + 1));
 		if (!tmp) {
 			menu_tree_destroy(show_all);
 			return;
 		}
-		filter_branch->children = tmp;
-		filter_branch->children[filter_branch->num_children++] = show_all;
+		edge_branch->children = tmp;
+		edge_branch->children[edge_branch->num_children++] = show_all;
 	}
 
 	if (data->num_filterable_edge_attrs == 0)
@@ -592,13 +592,13 @@ void menu_populate_attribute_edge_filters(MenuNode *root, GraphData *data)
 		}
 
 		{
-			MenuNode **tmp = realloc(filter_branch->children, sizeof(MenuNode *) * (filter_branch->num_children + 1));
+			MenuNode **tmp = realloc(edge_branch->children, sizeof(MenuNode *) * (edge_branch->num_children + 1));
 			if (!tmp) {
 				menu_tree_destroy(attr_branch);
 				continue;
 			}
-			filter_branch->children = tmp;
-			filter_branch->children[filter_branch->num_children++] = attr_branch;
+			edge_branch->children = tmp;
+			edge_branch->children[edge_branch->num_children++] = attr_branch;
 		}
 	}
 }
@@ -609,14 +609,14 @@ void menu_clear_attribute_edge_filters(MenuNode *root, GraphData *data)
 		return;
 	(void)data;
 
-	// Find "Edge" branch, then "Filter" sub-branch, clear its children
-	MenuNode *edge_branch = find_child_branch(root, "Edge");
+	// Find "Filter" branch, then "Edge" sub-branch, clear its children
+	MenuNode *filter_root = find_child_branch(root, "Filter");
+	if (!filter_root)
+		return;
+	MenuNode *edge_branch = find_child_branch(filter_root, "Edge");
 	if (!edge_branch)
 		return;
-	MenuNode *filter_branch = find_child_branch(edge_branch, "Filter");
-	if (!filter_branch)
-		return;
-	menu_clear_children(filter_branch);
+	menu_clear_children(edge_branch);
 }
 
 // ============================================================================

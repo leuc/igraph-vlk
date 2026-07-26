@@ -42,7 +42,7 @@ MenuNode *menu_find_node_by_command_id(MenuNode *node, const char *command_id);
 // ============================================================================
 
 /**
- * Populate the "Node > Filter" submenu with entries from the graph's
+ * Populate the "Filter > Node" submenu with entries from the graph's
  * filterable attributes (low-cardinality string/boolean attributes).
  * @param root Root menu node
  * @param data GraphData with filterable_attrs populated
@@ -50,13 +50,13 @@ MenuNode *menu_find_node_by_command_id(MenuNode *node, const char *command_id);
 void menu_populate_attribute_filters(MenuNode *root, GraphData *data);
 
 /**
- * Clear all dynamically added filter entries from the "Node > Filter" submenu.
+ * Clear all dynamically added filter entries from the "Filter > Node" submenu.
  * @param root Root menu node
  */
 void menu_clear_attribute_filters(MenuNode *root, GraphData *data);
 
 /**
- * Populate the "Edge > Filter" submenu with entries from the graph's
+ * Populate the "Filter > Edge" submenu with entries from the graph's
  * filterable edge attributes (low-cardinality string/boolean attributes).
  * @param root Root menu node
  * @param data GraphData with filterable_edge_attrs populated
@@ -64,7 +64,7 @@ void menu_clear_attribute_filters(MenuNode *root, GraphData *data);
 void menu_populate_attribute_edge_filters(MenuNode *root, GraphData *data);
 
 /**
- * Clear all dynamically added filter entries from the "Edge > Filter" submenu.
+ * Clear all dynamically added filter entries from the "Filter > Edge" submenu.
  * @param root Root menu node
  */
 void menu_clear_attribute_edge_filters(MenuNode *root, GraphData *data);
