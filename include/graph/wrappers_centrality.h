@@ -54,6 +54,10 @@ void *compute_igraph_edge_betweenness(ExecutionContext *ctx);
 // (numeric) edge attributes as a side effect.
 void *compute_igraph_convergence_degree(ExecutionContext *ctx);
 
+// Edge trussness — highest k-truss each edge belongs to. Fails (returns NULL,
+// logs igraph's error) on graphs with multi-edges or mutual directed edge pairs.
+void *compute_igraph_trussness(ExecutionContext *ctx);
+
 // Standard apply and free functions for centrality scores
 void apply_centrality_scores(ExecutionContext *ctx, void *result_data);
 void centrality_scores_free(void *result_data);

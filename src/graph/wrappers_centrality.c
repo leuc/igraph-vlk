@@ -562,6 +562,43 @@ void *compute_igraph_convergence_degree(ExecutionContext *ctx)
 	return result;
 }
 
+// Edge trussness — highest k-truss each edge belongs to. igraph_trussness itself
+// rejects multigraphs (and directed graphs with mutual edge pairs) with a clear
+// error; just propagate it rather than duplicating that detection here.
+void *compute_igraph_trussness(ExecutionContext *ctx)
+{
+	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
+	igraph_integer_t ecount = igraph_ecount(graph);
+
+	igraph_vector_int_t truss;
+	if (igraph_vector_int_init(&truss, 0) != IGRAPH_SUCCESS)
+		return NULL;
+
+	igraph_error_t code = igraph_trussness(graph, &truss);
+	if (code != IGRAPH_SUCCESS) {
+		fprintf(stderr, "igraph_trussness failed: %s\n", igraph_strerror(code));
+		igraph_vector_int_destroy(&truss);
+		return NULL;
+	}
+
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
+	if (!result || igraph_vector_init(result, ecount) != IGRAPH_SUCCESS) {
+		if (result)
+			IGRAPH_FREE(result);
+		igraph_vector_int_destroy(&truss);
+		return NULL;
+	}
+	for (igraph_integer_t i = 0; i < ecount; i++)
+		VECTOR(*result)[i] = (igraph_real_t)VECTOR(truss)[i];
+
+	igraph_vector_int_destroy(&truss);
+	return result;
+}
+
 // ============================================================================
 // Apply and Free Functions
 // ============================================================================
