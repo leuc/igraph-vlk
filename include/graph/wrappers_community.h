@@ -59,4 +59,10 @@ void free_community_membership(void *result_data);
 // (e.g. representative vertex ids), not just compact 0..C-1 indices.
 void community_id_to_rgb(igraph_integer_t comm_id, float out_rgb[3]);
 
+// Removes every attribute a Group command may have cached (see the name
+// table in wrappers_community.c), so the next Group invocation recomputes
+// instead of reapplying values that are now stale. Call after any in-place
+// graph edit.
+void community_clear_cached_attrs(igraph_t *graph);
+
 #endif // GRAPH_WRAPPERS_COMMUNITY_H

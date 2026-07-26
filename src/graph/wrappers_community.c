@@ -34,6 +34,9 @@ void *compute_igraph_community_multilevel(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_vertex_attr_int(graph, "community-louvain", membership))
+		return membership;
+
 	igraph_vector_t modularity;
 	if (igraph_vector_init(&modularity, 0) != IGRAPH_SUCCESS) {
 		igraph_vector_int_destroy(membership);
@@ -56,6 +59,7 @@ void *compute_igraph_community_multilevel(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr_int(graph, "community-louvain", membership);
 	return membership;
 }
 
@@ -73,6 +77,9 @@ void *compute_igraph_community_leiden(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+
+	if (graph_cache_load_vertex_attr_int(graph, "community-leiden", membership))
+		return membership;
 
 	igraph_int_t nb_clusters;
 	igraph_real_t quality;
@@ -101,6 +108,7 @@ void *compute_igraph_community_leiden(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr_int(graph, "community-leiden", membership);
 	return membership;
 }
 
@@ -118,6 +126,9 @@ void *compute_igraph_community_walktrap(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+
+	if (graph_cache_load_vertex_attr_int(graph, "community-walktrap", membership))
+		return membership;
 
 	igraph_matrix_int_t merges;
 	if (igraph_matrix_int_init(&merges, 0, 0) != IGRAPH_SUCCESS) {
@@ -149,6 +160,7 @@ void *compute_igraph_community_walktrap(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr_int(graph, "community-walktrap", membership);
 	return membership;
 }
 
@@ -166,6 +178,9 @@ void *compute_igraph_community_edge_betweenness(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+
+	if (graph_cache_load_vertex_attr_int(graph, "community-edge-betweenness", membership))
+		return membership;
 
 	igraph_vector_int_t removed_edges;
 	if (igraph_vector_int_init(&removed_edges, 0) != IGRAPH_SUCCESS) {
@@ -227,6 +242,7 @@ void *compute_igraph_community_edge_betweenness(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr_int(graph, "community-edge-betweenness", membership);
 	return membership;
 }
 
@@ -244,6 +260,9 @@ void *compute_igraph_community_fastgreedy(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+
+	if (graph_cache_load_vertex_attr_int(graph, "community-fastgreedy", membership))
+		return membership;
 
 	igraph_matrix_int_t merges;
 	if (igraph_matrix_int_init(&merges, 0, 0) != IGRAPH_SUCCESS) {
@@ -275,6 +294,7 @@ void *compute_igraph_community_fastgreedy(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr_int(graph, "community-fastgreedy", membership);
 	return membership;
 }
 
@@ -293,6 +313,9 @@ void *compute_igraph_community_infomap(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_vertex_attr_int(graph, "community-infomap", membership))
+		return membership;
+
 	igraph_real_t codelength;
 
 	igraph_vector_t weights;
@@ -308,6 +331,7 @@ void *compute_igraph_community_infomap(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr_int(graph, "community-infomap", membership);
 	return membership;
 }
 
@@ -326,6 +350,9 @@ void *compute_igraph_community_label_propagation(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_vertex_attr_int(graph, "community-label-propagation", membership))
+		return membership;
+
 	igraph_vector_t weights;
 	bool has_weights = graph_build_edge_weights(graph, &weights);
 
@@ -339,6 +366,7 @@ void *compute_igraph_community_label_propagation(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr_int(graph, "community-label-propagation", membership);
 	return membership;
 }
 
@@ -356,6 +384,9 @@ void *compute_igraph_community_spinglass(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+
+	if (graph_cache_load_vertex_attr_int(graph, "community-spinglass", membership))
+		return membership;
 
 	igraph_real_t modularity;
 	igraph_real_t temperature;
@@ -385,6 +416,7 @@ void *compute_igraph_community_spinglass(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr_int(graph, "community-spinglass", membership);
 	return membership;
 }
 
@@ -402,6 +434,9 @@ void *compute_igraph_community_leading_eigenvector(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+
+	if (graph_cache_load_vertex_attr_int(graph, "community-leading-eigenvector", membership))
+		return membership;
 
 	igraph_matrix_int_t merges;
 	if (igraph_matrix_int_init(&merges, 0, 0) != IGRAPH_SUCCESS) {
@@ -458,6 +493,7 @@ void *compute_igraph_community_leading_eigenvector(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr_int(graph, "community-leading-eigenvector", membership);
 	return membership;
 }
 
@@ -476,6 +512,9 @@ void *compute_igraph_community_optimal_modularity(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_vertex_attr_int(graph, "community-optimal-modularity", membership))
+		return membership;
+
 	igraph_real_t modularity;
 
 	igraph_vector_t weights;
@@ -491,6 +530,7 @@ void *compute_igraph_community_optimal_modularity(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr_int(graph, "community-optimal-modularity", membership);
 	return membership;
 }
 
@@ -508,6 +548,9 @@ void *compute_igraph_community_voronoi(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+
+	if (graph_cache_load_vertex_attr_int(graph, "community-voronoi", membership))
+		return membership;
 
 	igraph_vector_int_t generators;
 	igraph_real_t modularity;
@@ -532,6 +575,7 @@ void *compute_igraph_community_voronoi(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr_int(graph, "community-voronoi", membership);
 	return membership;
 }
 
@@ -550,6 +594,9 @@ void *compute_igraph_community_fluid_communities(ExecutionContext *ctx)
 		return NULL;
 	}
 
+	if (graph_cache_load_vertex_attr_int(graph, "community-fluid", membership))
+		return membership;
+
 	// Estimate number of communities: roughly sqrt(n/2) but ensure at least 1 and less than n
 	igraph_int_t ncomm = vcount > 1 ? (igraph_int_t)sqrt(vcount / 2.0) + 1 : 1;
 	if (ncomm >= vcount)
@@ -564,6 +611,7 @@ void *compute_igraph_community_fluid_communities(ExecutionContext *ctx)
 		IGRAPH_FREE(membership);
 		return NULL;
 	}
+	graph_cache_store_vertex_attr_int(graph, "community-fluid", membership);
 	return membership;
 }
 
@@ -647,5 +695,25 @@ void free_community_membership(void *result_data)
 	if (result_data) {
 		igraph_vector_int_destroy((igraph_vector_int_t *)result_data);
 		IGRAPH_FREE(result_data);
+	}
+}
+
+// ============================================================================
+// Every attribute name a Group command may have cached, so an in-place graph
+// edit (Alter menu) can wipe them all and force the next Group click to
+// recompute rather than reapply now-stale membership.
+// ============================================================================
+static const char *const GROUP_CACHED_ATTRS[] = {
+	"community-louvain", "community-leiden", "community-walktrap", "community-edge-betweenness", "community-fastgreedy", "community-infomap", "community-label-propagation", "community-spinglass", "community-leading-eigenvector", "community-optimal-modularity", "community-voronoi", "community-fluid",
+};
+
+void community_clear_cached_attrs(igraph_t *graph)
+{
+	if (!graph)
+		return;
+	for (size_t i = 0; i < sizeof(GROUP_CACHED_ATTRS) / sizeof(GROUP_CACHED_ATTRS[0]); i++) {
+		const char *name = GROUP_CACHED_ATTRS[i];
+		if (igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_VERTEX, name))
+			DELVA(graph, name);
 	}
 }

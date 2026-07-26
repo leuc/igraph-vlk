@@ -7,6 +7,7 @@
 #include "app_state.h"
 #include "graph/graph_core.h"
 #include "graph/wrappers_centrality.h"
+#include "graph/wrappers_community.h"
 #include "vulkan/renderer.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -79,6 +80,7 @@ void apply_remove_feedback_arc_set(ExecutionContext *ctx, void *result_data)
 	GraphData *data = &state->current_graph;
 
 	centrality_clear_cached_attrs(&data->g);
+	community_clear_cached_attrs(&data->g);
 
 	if (!graph_rebuild_edges(data)) {
 		fprintf(stderr, "[apply_remove_feedback_arc_set] graph_rebuild_edges failed\n");
@@ -307,6 +309,7 @@ void apply_inplace_graph_update(ExecutionContext *ctx, void *result_data)
 	GraphData *data = &state->current_graph;
 
 	centrality_clear_cached_attrs(&data->g);
+	community_clear_cached_attrs(&data->g);
 
 	if (!graph_rebuild_edges(data)) {
 		fprintf(stderr, "[apply_inplace_graph_update] graph_rebuild_edges failed\n");
@@ -341,6 +344,7 @@ void apply_inplace_graph_update_full(ExecutionContext *ctx, void *result_data)
 	GraphData *data = &state->current_graph;
 
 	centrality_clear_cached_attrs(&data->g);
+	community_clear_cached_attrs(&data->g);
 
 	if (!graph_build_visualization(data)) {
 		fprintf(stderr, "[apply_inplace_graph_update_full] graph_build_visualization failed\n");

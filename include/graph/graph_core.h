@@ -101,4 +101,17 @@ bool graph_cache_load_edge_attr(const igraph_t *graph, const char *name, igraph_
  */
 void graph_cache_store_edge_attr(igraph_t *graph, const char *name, const igraph_vector_t *values);
 
+/**
+ * Int-vector twin of graph_cache_load_vertex_attr(): loads a numeric vertex
+ * attribute (if present) into an integer vector, rounding each value. Safe
+ * for caching small integer-valued results (e.g. community membership
+ * indices) that fit exactly in a double.
+ */
+bool graph_cache_load_vertex_attr_int(const igraph_t *graph, const char *name, igraph_vector_int_t *out);
+
+/**
+ * Int-vector twin of graph_cache_store_vertex_attr().
+ */
+void graph_cache_store_vertex_attr_int(igraph_t *graph, const char *name, const igraph_vector_int_t *values);
+
 #endif // GRAPH_CORE_H

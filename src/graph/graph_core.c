@@ -528,3 +528,44 @@ void graph_cache_store_edge_attr(igraph_t *graph, const char *name, const igraph
 	if (SETEANV(graph, name, values) != IGRAPH_SUCCESS)
 		fprintf(stderr, "[Cache] Failed to store '%s' edge attribute\n", name);
 }
+
+// Int-vector twins: igraph cattributes only store igraph_real_t, so these
+// round-trip through a temporary real vector. Safe for any integer-valued
+// cache (e.g. community membership indices) that fits exactly in a double.
+bool graph_cache_load_vertex_attr_int(const igraph_t *graph, const char *name, igraph_vector_int_t *out)
+{
+	if (!igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_VERTEX, name))
+		return false;
+	igraph_vector_t tmp;
+	if (igraph_vector_init(&tmp, 0) != IGRAPH_SUCCESS)
+		return false;
+	if (VANV(graph, name, &tmp) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(&tmp);
+		return false;
+	}
+	igraph_integer_t n = igraph_vector_size(&tmp);
+	if (igraph_vector_int_resize(out, n) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(&tmp);
+		return false;
+	}
+	for (igraph_integer_t i = 0; i < n; i++)
+		VECTOR(*out)[i] = (igraph_integer_t)llround(VECTOR(tmp)[i]);
+	igraph_vector_destroy(&tmp);
+	printf("[Cache] '%s' loaded from cached vertex attribute\n", name);
+	return true;
+}
+
+void graph_cache_store_vertex_attr_int(igraph_t *graph, const char *name, const igraph_vector_int_t *values)
+{
+	igraph_integer_t n = igraph_vector_int_size(values);
+	igraph_vector_t tmp;
+	if (igraph_vector_init(&tmp, n) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "[Cache] Failed to store '%s' vertex attribute\n", name);
+		return;
+	}
+	for (igraph_integer_t i = 0; i < n; i++)
+		VECTOR(tmp)[i] = (igraph_real_t)VECTOR(*values)[i];
+	if (SETVANV(graph, name, &tmp) != IGRAPH_SUCCESS)
+		fprintf(stderr, "[Cache] Failed to store '%s' vertex attribute\n", name);
+	igraph_vector_destroy(&tmp);
+}
