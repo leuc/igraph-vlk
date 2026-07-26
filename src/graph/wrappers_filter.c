@@ -63,6 +63,30 @@ void apply_filter_by_attr(ExecutionContext *ctx, void *result_data)
 	printf("[Filter] Attribute '%s' = '%s'\n", fp->attr_name, fp->attr_value);
 }
 
+void apply_filter_edge_reset(ExecutionContext *ctx, void *result_data)
+{
+	if (!ctx || !ctx->app_state)
+		return;
+	(void)result_data;
+	AppState *state = ctx->app_state;
+	graph_filter_reset_edge_visibility(&state->current_graph);
+	state->renderer.needsAttributeUpload = VK_TRUE;
+	renderer_update_graph(&state->renderer, &state->current_graph);
+	printf("[Filter] Show all edges\n");
+}
+
+void apply_filter_by_edge_attr(ExecutionContext *ctx, void *result_data)
+{
+	if (!ctx || !ctx->app_state || !result_data)
+		return;
+	AppState *state = ctx->app_state;
+	FilterParams *fp = (FilterParams *)result_data;
+	graph_filter_by_edge_attribute(&state->current_graph, fp->attr_name, fp->attr_value);
+	state->renderer.needsAttributeUpload = VK_TRUE;
+	renderer_update_graph(&state->renderer, &state->current_graph);
+	printf("[Filter] Edge attribute '%s' = '%s'\n", fp->attr_name, fp->attr_value);
+}
+
 void free_filter_params(void *result_data)
 {
 	if (!result_data)

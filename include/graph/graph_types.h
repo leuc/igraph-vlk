@@ -55,6 +55,7 @@ typedef struct
 	uint32_t to;
 	float selected;
 	float weight;
+	float visible;
 } Edge;
 
 typedef struct
@@ -81,6 +82,9 @@ typedef struct
 
 	FilterableAttr *filterable_attrs;
 	int num_filterable_attrs;
+
+	FilterableAttr *filterable_edge_attrs;
+	int num_filterable_edge_attrs;
 
 	bool use_as_seed;
 } GraphData;

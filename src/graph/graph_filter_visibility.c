@@ -78,3 +78,73 @@ void graph_filter_by_attribute(GraphData *data, const char *attr_name, const cha
 		}
 	}
 }
+
+void graph_filter_reset_edge_visibility(GraphData *data)
+{
+	if (!data || !data->edges)
+		return;
+	for (uint32_t i = 0; i < data->edge_count; i++) {
+		data->edges[i].visible = 1.0f;
+	}
+}
+
+void graph_filter_by_edge_attribute(GraphData *data, const char *attr_name, const char *attr_value)
+{
+	if (!data || !data->edges || !attr_name || !attr_value)
+		return;
+
+	// Check that the attribute exists
+	if (!igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_EDGE, attr_name)) {
+		fprintf(stderr, "graph_filter_by_edge_attribute: attribute '%s' not found\n", attr_name);
+		return;
+	}
+
+	// Determine attribute type
+	igraph_strvector_t enames;
+	igraph_vector_int_t etypes;
+	if (igraph_strvector_init(&enames, 0) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "graph_filter_by_edge_attribute: strvector init failed\n");
+		return;
+	}
+	if (igraph_vector_int_init(&etypes, 0) != IGRAPH_SUCCESS) {
+		igraph_strvector_destroy(&enames);
+		fprintf(stderr, "graph_filter_by_edge_attribute: vector_int init failed\n");
+		return;
+	}
+	igraph_attribute_type_t attr_type = IGRAPH_ATTRIBUTE_NUMERIC;
+	igraph_error_handler_t *prev = igraph_set_error_handler(igraph_error_handler_printignore);
+	igraph_error_t err = igraph_cattribute_list(&data->g, NULL, NULL, NULL, NULL, &enames, &etypes);
+	if (err == IGRAPH_SUCCESS) {
+		for (int i = 0; i < igraph_strvector_size(&enames); i++) {
+			if (strcmp(igraph_strvector_get(&enames, i), attr_name) == 0) {
+				attr_type = (igraph_attribute_type_t)VECTOR(etypes)[i];
+				break;
+			}
+		}
+	}
+	igraph_set_error_handler(prev);
+	igraph_strvector_destroy(&enames);
+	igraph_vector_int_destroy(&etypes);
+
+	// Set all edges hidden first, then reveal matches
+	for (uint32_t i = 0; i < data->edge_count; i++) {
+		data->edges[i].visible = 0.0f;
+	}
+
+	if (attr_type == IGRAPH_ATTRIBUTE_STRING) {
+		for (uint32_t i = 0; i < data->edge_count; i++) {
+			const char *val = igraph_cattribute_EAS(&data->g, attr_name, i);
+			if (val && strcmp(val, attr_value) == 0) {
+				data->edges[i].visible = 1.0f;
+			}
+		}
+	} else if (attr_type == IGRAPH_ATTRIBUTE_BOOLEAN) {
+		bool match = (strcmp(attr_value, "true") == 0);
+		for (uint32_t i = 0; i < data->edge_count; i++) {
+			bool val = igraph_cattribute_EAB(&data->g, attr_name, i);
+			if (val == match) {
+				data->edges[i].visible = 1.0f;
+			}
+		}
+	}
+}

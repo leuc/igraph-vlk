@@ -20,6 +20,12 @@ void apply_filter_reset(ExecutionContext *ctx, void *result_data);
 // Apply: filter by attribute (reads FilterParams from result_data)
 void apply_filter_by_attr(ExecutionContext *ctx, void *result_data);
 
+// Apply: reset all edges to visible
+void apply_filter_edge_reset(ExecutionContext *ctx, void *result_data);
+
+// Apply: filter edges by attribute (reads FilterParams from result_data)
+void apply_filter_by_edge_attr(ExecutionContext *ctx, void *result_data);
+
 // Free: frees FilterParams
 void free_filter_params(void *result_data);
 

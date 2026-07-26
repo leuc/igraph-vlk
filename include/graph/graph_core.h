@@ -36,6 +36,15 @@ bool graph_build_visualization(GraphData *data);
 void graph_detect_filterable_attrs(GraphData *data);
 
 /**
+ * (Re)scan edge attributes for low-cardinality string/boolean ones and
+ * populate data->filterable_edge_attrs. Called by graph_build_visualization;
+ * call directly after an in-place op adds/changes edge attributes without a
+ * full rebuild.
+ * @param data Pointer to GraphData whose filterable_edge_attrs should be refreshed
+ */
+void graph_detect_filterable_edge_attrs(GraphData *data);
+
+/**
  * Rebuild only the edge array and node degrees after in-place edge changes.
  * Does NOT touch node colors, labels, sizes, or positions.
  * @param data Pointer to GraphData whose edges changed

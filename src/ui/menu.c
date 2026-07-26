@@ -509,6 +509,116 @@ void menu_clear_attribute_filters(MenuNode *root, GraphData *data)
 	menu_clear_children(filter_branch);
 }
 
+void menu_populate_attribute_edge_filters(MenuNode *root, GraphData *data)
+{
+	if (!root || !data)
+		return;
+
+	// Clear any existing filter entries to prevent duplicates
+	menu_clear_attribute_edge_filters(root, data);
+
+	// Find "Edge" branch (created by init_menu_tree from the branch anchor)
+	MenuNode *edge_branch = find_child_branch(root, "Edge");
+	if (!edge_branch)
+		return;
+
+	// Find or create "Filter" sub-branch
+	MenuNode *filter_branch = find_child_branch(edge_branch, "Filter");
+	if (!filter_branch) {
+		filter_branch = create_menu_node("Filter", NODE_BRANCH);
+		if (!filter_branch)
+			return;
+		MenuNode **tmp = realloc(edge_branch->children, sizeof(MenuNode *) * (edge_branch->num_children + 1));
+		if (!tmp) {
+			menu_tree_destroy(filter_branch);
+			return;
+		}
+		edge_branch->children = tmp;
+		edge_branch->children[edge_branch->num_children++] = filter_branch;
+	}
+
+	// Add "Show All" leaf using registry CommandDef
+	const CommandDef *show_all_def = find_command_def("filter_edge_show_all");
+	MenuNode *show_all = create_menu_node("Show All", NODE_LEAF_COMMAND);
+	if (!show_all)
+		return;
+	show_all->command = create_command("filter_edge_show_all", "Show All", 0);
+	show_all->command->cmd_def = show_all_def;
+	{
+		MenuNode **tmp = realloc(filter_branch->children, sizeof(MenuNode *) * (filter_branch->num_children + 1));
+		if (!tmp) {
+			menu_tree_destroy(show_all);
+			return;
+		}
+		filter_branch->children = tmp;
+		filter_branch->children[filter_branch->num_children++] = show_all;
+	}
+
+	if (data->num_filterable_edge_attrs == 0)
+		return;
+
+	// Add attribute name sub-branches with value leaves
+	const CommandDef *filter_def = find_command_def("filter_by_edge_attr");
+	if (!filter_def)
+		return;
+
+	for (int a = 0; a < data->num_filterable_edge_attrs; a++) {
+		FilterableAttr *fa = &data->filterable_edge_attrs[a];
+
+		MenuNode *attr_branch = create_menu_node(fa->name, NODE_BRANCH);
+		if (!attr_branch)
+			continue;
+
+		for (int v = 0; v < fa->num_values; v++) {
+			MenuNode *val_leaf = create_menu_node(fa->values[v], NODE_LEAF_COMMAND);
+			if (!val_leaf)
+				continue;
+			val_leaf->command = create_command("filter_by_edge_attr", fa->values[v], 2);
+			val_leaf->command->cmd_def = filter_def;
+			val_leaf->command->params[0].name = "attr_name";
+			val_leaf->command->params[0].type = PARAM_TYPE_STRING;
+			val_leaf->command->params[0].value.str_val = strdup(fa->name);
+			val_leaf->command->params[1].name = "attr_value";
+			val_leaf->command->params[1].type = PARAM_TYPE_STRING;
+			val_leaf->command->params[1].value.str_val = strdup(fa->values[v]);
+
+			MenuNode **tmp = realloc(attr_branch->children, sizeof(MenuNode *) * (attr_branch->num_children + 1));
+			if (!tmp) {
+				menu_tree_destroy(val_leaf);
+				continue;
+			}
+			attr_branch->children = tmp;
+			attr_branch->children[attr_branch->num_children++] = val_leaf;
+		}
+
+		{
+			MenuNode **tmp = realloc(filter_branch->children, sizeof(MenuNode *) * (filter_branch->num_children + 1));
+			if (!tmp) {
+				menu_tree_destroy(attr_branch);
+				continue;
+			}
+			filter_branch->children = tmp;
+			filter_branch->children[filter_branch->num_children++] = attr_branch;
+		}
+	}
+}
+
+void menu_clear_attribute_edge_filters(MenuNode *root, GraphData *data)
+{
+	if (!root)
+		return;
+	(void)data;
+
+	// Find "Edge" branch, then "Filter" sub-branch, clear its children
+	MenuNode *edge_branch = find_child_branch(root, "Edge");
+	if (!edge_branch)
+		return;
+	MenuNode *filter_branch = find_child_branch(edge_branch, "Filter");
+	if (!filter_branch)
+		return;
+	menu_clear_children(filter_branch);
+}
+
 // ============================================================================
 // Netzschleuder Catalog Menu Population
 // ============================================================================

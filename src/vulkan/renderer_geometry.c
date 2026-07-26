@@ -142,7 +142,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 				memcpy(edgeAttributes[idx].color, graph->nodes[graph->edges[i].from].color, 12);
 				edgeAttributes[idx].selected = graph->edges[i].selected;
 				edgeAttributes[idx].normalized_pos = current_segment_start_len / (total_length > 0.0f ? total_length : 1.0f);
-				edgeAttributes[idx].visible = (graph->nodes[graph->edges[i].from].visible > 0.5f && graph->nodes[graph->edges[i].to].visible > 0.5f) ? 1.0f : 0.0f;
+				edgeAttributes[idx].visible = (graph->nodes[graph->edges[i].from].visible > 0.5f && graph->nodes[graph->edges[i].to].visible > 0.5f && graph->edges[i].visible > 0.5f) ? 1.0f : 0.0f;
 				edgeAttributes[idx].alpha = 1.0f;
 				idx++;
 
@@ -169,7 +169,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 			glm_vec3_scale(graph->nodes[graph->edges[i].from].position, r->layoutScale, p1);
 			glm_vec3_scale(graph->nodes[graph->edges[i].to].position, r->layoutScale, p2);
 
-			float edge_vis = (graph->nodes[graph->edges[i].from].visible > 0.5f && graph->nodes[graph->edges[i].to].visible > 0.5f) ? 1.0f : 0.0f;
+			float edge_vis = (graph->nodes[graph->edges[i].from].visible > 0.5f && graph->nodes[graph->edges[i].to].visible > 0.5f && graph->edges[i].visible > 0.5f) ? 1.0f : 0.0f;
 
 			float alpha = 1.0f;
 			if (maxWeight > 0.0f) {

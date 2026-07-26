@@ -611,6 +611,7 @@ bool graph_stream_poll(GraphStream *gs, GraphData *data)
 					e->to = (uint32_t)to_vid;
 					e->selected = 0.0f;
 					e->weight = gs->pend_has_weight[k] ? (float)gs->pend_weight[k] : 0.0f;
+					e->visible = 1.0f;
 					data->edge_count++;
 
 					data->nodes[from_vid].degree++;
