@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -182,6 +183,48 @@ const char *os_cache_dir(const char *app_name)
 #endif
 
 	os_mkdir_p(path);
+	return path;
+}
+
+// ============================================================================
+// Desktop save path
+// ============================================================================
+
+const char *os_desktop_graphml_save_path(void)
+{
+	static char path[8192];
+
+#if defined(_WIN32)
+	const char *home = getenv("USERPROFILE");
+#else
+	const char *home = getenv("HOME");
+#endif
+	if (!home || !home[0])
+		return NULL;
+
+	char desktop_dir[4096];
+#if defined(_WIN32)
+	snprintf(desktop_dir, sizeof(desktop_dir), "%s\\Desktop", home);
+#else
+	snprintf(desktop_dir, sizeof(desktop_dir), "%s/Desktop", home);
+#endif
+	os_mkdir_p(desktop_dir);
+
+	time_t now = time(NULL);
+	struct tm tm_buf;
+#if defined(_WIN32)
+	localtime_s(&tm_buf, &now);
+#else
+	localtime_r(&now, &tm_buf);
+#endif
+	char stamp[32];
+	strftime(stamp, sizeof(stamp), "%Y%m%d_%H%M%S", &tm_buf);
+
+#if defined(_WIN32)
+	snprintf(path, sizeof(path), "%s\\graph_%s.graphml", desktop_dir, stamp);
+#else
+	snprintf(path, sizeof(path), "%s/graph_%s.graphml", desktop_dir, stamp);
+#endif
 	return path;
 }
 

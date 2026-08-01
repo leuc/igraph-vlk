@@ -7,6 +7,7 @@
 #define GRAPH_IO_H
 
 #include "graph_types.h"
+#include "interaction/state.h"
 #include <igraph.h>
 
 /**
@@ -35,5 +36,17 @@ bool graph_load_gml(const char *filename, GraphData *data, const char *node_attr
  * @return true on success, false on failure
  */
 bool graph_read_gml(igraph_t *graph, FILE *fp);
+
+/**
+ * Write the graph (with all vertex/edge attributes) to filename as GraphML.
+ * @return true on success, false on failure
+ */
+bool graph_save_graphml(const char *filename, GraphData *data);
+
+/**
+ * Worker: save the current graph to a dated GraphML file on the Desktop.
+ * Returns an InfoCardData* with the save path on success, NULL on failure.
+ */
+void *compute_save_graphml(ExecutionContext *ctx);
 
 #endif // GRAPH_IO_H

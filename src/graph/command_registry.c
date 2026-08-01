@@ -4,6 +4,7 @@
  */
 
 #include "command_registry.h"
+#include "graph/graph_io.h"
 #include "graph/repo_netzschleuder.h"
 #include "graph/stream.h"
 #include "graph/wrappers_centrality.h"
@@ -163,6 +164,7 @@ const CommandDef g_command_registry[] = {
 
 	// Root menu
 	{"", NULL, "Filter", NULL, NULL, NULL}, // branch anchor
+	{"", "save_graphml", "Save", compute_save_graphml, apply_info_card, info_card_free},
 	{"", "quit", "Quit", compute_inline_pass, apply_quit, free_noop},
 
 };

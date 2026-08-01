@@ -10,7 +10,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "app_state.h"
 #include "graph/graph_core.h"
+#include "graph/worker_thread.h"
+#include "graph/wrappers_paths.h"
+#include "os/path.h"
 #include <zstd.h>
 
 // ============================================================================
@@ -236,4 +240,60 @@ bool graph_load(const char *filename, GraphData *data, const char *node_attr, co
 		return false;
 
 	return graph_finish_load(data, node_attr, edge_attr);
+}
+
+// ============================================================================
+// Write the graph (with all vertex/edge attributes) as GraphML.
+// ============================================================================
+bool graph_save_graphml(const char *filename, GraphData *data)
+{
+	if (!data->graph_initialized)
+		return false;
+
+	FILE *fp = fopen(filename, "w");
+	if (!fp)
+		return false;
+
+	igraph_error_t err = igraph_write_graph_graphml(&data->g, fp, /*prefixattr=*/false);
+	fclose(fp);
+	return err == IGRAPH_SUCCESS;
+}
+
+// ============================================================================
+// Worker: save the current graph to a dated GraphML file on the Desktop.
+// ============================================================================
+void *compute_save_graphml(ExecutionContext *ctx)
+{
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
+
+	worker_thread_set_status_message("Saving graph...");
+	worker_thread_set_progress(0.2f);
+
+	const char *path = os_desktop_graphml_save_path();
+	if (!path) {
+		fprintf(stderr, "[%s] Could not resolve Desktop path\n", __func__);
+		return NULL;
+	}
+
+	bool ok = graph_save_graphml(path, &ctx->app_state->current_graph);
+	worker_thread_set_progress(1.0f);
+	if (!ok) {
+		fprintf(stderr, "[%s] Failed to write %s\n", __func__, path);
+		return NULL;
+	}
+
+	InfoCardData *data = (InfoCardData *)malloc(sizeof(InfoCardData));
+	if (!data)
+		return NULL;
+	memset(data, 0, sizeof(InfoCardData));
+	strncpy(data->title, "Graph Saved", sizeof(data->title) - 1);
+	data->num_pairs = 1;
+	strncpy(data->pairs[0].key, "Path", sizeof(data->pairs[0].key) - 1);
+	strncpy(data->pairs[0].value, path, sizeof(data->pairs[0].value) - 1);
+
+	worker_thread_set_status_message("Saved");
+	return data;
 }

@@ -14,6 +14,12 @@ void os_path_init(void);
 // Aborts with fatal error if the file cannot be found.
 const char *os_resolve_path(const char *rel);
 
+// Returns a full path on the user's Desktop for a new dated GraphML save file,
+// e.g. "/home/user/Desktop/graph_20260801_143022.graphml".
+// Creates the Desktop directory if it does not exist. Returns NULL if
+// HOME/USERPROFILE is unset.
+const char *os_desktop_graphml_save_path(void);
+
 // Returns the platform cache directory for the given app name.
 // Respects IGRAPH_VLK_CACHE_PATH env var if set.
 // Linux: $XDG_CACHE_HOME/<name> or ~/.cache/<name>
