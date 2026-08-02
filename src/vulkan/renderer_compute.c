@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "graph/graph_core.h"
 #include "graph/wrappers_splc.h"
 #include "vulkan/buffers.h"
 #include "vulkan/renderer_init_splc_buffers.h"
@@ -453,8 +454,15 @@ void renderer_readback_splc_weights(Renderer *r, GraphData *graph)
 	memcpy(splc_edges, mapped, edge_buf_size);
 	vkUnmapMemory(r->core.device, r->splc.edges_memory);
 
+	igraph_vector_t splc_weights;
+	if (igraph_vector_init(&splc_weights, igraph_ecount(&graph->g)) != IGRAPH_SUCCESS) {
+		free(splc_edges);
+		return;
+	}
+
 	igraph_vector_int_t out_neis;
 	if (igraph_vector_int_init(&out_neis, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(&splc_weights);
 		free(splc_edges);
 		return;
 	}
@@ -468,6 +476,7 @@ void renderer_readback_splc_weights(Renderer *r, GraphData *graph)
 			igraph_get_eid(&graph->g, &eid, i, VECTOR(out_neis)[j], IGRAPH_DIRECTED, false);
 			float w = splc_edges[e_idx].weight;
 			graph->edges[eid].weight = w;
+			VECTOR(splc_weights)[eid] = w;
 			if (w > max_w)
 				max_w = w;
 			total_w += w;
@@ -477,6 +486,9 @@ void renderer_readback_splc_weights(Renderer *r, GraphData *graph)
 	}
 	igraph_vector_int_destroy(&out_neis);
 	free(splc_edges);
+
+	graph_cache_store_edge_attr(&graph->g, "splc-weight", &splc_weights);
+	igraph_vector_destroy(&splc_weights);
 
 	printf("SPLC readback: %u edges, max weight: %.2f, total: %.2f\n", e_idx, max_w, total_w);
 }
