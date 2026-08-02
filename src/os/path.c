@@ -221,9 +221,9 @@ const char *os_desktop_graphml_save_path(void)
 	strftime(stamp, sizeof(stamp), "%Y%m%d_%H%M%S", &tm_buf);
 
 #if defined(_WIN32)
-	snprintf(path, sizeof(path), "%s\\graph_%s.graphml", desktop_dir, stamp);
+	snprintf(path, sizeof(path), "%s\\Graphs\\graph_%s.graphml", desktop_dir, stamp);
 #else
-	snprintf(path, sizeof(path), "%s/graph_%s.graphml", desktop_dir, stamp);
+	snprintf(path, sizeof(path), "%s/Graphs/graph_%s.graphml", desktop_dir, stamp);
 #endif
 	return path;
 }
