@@ -8,6 +8,7 @@
 #include "app_state.h"
 #include "graph/graph_core.h"
 #include "graph/worker_thread.h"
+#include "ui/menu.h"
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_anim.h"
 
@@ -238,7 +239,21 @@ void *compute_max_antichain_trigger(ExecutionContext *ctx)
 	igraph_integer_t antichain_size = igraph_vector_int_size(&antichain);
 	for (igraph_integer_t k = 0; k < antichain_size; k++)
 		ranks[VECTOR(antichain)[k]] = 0;
+
 	igraph_vector_int_destroy(&antichain);
+
+	// Persist membership as a vertex attribute (1 = antichain member, 0 = other)
+	// so it survives filtering/GraphML export, mirroring community-* membership.
+	igraph_vector_int_t membership;
+	if (igraph_vector_int_init(&membership, vcount) != IGRAPH_SUCCESS) {
+		fprintf(stderr, "[MaxAntichain] failed to initialize membership vector\n");
+		free(ranks);
+		return NULL;
+	}
+	for (igraph_integer_t i = 0; i < vcount; i++)
+		VECTOR(membership)[i] = (ranks[i] == 0) ? 1 : 0;
+	graph_cache_store_vertex_attr_int(graph, "antichain", &membership);
+	igraph_vector_int_destroy(&membership);
 
 	char msg[128];
 	snprintf(msg, sizeof(msg), "Maximum Antichain: %lld vertices", (long long)antichain_size);
@@ -360,6 +375,11 @@ void apply_path_cover_result(ExecutionContext *ctx, void *result_data)
 		for (igraph_integer_t i = 0; i < (igraph_integer_t)graph->node_count; i++)
 			if (result->ranks[i] != 0)
 				memcpy(graph->nodes[i].color, background_color, sizeof(vec3));
+
+		// The worker just wrote the 'antichain' vertex attribute; refresh
+		// Filter > Node so it shows up right away (mirrors apply_cd_index).
+		graph_detect_filterable_attrs(graph);
+		menu_populate_attribute_filters(state->app_ctx.menu.root, graph);
 	}
 
 	renderer_update_graph(&state->renderer, graph);
