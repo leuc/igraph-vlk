@@ -407,11 +407,12 @@ void *compute_igraph_constraint(ExecutionContext *ctx)
 	return result;
 }
 
-// CD index (citation disruption). Time window fixed to 5 years (1825 days),
-// matching "CD5", the window most commonly reported in the citation-disruption
-// literature (Funk & Owen-Smith 2017).
+// CD index (citation disruption). Time window fixed to 6 months (182 days).
+// The citation-disruption literature (Funk & Owen-Smith 2017) most commonly
+// reports "CD5" (a 5-year window); 182 days is used here instead for a
+// shorter-horizon signal.
 #define CD_INDEX_DATE_ATTR "date"
-#define CD_INDEX_TIME_WINDOW_DAYS 1825
+#define CD_INDEX_TIME_WINDOW_DAYS 182
 
 // Days since 1970-01-01 for a proleptic Gregorian y/m/d (Howard Hinnant's
 // days_from_civil; plain integer arithmetic sidesteps struct tm/timegm's
@@ -517,12 +518,21 @@ void *compute_igraph_cd_index(ExecutionContext *ctx)
 		VECTOR(timestamps)[i] = days;
 	}
 
-	igraph_error_t code = igraph_cd_index(graph, &timestamps, result, NULL, NULL, igraph_vss_all(), CD_INDEX_TIME_WINDOW_DAYS);
+	igraph_vector_t mcd_result;
+	if (igraph_vector_init(&mcd_result, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(&timestamps);
+		igraph_vector_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
+
+	igraph_error_t code = igraph_cd_index(graph, &timestamps, result, NULL, &mcd_result, igraph_vss_all(), CD_INDEX_TIME_WINDOW_DAYS);
 
 	igraph_vector_int_destroy(&timestamps);
 
 	if (code != IGRAPH_SUCCESS) {
 		fprintf(stderr, "igraph_cd_index failed\n");
+		igraph_vector_destroy(&mcd_result);
 		igraph_vector_destroy(result);
 		IGRAPH_FREE(result);
 		return NULL;
@@ -542,6 +552,11 @@ void *compute_igraph_cd_index(ExecutionContext *ctx)
 		}
 	}
 	graph_cache_store_vertex_attr(graph, "cd-index", result);
+	// mCD index (CD index * I-index, the impact-weighted variant from Funk &
+	// Owen-Smith 2017 Eq. 4) — persisted for downstream/export use even
+	// though nothing in the app displays it yet.
+	graph_cache_store_vertex_attr(graph, "mcd-index", &mcd_result);
+	igraph_vector_destroy(&mcd_result);
 	cd_index_apply_display_transform(result, vcount);
 
 	return result;
