@@ -100,6 +100,7 @@ const CommandDef g_command_registry[] = {
 	{"Rank", "igraph_eigenvector_centrality", "Eigenvector Centrality", compute_igraph_eigenvector_centrality, apply_centrality_scores, centrality_scores_free},
 	{"Rank", "igraph_pagerank", "PageRank", compute_igraph_pagerank, apply_centrality_scores, centrality_scores_free},
 	{"Rank", "igraph_hub_and_authority_scores", "HITS (Hub)", compute_igraph_hub_and_authority_scores, apply_centrality_scores, centrality_scores_free},
+	{"Rank", "igraph_authority_scores", "HITS (Authority)", compute_igraph_authority_scores, apply_centrality_scores, centrality_scores_free},
 	{"Rank", "igraph_harmonic_centrality", "Harmonic", compute_igraph_harmonic_centrality, apply_centrality_scores, centrality_scores_free},
 	{"Rank", "igraph_strength", "Strength (Weighted Degree)", compute_igraph_strength, apply_centrality_scores, centrality_scores_free},
 	{"Rank", "igraph_constraint", "Constraint (Structural Holes)", compute_igraph_constraint, apply_centrality_scores, centrality_scores_free},

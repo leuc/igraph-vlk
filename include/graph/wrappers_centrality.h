@@ -29,6 +29,7 @@ void *compute_igraph_pagerank(ExecutionContext *ctx);
 
 // HITS (Hub & Authority)
 void *compute_igraph_hub_and_authority_scores(ExecutionContext *ctx);
+void *compute_igraph_authority_scores(ExecutionContext *ctx);
 
 // Harmonic centrality
 void *compute_igraph_harmonic_centrality(ExecutionContext *ctx);

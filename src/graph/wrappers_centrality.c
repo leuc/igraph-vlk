@@ -195,9 +195,47 @@ void *compute_igraph_pagerank(ExecutionContext *ctx)
 	return result;
 }
 
-// HITS (Hub and Authority scores)
-// Returns a combined score: average of hub and authority, or just hub?
-// For simplicity, we'll return hub scores as the centrality measure
+// HITS: runs igraph_hub_and_authority_scores once for both scores and caches
+// both as vertex attributes, so whichever of hub/authority is requested
+// first computes both, and the other becomes a cache hit. Caller must
+// igraph_vector_destroy() both out params on success.
+static igraph_error_t hits_compute_both(igraph_t *graph, igraph_vector_t *hub_out, igraph_vector_t *authority_out)
+{
+	igraph_integer_t vcount = igraph_vcount(graph);
+	if (igraph_vector_init(hub_out, vcount) != IGRAPH_SUCCESS)
+		return IGRAPH_ENOMEM;
+	if (igraph_vector_init(authority_out, vcount) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(hub_out);
+		return IGRAPH_ENOMEM;
+	}
+
+	igraph_vector_t weights;
+	bool has_weights = graph_build_edge_weights(graph, &weights);
+
+	igraph_error_t code;
+	if (!igraph_is_directed(graph)) {
+		// For undirected graphs, HITS reduces to eigenvector centrality (hub == authority)
+		code = igraph_eigenvector_centrality(graph, hub_out, NULL, IGRAPH_ALL, has_weights ? &weights : NULL, NULL);
+		if (code == IGRAPH_SUCCESS)
+			igraph_vector_update(authority_out, hub_out);
+	} else {
+		code = igraph_hub_and_authority_scores(graph, hub_out, authority_out, NULL, has_weights ? &weights : NULL, NULL);
+	}
+
+	if (has_weights)
+		igraph_vector_destroy(&weights);
+
+	if (code != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(hub_out);
+		igraph_vector_destroy(authority_out);
+		return code;
+	}
+
+	graph_cache_store_vertex_attr(graph, "hub", hub_out);
+	graph_cache_store_vertex_attr(graph, "authority", authority_out);
+	return IGRAPH_SUCCESS;
+}
+
 void *compute_igraph_hub_and_authority_scores(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -212,51 +250,49 @@ void *compute_igraph_hub_and_authority_scores(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	if (graph_cache_load_vertex_attr(graph, "hits-hub", result))
+	if (graph_cache_load_vertex_attr(graph, "hub", result))
 		return result;
 
-	igraph_vector_t weights;
-	bool has_weights = graph_build_edge_weights(graph, &weights);
+	igraph_vector_t hub_scores, authority_scores;
+	if (hits_compute_both(graph, &hub_scores, &authority_scores) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
+	igraph_vector_update(result, &hub_scores);
+	igraph_vector_destroy(&hub_scores);
+	igraph_vector_destroy(&authority_scores);
 
-	if (!igraph_is_directed(graph)) {
-		// For undirected graphs, HITS reduces to eigenvector centrality
-		igraph_error_t code = igraph_eigenvector_centrality(graph, result, NULL, IGRAPH_ALL, has_weights ? &weights : NULL, NULL);
-		if (has_weights)
-			igraph_vector_destroy(&weights);
-		if (code != IGRAPH_SUCCESS) {
-			igraph_vector_destroy(result);
-			IGRAPH_FREE(result);
-			return NULL;
-		}
-	} else {
-		igraph_vector_t hub_scores;
-		igraph_vector_t authority_scores;
-		igraph_vector_init(&hub_scores, vcount);
-		igraph_vector_init(&authority_scores, vcount);
+	return result;
+}
 
-		igraph_error_t code = igraph_hub_and_authority_scores(graph, &hub_scores, &authority_scores, NULL, has_weights ? &weights : NULL, NULL);
-
-		if (has_weights)
-			igraph_vector_destroy(&weights);
-
-		if (code != IGRAPH_SUCCESS) {
-			igraph_vector_destroy(&hub_scores);
-			igraph_vector_destroy(&authority_scores);
-			igraph_vector_destroy(result);
-			IGRAPH_FREE(result);
-			return NULL;
-		}
-
-		// Use hub scores as the centrality measure (could also use authority or average)
-		for (igraph_integer_t i = 0; i < vcount; i++) {
-			VECTOR(*result)[i] = VECTOR(hub_scores)[i];
-		}
-
-		igraph_vector_destroy(&hub_scores);
-		igraph_vector_destroy(&authority_scores);
+void *compute_igraph_authority_scores(ExecutionContext *ctx)
+{
+	igraph_t *graph = &ctx->app_state->current_graph.g;
+	if (!ctx->app_state->current_graph.graph_initialized) {
+		fprintf(stderr, "[%s] Graph not initialized\n", __func__);
+		return NULL;
+	}
+	igraph_integer_t vcount = igraph_vcount(graph);
+	igraph_vector_t *result = IGRAPH_MALLOC(sizeof(igraph_vector_t));
+	if (igraph_vector_init(result, vcount) != IGRAPH_SUCCESS) {
+		IGRAPH_FREE(result);
+		return NULL;
 	}
 
-	graph_cache_store_vertex_attr(graph, "hits-hub", result);
+	if (graph_cache_load_vertex_attr(graph, "authority", result))
+		return result;
+
+	igraph_vector_t hub_scores, authority_scores;
+	if (hits_compute_both(graph, &hub_scores, &authority_scores) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(result);
+		IGRAPH_FREE(result);
+		return NULL;
+	}
+	igraph_vector_update(result, &authority_scores);
+	igraph_vector_destroy(&hub_scores);
+	igraph_vector_destroy(&authority_scores);
+
 	return result;
 }
 
