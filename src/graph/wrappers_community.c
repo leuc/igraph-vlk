@@ -5,8 +5,10 @@
 
 #include "graph/wrappers_community.h"
 #include "app_state.h"
+#include "graph/graph_color.h"
 #include "interaction/state.h"
 #include "vulkan/renderer.h"
+#include "vulkan/renderer_anim.h"
 #include <igraph.h>
 #include <igraph_progress.h>
 #include <math.h>
@@ -652,6 +654,11 @@ void apply_community_membership(ExecutionContext *ctx, void *result_data)
 		fprintf(stderr, "[apply_community_membership] Error: Membership size doesn't match node count\n");
 		return;
 	}
+
+	// Group never wants leftover dimming/reveal state from a prior Follow command
+	graph_reset_emphasis(data);
+	renderer_anim_reset_nodes(renderer, data);
+	renderer_anim_reset_edges(renderer);
 
 	// Calculate cluster count and sizes
 	int cluster_count = 0;

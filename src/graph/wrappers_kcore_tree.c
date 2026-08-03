@@ -7,6 +7,7 @@
 
 #include "app_state.h"
 #include "graph/dyn_core_tree.h"
+#include "graph/graph_color.h"
 #include "graph/worker_thread.h"
 #include "vulkan/renderer_anim.h"
 #include <igraph.h>
@@ -189,6 +190,7 @@ void apply_kcore_tree_trigger(ExecutionContext *ctx, void *result_data)
 		return;
 	}
 
+	graph_reset_emphasis(graph);
 	renderer_anim_reset_nodes(&state->renderer, graph);
 	renderer_anim_reset_edges(&state->renderer);
 

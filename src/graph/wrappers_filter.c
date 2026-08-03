@@ -6,8 +6,10 @@
 #include "graph/wrappers_filter.h"
 
 #include "app_state.h"
+#include "graph/graph_color.h"
 #include "graph/graph_filter_visibility.h"
 #include "vulkan/renderer.h"
+#include "vulkan/renderer_anim.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,6 +45,9 @@ void apply_filter_reset(ExecutionContext *ctx, void *result_data)
 		return;
 	(void)result_data;
 	AppState *state = ctx->app_state;
+	graph_reset_emphasis(&state->current_graph);
+	renderer_anim_reset_nodes(&state->renderer, &state->current_graph);
+	renderer_anim_reset_edges(&state->renderer);
 	graph_filter_reset_visibility(&state->current_graph);
 	state->renderer.needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(&state->renderer, &state->current_graph);
@@ -56,6 +61,9 @@ void apply_filter_by_attr(ExecutionContext *ctx, void *result_data)
 		return;
 	AppState *state = ctx->app_state;
 	FilterParams *fp = (FilterParams *)result_data;
+	graph_reset_emphasis(&state->current_graph);
+	renderer_anim_reset_nodes(&state->renderer, &state->current_graph);
+	renderer_anim_reset_edges(&state->renderer);
 	graph_filter_by_attribute(&state->current_graph, fp->attr_name, fp->attr_value);
 	state->renderer.needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(&state->renderer, &state->current_graph);
@@ -69,6 +77,9 @@ void apply_filter_edge_reset(ExecutionContext *ctx, void *result_data)
 		return;
 	(void)result_data;
 	AppState *state = ctx->app_state;
+	graph_reset_emphasis(&state->current_graph);
+	renderer_anim_reset_nodes(&state->renderer, &state->current_graph);
+	renderer_anim_reset_edges(&state->renderer);
 	graph_filter_reset_edge_visibility(&state->current_graph);
 	state->renderer.needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(&state->renderer, &state->current_graph);
@@ -81,6 +92,9 @@ void apply_filter_by_edge_attr(ExecutionContext *ctx, void *result_data)
 		return;
 	AppState *state = ctx->app_state;
 	FilterParams *fp = (FilterParams *)result_data;
+	graph_reset_emphasis(&state->current_graph);
+	renderer_anim_reset_nodes(&state->renderer, &state->current_graph);
+	renderer_anim_reset_edges(&state->renderer);
 	graph_filter_by_edge_attribute(&state->current_graph, fp->attr_name, fp->attr_value);
 	state->renderer.needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(&state->renderer, &state->current_graph);

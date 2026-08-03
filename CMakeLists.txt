@@ -129,6 +129,7 @@ add_executable(
 	src/graph/community_simhash.c
 	src/graph/graph_filter.c
 	src/graph/graph_filter_visibility.c
+	src/graph/graph_color.c
 	src/graph/layered_sphere.c
 	src/graph/layered_sphere_common.c
 	src/graph/graph_actions.c

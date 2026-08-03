@@ -42,6 +42,7 @@ typedef struct
 	int degree;
 	float selected;
 	float visible;
+	float emphasis;
 } Node;
 
 typedef struct
@@ -56,6 +57,7 @@ typedef struct
 	float selected;
 	float weight;
 	float visible;
+	float emphasis;
 } Edge;
 
 typedef struct

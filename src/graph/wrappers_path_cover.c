@@ -6,6 +6,7 @@
 #include "graph/wrappers_path_cover.h"
 
 #include "app_state.h"
+#include "graph/graph_color.h"
 #include "graph/graph_core.h"
 #include "graph/worker_thread.h"
 #include "ui/menu.h"
@@ -347,6 +348,7 @@ void apply_path_cover_result(ExecutionContext *ctx, void *result_data)
 		return;
 	}
 
+	graph_reset_emphasis(graph);
 	renderer_anim_reset_nodes(&state->renderer, graph);
 	renderer_anim_reset_edges(&state->renderer);
 
@@ -366,15 +368,15 @@ void apply_path_cover_result(ExecutionContext *ctx, void *result_data)
 
 	free(from);
 
-	// Non-antichain vertices are force-reset to grey so the antichain (rank
-	// 0, left at its existing color) stays visually distinct after the
-	// reveal finishes, in case an earlier command (e.g. community coloring)
-	// left the rest of the graph a different color.
+	// Non-antichain vertices are dimmed (not overwritten) so the antichain
+	// (rank 0) stays visually distinct after the reveal finishes, while
+	// still showing whatever color an earlier command (e.g. community
+	// coloring) assigned — and it's non-destructive, so the next command
+	// that calls graph_reset_emphasis() restores full brightness.
 	if (result->is_antichain) {
-		static const vec3 background_color = {0.3f, 0.3f, 0.3f};
 		for (igraph_integer_t i = 0; i < (igraph_integer_t)graph->node_count; i++)
 			if (result->ranks[i] != 0)
-				memcpy(graph->nodes[i].color, background_color, sizeof(vec3));
+				graph->nodes[i].emphasis = EMPHASIS_DIMMED;
 
 		// The worker just wrote the 'antichain' vertex attribute; refresh
 		// Filter > Node so it shows up right away (mirrors apply_cd_index).

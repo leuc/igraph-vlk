@@ -314,6 +314,7 @@ bool graph_build_visualization(GraphData *data)
 		data->nodes[i].size = (has_node_attr && max_n_val > 0) ? (float)VAN(&data->g, data->node_attr_name, i) / max_n_val : 1.0f;
 		data->nodes[i].label = has_label ? strdup(VAS(&data->g, "label", i)) : NULL;
 		data->nodes[i].visible = 1.0f;
+		data->nodes[i].emphasis = 1.0f;
 	}
 	igraph_vector_int_t degrees;
 	if (igraph_vector_int_init(&degrees, data->node_count) == IGRAPH_SUCCESS) {
@@ -351,6 +352,7 @@ bool graph_build_visualization(GraphData *data)
 		data->edges[i].to = (uint32_t)to;
 		data->edges[i].weight = has_weight ? (float)EAN(&data->g, "weight", i) : 0.0f;
 		data->edges[i].visible = 1.0f;
+		data->edges[i].emphasis = 1.0f;
 	}
 
 	// Analyze filterable edge attributes (low-cardinality string/boolean only)
@@ -382,6 +384,7 @@ bool graph_rebuild_edges(GraphData *data)
 		data->edges[i].to = (uint32_t)to;
 		data->edges[i].weight = has_weight ? (float)EAN(&data->g, "weight", i) : 0.0f;
 		data->edges[i].visible = 1.0f;
+		data->edges[i].emphasis = 1.0f;
 	}
 
 	// Recompute degree on existing nodes — it affects node shape rendering

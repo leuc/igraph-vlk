@@ -5,6 +5,7 @@
 
 #include "graph/wrappers_flow.h"
 #include "app_state.h"
+#include "graph/graph_color.h"
 #include "graph/graph_core.h"
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_anim.h"
@@ -235,6 +236,7 @@ void apply_maxflow_sampling(ExecutionContext *ctx, void *result_data)
 
 	state->renderer.needsAttributeUpload = VK_TRUE;
 
+	graph_reset_emphasis(graph_data);
 	renderer_anim_reset_nodes(&state->renderer, graph_data);
 	renderer_anim_reset_edges(&state->renderer);
 

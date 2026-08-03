@@ -6,6 +6,7 @@
 #include "graph/wrappers_criticality.h"
 
 #include "app_state.h"
+#include "graph/graph_color.h"
 #include "graph/graph_core.h"
 #include "graph/worker_thread.h"
 #include "graph/wrappers_splc.h"
@@ -495,8 +496,9 @@ bool poll_criticality_gpu(ExecutionContext *ctx)
 	snprintf(msg, sizeof(msg), "Criticality (%s): basket %lld nodes, main path %lld, coverage %.2f", mode_label, (long long)zero_basket_size, (long long)path_len, coverage_zero);
 	worker_thread_set_status_message(msg);
 
-	// Reveal the core first, and grey out everything outside the basket so it
+	// Reveal the core first, and dim everything outside the basket so it
 	// stays visually distinct once the reveal finishes.
+	graph_reset_emphasis(graph);
 	renderer_anim_reset_nodes(r, graph);
 	renderer_anim_reset_edges(r);
 	int *ranks = crit_ranks_by_criticality(c, n);
@@ -513,10 +515,9 @@ bool poll_criticality_gpu(ExecutionContext *ctx)
 		free(ranks);
 	}
 
-	static const vec3 background_color = {0.3f, 0.3f, 0.3f};
 	for (igraph_integer_t v = 0; v < n; v++)
 		if (!VECTOR(basket_flags)[v])
-			memcpy(graph->nodes[v].color, background_color, sizeof(vec3));
+			graph->nodes[v].emphasis = EMPHASIS_DIMMED;
 
 	graph_detect_filterable_attrs(graph);
 	menu_populate_attribute_filters(state->app_ctx.menu.root, graph);
