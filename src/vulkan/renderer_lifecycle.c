@@ -179,6 +179,36 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->splc.level_interval = 0.5f;
 	r->splc.active = false;
 
+	// Field-by-field rather than a memset: renderer_create_pipelines() above
+	// has already filled in r->crit.pipeline_layout, which must survive.
+	r->crit.out_nodes_buffer = VK_NULL_HANDLE;
+	r->crit.out_nodes_memory = VK_NULL_HANDLE;
+	r->crit.out_edges_buffer = VK_NULL_HANDLE;
+	r->crit.out_edges_memory = VK_NULL_HANDLE;
+	r->crit.in_nodes_buffer = VK_NULL_HANDLE;
+	r->crit.in_nodes_memory = VK_NULL_HANDLE;
+	r->crit.in_edges_buffer = VK_NULL_HANDLE;
+	r->crit.in_edges_memory = VK_NULL_HANDLE;
+	r->crit.level_buffer = VK_NULL_HANDLE;
+	r->crit.level_memory = VK_NULL_HANDLE;
+	r->crit.lnw_buffer = VK_NULL_HANDLE;
+	r->crit.lnw_memory = VK_NULL_HANDLE;
+	r->crit.lnx_buffer = VK_NULL_HANDLE;
+	r->crit.lnx_memory = VK_NULL_HANDLE;
+	r->crit.height_buffer = VK_NULL_HANDLE;
+	r->crit.height_memory = VK_NULL_HANDLE;
+	r->crit.depth_buffer = VK_NULL_HANDLE;
+	r->crit.depth_memory = VK_NULL_HANDLE;
+	r->crit.cmd_pool = VK_NULL_HANDLE;
+	r->crit.cmd_buf = VK_NULL_HANDLE;
+	r->crit.fence = VK_NULL_HANDLE;
+	r->crit.level_offsets = NULL;
+	r->crit.level_sizes = NULL;
+	r->crit.num_levels = 0;
+	r->crit.node_count = 0;
+	r->crit.weight_mode = CRIT_WEIGHT_UNIT;
+	r->crit.submitted = false;
+
 	r->bfs.rank_buf = VK_NULL_HANDLE;
 	r->bfs.rank_mem = VK_NULL_HANDLE;
 	r->bfs.from_buf = VK_NULL_HANDLE;

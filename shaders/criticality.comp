@@ -1,0 +1,169 @@
+#version 450
+
+// Price & Evans (2025) — Understanding Main Path Analysis
+// arXiv:2512.12355 [physics.soc-ph], section 2.5 "Baskets of Nodes"
+// https://doi.org/10.48550/arXiv.2512.12355
+//
+// Four level-synchronous dynamic programming sweeps over a DAG:
+//
+//   stage 0  lnW(v) = ln(number of paths source -> v)     eq. 2.8b
+//   stage 1  lnX(v) = ln(number of paths v -> sink)       eq. 2.8c
+//   stage 2  h(v)   = max weight of any path source -> v  eq. 2.12
+//   stage 3  d(v)   = max weight of any path v -> sink    eq. 2.13
+//
+// The host assigns levels by longest-path relaxation, so every edge (u, v)
+// has level(v) > level(u). Dispatching levels in ascending order for stages
+// 0 and 2, and descending order for stages 1 and 3, therefore guarantees
+// every value read has already been finalised: all four sweeps are pure
+// gathers and need no atomics at all.
+//
+// Path counts grow factorially with graph size (section 2.6), so they are
+// carried as natural logarithms and combined with a shifted log-sum-exp.
+// The entropy (SPE) edge weight is then just lnW(u) + lnX(v), eq. 2.8a.
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+#define STAGE_LNW 0u
+#define STAGE_LNX 1u
+#define STAGE_HEIGHT 2u
+#define STAGE_DEPTH 3u
+
+#define WEIGHT_UNIT 0u
+#define WEIGHT_SPE 1u
+
+struct CritNode
+{
+	uint edge_offset;
+	uint degree;
+};
+
+struct CritEdge
+{
+	uint node;
+	uint pad;
+};
+
+// Forward (out-edge) CSR: successors of v
+layout(std430, binding = 0) readonly buffer OutNodeBuffer
+{
+	CritNode out_nodes[];
+};
+
+layout(std430, binding = 1) readonly buffer OutEdgeBuffer
+{
+	CritEdge out_edges[];
+};
+
+// Reverse (in-edge) CSR: predecessors of v
+layout(std430, binding = 2) readonly buffer InNodeBuffer
+{
+	CritNode in_nodes[];
+};
+
+layout(std430, binding = 3) readonly buffer InEdgeBuffer
+{
+	CritEdge in_edges[];
+};
+
+// All node ids, grouped by level; one contiguous run per level
+layout(std430, binding = 4) readonly buffer LevelBuffer
+{
+	uint level_nodes[];
+};
+
+layout(std430, binding = 5) buffer LnWBuffer
+{
+	float lnW[];
+};
+
+layout(std430, binding = 6) buffer LnXBuffer
+{
+	float lnX[];
+};
+
+layout(std430, binding = 7) buffer HeightBuffer
+{
+	float height[];
+};
+
+layout(std430, binding = 8) buffer DepthBuffer
+{
+	float depth[];
+};
+
+layout(push_constant) uniform Constants
+{
+	uint level_offset;
+	uint num_nodes_in_level;
+	uint stage;
+	uint weight_mode;
+}
+pc;
+
+void main()
+{
+	uint idx = gl_GlobalInvocationID.x;
+	if (idx >= pc.num_nodes_in_level)
+		return;
+
+	uint v = level_nodes[pc.level_offset + idx];
+
+	if (pc.stage == STAGE_LNW) {
+		// ln(sum over predecessors u of exp(lnW[u])), shifted by the max so
+		// the exponentials stay in range. A source (no predecessors) keeps
+		// lnW = 0, i.e. the single trivial path of length zero.
+		CritNode n = in_nodes[v];
+		if (n.degree == 0u) {
+			lnW[v] = 0.0;
+			return;
+		}
+		float m = -1.0 / 0.0;
+		for (uint i = 0u; i < n.degree; i++)
+			m = max(m, lnW[in_edges[n.edge_offset + i].node]);
+		float sum = 0.0;
+		for (uint i = 0u; i < n.degree; i++)
+			sum += exp(lnW[in_edges[n.edge_offset + i].node] - m);
+		lnW[v] = m + log(sum);
+		return;
+	}
+
+	if (pc.stage == STAGE_LNX) {
+		CritNode n = out_nodes[v];
+		if (n.degree == 0u) {
+			lnX[v] = 0.0;
+			return;
+		}
+		float m = -1.0 / 0.0;
+		for (uint i = 0u; i < n.degree; i++)
+			m = max(m, lnX[out_edges[n.edge_offset + i].node]);
+		float sum = 0.0;
+		for (uint i = 0u; i < n.degree; i++)
+			sum += exp(lnX[out_edges[n.edge_offset + i].node] - m);
+		lnX[v] = m + log(sum);
+		return;
+	}
+
+	if (pc.stage == STAGE_HEIGHT) {
+		CritNode n = in_nodes[v];
+		float best = 0.0;
+		float x_v = lnX[v];
+		for (uint i = 0u; i < n.degree; i++) {
+			uint u = in_edges[n.edge_offset + i].node;
+			float w = (pc.weight_mode == WEIGHT_SPE) ? (lnW[u] + x_v) : 1.0;
+			best = max(best, height[u] + w);
+		}
+		height[v] = best;
+		return;
+	}
+
+	// STAGE_DEPTH
+	CritNode n = out_nodes[v];
+	float best = 0.0;
+	float w_v = lnW[v];
+	for (uint i = 0u; i < n.degree; i++) {
+		uint s = out_edges[n.edge_offset + i].node;
+		float w = (pc.weight_mode == WEIGHT_SPE) ? (w_v + lnX[s]) : 1.0;
+		best = max(best, depth[s] + w);
+	}
+	depth[v] = best;
+}

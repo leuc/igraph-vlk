@@ -38,6 +38,35 @@ typedef struct
 	float weight;
 } SPLCEdge;
 
+// Generalised criticality compute types (arXiv:2512.12355 section 2.5).
+// Same CSR shape as SPLCNode/SPLCEdge, but used for both the forward
+// (out-edge) and reverse (in-edge) adjacency, so the field names are
+// direction-neutral.
+typedef struct
+{
+	uint32_t edge_offset;
+	uint32_t degree;
+} CritNode;
+
+typedef struct
+{
+	uint32_t node;
+	uint32_t pad;
+} CritEdge;
+
+// Must match the stage/weight_mode constants in shaders/criticality.comp
+typedef enum { CRIT_STAGE_LNW = 0, CRIT_STAGE_LNX = 1, CRIT_STAGE_HEIGHT = 2, CRIT_STAGE_DEPTH = 3 } CritStage;
+
+typedef enum { CRIT_WEIGHT_UNIT = 0, CRIT_WEIGHT_SPE = 1 } CritWeightMode;
+
+typedef struct
+{
+	uint32_t level_offset;
+	uint32_t num_nodes_in_level;
+	uint32_t stage;
+	uint32_t weight_mode;
+} CritPushConstants;
+
 // BCGL (Binary Classification-Based Graph Layout) compute types
 typedef struct
 {
@@ -313,6 +342,7 @@ typedef struct
 	VkPipeline ray;
 	VkPipeline compute_spherical;
 	VkPipeline compute_splc;
+	VkPipeline compute_criticality;
 } Pipelines;
 
 typedef struct
@@ -327,6 +357,9 @@ typedef struct
 	VkDescriptorSet *detail_card_sets;
 	VkDescriptorPool splc_pool;
 	VkDescriptorSet splc_set;
+	VkDescriptorSetLayout crit_compute_layout;
+	VkDescriptorPool crit_pool;
+	VkDescriptorSet crit_set;
 } Descriptors;
 
 typedef struct
@@ -355,6 +388,47 @@ typedef struct
 	// map by this, not graph->edge_count, or it oversteps the buffer.
 	uint32_t buffer_edge_count;
 } SPLCComputeContext;
+
+// Generalised criticality (arXiv:2512.12355 section 2.5).
+//
+// Unlike SPLC this is a computation rather than an animation: all
+// 4 * num_levels dispatches are recorded into one command buffer and
+// submitted once, then polled for completion. Levels are uploaded once as a
+// single permutation of node ids grouped by level, indexed via level_offsets
+// and level_sizes, so nothing needs re-uploading between dispatches.
+typedef struct
+{
+	VkBuffer out_nodes_buffer;
+	VkDeviceMemory out_nodes_memory;
+	VkBuffer out_edges_buffer;
+	VkDeviceMemory out_edges_memory;
+	VkBuffer in_nodes_buffer;
+	VkDeviceMemory in_nodes_memory;
+	VkBuffer in_edges_buffer;
+	VkDeviceMemory in_edges_memory;
+	VkBuffer level_buffer;
+	VkDeviceMemory level_memory;
+	VkBuffer lnw_buffer;
+	VkDeviceMemory lnw_memory;
+	VkBuffer lnx_buffer;
+	VkDeviceMemory lnx_memory;
+	VkBuffer height_buffer;
+	VkDeviceMemory height_memory;
+	VkBuffer depth_buffer;
+	VkDeviceMemory depth_memory;
+
+	VkPipelineLayout pipeline_layout;
+	VkCommandPool cmd_pool;
+	VkCommandBuffer cmd_buf;
+	VkFence fence;
+
+	uint32_t *level_offsets; // start index into the level buffer, per level
+	uint32_t *level_sizes;	 // node count, per level
+	int num_levels;
+	uint32_t node_count;
+	uint32_t weight_mode; // 0 = unit, 1 = SPE (entropy)
+	bool submitted;		  // work is in flight, awaiting the fence
+} CritComputeContext;
 
 typedef struct
 {
@@ -547,6 +621,9 @@ typedef struct Renderer
 
 	// SPLC (Search Path Link Count) animation
 	SPLCComputeContext splc;
+
+	// Generalised criticality / baskets of nodes (arXiv:2512.12355 §2.5)
+	CritComputeContext crit;
 
 	// BCGL (Binary Classification-Based Graph Layout) compute context
 	BCGLComputeContext bcgl_ctx;

@@ -10,6 +10,7 @@
 #include "graph/wrappers_centrality.h"
 #include "graph/wrappers_community.h"
 #include "graph/wrappers_constructors.h"
+#include "graph/wrappers_criticality.h"
 #include "graph/wrappers_cycles.h"
 #include "graph/wrappers_filter.h"
 #include "graph/wrappers_flow.h"
@@ -128,6 +129,8 @@ const CommandDef g_command_registry[] = {
 	{"Follow", "topo_trigger", "Topological sort", compute_inline_pass, apply_topo_trigger, free_noop},
 	{"Follow", "kcore_tree_trigger", "K-Core Tree", compute_kcore_tree_trigger, apply_kcore_tree_trigger, free_kcore_tree_result},
 	{"Follow", "splc_animation", "Search Path Link Count", compute_splc_animation, apply_splc_animation, free_noop, poll_splc_gpu},
+	{"Follow", "criticality_unit", "Criticality Basket (unit weights)", compute_criticality_unit, apply_criticality_basket, free_criticality_result, poll_criticality_gpu},
+	{"Follow", "criticality_spe", "Criticality Basket (entropy weights)", compute_criticality_spe, apply_criticality_basket, free_criticality_result, poll_criticality_gpu},
 	{"Follow", "maxflow_sampled", "Max Flow (Sampled Pairs)", compute_maxflow_sampling, apply_maxflow_sampling, free_maxflow_result},
 	{"Follow", "min_path_cover_trigger", "Minimum Path Cover", compute_min_path_cover_trigger, apply_path_cover_result, free_path_cover_result},
 	{"Follow", "max_antichain_trigger", "Maximum Antichain", compute_max_antichain_trigger, apply_path_cover_result, free_path_cover_result},

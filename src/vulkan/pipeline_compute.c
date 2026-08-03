@@ -27,6 +27,9 @@ void renderer_create_compute_pipelines(Renderer *r)
 
 	if (r->core.has_atomic_float)
 		renderer_create_splc_compute_pipeline(r);
+	// Criticality is a pure gather DP — no atomics, so it is available even
+	// where the SPLC animation is not.
+	renderer_create_criticality_compute_pipeline(r);
 	renderer_create_bcgl_compute_pipeline(r);
 }
 
@@ -55,4 +58,37 @@ void renderer_create_splc_compute_pipeline(Renderer *r)
 
 	VkDescriptorSetAllocateInfo splcDescSetInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->descriptors.splc_pool, .descriptorSetCount = 1, .pSetLayouts = &r->descriptors.splc_compute_layout};
 	VK_CHECK(vkAllocateDescriptorSets(r->core.device, &splcDescSetInfo, &r->descriptors.splc_set), "Failed to allocate SPLC descriptor set");
+}
+
+// Bindings 0-3: forward and reverse CSR (nodes, edges) x (out, in)
+// Binding 4:    node ids grouped by level
+// Bindings 5-8: lnW, lnX, height, depth
+#define CRIT_BINDING_COUNT 9
+
+void renderer_create_criticality_compute_pipeline(Renderer *r)
+{
+	VkDescriptorSetLayoutBinding critBindings[CRIT_BINDING_COUNT];
+	for (uint32_t i = 0; i < CRIT_BINDING_COUNT; i++)
+		critBindings[i] = (VkDescriptorSetLayoutBinding){i, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL};
+
+	VkDescriptorSetLayoutCreateInfo critLayoutInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = CRIT_BINDING_COUNT, .pBindings = critBindings};
+	VK_CHECK(vkCreateDescriptorSetLayout(r->core.device, &critLayoutInfo, NULL, &r->descriptors.crit_compute_layout), "Failed to create criticality compute descriptor set layout");
+
+	VkPushConstantRange critPushConstant = {.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = sizeof(CritPushConstants)};
+	VkPipelineLayoutCreateInfo critPipelineLayoutInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->descriptors.crit_compute_layout, .pushConstantRangeCount = 1, .pPushConstantRanges = &critPushConstant};
+	VK_CHECK(vkCreatePipelineLayout(r->core.device, &critPipelineLayoutInfo, NULL, &r->crit.pipeline_layout), "Failed to create criticality compute pipeline layout");
+
+	VkShaderModule critShaderModule = VK_NULL_HANDLE;
+	VK_CHECK(create_shader_module(r->core.device, CRITICALITY_COMP_SHADER_PATH, &critShaderModule), "Failed to create criticality compute shader module");
+	VkPipelineShaderStageCreateInfo critStage = VK_SHADER_STAGE_COMP(critShaderModule);
+	VkComputePipelineCreateInfo critPipelineInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = critStage, .layout = r->crit.pipeline_layout};
+	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &critPipelineInfo, NULL, &r->pipelines.compute_criticality), "Failed to create criticality compute pipeline");
+	vkDestroyShaderModule(r->core.device, critShaderModule, NULL);
+
+	VkDescriptorPoolSize critPoolSizes = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, CRIT_BINDING_COUNT};
+	VkDescriptorPoolCreateInfo critPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &critPoolSizes};
+	VK_CHECK(vkCreateDescriptorPool(r->core.device, &critPoolInfo, NULL, &r->descriptors.crit_pool), "Failed to create criticality descriptor pool");
+
+	VkDescriptorSetAllocateInfo critDescSetInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->descriptors.crit_pool, .descriptorSetCount = 1, .pSetLayouts = &r->descriptors.crit_compute_layout};
+	VK_CHECK(vkAllocateDescriptorSets(r->core.device, &critDescSetInfo, &r->descriptors.crit_set), "Failed to allocate criticality descriptor set");
 }

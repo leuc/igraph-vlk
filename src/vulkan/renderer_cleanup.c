@@ -13,6 +13,7 @@
 #include "vulkan/render_pass.h"
 #include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_bcgl.h"
+#include "vulkan/renderer_criticality.h"
 #include "vulkan/renderer_transition.h"
 #include "vulkan/swapchain.h"
 #include "vulkan/text.h"
@@ -120,6 +121,20 @@ void cleanup_splc_pipelines_core(Renderer *r)
 		vkDestroyPipelineLayout(r->core.device, r->splc.pipeline_layout, NULL);
 	if (r->descriptors.splc_compute_layout != VK_NULL_HANDLE)
 		vkDestroyDescriptorSetLayout(r->core.device, r->descriptors.splc_compute_layout, NULL);
+
+	renderer_destroy_criticality_buffers(r);
+	if (r->crit.fence != VK_NULL_HANDLE)
+		vkDestroyFence(r->core.device, r->crit.fence, NULL);
+	if (r->crit.cmd_pool != VK_NULL_HANDLE)
+		vkDestroyCommandPool(r->core.device, r->crit.cmd_pool, NULL);
+	if (r->descriptors.crit_pool != VK_NULL_HANDLE)
+		vkDestroyDescriptorPool(r->core.device, r->descriptors.crit_pool, NULL);
+	if (r->pipelines.compute_criticality != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->pipelines.compute_criticality, NULL);
+	if (r->crit.pipeline_layout != VK_NULL_HANDLE)
+		vkDestroyPipelineLayout(r->core.device, r->crit.pipeline_layout, NULL);
+	if (r->descriptors.crit_compute_layout != VK_NULL_HANDLE)
+		vkDestroyDescriptorSetLayout(r->core.device, r->descriptors.crit_compute_layout, NULL);
 
 	if (r->descriptors.pool != VK_NULL_HANDLE)
 		vkDestroyDescriptorPool(r->core.device, r->descriptors.pool, NULL);
