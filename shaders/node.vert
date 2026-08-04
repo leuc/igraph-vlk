@@ -13,13 +13,20 @@ layout(binding = 4) uniform GlobalAnimState
 	float time;
 	float delta_time;
 	uint frame_count;
-	float _pad;
 	float transition_t;
+	float seq_time;
+	float seq_stride;
+	float seq_duration;
+	float _reserved;
 }
 anim;
 
-layout(std430, binding = 5) readonly buffer BFSOrder {
-	int bfsRank[];
+layout(std430, binding = 5) readonly buffer NodeAnimationStep {
+	int nodeStep[];
+};
+
+layout(std430, binding = 8) readonly buffer NodeAnimationValue {
+	float nodeValue[];
 };
 
 layout(location = 0) in vec3 inPosition;
@@ -67,5 +74,5 @@ void main()
 	fragDegree = instanceDegree;
 	fragSelected = instanceSelected;
 	fragVisible = instanceVisible;
-	fragBfsRank = bfsRank[gl_InstanceIndex];
+	fragBfsRank = nodeStep[gl_InstanceIndex];
 }

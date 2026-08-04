@@ -7,9 +7,9 @@
 
 #include "app_state.h"
 #include "graph/dyn_core_tree.h"
+#include "graph/graph_animation.h"
 #include "graph/graph_color.h"
 #include "graph/worker_thread.h"
-#include "vulkan/renderer_anim.h"
 #include <igraph.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -121,7 +121,7 @@ void *compute_kcore_tree_trigger(ExecutionContext *ctx)
 
 	// BFS over the TREE structure (not the graph): assigns each vertex a
 	// reveal rank equal to its visitation order, exactly mirroring
-	// renderer_anim_compute_bfs's ranks[order[i]] = i pattern, so it drives
+	// graph_animation_play_bfs's ranks[order[i]] = i pattern, so it drives
 	// the same shader-side reveal-by-rank animation BFS/DFS/topo use.
 	int *ranks = malloc(sizeof(int) * vcount);
 	if (!ranks) {
@@ -191,18 +191,9 @@ void apply_kcore_tree_trigger(ExecutionContext *ctx, void *result_data)
 	}
 
 	graph_reset_emphasis(graph);
-	renderer_anim_reset_nodes(&state->renderer, graph);
-	renderer_anim_reset_edges(&state->renderer);
-
-	uint32_t *from = malloc(sizeof(uint32_t) * graph->edge_count);
-	for (igraph_integer_t i = 0; i < (igraph_integer_t)graph->edge_count; i++)
-		from[i] = graph->edges[i].from;
-
-	renderer_anim_upload_node_ranks(&state->renderer, result->ranks, graph->node_count, 3.0f);
-	renderer_anim_upload_edge_from(&state->renderer, from, graph->edge_count);
-	renderer_anim_reset_timer(&state->renderer);
-
-	free(from);
+	graph_animation_clear(&state->renderer);
+	GraphAnimationRequest request = {.node_steps = result->ranks, .duration = 3.0f};
+	graph_animation_play(&state->renderer, graph, &request);
 }
 
 void free_kcore_tree_result(void *result_data)

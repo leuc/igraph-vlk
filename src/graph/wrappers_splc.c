@@ -5,10 +5,10 @@
 
 #include "graph/wrappers_splc.h"
 #include "app_state.h"
+#include "graph/graph_animation.h"
 #include "graph/graph_color.h"
 #include "graph/graph_core.h"
 #include "vulkan/renderer.h"
-#include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_compute.h"
 
 #include <stdio.h>
@@ -133,8 +133,7 @@ void apply_splc_animation(ExecutionContext *ctx, void *result_data)
 	GraphData *data = &state->current_graph;
 
 	graph_reset_emphasis(data);
-	renderer_anim_reset_nodes(&state->renderer, data);
-	renderer_anim_reset_edges(&state->renderer);
+	graph_animation_clear(&state->renderer);
 
 	state->renderer.needsAttributeUpload = VK_TRUE;
 	if (!graph_rebuild_edges(data)) {

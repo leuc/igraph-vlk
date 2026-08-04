@@ -6,11 +6,11 @@
 #define _GNU_SOURCE
 
 #include "app_state.h"
+#include "graph/graph_animation.h"
 #include "graph/graph_color.h"
 #include "graph/wrappers_layout.h"
 #include "interaction/state.h"
 #include "vulkan/renderer.h"
-#include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_transition.h"
 #include <float.h>
 #include <igraph.h>
@@ -80,9 +80,8 @@ void apply_bfs_trigger(ExecutionContext *ctx, void *result_data)
 		return;
 	AppState *state = ctx->app_state;
 	graph_reset_emphasis(&state->current_graph);
-	renderer_anim_reset_nodes(&state->renderer, &state->current_graph);
-	renderer_anim_reset_edges(&state->renderer);
-	renderer_anim_compute_bfs(&state->renderer, &state->current_graph);
+	graph_animation_clear(&state->renderer);
+	graph_animation_play_bfs(&state->renderer, &state->current_graph);
 }
 
 void apply_dfs_trigger(ExecutionContext *ctx, void *result_data)
@@ -92,9 +91,8 @@ void apply_dfs_trigger(ExecutionContext *ctx, void *result_data)
 		return;
 	AppState *state = ctx->app_state;
 	graph_reset_emphasis(&state->current_graph);
-	renderer_anim_reset_nodes(&state->renderer, &state->current_graph);
-	renderer_anim_reset_edges(&state->renderer);
-	renderer_anim_compute_dfs(&state->renderer, &state->current_graph);
+	graph_animation_clear(&state->renderer);
+	graph_animation_play_dfs(&state->renderer, &state->current_graph);
 }
 
 void apply_topo_trigger(ExecutionContext *ctx, void *result_data)
@@ -104,9 +102,8 @@ void apply_topo_trigger(ExecutionContext *ctx, void *result_data)
 		return;
 	AppState *state = ctx->app_state;
 	graph_reset_emphasis(&state->current_graph);
-	renderer_anim_reset_nodes(&state->renderer, &state->current_graph);
-	renderer_anim_reset_edges(&state->renderer);
-	renderer_anim_compute_topo(&state->renderer, &state->current_graph);
+	graph_animation_clear(&state->renderer);
+	graph_animation_play_topological(&state->renderer, &state->current_graph);
 }
 
 void free_layout_matrix(void *result_data)

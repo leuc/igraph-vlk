@@ -5,13 +5,16 @@ layout(binding = 4) uniform GlobalAnimState
 	float time;
 	float delta_time;
 	uint frame_count;
-	float _pad;
 	float transition_t;
+	float seq_time;
+	float seq_stride;
+	float seq_duration;
+	float _reserved;
 }
 anim;
 
-layout(std430, binding = 5) readonly buffer BFSOrder {
-	int bfsRank[];
+layout(std430, binding = 5) readonly buffer NodeAnimationStep {
+	int nodeStep[];
 };
 
 layout(push_constant) uniform Constants
@@ -36,7 +39,8 @@ void main()
 	if (fragVisible < 0.5)
 		discard;
 
-	vec3 c = mix(vec3(0.15), fragColor, smoothstep(0.0, 0.3, anim.time - float(fragBfsRank) * anim._pad));
+	const float FADE = 0.3;
+	vec3 c = mix(vec3(0.15), fragColor, smoothstep(0.0, FADE, anim.seq_time - float(fragBfsRank) * anim.seq_stride));
 
 	vec2 uv = fragTexCoord;
 	float dist = length(uv);

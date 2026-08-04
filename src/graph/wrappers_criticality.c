@@ -6,13 +6,13 @@
 #include "graph/wrappers_criticality.h"
 
 #include "app_state.h"
+#include "graph/graph_animation.h"
 #include "graph/graph_color.h"
 #include "graph/graph_core.h"
 #include "graph/worker_thread.h"
 #include "graph/wrappers_splc.h"
 #include "ui/menu.h"
 #include "vulkan/renderer.h"
-#include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_criticality.h"
 
 #include <math.h>
@@ -499,19 +499,11 @@ bool poll_criticality_gpu(ExecutionContext *ctx)
 	// Reveal the core first, and dim everything outside the basket so it
 	// stays visually distinct once the reveal finishes.
 	graph_reset_emphasis(graph);
-	renderer_anim_reset_nodes(r, graph);
-	renderer_anim_reset_edges(r);
+	graph_animation_clear(r);
 	int *ranks = crit_ranks_by_criticality(c, n);
 	if (ranks) {
-		uint32_t *from = malloc(sizeof(uint32_t) * graph->edge_count);
-		if (from) {
-			for (uint32_t i = 0; i < graph->edge_count; i++)
-				from[i] = graph->edges[i].from;
-			renderer_anim_upload_node_ranks(r, ranks, graph->node_count, 3.0f);
-			renderer_anim_upload_edge_from(r, from, graph->edge_count);
-			renderer_anim_reset_timer(r);
-			free(from);
-		}
+		GraphAnimationRequest request = {.node_steps = ranks, .duration = 3.0f};
+		graph_animation_play(r, graph, &request);
 		free(ranks);
 	}
 

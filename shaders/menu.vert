@@ -26,8 +26,11 @@ layout(std140, set = 0, binding = 4) uniform GlobalAnimState
 	float time;
 	float delta_time;
 	uint frame_count;
-	float _pad;
 	float transition_t;
+	float seq_time;
+	float seq_stride;
+	float seq_duration;
+	float _reserved;
 }
 anim;
 

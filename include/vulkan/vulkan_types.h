@@ -246,9 +246,14 @@ typedef struct
 	float time;
 	float delta_time;
 	uint32_t frame_count;
-	float _pad;
 	float transition_t;
+	float seq_time;
+	float seq_stride;
+	float seq_duration;
+	float _reserved;
 } GlobalAnimState;
+
+_Static_assert(sizeof(GlobalAnimState) == 32, "GlobalAnimState must match the std140 block in graphics shaders");
 
 typedef struct
 {
@@ -256,6 +261,20 @@ typedef struct
 	VkDeviceMemory memory[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
 	void *mapped[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
 	GlobalAnimState data;
+	float seq_start_time;
+	struct
+	{
+		VkBuffer node_step;
+		VkDeviceMemory node_step_memory;
+		VkBuffer node_value;
+		VkDeviceMemory node_value_memory;
+		VkBuffer edge_source;
+		VkDeviceMemory edge_source_memory;
+		VkBuffer edge_value;
+		VkDeviceMemory edge_value_memory;
+		uint32_t node_capacity;
+		uint32_t edge_capacity;
+	} channels;
 } AnimStateBuffers;
 
 typedef struct
@@ -550,24 +569,6 @@ typedef struct Renderer
 	UniformBuffers ubo;
 	AnimStateBuffers anim;
 	Texture texture;
-
-	struct
-	{
-		VkBuffer rank_buf;
-		VkDeviceMemory rank_mem;
-		VkBuffer from_buf;
-		VkDeviceMemory from_mem;
-		uint32_t node_count;
-		uint32_t edge_count;
-	} bfs;
-
-	struct
-	{
-		VkBuffer buf;
-		VkDeviceMemory mem;
-		uint32_t edge_count;
-		float max_value;
-	} edge_vis;
 
 	// XR-specific depth buffers (per view, separate from desktop)
 	uint32_t xr_view_count;

@@ -69,4 +69,6 @@ void renderer_dispatch_splc_level(Renderer *r, VkCommandBuffer cmd);
  */
 void renderer_readback_splc_weights(Renderer *r, GraphData *graph);
 
+void renderer_splc_clear_visualization(Renderer *r);
+
 #endif

@@ -133,6 +133,7 @@ add_executable(
 	src/graph/layered_sphere.c
 	src/graph/layered_sphere_common.c
 	src/graph/graph_actions.c
+	src/graph/graph_animation.c
 	# Layout wrappers (split by algorithm)
 	src/graph/layouts_force_fr.c
 	src/graph/layouts_drl.c

@@ -6,12 +6,12 @@
 #include "graph/wrappers_path_cover.h"
 
 #include "app_state.h"
+#include "graph/graph_animation.h"
 #include "graph/graph_color.h"
 #include "graph/graph_core.h"
 #include "graph/worker_thread.h"
 #include "ui/menu.h"
 #include "vulkan/renderer.h"
-#include "vulkan/renderer_anim.h"
 
 #include <igraph.h>
 #include <stdbool.h>
@@ -65,7 +65,7 @@ static bool path_cover_ensure_dag(igraph_t *graph, const char *label)
 // Walks each path/chain in cover in order, first-touch-assigning an
 // incrementing reveal rank per vertex (vertices shared between paths keep
 // the rank from whichever path reaches them first). Mirrors
-// renderer_anim_compute_bfs's ranks[order[i]] = i pattern.
+// graph_animation_play_bfs's ranks[order[i]] = i pattern.
 static int *ranks_from_cover(const igraph_vector_int_list_t *cover, igraph_integer_t vcount)
 {
 	int *ranks = malloc(sizeof(int) * vcount);
@@ -349,8 +349,7 @@ void apply_path_cover_result(ExecutionContext *ctx, void *result_data)
 	}
 
 	graph_reset_emphasis(graph);
-	renderer_anim_reset_nodes(&state->renderer, graph);
-	renderer_anim_reset_edges(&state->renderer);
+	graph_animation_clear(&state->renderer);
 
 	state->renderer.needsAttributeUpload = VK_TRUE;
 	if (!graph_rebuild_edges(graph)) {
@@ -358,15 +357,8 @@ void apply_path_cover_result(ExecutionContext *ctx, void *result_data)
 		return;
 	}
 
-	uint32_t *from = malloc(sizeof(uint32_t) * graph->edge_count);
-	for (igraph_integer_t i = 0; i < (igraph_integer_t)graph->edge_count; i++)
-		from[i] = graph->edges[i].from;
-
-	renderer_anim_upload_node_ranks(&state->renderer, result->ranks, graph->node_count, 3.0f);
-	renderer_anim_upload_edge_from(&state->renderer, from, graph->edge_count);
-	renderer_anim_reset_timer(&state->renderer);
-
-	free(from);
+	GraphAnimationRequest request = {.node_steps = result->ranks, .duration = 3.0f};
+	graph_animation_play(&state->renderer, graph, &request);
 
 	// Non-antichain vertices are dimmed (not overwritten) so the antichain
 	// (rank 0) stays visually distinct after the reveal finishes, while

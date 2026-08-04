@@ -5,10 +5,10 @@
 
 #include "graph/wrappers_flow.h"
 #include "app_state.h"
+#include "graph/graph_animation.h"
 #include "graph/graph_color.h"
 #include "graph/graph_core.h"
 #include "vulkan/renderer.h"
-#include "vulkan/renderer_anim.h"
 
 #include <igraph.h>
 #include <math.h>
@@ -25,7 +25,6 @@ typedef struct
 	float max_flow_value;
 	int sample_count;
 	int *node_ranks;
-	uint32_t *edge_from;
 } MaxflowResult;
 
 void *compute_maxflow_sampling(ExecutionContext *ctx)
@@ -209,12 +208,6 @@ void *compute_maxflow_sampling(ExecutionContext *ctx)
 
 	result->node_ranks = node_ranks;
 
-	result->edge_from = malloc(m * sizeof(uint32_t));
-	if (result->edge_from) {
-		for (igraph_integer_t i = 0; i < m; i++)
-			result->edge_from[i] = graph_data->edges[i].from;
-	}
-
 	printf("[maxflow] Computed flows for %d source→target pairs, max=%.4f, nz=%d/%" IGRAPH_PRId "\n", result->sample_count, result->max_flow_value, nz_edges, m);
 
 	return result;
@@ -237,8 +230,7 @@ void apply_maxflow_sampling(ExecutionContext *ctx, void *result_data)
 	state->renderer.needsAttributeUpload = VK_TRUE;
 
 	graph_reset_emphasis(graph_data);
-	renderer_anim_reset_nodes(&state->renderer, graph_data);
-	renderer_anim_reset_edges(&state->renderer);
+	graph_animation_clear(&state->renderer);
 
 	if (!graph_rebuild_edges(graph_data)) {
 		fprintf(stderr, "[maxflow apply] graph_rebuild_edges failed\n");
@@ -247,10 +239,20 @@ void apply_maxflow_sampling(ExecutionContext *ctx, void *result_data)
 	for (int i = 0; i < graph_data->edge_count; i++) {
 		graph_data->edges[i].weight = flow_result->edge_flows[i];
 	}
-	renderer_anim_upload_edge_floats(&state->renderer, flow_result->edge_flows, graph_data->edge_count, flow_result->max_flow_value);
-	renderer_anim_upload_node_ranks(&state->renderer, flow_result->node_ranks, graph_data->node_count, 4.0f);
-	renderer_anim_upload_edge_from(&state->renderer, flow_result->edge_from, graph_data->edge_count);
-	renderer_anim_reset_timer(&state->renderer);
+	float *edge_values = NULL;
+	if (flow_result->max_flow_value > 0.0f) {
+		edge_values = malloc(sizeof(float) * graph_data->edge_count);
+		if (!edge_values) {
+			fprintf(stderr, "[maxflow apply] Failed to allocate normalized edge values\n");
+			return;
+		}
+		float denominator = logf(flow_result->max_flow_value + 1.0f);
+		for (uint32_t i = 0; i < graph_data->edge_count; i++)
+			edge_values[i] = logf(flow_result->edge_flows[i] + 1.0f) / denominator;
+	}
+	GraphAnimationRequest request = {.node_steps = flow_result->node_ranks, .edge_values = edge_values, .duration = 4.0f};
+	graph_animation_play(&state->renderer, graph_data, &request);
+	free(edge_values);
 
 	renderer_update_graph(&state->renderer, graph_data);
 	state->renderer.label.tree_needs_rebuild = true;
@@ -266,6 +268,5 @@ void free_maxflow_result(void *result_data)
 	MaxflowResult *result = (MaxflowResult *)result_data;
 	free(result->edge_flows);
 	free(result->node_ranks);
-	free(result->edge_from);
 	free(result);
 }

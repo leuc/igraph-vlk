@@ -188,6 +188,18 @@ static void splc_destroy_buffer(VkDevice dev, VkBuffer buf, VkDeviceMemory mem)
 		vkFreeMemory(dev, mem, NULL);
 }
 
+void renderer_splc_clear_visualization(Renderer *r)
+{
+	if (!r)
+		return;
+	r->splc.active = false;
+	r->splc.readback_pending = false;
+	if (r->splc.max_memory != VK_NULL_HANDLE) {
+		uint32_t zero = 0;
+		update_buffer(r->core.device, r->splc.max_memory, sizeof(uint32_t), &zero);
+	}
+}
+
 static void splc_create_fallback_buffers(Renderer *r, uint32_t m)
 {
 	VkDeviceSize edge_buf_size = sizeof(SPLCEdge) * m;

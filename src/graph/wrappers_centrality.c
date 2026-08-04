@@ -5,12 +5,12 @@
 
 #include "graph/wrappers_centrality.h"
 #include "app_state.h"
+#include "graph/graph_animation.h"
 #include "graph/graph_color.h"
 #include "graph/graph_core.h"
 #include "interaction/state.h"
 #include "ui/menu.h"
 #include "vulkan/renderer.h"
-#include "vulkan/renderer_anim.h"
 #include <igraph.h>
 #include <math.h>
 #include <stdio.h>
@@ -761,8 +761,7 @@ void apply_centrality_scores(ExecutionContext *ctx, void *result_data)
 
 	// Rank never wants leftover dimming/reveal state from a prior Follow command
 	graph_reset_emphasis(data);
-	renderer_anim_reset_nodes(renderer, data);
-	renderer_anim_reset_edges(renderer);
+	graph_animation_clear(renderer);
 
 	// Find min/max for normalization
 	igraph_real_t min_v, max_v;
@@ -830,8 +829,7 @@ void apply_edge_centrality_scores(ExecutionContext *ctx, void *result_data)
 
 	// Rank never wants leftover dimming/reveal state from a prior Follow command
 	graph_reset_emphasis(data);
-	renderer_anim_reset_nodes(renderer, data);
-	renderer_anim_reset_edges(renderer);
+	graph_animation_clear(renderer);
 
 	// Find min/max for normalization
 	igraph_real_t min_v, max_v;

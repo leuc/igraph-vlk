@@ -13,19 +13,22 @@ layout(binding = 4) uniform GlobalAnimState
 	float time;
 	float delta_time;
 	uint frame_count;
-	float _pad;
 	float transition_t;
+	float seq_time;
+	float seq_stride;
+	float seq_duration;
+	float _reserved;
 }
 anim;
 
-layout(std430, binding = 5) readonly buffer BFSOrder
+layout(std430, binding = 5) readonly buffer NodeAnimationStep
 {
-	int bfsRank[];
+	int nodeStep[];
 };
 
-layout(std430, binding = 6) readonly buffer EdgeFrom
+layout(std430, binding = 6) readonly buffer EdgeAnimationSource
 {
-	uint edgeFrom[];
+	uint edgeSource[];
 };
 
 struct SPLCEdge
@@ -44,9 +47,9 @@ layout(std430, binding = 3) readonly buffer MaxBuffer
 	uint global_max_weight_uint;
 };
 
-layout(std430, binding = 7) readonly buffer EdgeVis
+layout(std430, binding = 7) readonly buffer EdgeAnimationValue
 {
-	float edgeFlow[];
+	float edgeValue[];
 };
 
 layout(push_constant) uniform SPLCConstants
@@ -78,21 +81,16 @@ void main()
 
 	fragColor = inColor;
 	uint edge_index = gl_VertexIndex / (splcPC.segmentsPerEdge * 2);
-	float reveal_t = smoothstep(0.0, 0.3, anim.time - float(bfsRank[edgeFrom[edge_index]]) * anim._pad);
+	const float FADE = 0.3;
+	float reveal_t = smoothstep(0.0, FADE, anim.seq_time - float(nodeStep[edgeSource[edge_index]]) * anim.seq_stride);
 	if (max_w > 0.0) {
 		float w = splc_edges[edge_index].weight;
 		float intensity = clamp(pow(log(w + 1.0) / log(max_w + 1.0), 0.3), 0.0, 1.0);
 		fragColor = inColor * (0.2 + 0.8 * intensity) * reveal_t;
 	} else {
-		float max_flow = edgeFlow[0];
 		vec3 base = mix(vec3(0.15), inColor, reveal_t);
-		if (max_flow > 0.0) {
-			float w = edgeFlow[edge_index + 1];
-			float intensity = clamp(pow(log(w + 1.0) / log(max_flow + 1.0), 0.3), 0.0, 1.0);
-			fragColor = base * (0.2 + 0.8 * intensity);
-		} else {
-			fragColor = base;
-		}
+		float intensity = clamp(pow(edgeValue[edge_index], 0.3), 0.0, 1.0);
+		fragColor = base * (0.2 + 0.8 * intensity);
 	}
 	fragSelected = inSelected;
 	fragNormalizedPos = inNormalizedPos;
