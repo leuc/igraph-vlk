@@ -105,10 +105,12 @@ void main()
 		float w = splc_edges[edge_index].weight;
 		float intensity = clamp(pow(log(w + 1.0) / log(max_w + 1.0), 0.3), 0.0, 1.0);
 		fragColor = inColor * (0.2 + 0.8 * intensity) * reveal_t;
+		fragAlpha = inAlpha * (0.12 + 0.88 * intensity);
 	} else {
 		vec3 base = mix(vec3(0.15), inColor, reveal_t);
 		float intensity = clamp(pow(edgeValue[edge_index], 0.3), 0.0, 1.0);
 		fragColor = base * (0.2 + 0.8 * intensity);
+		fragAlpha = inAlpha;
 	}
 
 	float event_pulse = 0.0;
@@ -125,5 +127,6 @@ void main()
 	fragSelected = inSelected;
 	fragNormalizedPos = inNormalizedPos;
 	fragVisible = inVisible;
-	fragAlpha = inAlpha;
+	if (max_w <= 0.0)
+		fragAlpha = inAlpha;
 }

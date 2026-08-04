@@ -5,6 +5,7 @@
 
 #include "vulkan/renderer_anim.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -143,6 +144,8 @@ void renderer_anim_update(Renderer *r, float time, float delta_time, uint32_t fr
 	r->anim.data.delta_time = delta_time;
 	r->anim.data.frame_count = frame_count;
 	r->anim.data.seq_time = time - r->anim.seq_start_time;
+	if (r->anim.data.seq_duration > 0.0f && r->anim.data.seq_time <= r->anim.data.seq_duration && frame_count % 60 == 0)
+		fprintf(stderr, "[Animation] state: time=%.3fs/%.3fs stride=%.5fs dt=%.4fs frame=%u\n", r->anim.data.seq_time, r->anim.data.seq_duration, r->anim.data.seq_stride, r->anim.data.delta_time, r->anim.data.frame_count);
 }
 
 void renderer_anim_upload(Renderer *r, uint32_t ubo_idx)
@@ -192,6 +195,8 @@ void renderer_anim_play(Renderer *r, const RendererAnimClip *clip)
 	r->anim.data.seq_stride = max_step > 0 ? r->anim.data.seq_duration / (float)max_step : 0.0f;
 	r->anim.seq_start_time = r->anim.data.time;
 	r->anim.data.seq_time = 0.0f;
+	if (clip->node_steps || clip->node_values || clip->edge_values || clip->edge_event_count > 0)
+		fprintf(stderr, "[Animation] start: nodes=%u edges=%u max_step=%d events=%u duration=%.3fs event_end=%.3fs stride=%.5fs\n", clip->node_count, clip->edge_count, max_step, clip->edge_event_count, r->anim.data.seq_duration, event_end, r->anim.data.seq_stride);
 }
 
 void renderer_anim_clear(Renderer *r)

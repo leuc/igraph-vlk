@@ -8,9 +8,8 @@
 #include "graph/graph_animation.h"
 #include "graph/graph_color.h"
 #include "graph/graph_core.h"
-#include "graph/main_path.h"
 #include "vulkan/renderer.h"
-#include "vulkan/renderer_compute.h"
+#include "vulkan/renderer_criticality.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -84,7 +83,7 @@ igraph_integer_t calculate_dag_levels(const igraph_t *graph, igraph_vector_int_t
 // Worker: Prepare graph for SPLC animation
 // Checks directed, makes acyclic if needed (in-place), returns graph on success
 // ============================================================================
-void *compute_splc_animation(ExecutionContext *ctx)
+void *main_path_prepare(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
 	if (!ctx->app_state->current_graph.graph_initialized) {
@@ -118,7 +117,34 @@ void *compute_splc_animation(ExecutionContext *ctx)
 		igraph_vector_int_destroy(&fas);
 	}
 
-	return graph;
+	MainPathPrep *prep = calloc(1, sizeof(*prep));
+	if (!prep || igraph_vector_int_init(&prep->levels, 0) != IGRAPH_SUCCESS) {
+		free(prep);
+		return NULL;
+	}
+	igraph_integer_t max_level = calculate_dag_levels(graph, &prep->levels);
+	if (max_level < 0) {
+		igraph_vector_int_destroy(&prep->levels);
+		free(prep);
+		return NULL;
+	}
+	prep->num_levels = (int)max_level + 1;
+	prep->node_count = igraph_vcount(graph);
+	return prep;
+}
+
+void *compute_splc_animation(ExecutionContext *ctx)
+{
+	return main_path_prepare(ctx);
+}
+
+void free_main_path_prep(void *result_data)
+{
+	MainPathPrep *prep = result_data;
+	if (!prep)
+		return;
+	igraph_vector_int_destroy(&prep->levels);
+	free(prep);
 }
 
 // ============================================================================
@@ -128,10 +154,14 @@ void apply_splc_animation(ExecutionContext *ctx, void *result_data)
 {
 	if (!ctx || !ctx->app_state || !result_data)
 		return;
-	(void)result_data;
+	MainPathPrep *prep = result_data;
 
 	AppState *state = ctx->app_state;
 	GraphData *data = &state->current_graph;
+	if (prep->node_count != (igraph_integer_t)data->node_count) {
+		fprintf(stderr, "[apply_splc_animation] stale result\n");
+		return;
+	}
 
 	graph_reset_emphasis(data);
 	graph_animation_clear(&state->renderer);
@@ -141,14 +171,14 @@ void apply_splc_animation(ExecutionContext *ctx, void *result_data)
 		fprintf(stderr, "[apply_splc_animation] graph_rebuild_edges failed\n");
 		return;
 	}
-	if (!renderer_init_splc_buffers(&state->renderer, data)) {
-		fprintf(stderr, "[apply_splc_animation] renderer_init_splc_buffers failed\n");
+	renderer_update_graph(&state->renderer, data);
+	if (!renderer_init_criticality_buffers(&state->renderer, data, &prep->levels, prep->num_levels, CRIT_WEIGHT_UNIT) || !renderer_start_main_path_weighting(&state->renderer)) {
+		fprintf(stderr, "[apply_splc_animation] failed to initialize live main-path weighting\n");
 		return;
 	}
-	renderer_update_graph(&state->renderer, data);
 	state->renderer.label.tree_needs_rebuild = true;
 
-	printf("SPLC animation started (graph has %d levels)\n", state->renderer.splc.num_levels);
+	printf("SPLC live weighting started (graph has %d levels)\n", prep->num_levels);
 
 	igraph_vector_int_t indeg, outdeg;
 	igraph_integer_t nv = igraph_vcount(&data->g);
@@ -184,14 +214,5 @@ bool poll_splc_gpu(ExecutionContext *ctx)
 		return true;
 
 	Renderer *r = &ctx->app_state->renderer;
-
-	// SPLC per-frame dispatch happens in renderer_draw_frame.
-	// This poll manages the lifecycle: once splc_active goes false (all levels
-	// dispatched and readback done), the job is complete.
-	if (!r->splc.active && !r->splc.readback_pending) {
-		main_path_play_weighting(r, &ctx->app_state->current_graph, "main-path-weight-splc");
-		return true;
-	}
-
-	return false;
+	return !r->crit.active && !r->crit.readback_pending;
 }

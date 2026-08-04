@@ -30,6 +30,7 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 #define WEIGHT_UNIT 0u
 #define WEIGHT_SPE 1u
+#define WEIGHT_SPC 2u
 
 struct CritNode
 {
@@ -91,6 +92,22 @@ layout(std430, binding = 8) buffer DepthBuffer
 	float depth[];
 };
 
+struct DisplayEdge
+{
+	uint target_node;
+	float weight;
+};
+
+layout(std430, binding = 9) buffer DisplayEdgeBuffer
+{
+	DisplayEdge display_edges[];
+};
+
+layout(std430, binding = 10) buffer DisplayMaxBuffer
+{
+	uint display_max_weight_uint;
+};
+
 layout(push_constant) uniform Constants
 {
 	uint level_offset;
@@ -99,6 +116,32 @@ layout(push_constant) uniform Constants
 	uint weight_mode;
 }
 pc;
+
+float softplus(float value)
+{
+	return value > 20.0 ? value : log(1.0 + exp(value));
+}
+
+void record_display_edges(CritNode n, float score)
+{
+	uint encoded_score = floatBitsToUint(score);
+	for (uint i = 0u; i < n.degree; i++) {
+		uint edge_id = out_edges[n.edge_offset + i].pad;
+		display_edges[edge_id].weight = score;
+		atomicMax(display_max_weight_uint, encoded_score);
+	}
+}
+
+void record_projected_display_edges(uint source, CritNode n)
+{
+	for (uint i = 0u; i < n.degree; i++) {
+		CritEdge edge = out_edges[n.edge_offset + i];
+		float log_count = lnW[source] + lnX[edge.node];
+		float score = pc.weight_mode == WEIGHT_SPE ? 1.0 + log_count : softplus(log_count);
+		display_edges[edge.pad].weight = score;
+		atomicMax(display_max_weight_uint, floatBitsToUint(score));
+	}
+}
 
 void main()
 {
@@ -113,33 +156,37 @@ void main()
 		// the exponentials stay in range. A source (no predecessors) keeps
 		// lnW = 0, i.e. the single trivial path of length zero.
 		CritNode n = in_nodes[v];
-		if (n.degree == 0u) {
-			lnW[v] = 0.0;
-			return;
+		float value = 0.0;
+		if (n.degree != 0u) {
+			float m = -1.0 / 0.0;
+			for (uint i = 0u; i < n.degree; i++)
+				m = max(m, lnW[in_edges[n.edge_offset + i].node]);
+			float sum = 0.0;
+			for (uint i = 0u; i < n.degree; i++)
+				sum += exp(lnW[in_edges[n.edge_offset + i].node] - m);
+			value = m + log(sum);
 		}
-		float m = -1.0 / 0.0;
-		for (uint i = 0u; i < n.degree; i++)
-			m = max(m, lnW[in_edges[n.edge_offset + i].node]);
-		float sum = 0.0;
-		for (uint i = 0u; i < n.degree; i++)
-			sum += exp(lnW[in_edges[n.edge_offset + i].node] - m);
-		lnW[v] = m + log(sum);
+		lnW[v] = value;
+		if (pc.weight_mode == WEIGHT_UNIT)
+			record_display_edges(out_nodes[v], softplus(value));
 		return;
 	}
 
 	if (pc.stage == STAGE_LNX) {
 		CritNode n = out_nodes[v];
-		if (n.degree == 0u) {
-			lnX[v] = 0.0;
-			return;
+		float value = 0.0;
+		if (n.degree != 0u) {
+			float m = -1.0 / 0.0;
+			for (uint i = 0u; i < n.degree; i++)
+				m = max(m, lnX[out_edges[n.edge_offset + i].node]);
+			float sum = 0.0;
+			for (uint i = 0u; i < n.degree; i++)
+				sum += exp(lnX[out_edges[n.edge_offset + i].node] - m);
+			value = m + log(sum);
 		}
-		float m = -1.0 / 0.0;
-		for (uint i = 0u; i < n.degree; i++)
-			m = max(m, lnX[out_edges[n.edge_offset + i].node]);
-		float sum = 0.0;
-		for (uint i = 0u; i < n.degree; i++)
-			sum += exp(lnX[out_edges[n.edge_offset + i].node] - m);
-		lnX[v] = m + log(sum);
+		lnX[v] = value;
+		if (pc.weight_mode != WEIGHT_UNIT)
+			record_projected_display_edges(v, n);
 		return;
 	}
 

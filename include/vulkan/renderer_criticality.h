@@ -12,13 +12,16 @@
  * Generalised criticality on the GPU — Price & Evans, "Understanding Main
  * Path Analysis", arXiv:2512.12355 section 2.5.
  *
- * Four level-synchronous gather sweeps produce, per node:
+ * The shared main-path pipeline uses level-synchronous gather sweeps to
+ * produce, per node:
  *   lnW    ln(number of paths source -> v)          eq. 2.8b
  *   lnX    ln(number of paths v -> sink)            eq. 2.8c
  *   height max weight of any path source -> v       eq. 2.12
  *   depth  max weight of any path v -> sink         eq. 2.13
  *
- * The caller derives H, criticality c = H - h - d, and the basket from these.
+ * SPLC stops after the forward pass. SPC and SPE then use the reverse pass to
+ * project their edge scores. The legacy height/depth helpers remain available
+ * for the criticality analysis path.
  */
 
 /**
@@ -27,28 +30,19 @@
  * @param graph       Graph data; must be a DAG (caller's responsibility)
  * @param levels      Per-node level from calculate_dag_levels(), size n
  * @param num_levels  max_level + 1
- * @param weight_mode CRIT_WEIGHT_UNIT or CRIT_WEIGHT_SPE
+ * @param weight_mode CRIT_WEIGHT_UNIT (SPLC), CRIT_WEIGHT_SPC, or CRIT_WEIGHT_SPE
  * @return true on success
  */
 bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igraph_vector_int_t *levels, int num_levels, uint32_t weight_mode);
 
-/**
- * Record all 4 * num_levels dispatches and submit them as a single batch.
- * Non-blocking: poll with renderer_criticality_ready().
- * @return true if the submit succeeded
- */
-bool renderer_dispatch_criticality(Renderer *r);
+/** Start one live, level-ticked main-path weighting run. */
+bool renderer_start_main_path_weighting(Renderer *r);
 
-/** True once the submitted criticality batch has finished on the GPU. */
-bool renderer_criticality_ready(Renderer *r);
+/** Record the next forward or reverse level dispatch into a frame command buffer. */
+void renderer_dispatch_main_path_weight_level(Renderer *r, VkCommandBuffer cmd);
 
-/**
- * Copy the four per-node result arrays out of GPU memory.
- * Each out parameter may be NULL to skip it; non-NULL ones receive a
- * malloc'd array of node_count floats that the caller must free().
- * @return true on success
- */
-bool renderer_readback_criticality(Renderer *r, float **out_height, float **out_depth, float **out_lnw, float **out_lnx);
+/** Persist the completed live weighting result as the method's edge attribute. */
+void renderer_readback_main_path_weights(Renderer *r, GraphData *graph);
 
 /** Release all criticality GPU buffers and host-side level bookkeeping. */
 void renderer_destroy_criticality_buffers(Renderer *r);

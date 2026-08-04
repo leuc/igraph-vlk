@@ -11,6 +11,7 @@
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_compute.h"
+#include "vulkan/renderer_criticality.h"
 #include "vulkan/renderer_lifecycle.h"
 #include "vulkan/utils.h"
 
@@ -134,6 +135,11 @@ void renderer_draw_frame(Renderer *r, GraphData *graph)
 		r->splc.readback_pending = false;
 		r->splc.active = false;
 	}
+	if (r->crit.readback_pending) {
+		renderer_readback_main_path_weights(r, graph);
+		r->crit.readback_pending = false;
+		r->crit.active = false;
+	}
 
 	uint32_t imageIndex;
 	VkResult res = vkAcquireNextImageKHR(r->core.device, r->swapchain.swapchain, UINT64_MAX, r->commands.imageAvailableSemaphores[r->commands.currentFrame], VK_NULL_HANDLE, &imageIndex);
@@ -155,6 +161,11 @@ void renderer_draw_frame(Renderer *r, GraphData *graph)
 		if (now - r->splc.last_level_time >= r->splc.level_interval) {
 			renderer_dispatch_splc_level(r, r->commands.commandBuffers[r->commands.currentFrame]);
 		}
+	}
+	if (r->crit.active) {
+		double now = (double)r->anim.data.time;
+		if (now - r->crit.last_level_time >= r->crit.level_interval)
+			renderer_dispatch_main_path_weight_level(r, r->commands.commandBuffers[r->commands.currentFrame]);
 	}
 
 	renderer_render_scene(r, r->commands.commandBuffers[r->commands.currentFrame], r->renderPass.renderPass, r->renderPass.framebuffers[imageIndex], r->swapchain.extent, r->ubo.data.view, r->ubo.data.proj, 0, false, (vec3){0}, (vec3){0});

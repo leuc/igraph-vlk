@@ -57,7 +57,7 @@ typedef struct
 // Must match the stage/weight_mode constants in shaders/criticality.comp
 typedef enum { CRIT_STAGE_LNW = 0, CRIT_STAGE_LNX = 1, CRIT_STAGE_HEIGHT = 2, CRIT_STAGE_DEPTH = 3 } CritStage;
 
-typedef enum { CRIT_WEIGHT_UNIT = 0, CRIT_WEIGHT_SPE = 1 } CritWeightMode;
+typedef enum { CRIT_WEIGHT_UNIT = 0, CRIT_WEIGHT_SPE = 1, CRIT_WEIGHT_SPC = 2 } CritWeightMode;
 
 typedef struct
 {
@@ -414,13 +414,8 @@ typedef struct
 	uint32_t buffer_edge_count;
 } SPLCComputeContext;
 
-// Generalised criticality (arXiv:2512.12355 section 2.5).
-//
-// Unlike SPLC this is a computation rather than an animation: all
-// 4 * num_levels dispatches are recorded into one command buffer and
-// submitted once, then polled for completion. Levels are uploaded once as a
-// single permutation of node ids grouped by level, indexed via level_offsets
-// and level_sizes, so nothing needs re-uploading between dispatches.
+// Main-path dynamic-programming buffers. Levels are uploaded once as a single
+// permutation and dispatched one renderer tick at a time.
 typedef struct
 {
 	VkBuffer out_nodes_buffer;
@@ -441,18 +436,25 @@ typedef struct
 	VkDeviceMemory height_memory;
 	VkBuffer depth_buffer;
 	VkDeviceMemory depth_memory;
+	VkBuffer display_edges_buffer;
+	VkDeviceMemory display_edges_memory;
+	VkBuffer display_max_buffer;
+	VkDeviceMemory display_max_memory;
 
 	VkPipelineLayout pipeline_layout;
-	VkCommandPool cmd_pool;
-	VkCommandBuffer cmd_buf;
-	VkFence fence;
 
 	uint32_t *level_offsets; // start index into the level buffer, per level
 	uint32_t *level_sizes;	 // node count, per level
 	int num_levels;
 	uint32_t node_count;
-	uint32_t weight_mode; // 0 = unit, 1 = SPE (entropy)
-	bool submitted;		  // work is in flight, awaiting the fence
+	uint32_t weight_mode;
+	bool active;
+	bool readback_pending;
+	int current_level;
+	uint32_t stage;
+	double last_level_time;
+	double level_interval;
+	uint32_t graph_edge_count;
 } CritComputeContext;
 
 typedef struct

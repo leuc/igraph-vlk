@@ -199,15 +199,22 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->crit.height_memory = VK_NULL_HANDLE;
 	r->crit.depth_buffer = VK_NULL_HANDLE;
 	r->crit.depth_memory = VK_NULL_HANDLE;
-	r->crit.cmd_pool = VK_NULL_HANDLE;
-	r->crit.cmd_buf = VK_NULL_HANDLE;
-	r->crit.fence = VK_NULL_HANDLE;
+	r->crit.display_edges_buffer = VK_NULL_HANDLE;
+	r->crit.display_edges_memory = VK_NULL_HANDLE;
+	r->crit.display_max_buffer = VK_NULL_HANDLE;
+	r->crit.display_max_memory = VK_NULL_HANDLE;
 	r->crit.level_offsets = NULL;
 	r->crit.level_sizes = NULL;
 	r->crit.num_levels = 0;
 	r->crit.node_count = 0;
 	r->crit.weight_mode = CRIT_WEIGHT_UNIT;
-	r->crit.submitted = false;
+	r->crit.active = false;
+	r->crit.readback_pending = false;
+	r->crit.current_level = 0;
+	r->crit.stage = CRIT_STAGE_LNW;
+	r->crit.last_level_time = 0.0;
+	r->crit.level_interval = 0.0;
+	r->crit.graph_edge_count = 0;
 
 	r->graphUpdateRingIndex = 0;
 	for (int i = 0; i < GRAPH_UPDATE_RING_SIZE; i++) {

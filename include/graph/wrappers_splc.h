@@ -18,6 +18,16 @@
  */
 igraph_integer_t calculate_dag_levels(const igraph_t *graph, igraph_vector_int_t *levels);
 
+typedef struct
+{
+	igraph_vector_int_t levels;
+	int num_levels;
+	igraph_integer_t node_count;
+} MainPathPrep;
+
+void *main_path_prepare(ExecutionContext *ctx);
+void free_main_path_prep(void *result_data);
+
 // SPLC animation command (menu-triggered with background worker)
 void *compute_splc_animation(ExecutionContext *ctx);
 void apply_splc_animation(ExecutionContext *ctx, void *result_data);

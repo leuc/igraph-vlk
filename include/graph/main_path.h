@@ -6,11 +6,7 @@
 #ifndef GRAPH_MAIN_PATH_H
 #define GRAPH_MAIN_PATH_H
 
-#include "graph/graph_types.h"
 #include "interaction/state.h"
-#include "vulkan/vulkan_types.h"
-
-void main_path_play_weighting(Renderer *renderer, GraphData *graph, const char *weight_attr);
 
 void *compute_main_path_splc_basket(ExecutionContext *ctx);
 void *compute_main_path_spc_basket(ExecutionContext *ctx);

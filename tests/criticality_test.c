@@ -31,7 +31,7 @@
 #define OUT_EDGE_COUNT 10
 #define IN_EDGE_COUNT 10
 #define NUM_LEVELS 5
-#define BINDING_COUNT 9
+#define BINDING_COUNT 11
 #define WORKGROUP_SIZE 64
 
 #define CRIT_STAGE_LNW 0u
@@ -40,6 +40,7 @@
 #define CRIT_STAGE_DEPTH 3u
 #define CRIT_WEIGHT_UNIT 0u
 #define CRIT_WEIGHT_SPE 1u
+#define CRIT_WEIGHT_SPC 2u
 
 #define TOLERANCE 1e-4f
 
@@ -54,6 +55,12 @@ typedef struct
 	uint32_t node;
 	uint32_t pad;
 } CritEdge;
+
+typedef struct
+{
+	uint32_t target_node;
+	float weight;
+} DisplayEdge;
 
 typedef struct
 {
@@ -81,6 +88,7 @@ static const CritNode g_out_nodes[NODE_COUNT] = {
 };
 
 static const uint32_t g_out_targets[OUT_EDGE_COUNT] = {1, 2, 7, 3, 3, 4, 5, 6, 6, 6};
+static const uint32_t g_out_sources[OUT_EDGE_COUNT] = {0, 0, 0, 1, 2, 3, 3, 4, 5, 7};
 
 static const CritNode g_in_nodes[NODE_COUNT] = {
 	{0, 0}, // S (source)
@@ -319,25 +327,29 @@ static void harness_destroy(Harness *h)
 }
 
 // Buffer indices, matching the shader's binding numbers
-enum { BUF_OUT_NODES = 0, BUF_OUT_EDGES, BUF_IN_NODES, BUF_IN_EDGES, BUF_LEVELS, BUF_LNW, BUF_LNX, BUF_HEIGHT, BUF_DEPTH };
+enum { BUF_OUT_NODES = 0, BUF_OUT_EDGES, BUF_IN_NODES, BUF_IN_EDGES, BUF_LEVELS, BUF_LNW, BUF_LNX, BUF_HEIGHT, BUF_DEPTH, BUF_DISPLAY_EDGES, BUF_DISPLAY_MAX };
 
 static int harness_upload_graph(Harness *h)
 {
 	VkDeviceSize node_size = sizeof(CritNode) * NODE_COUNT;
 	VkDeviceSize value_size = sizeof(float) * NODE_COUNT;
 
-	if (create_buffer(h, BUF_OUT_NODES, node_size) || create_buffer(h, BUF_OUT_EDGES, sizeof(CritEdge) * OUT_EDGE_COUNT) || create_buffer(h, BUF_IN_NODES, node_size) || create_buffer(h, BUF_IN_EDGES, sizeof(CritEdge) * IN_EDGE_COUNT) || create_buffer(h, BUF_LEVELS, sizeof(uint32_t) * NODE_COUNT) || create_buffer(h, BUF_LNW, value_size) || create_buffer(h, BUF_LNX, value_size) || create_buffer(h, BUF_HEIGHT, value_size) || create_buffer(h, BUF_DEPTH, value_size))
+	if (create_buffer(h, BUF_OUT_NODES, node_size) || create_buffer(h, BUF_OUT_EDGES, sizeof(CritEdge) * OUT_EDGE_COUNT) || create_buffer(h, BUF_IN_NODES, node_size) || create_buffer(h, BUF_IN_EDGES, sizeof(CritEdge) * IN_EDGE_COUNT) || create_buffer(h, BUF_LEVELS, sizeof(uint32_t) * NODE_COUNT) || create_buffer(h, BUF_LNW, value_size) || create_buffer(h, BUF_LNX, value_size) || create_buffer(h, BUF_HEIGHT, value_size) || create_buffer(h, BUF_DEPTH, value_size) || create_buffer(h, BUF_DISPLAY_EDGES, sizeof(CritEdge) * OUT_EDGE_COUNT) || create_buffer(h, BUF_DISPLAY_MAX, sizeof(uint32_t)))
 		return 1;
 
 	CritEdge out_edges[OUT_EDGE_COUNT] = {0};
-	for (int i = 0; i < OUT_EDGE_COUNT; i++)
+	for (int i = 0; i < OUT_EDGE_COUNT; i++) {
 		out_edges[i].node = g_out_targets[i];
+		out_edges[i].pad = (uint32_t)i;
+	}
 	CritEdge in_edges[IN_EDGE_COUNT] = {0};
 	for (int i = 0; i < IN_EDGE_COUNT; i++)
 		in_edges[i].node = g_in_sources[i];
 
 	float zeros[NODE_COUNT] = {0};
-	if (upload(h, BUF_OUT_NODES, g_out_nodes, node_size) || upload(h, BUF_OUT_EDGES, out_edges, sizeof(out_edges)) || upload(h, BUF_IN_NODES, g_in_nodes, node_size) || upload(h, BUF_IN_EDGES, in_edges, sizeof(in_edges)) || upload(h, BUF_LEVELS, g_level_perm, sizeof(g_level_perm)) || upload(h, BUF_LNW, zeros, value_size) || upload(h, BUF_LNX, zeros, value_size) || upload(h, BUF_HEIGHT, zeros, value_size) || upload(h, BUF_DEPTH, zeros, value_size))
+	CritEdge display_edges[OUT_EDGE_COUNT] = {0};
+	uint32_t display_max = 0;
+	if (upload(h, BUF_OUT_NODES, g_out_nodes, node_size) || upload(h, BUF_OUT_EDGES, out_edges, sizeof(out_edges)) || upload(h, BUF_IN_NODES, g_in_nodes, node_size) || upload(h, BUF_IN_EDGES, in_edges, sizeof(in_edges)) || upload(h, BUF_LEVELS, g_level_perm, sizeof(g_level_perm)) || upload(h, BUF_LNW, zeros, value_size) || upload(h, BUF_LNX, zeros, value_size) || upload(h, BUF_HEIGHT, zeros, value_size) || upload(h, BUF_DEPTH, zeros, value_size) || upload(h, BUF_DISPLAY_EDGES, display_edges, sizeof(display_edges)) || upload(h, BUF_DISPLAY_MAX, &display_max, sizeof(display_max)))
 		return 1;
 
 	VkDescriptorBufferInfo infos[BINDING_COUNT];
@@ -440,6 +452,48 @@ static int run_mode(Harness *h, uint32_t weight_mode, const char *name, const fl
 	return failures;
 }
 
+static float softplus(float value)
+{
+	return value > 20.0f ? value : logf(1.0f + expf(value));
+}
+
+static int check_live_weights(Harness *h, uint32_t weight_mode, const char *name)
+{
+	DisplayEdge zero_edges[OUT_EDGE_COUNT] = {0};
+	uint32_t zero_max = 0;
+	if (upload(h, BUF_DISPLAY_EDGES, zero_edges, sizeof(zero_edges)) || upload(h, BUF_DISPLAY_MAX, &zero_max, sizeof(zero_max)))
+		return 1;
+	if (harness_run(h, weight_mode) != 0)
+		return 1;
+	DisplayEdge edges[OUT_EDGE_COUNT];
+	uint32_t max_bits = 0;
+	if (download(h, BUF_DISPLAY_EDGES, edges, sizeof(edges)) || download(h, BUF_DISPLAY_MAX, &max_bits, sizeof(max_bits)))
+		return 1;
+	int failures = 0;
+	float expected_max = 0.0f;
+	for (int e = 0; e < OUT_EDGE_COUNT; e++) {
+		float score = g_expect_lnw[g_out_sources[e]];
+		if (weight_mode != CRIT_WEIGHT_UNIT)
+			score += g_expect_lnx[g_out_targets[e]];
+		float expected = weight_mode == CRIT_WEIGHT_SPE ? 1.0f + score : softplus(score);
+		if (fabsf(edges[e].weight - expected) > TOLERANCE) {
+			fprintf(stderr, "  %s display[%d]: got %.6f, expected %.6f\n", name, e, (double)edges[e].weight, (double)expected);
+			failures++;
+		}
+		if (expected > expected_max)
+			expected_max = expected;
+	}
+	float max_weight = 0.0f;
+	memcpy(&max_weight, &max_bits, sizeof(max_weight));
+	if (fabsf(max_weight - expected_max) > TOLERANCE) {
+		fprintf(stderr, "  %s display max: got %.6f, expected %.6f\n", name, (double)max_weight, (double)expected_max);
+		failures++;
+	}
+	if (failures == 0)
+		printf("  %s live edge display: ok\n", name);
+	return failures;
+}
+
 int main(void)
 {
 	Harness h;
@@ -459,6 +513,9 @@ int main(void)
 	int failures = 0;
 	failures += run_mode(&h, CRIT_WEIGHT_UNIT, "unit", g_expect_unit_height, g_expect_unit_depth, g_expect_unit_criticality);
 	failures += run_mode(&h, CRIT_WEIGHT_SPE, "SPE", g_expect_spe_height, g_expect_spe_depth, g_expect_spe_criticality);
+	failures += check_live_weights(&h, CRIT_WEIGHT_UNIT, "SPLC");
+	failures += check_live_weights(&h, CRIT_WEIGHT_SPC, "SPC");
+	failures += check_live_weights(&h, CRIT_WEIGHT_SPE, "SPE");
 
 	harness_destroy(&h);
 

@@ -63,7 +63,8 @@ void renderer_create_splc_compute_pipeline(Renderer *r)
 // Bindings 0-3: forward and reverse CSR (nodes, edges) x (out, in)
 // Binding 4:    node ids grouped by level
 // Bindings 5-8: lnW, lnX, height, depth
-#define CRIT_BINDING_COUNT 9
+// Bindings 9-10: live edge display scores and their current maximum
+#define CRIT_BINDING_COUNT 11
 
 void renderer_create_criticality_compute_pipeline(Renderer *r)
 {

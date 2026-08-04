@@ -123,10 +123,6 @@ void cleanup_splc_pipelines_core(Renderer *r)
 		vkDestroyDescriptorSetLayout(r->core.device, r->descriptors.splc_compute_layout, NULL);
 
 	renderer_destroy_criticality_buffers(r);
-	if (r->crit.fence != VK_NULL_HANDLE)
-		vkDestroyFence(r->core.device, r->crit.fence, NULL);
-	if (r->crit.cmd_pool != VK_NULL_HANDLE)
-		vkDestroyCommandPool(r->core.device, r->crit.cmd_pool, NULL);
 	if (r->descriptors.crit_pool != VK_NULL_HANDLE)
 		vkDestroyDescriptorPool(r->core.device, r->descriptors.crit_pool, NULL);
 	if (r->pipelines.compute_criticality != VK_NULL_HANDLE)
