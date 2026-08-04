@@ -25,14 +25,12 @@ void renderer_create_compute_pipelines(Renderer *r)
 	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &computePipelineInfoSpherical, NULL, &r->pipelines.compute_spherical), "Failed to create compute spherical pipeline");
 	vkDestroyShaderModule(r->core.device, sphericalShaderModule, NULL);
 
-	if (r->core.has_atomic_float)
-		renderer_create_splc_compute_pipeline(r);
-	// Criticality is a pure gather DP — no atomics, so it is available even
-	// where the SPLC animation is not.
+	// Main Path is a pure gather DP and needs no atomic-float extension.
 	renderer_create_criticality_compute_pipeline(r);
 	renderer_create_bcgl_compute_pipeline(r);
 }
 
+#if 0
 void renderer_create_splc_compute_pipeline(Renderer *r)
 {
 	VkDescriptorSetLayoutBinding splcBindings[] = {
@@ -59,12 +57,14 @@ void renderer_create_splc_compute_pipeline(Renderer *r)
 	VkDescriptorSetAllocateInfo splcDescSetInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->descriptors.splc_pool, .descriptorSetCount = 1, .pSetLayouts = &r->descriptors.splc_compute_layout};
 	VK_CHECK(vkAllocateDescriptorSets(r->core.device, &splcDescSetInfo, &r->descriptors.splc_set), "Failed to allocate SPLC descriptor set");
 }
+#endif
 
 // Bindings 0-3: forward and reverse CSR (nodes, edges) x (out, in)
 // Binding 4:    node ids grouped by level
 // Bindings 5-8: lnW, lnX, height, depth
 // Bindings 9-10: live edge display scores and their current maximum
-#define CRIT_BINDING_COUNT 11
+// Binding 11: raw persisted edge weights used only by basket selection
+#define CRIT_BINDING_COUNT 12
 
 void renderer_create_criticality_compute_pipeline(Renderer *r)
 {
@@ -80,7 +80,7 @@ void renderer_create_criticality_compute_pipeline(Renderer *r)
 	VK_CHECK(vkCreatePipelineLayout(r->core.device, &critPipelineLayoutInfo, NULL, &r->crit.pipeline_layout), "Failed to create criticality compute pipeline layout");
 
 	VkShaderModule critShaderModule = VK_NULL_HANDLE;
-	VK_CHECK(create_shader_module(r->core.device, CRITICALITY_COMP_SHADER_PATH, &critShaderModule), "Failed to create criticality compute shader module");
+	VK_CHECK(create_shader_module(r->core.device, MAIN_PATH_COMP_SHADER_PATH, &critShaderModule), "Failed to create Main Path compute shader module");
 	VkPipelineShaderStageCreateInfo critStage = VK_SHADER_STAGE_COMP(critShaderModule);
 	VkComputePipelineCreateInfo critPipelineInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = critStage, .layout = r->crit.pipeline_layout};
 	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &critPipelineInfo, NULL, &r->pipelines.compute_criticality), "Failed to create criticality compute pipeline");

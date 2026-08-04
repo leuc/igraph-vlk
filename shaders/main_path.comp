@@ -4,7 +4,8 @@
 // arXiv:2512.12355 [physics.soc-ph], section 2.5 "Baskets of Nodes"
 // https://doi.org/10.48550/arXiv.2512.12355
 //
-// Four level-synchronous dynamic programming sweeps over a DAG:
+// The shared Main Path compute shader. Four level-synchronous dynamic
+// programming sweeps over a DAG:
 //
 //   stage 0  lnW(v) = ln(number of paths source -> v)     eq. 2.8b
 //   stage 1  lnX(v) = ln(number of paths v -> sink)       eq. 2.8c
@@ -28,9 +29,10 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 #define STAGE_HEIGHT 2u
 #define STAGE_DEPTH 3u
 
-#define WEIGHT_UNIT 0u
-#define WEIGHT_SPE 1u
+#define WEIGHT_SPLC 0u
+#define WEIGHT_UNIT 1u
 #define WEIGHT_SPC 2u
+#define WEIGHT_SPE 3u
 
 struct CritNode
 {
@@ -108,6 +110,11 @@ layout(std430, binding = 10) buffer DisplayMaxBuffer
 	uint display_max_weight_uint;
 };
 
+layout(std430, binding = 11) readonly buffer EdgeWeightBuffer
+{
+	float edge_weights[];
+};
+
 layout(push_constant) uniform Constants
 {
 	uint level_offset;
@@ -143,6 +150,17 @@ void record_projected_display_edges(uint source, CritNode n)
 	}
 }
 
+void record_forward_display_edges(CritNode n, float log_count)
+{
+	float score = pc.weight_mode == WEIGHT_UNIT ? 1.0 : (pc.weight_mode == WEIGHT_SPE ? 1.0 + log_count : softplus(log_count));
+	record_display_edges(n, score);
+}
+
+float selection_weight(CritEdge edge)
+{
+	return edge_weights[edge.pad];
+}
+
 void main()
 {
 	uint idx = gl_GlobalInvocationID.x;
@@ -152,12 +170,20 @@ void main()
 	uint v = level_nodes[pc.level_offset + idx];
 
 	if (pc.stage == STAGE_LNW) {
-		// ln(sum over predecessors u of exp(lnW[u])), shifted by the max so
-		// the exponentials stay in range. A source (no predecessors) keeps
-		// lnW = 0, i.e. the single trivial path of length zero.
+		// SPLC counts every path ending at v, including the length-zero path.
+		// Therefore W(v) = 1 + sum(pred W), unlike SPC's source-rooted count.
+		// Unit/SPC/SPE retain the source-rooted convention of Price & Evans.
 		CritNode n = in_nodes[v];
 		float value = 0.0;
-		if (n.degree != 0u) {
+		if (pc.weight_mode == WEIGHT_SPLC) {
+			float m = 0.0;
+			for (uint i = 0u; i < n.degree; i++)
+				m = max(m, lnW[in_edges[n.edge_offset + i].node]);
+			float sum = exp(-m);
+			for (uint i = 0u; i < n.degree; i++)
+				sum += exp(lnW[in_edges[n.edge_offset + i].node] - m);
+			value = m + log(sum);
+		} else if (n.degree != 0u) {
 			float m = -1.0 / 0.0;
 			for (uint i = 0u; i < n.degree; i++)
 				m = max(m, lnW[in_edges[n.edge_offset + i].node]);
@@ -167,8 +193,9 @@ void main()
 			value = m + log(sum);
 		}
 		lnW[v] = value;
-		if (pc.weight_mode == WEIGHT_UNIT)
-			record_display_edges(out_nodes[v], softplus(value));
+		// Every method exposes this forward prefix sweep. SPC/SPE then refine
+		// the same edges in reverse with their suffix count in STAGE_LNX.
+		record_forward_display_edges(out_nodes[v], value);
 		return;
 	}
 
@@ -185,7 +212,7 @@ void main()
 			value = m + log(sum);
 		}
 		lnX[v] = value;
-		if (pc.weight_mode != WEIGHT_UNIT)
+		if (pc.weight_mode == WEIGHT_SPC || pc.weight_mode == WEIGHT_SPE)
 			record_projected_display_edges(v, n);
 		return;
 	}
@@ -193,10 +220,10 @@ void main()
 	if (pc.stage == STAGE_HEIGHT) {
 		CritNode n = in_nodes[v];
 		float best = 0.0;
-		float x_v = lnX[v];
 		for (uint i = 0u; i < n.degree; i++) {
-			uint u = in_edges[n.edge_offset + i].node;
-			float w = (pc.weight_mode == WEIGHT_SPE) ? (lnW[u] + x_v) : 1.0;
+			CritEdge edge = in_edges[n.edge_offset + i];
+			uint u = edge.node;
+			float w = selection_weight(edge);
 			best = max(best, height[u] + w);
 		}
 		height[v] = best;
@@ -206,10 +233,10 @@ void main()
 	// STAGE_DEPTH
 	CritNode n = out_nodes[v];
 	float best = 0.0;
-	float w_v = lnW[v];
 	for (uint i = 0u; i < n.degree; i++) {
-		uint s = out_edges[n.edge_offset + i].node;
-		float w = (pc.weight_mode == WEIGHT_SPE) ? (w_v + lnX[s]) : 1.0;
+		CritEdge edge = out_edges[n.edge_offset + i];
+		uint s = edge.node;
+		float w = selection_weight(edge);
 		best = max(best, depth[s] + w);
 	}
 	depth[v] = best;

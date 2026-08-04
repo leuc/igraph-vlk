@@ -9,9 +9,7 @@
 #include <string.h>
 
 #include "graph/graph_core.h"
-#include "graph/wrappers_splc.h"
 #include "vulkan/buffers.h"
-#include "vulkan/renderer_init_splc_buffers.h"
 #include "vulkan/utils.h"
 
 VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge *edgeResults)
@@ -149,8 +147,9 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 }
 
 // ============================================================================
-// SPLC buffer helpers
+// Retired atomic SPLC implementation. Main Path uses renderer_criticality.c.
 // ============================================================================
+#if 0
 
 static void splc_destroy_old_buffers(Renderer *r)
 {
@@ -504,3 +503,4 @@ void renderer_readback_splc_weights(Renderer *r, GraphData *graph)
 
 	printf("SPLC readback: %u edges, max weight: %.2f, total: %.2f\n", e_idx, max_w, total_w);
 }
+#endif

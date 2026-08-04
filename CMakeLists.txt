@@ -66,7 +66,7 @@ if(USE_OPENXR)
 	endif()
 endif()
 
-set(SHADERS shaders/node.vert shaders/node.frag shaders/edge.vert shaders/edge.frag shaders/label.vert shaders/label.frag shaders/ui.vert shaders/ui.frag shaders/menu.vert shaders/menu.frag shaders/textquad.vert shaders/textquad.frag shaders/routing.comp shaders/splc.comp shaders/criticality.comp shaders/bcgl.comp shaders/ray.vert shaders/ray.frag)
+set(SHADERS shaders/node.vert shaders/node.frag shaders/edge.vert shaders/edge.frag shaders/label.vert shaders/label.frag shaders/ui.vert shaders/ui.frag shaders/menu.vert shaders/menu.frag shaders/textquad.vert shaders/textquad.frag shaders/routing.comp shaders/main_path.comp shaders/bcgl.comp shaders/ray.vert shaders/ray.frag)
 
 foreach(shader ${SHADERS})
 	get_filename_component(shader_name ${shader} NAME)
@@ -111,7 +111,6 @@ add_executable(
 	# Extracted refactor modules
 	src/vulkan/renderer_cleanup.c
 	src/vulkan/renderer_update_node_labels.c
-	src/vulkan/renderer_init_splc_buffers.c
 	src/vulkan/renderer_criticality.c
 	src/vulkan/renderer_bcgl.c
 	src/vulkan/renderer_transition.c
@@ -199,7 +198,7 @@ if(USE_OPENXR)
 	target_link_libraries(igraph-vlk PRIVATE OpenXR::openxr_loader)
 endif()
 
-target_compile_definitions(igraph-vlk PRIVATE NODE_VERT_SHADER_PATH="shaders/node.vert.spv" NODE_FRAG_SHADER_PATH="shaders/node.frag.spv" EDGE_VERT_SHADER_PATH="shaders/edge.vert.spv" EDGE_FRAG_SHADER_PATH="shaders/edge.frag.spv" LABEL_VERT_SHADER_PATH="shaders/label.vert.spv" LABEL_FRAG_SHADER_PATH="shaders/label.frag.spv" UI_VERT_SHADER_PATH="shaders/ui.vert.spv" UI_FRAG_SHADER_PATH="shaders/ui.frag.spv" MENU_VERT_SHADER_PATH="shaders/menu.vert.spv" MENU_FRAG_SHADER_PATH="shaders/menu.frag.spv" TEXTQUAD_VERT_SHADER_PATH="shaders/textquad.vert.spv" TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv" ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv" SPLC_COMP_SHADER_PATH="shaders/splc.comp.spv" CRITICALITY_COMP_SHADER_PATH="shaders/criticality.comp.spv" BCGL_COMP_SHADER_PATH="shaders/bcgl.comp.spv" RAY_VERT_SHADER_PATH="shaders/ray.vert.spv" RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv")
+target_compile_definitions(igraph-vlk PRIVATE NODE_VERT_SHADER_PATH="shaders/node.vert.spv" NODE_FRAG_SHADER_PATH="shaders/node.frag.spv" EDGE_VERT_SHADER_PATH="shaders/edge.vert.spv" EDGE_FRAG_SHADER_PATH="shaders/edge.frag.spv" LABEL_VERT_SHADER_PATH="shaders/label.vert.spv" LABEL_FRAG_SHADER_PATH="shaders/label.frag.spv" UI_VERT_SHADER_PATH="shaders/ui.vert.spv" UI_FRAG_SHADER_PATH="shaders/ui.frag.spv" MENU_VERT_SHADER_PATH="shaders/menu.vert.spv" MENU_FRAG_SHADER_PATH="shaders/menu.frag.spv" TEXTQUAD_VERT_SHADER_PATH="shaders/textquad.vert.spv" TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv" ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv" MAIN_PATH_COMP_SHADER_PATH="shaders/main_path.comp.spv" BCGL_COMP_SHADER_PATH="shaders/bcgl.comp.spv" RAY_VERT_SHADER_PATH="shaders/ray.vert.spv" RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv")
 
 # Standalone test for dynamic k-core maintenance (not installed)
 enable_testing()
@@ -294,13 +293,13 @@ if(NOT MSVC)
 endif()
 add_test(NAME picking_test COMMAND picking_test)
 
-# Headless Vulkan test for shaders/criticality.comp (arXiv:2512.12355 §2.5).
+# Headless Vulkan test for shaders/main_path.comp (arXiv:2512.12355 §2.5).
 # Compute-only, so it needs no window or surface — any Vulkan ICD will do,
 # including the lavapipe software rasterizer.
 add_executable(criticality_test tests/criticality_test.c)
 add_dependencies(criticality_test shaders)
 target_include_directories(criticality_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${Vulkan_INCLUDE_DIRS})
-target_compile_definitions(criticality_test PRIVATE CRITICALITY_TEST_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/criticality.comp.spv")
+target_compile_definitions(criticality_test PRIVATE CRITICALITY_TEST_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/main_path.comp.spv")
 target_link_libraries(criticality_test PRIVATE ${Vulkan_LIBRARIES})
 if(NOT MSVC)
 	target_link_libraries(criticality_test PRIVATE m)

@@ -24,8 +24,6 @@ Per-directory guide for `src/vulkan/` and `include/vulkan/`. See root `AGENTS.md
 | `include/vulkan/renderer_camera.h` | Camera rendering API |
 | `src/vulkan/renderer_compute.c` | Compute dispatch (SPLC, routing, BCGL) |
 | `include/vulkan/renderer_compute.h` | Compute dispatch API |
-| `src/vulkan/renderer_init_splc_buffers.c` | SPLC compute buffer initialization |
-| `include/vulkan/renderer_init_splc_buffers.h` | SPLC buffer init API |
 | `src/vulkan/renderer_update_node_labels.c` | Dynamic node label updates |
 | `include/vulkan/renderer_update_node_labels.h` | Label update API |
 | `src/vulkan/renderer_xr.c` | XR framebuffers, depth buffers per view |

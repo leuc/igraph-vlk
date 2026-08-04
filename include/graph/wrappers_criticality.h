@@ -19,6 +19,7 @@
 // Worker-thread preparation (forces a DAG, computes levels)
 void *compute_main_path_spc(ExecutionContext *ctx);
 void *compute_main_path_spe(ExecutionContext *ctx);
+void *compute_main_path_unit(ExecutionContext *ctx);
 
 // Main-thread live GPU setup
 void apply_main_path_weighting(ExecutionContext *ctx, void *result_data);

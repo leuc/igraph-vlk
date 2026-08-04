@@ -15,6 +15,8 @@
 
 #define CRIT_WORKGROUP_SIZE 64
 
+static float *crit_copy_values(Renderer *r, VkDeviceMemory mem, uint32_t n);
+
 // ============================================================================
 // Topology construction
 // ============================================================================
@@ -144,6 +146,7 @@ void renderer_destroy_criticality_buffers(Renderer *r)
 	crit_destroy_buffer(dev, &ctx->depth_buffer, &ctx->depth_memory);
 	crit_destroy_buffer(dev, &ctx->display_edges_buffer, &ctx->display_edges_memory);
 	crit_destroy_buffer(dev, &ctx->display_max_buffer, &ctx->display_max_memory);
+	crit_destroy_buffer(dev, &ctx->edge_weights_buffer, &ctx->edge_weights_memory);
 
 	free(ctx->level_offsets);
 	free(ctx->level_sizes);
@@ -154,18 +157,22 @@ void renderer_destroy_criticality_buffers(Renderer *r)
 	ctx->graph_edge_count = 0;
 	ctx->active = false;
 	ctx->readback_pending = false;
+	ctx->selection_run = false;
+	ctx->selection_ready = false;
+	free(ctx->selection_flags);
+	ctx->selection_flags = NULL;
 }
 
 static void crit_write_descriptors(Renderer *r)
 {
 	CritComputeContext *ctx = &r->crit;
 	VkDescriptorBufferInfo infos[] = {
-		{ctx->out_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->out_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->level_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnw_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnx_buffer, 0, VK_WHOLE_SIZE}, {ctx->height_buffer, 0, VK_WHOLE_SIZE}, {ctx->depth_buffer, 0, VK_WHOLE_SIZE}, {ctx->display_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->display_max_buffer, 0, VK_WHOLE_SIZE},
+		{ctx->out_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->out_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->level_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnw_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnx_buffer, 0, VK_WHOLE_SIZE}, {ctx->height_buffer, 0, VK_WHOLE_SIZE}, {ctx->depth_buffer, 0, VK_WHOLE_SIZE}, {ctx->display_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->display_max_buffer, 0, VK_WHOLE_SIZE}, {ctx->edge_weights_buffer, 0, VK_WHOLE_SIZE},
 	};
-	VkWriteDescriptorSet writes[11];
-	for (uint32_t i = 0; i < 11; i++)
+	VkWriteDescriptorSet writes[12];
+	for (uint32_t i = 0; i < 12; i++)
 		writes[i] = VK_WRITE_DESC_BUFFER(r->descriptors.crit_set, i, &infos[i], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-	vkUpdateDescriptorSets(r->core.device, 11, writes, 0, NULL);
+	vkUpdateDescriptorSets(r->core.device, 12, writes, 0, NULL);
 }
 
 static void crit_write_graphics_descriptors(Renderer *r)
@@ -184,7 +191,7 @@ static void crit_write_graphics_descriptors(Renderer *r)
 	}
 }
 
-bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igraph_vector_int_t *levels, int num_levels, uint32_t weight_mode)
+bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igraph_vector_int_t *levels, int num_levels, uint32_t weight_mode, const igraph_vector_t *selection_weights)
 {
 	CritComputeContext *ctx = &r->crit;
 	renderer_destroy_criticality_buffers(r);
@@ -240,6 +247,7 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 	VK_CREATE_HOST_BUFFER(dev, phys, value_size, usage, &ctx->depth_buffer, &ctx->depth_memory);
 	VK_CREATE_HOST_BUFFER(dev, phys, display_edge_size, usage, &ctx->display_edges_buffer, &ctx->display_edges_memory);
 	VK_CREATE_HOST_BUFFER(dev, phys, sizeof(uint32_t), usage, &ctx->display_max_buffer, &ctx->display_max_memory);
+	VK_CREATE_HOST_BUFFER(dev, phys, sizeof(float) * (ctx->graph_edge_count > 0 ? ctx->graph_edge_count : 1), usage, &ctx->edge_weights_buffer, &ctx->edge_weights_memory);
 
 	update_buffer(dev, ctx->out_nodes_memory, node_size, out_nodes);
 	update_buffer(dev, ctx->out_edges_memory, sizeof(CritEdge) * out_edge_count, out_edges);
@@ -270,6 +278,15 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 	update_buffer(dev, ctx->display_edges_memory, display_edge_size, display_edges);
 	uint32_t zero_max = 0;
 	update_buffer(dev, ctx->display_max_memory, sizeof(zero_max), &zero_max);
+	if (selection_weights)
+		update_buffer(dev, ctx->edge_weights_memory, sizeof(float) * ctx->graph_edge_count, VECTOR(*selection_weights));
+	else {
+		float *zero_weights = calloc(ctx->graph_edge_count > 0 ? ctx->graph_edge_count : 1, sizeof(float));
+		if (zero_weights) {
+			update_buffer(dev, ctx->edge_weights_memory, sizeof(float) * (ctx->graph_edge_count > 0 ? ctx->graph_edge_count : 1), zero_weights);
+			free(zero_weights);
+		}
+	}
 	free(display_edges);
 
 	free(out_nodes);
@@ -291,13 +308,34 @@ bool renderer_start_main_path_weighting(Renderer *r)
 		return false;
 	ctx->active = true;
 	ctx->readback_pending = false;
+	ctx->selection_run = false;
 	ctx->stage = CRIT_STAGE_LNW;
 	ctx->current_level = 0;
-	ctx->level_interval = 5.0 / (double)ctx->num_levels;
+	int phases = ctx->weight_mode == CRIT_WEIGHT_SPC || ctx->weight_mode == CRIT_WEIGHT_SPE ? 2 : 1;
+	ctx->level_interval = 5.0 / (double)(ctx->num_levels * phases);
 	if (ctx->level_interval < 0.016)
 		ctx->level_interval = 0.016;
 	ctx->last_level_time = r->anim.data.time;
-	printf("[MainPath] start: method=%s levels=%d tick=%.3fs\n", ctx->weight_mode == CRIT_WEIGHT_UNIT ? "SPLC" : (ctx->weight_mode == CRIT_WEIGHT_SPC ? "SPC" : "SPE"), ctx->num_levels, ctx->level_interval);
+	printf("[MainPath] start: method=%s levels=%d tick=%.3fs\n", ctx->weight_mode == CRIT_WEIGHT_SPLC ? "SPLC" : (ctx->weight_mode == CRIT_WEIGHT_UNIT ? "Unit" : (ctx->weight_mode == CRIT_WEIGHT_SPC ? "SPC" : "SPE")), ctx->num_levels, ctx->level_interval);
+	return true;
+}
+
+bool renderer_start_main_path_selection(Renderer *r)
+{
+	CritComputeContext *ctx = &r->crit;
+	if (ctx->num_levels <= 0 || ctx->display_edges_buffer == VK_NULL_HANDLE)
+		return false;
+	ctx->active = true;
+	ctx->readback_pending = false;
+	ctx->selection_run = true;
+	ctx->selection_ready = false;
+	ctx->stage = CRIT_STAGE_HEIGHT;
+	ctx->current_level = 0;
+	ctx->level_interval = 5.0 / (double)(ctx->num_levels * 2);
+	if (ctx->level_interval < 0.016)
+		ctx->level_interval = 0.016;
+	ctx->last_level_time = r->anim.data.time;
+	printf("[MainPath] selection start: method=%u levels=%d tick=%.3fs\n", ctx->weight_mode, ctx->num_levels, ctx->level_interval);
 	return true;
 }
 
@@ -307,22 +345,36 @@ void renderer_dispatch_main_path_weight_level(Renderer *r, VkCommandBuffer cmd)
 	if (!ctx->active)
 		return;
 
-	if ((ctx->stage == CRIT_STAGE_LNW && ctx->current_level >= ctx->num_levels) || (ctx->stage == CRIT_STAGE_LNX && ctx->current_level < 0)) {
-		if (ctx->stage == CRIT_STAGE_LNW && ctx->weight_mode != CRIT_WEIGHT_UNIT) {
-			printf("[MainPath] phase complete: forward; starting reverse projection\n");
-			ctx->stage = CRIT_STAGE_LNX;
+	bool forward = ctx->stage == CRIT_STAGE_LNW || ctx->stage == CRIT_STAGE_HEIGHT;
+	if ((forward && ctx->current_level >= ctx->num_levels) || (!forward && ctx->current_level < 0)) {
+		if (ctx->selection_run && ctx->stage == CRIT_STAGE_HEIGHT) {
+			ctx->stage = CRIT_STAGE_DEPTH;
 			ctx->current_level = ctx->num_levels - 1;
 			ctx->last_level_time = r->anim.data.time;
 			return;
 		}
-		printf("[MainPath] compute complete; scheduling readback\n");
-		ctx->readback_pending = true;
+		if (ctx->stage == CRIT_STAGE_LNW && (ctx->weight_mode == CRIT_WEIGHT_SPC || ctx->weight_mode == CRIT_WEIGHT_SPE)) {
+			printf("[MainPath] forward sweep complete; reversing from sinks\n");
+			ctx->stage = CRIT_STAGE_LNX;
+			ctx->current_level = ctx->num_levels - 1;
+		} else if ((ctx->stage == CRIT_STAGE_LNW || ctx->stage == CRIT_STAGE_LNX) && ctx->selection_run) {
+			ctx->stage = CRIT_STAGE_HEIGHT;
+			ctx->current_level = 0;
+		} else if (ctx->stage == CRIT_STAGE_HEIGHT) {
+			ctx->stage = CRIT_STAGE_DEPTH;
+			ctx->current_level = ctx->num_levels - 1;
+		} else {
+			printf("[MainPath] compute complete; scheduling %s readback\n", ctx->selection_run ? "selection" : "weight");
+			ctx->readback_pending = true;
+			return;
+		}
+		ctx->last_level_time = r->anim.data.time;
 		return;
 	}
 
 	int level = ctx->current_level;
 	uint32_t count = ctx->level_sizes[level];
-	printf("[MainPath] tick: method=%s phase=%s level=%d/%d nodes=%u\n", ctx->weight_mode == CRIT_WEIGHT_UNIT ? "SPLC" : (ctx->weight_mode == CRIT_WEIGHT_SPC ? "SPC" : "SPE"), ctx->stage == CRIT_STAGE_LNW ? "forward" : "reverse", level, ctx->num_levels - 1, count);
+	printf("[MainPath] tick: method=%s phase=%s level=%d/%d nodes=%u\n", ctx->weight_mode == CRIT_WEIGHT_SPLC ? "SPLC" : (ctx->weight_mode == CRIT_WEIGHT_UNIT ? "Unit" : (ctx->weight_mode == CRIT_WEIGHT_SPC ? "SPC" : "SPE")), forward ? "forward" : "reverse", level, ctx->num_levels - 1, count);
 	if (count > 0) {
 		VkMemoryBarrier compute_barrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT};
 		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &compute_barrier, 0, NULL, 0, NULL);
@@ -334,8 +386,28 @@ void renderer_dispatch_main_path_weight_level(Renderer *r, VkCommandBuffer cmd)
 		VkMemoryBarrier vertex_barrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT};
 		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 1, &vertex_barrier, 0, NULL, 0, NULL);
 	}
-	ctx->current_level += ctx->stage == CRIT_STAGE_LNW ? 1 : -1;
+	ctx->current_level += forward ? 1 : -1;
 	ctx->last_level_time = r->anim.data.time;
+}
+
+void renderer_readback_main_path_selection(Renderer *r)
+{
+	CritComputeContext *ctx = &r->crit;
+	float *height = crit_copy_values(r, ctx->height_memory, ctx->node_count);
+	float *depth = crit_copy_values(r, ctx->depth_memory, ctx->node_count);
+	if (!height || !depth)
+		goto done;
+	float maximum = 0.0f;
+	for (uint32_t v = 0; v < ctx->node_count; v++)
+		maximum = fmaxf(maximum, height[v] + depth[v]);
+	ctx->selection_flags = calloc(ctx->node_count, sizeof(int));
+	if (ctx->selection_flags)
+		for (uint32_t v = 0; v < ctx->node_count; v++)
+			ctx->selection_flags[v] = fabsf(maximum - height[v] - depth[v]) < 1e-4f ? 1 : 0;
+done:
+	free(height);
+	free(depth);
+	ctx->selection_ready = ctx->selection_flags != NULL;
 }
 
 static float *crit_copy_values(Renderer *r, VkDeviceMemory mem, uint32_t n)
@@ -374,8 +446,10 @@ void renderer_readback_main_path_weights(Renderer *r, GraphData *graph)
 		igraph_edge(&graph->g, e, &from, &to);
 		float log_weight = lnw[from] + lnx[to];
 		float weight;
-		if (ctx->weight_mode == CRIT_WEIGHT_UNIT) {
+		if (ctx->weight_mode == CRIT_WEIGHT_SPLC) {
 			weight = lnw[from] > 80.0f ? INFINITY : expf(lnw[from]);
+		} else if (ctx->weight_mode == CRIT_WEIGHT_UNIT) {
+			weight = 1.0f;
 		} else if (ctx->weight_mode == CRIT_WEIGHT_SPC) {
 			weight = log_weight > 80.0f ? INFINITY : expf(log_weight);
 		} else {
@@ -388,9 +462,9 @@ void renderer_readback_main_path_weights(Renderer *r, GraphData *graph)
 		total += weight;
 	}
 
-	const char *attr_name = ctx->weight_mode == CRIT_WEIGHT_UNIT ? "main-path-weight-splc" : (ctx->weight_mode == CRIT_WEIGHT_SPC ? "main-path-weight-spc" : "main-path-weight-spe");
+	const char *attr_name = ctx->weight_mode == CRIT_WEIGHT_SPLC ? "main-path-weight-splc" : (ctx->weight_mode == CRIT_WEIGHT_UNIT ? "main-path-weight-unit" : (ctx->weight_mode == CRIT_WEIGHT_SPC ? "main-path-weight-spc" : "main-path-weight-spe"));
 	graph_cache_store_edge_attr(&graph->g, attr_name, &weights);
-	printf("Main path %s readback: %lld edges, max weight: %.2f, total: %.2f\n", ctx->weight_mode == CRIT_WEIGHT_UNIT ? "SPLC" : (ctx->weight_mode == CRIT_WEIGHT_SPC ? "SPC" : "SPE"), (long long)m, max_weight, total);
+	printf("Main path %s readback: %lld edges, max weight: %.2f, total: %.2f\n", ctx->weight_mode == CRIT_WEIGHT_SPLC ? "SPLC" : (ctx->weight_mode == CRIT_WEIGHT_UNIT ? "Unit" : (ctx->weight_mode == CRIT_WEIGHT_SPC ? "SPC" : "SPE")), (long long)m, max_weight, total);
 	igraph_vector_destroy(&weights);
 	free(lnw);
 	free(lnx);

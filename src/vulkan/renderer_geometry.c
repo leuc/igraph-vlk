@@ -28,8 +28,8 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	VK_CHECK(vkResetFences(r->core.device, 1, &r->graphUpdateFences[ringIdx]), "Failed to reset graph update fences");
 
 	// If edge count changed while SPLC was active, reset to avoid stale/out-of-bounds reads
-	if (r->splc.active && r->edge.count != graph->edge_count) {
-		r->splc.active = false;
+	if (r->crit.active && r->edge.count != graph->edge_count) {
+		r->crit.active = false;
 	}
 
 	r->node.count = graph->node_count;

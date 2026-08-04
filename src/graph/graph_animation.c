@@ -9,7 +9,6 @@
 #include <stdlib.h>
 
 #include "vulkan/renderer_anim.h"
-#include "vulkan/renderer_compute.h"
 
 static void graph_animation_submit(Renderer *renderer, const GraphData *graph, const GraphAnimationRequest *request)
 {
@@ -53,7 +52,8 @@ void graph_animation_clear(Renderer *renderer)
 	if (!renderer)
 		return;
 	renderer_anim_clear(renderer);
-	renderer_splc_clear_visualization(renderer);
+	renderer->crit.active = false;
+	renderer->crit.readback_pending = false;
 }
 
 static igraph_integer_t graph_animation_source(const GraphData *graph)

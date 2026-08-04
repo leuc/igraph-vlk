@@ -11,9 +11,14 @@
 void *compute_main_path_splc_basket(ExecutionContext *ctx);
 void *compute_main_path_spc_basket(ExecutionContext *ctx);
 void *compute_main_path_spe_basket(ExecutionContext *ctx);
+void *compute_main_path_unit_basket(ExecutionContext *ctx);
 void *compute_main_path_splc_path(ExecutionContext *ctx);
 void *compute_main_path_spc_path(ExecutionContext *ctx);
 void *compute_main_path_spe_path(ExecutionContext *ctx);
+void *compute_main_path_unit_path(ExecutionContext *ctx);
+
+void apply_main_path_basket(ExecutionContext *ctx, void *result_data);
+bool poll_main_path_basket(ExecutionContext *ctx);
 
 void apply_main_path_selection(ExecutionContext *ctx, void *result_data);
 void free_main_path_selection(void *result_data);

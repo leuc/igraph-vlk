@@ -172,7 +172,7 @@ void apply_splc_animation(ExecutionContext *ctx, void *result_data)
 		return;
 	}
 	renderer_update_graph(&state->renderer, data);
-	if (!renderer_init_criticality_buffers(&state->renderer, data, &prep->levels, prep->num_levels, CRIT_WEIGHT_UNIT) || !renderer_start_main_path_weighting(&state->renderer)) {
+	if (!renderer_init_criticality_buffers(&state->renderer, data, &prep->levels, prep->num_levels, CRIT_WEIGHT_SPLC, NULL) || !renderer_start_main_path_weighting(&state->renderer)) {
 		fprintf(stderr, "[apply_splc_animation] failed to initialize live main-path weighting\n");
 		return;
 	}

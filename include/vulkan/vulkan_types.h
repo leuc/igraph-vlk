@@ -54,10 +54,10 @@ typedef struct
 	uint32_t pad;
 } CritEdge;
 
-// Must match the stage/weight_mode constants in shaders/criticality.comp
+// Must match the stage/weight_mode constants in shaders/main_path.comp
 typedef enum { CRIT_STAGE_LNW = 0, CRIT_STAGE_LNX = 1, CRIT_STAGE_HEIGHT = 2, CRIT_STAGE_DEPTH = 3 } CritStage;
 
-typedef enum { CRIT_WEIGHT_UNIT = 0, CRIT_WEIGHT_SPE = 1, CRIT_WEIGHT_SPC = 2 } CritWeightMode;
+typedef enum { CRIT_WEIGHT_SPLC = 0, CRIT_WEIGHT_UNIT = 1, CRIT_WEIGHT_SPC = 2, CRIT_WEIGHT_SPE = 3 } CritWeightMode;
 
 typedef struct
 {
@@ -440,6 +440,8 @@ typedef struct
 	VkDeviceMemory display_edges_memory;
 	VkBuffer display_max_buffer;
 	VkDeviceMemory display_max_memory;
+	VkBuffer edge_weights_buffer;
+	VkDeviceMemory edge_weights_memory;
 
 	VkPipelineLayout pipeline_layout;
 
@@ -450,6 +452,9 @@ typedef struct
 	uint32_t weight_mode;
 	bool active;
 	bool readback_pending;
+	bool selection_run;
+	bool selection_ready;
+	int *selection_flags;
 	int current_level;
 	uint32_t stage;
 	double last_level_time;

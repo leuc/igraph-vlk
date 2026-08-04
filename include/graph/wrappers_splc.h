@@ -23,6 +23,8 @@ typedef struct
 	igraph_vector_int_t levels;
 	int num_levels;
 	igraph_integer_t node_count;
+	uint32_t weight_mode;
+	const char *weight_attr;
 } MainPathPrep;
 
 void *main_path_prepare(ExecutionContext *ctx);

@@ -27,7 +27,7 @@ typedef struct
 
 static void *crit_prepare(ExecutionContext *ctx, uint32_t weight_mode)
 {
-	const char *label = weight_mode == CRIT_WEIGHT_SPE ? "SPE" : "SPC";
+	const char *label = weight_mode == CRIT_WEIGHT_UNIT ? "Unit" : (weight_mode == CRIT_WEIGHT_SPE ? "SPE" : "SPC");
 	worker_thread_set_status_message("Main path: preparing DAG...");
 	MainPathPrep *dag = main_path_prepare(ctx);
 	if (!dag)
@@ -60,6 +60,11 @@ void *compute_main_path_spc(ExecutionContext *ctx)
 	return crit_prepare(ctx, CRIT_WEIGHT_SPC);
 }
 
+void *compute_main_path_unit(ExecutionContext *ctx)
+{
+	return crit_prepare(ctx, CRIT_WEIGHT_UNIT);
+}
+
 void *compute_main_path_spe(ExecutionContext *ctx)
 {
 	return crit_prepare(ctx, CRIT_WEIGHT_SPE);
@@ -85,7 +90,7 @@ void apply_main_path_weighting(ExecutionContext *ctx, void *result_data)
 		return;
 	}
 	renderer_update_graph(&state->renderer, graph);
-	if (!renderer_init_criticality_buffers(&state->renderer, graph, &prep->levels, prep->num_levels, prep->weight_mode) || !renderer_start_main_path_weighting(&state->renderer)) {
+	if (!renderer_init_criticality_buffers(&state->renderer, graph, &prep->levels, prep->num_levels, prep->weight_mode, NULL) || !renderer_start_main_path_weighting(&state->renderer)) {
 		fprintf(stderr, "[MainPath] failed to initialize live %s weighting\n", prep->weight_mode == CRIT_WEIGHT_SPE ? "SPE" : "SPC");
 		return;
 	}

@@ -14,7 +14,9 @@
 
 #include "graph/graph_color.h"
 #include "graph/graph_core.h"
+#include "graph/wrappers_splc.h"
 #include "vulkan/renderer.h"
+#include "vulkan/renderer_criticality.h"
 
 typedef enum {
 	MAIN_PATH_SELECT_BASKET,
@@ -283,17 +285,31 @@ static void *main_path_compute_selection(ExecutionContext *ctx, const char *weig
 	return result;
 }
 
+static void *main_path_prepare_basket(ExecutionContext *ctx, uint32_t weight_mode, const char *weight_attr)
+{
+	MainPathPrep *prep = main_path_prepare(ctx);
+	if (prep) {
+		prep->weight_mode = weight_mode;
+		prep->weight_attr = weight_attr;
+	}
+	return prep;
+}
+
 void *compute_main_path_splc_basket(ExecutionContext *ctx)
 {
-	return main_path_compute_selection(ctx, "main-path-weight-splc", MAIN_PATH_SELECT_BASKET);
+	return main_path_prepare_basket(ctx, CRIT_WEIGHT_SPLC, "main-path-weight-splc");
 }
 void *compute_main_path_spc_basket(ExecutionContext *ctx)
 {
-	return main_path_compute_selection(ctx, "main-path-weight-spc", MAIN_PATH_SELECT_BASKET);
+	return main_path_prepare_basket(ctx, CRIT_WEIGHT_SPC, "main-path-weight-spc");
 }
 void *compute_main_path_spe_basket(ExecutionContext *ctx)
 {
-	return main_path_compute_selection(ctx, "main-path-weight-spe", MAIN_PATH_SELECT_BASKET);
+	return main_path_prepare_basket(ctx, CRIT_WEIGHT_SPE, "main-path-weight-spe");
+}
+void *compute_main_path_unit_basket(ExecutionContext *ctx)
+{
+	return main_path_prepare_basket(ctx, CRIT_WEIGHT_UNIT, "main-path-weight-unit");
 }
 void *compute_main_path_splc_path(ExecutionContext *ctx)
 {
@@ -306,6 +322,10 @@ void *compute_main_path_spc_path(ExecutionContext *ctx)
 void *compute_main_path_spe_path(ExecutionContext *ctx)
 {
 	return main_path_compute_selection(ctx, "main-path-weight-spe", MAIN_PATH_SELECT_PATH);
+}
+void *compute_main_path_unit_path(ExecutionContext *ctx)
+{
+	return main_path_compute_selection(ctx, "main-path-weight-unit", MAIN_PATH_SELECT_PATH);
 }
 
 void apply_main_path_selection(ExecutionContext *ctx, void *result_data)
@@ -341,4 +361,69 @@ void free_main_path_selection(void *result_data)
 		return;
 	free(result->flags);
 	free(result);
+}
+
+void apply_main_path_basket(ExecutionContext *ctx, void *result_data)
+{
+	MainPathPrep *prep = result_data;
+	if (!ctx || !ctx->app_state || !prep)
+		return;
+	AppState *state = ctx->app_state;
+	GraphData *graph = &state->current_graph;
+	if (prep->node_count != (igraph_integer_t)graph->node_count)
+		return;
+	igraph_vector_t weights;
+	if (igraph_vector_init(&weights, 0) != IGRAPH_SUCCESS)
+		return;
+	if (!graph_cache_load_edge_attr(&graph->g, prep->weight_attr, &weights) || igraph_vector_size(&weights) != graph->edge_count) {
+		fprintf(stderr, "[Main Path] Run Weighting before Basket selection\n");
+		igraph_vector_destroy(&weights);
+		return;
+	}
+	for (uint32_t e = 0; e < graph->edge_count; e++)
+		if (!isfinite(VECTOR(weights)[e])) {
+			fprintf(stderr, "[Main Path] Basket rejects overflowing weights; use SPE\n");
+			igraph_vector_destroy(&weights);
+			return;
+		}
+	graph_reset_emphasis(graph);
+	if (!graph_rebuild_edges(graph))
+		return;
+	renderer_update_graph(&state->renderer, graph);
+	if (!renderer_init_criticality_buffers(&state->renderer, graph, &prep->levels, prep->num_levels, prep->weight_mode, &weights) || !renderer_start_main_path_selection(&state->renderer))
+		fprintf(stderr, "[MainPath] failed to initialize GPU basket selection\n");
+	igraph_vector_destroy(&weights);
+}
+
+bool poll_main_path_basket(ExecutionContext *ctx)
+{
+	if (!ctx || !ctx->app_state)
+		return true;
+	Renderer *renderer = &ctx->app_state->renderer;
+	CritComputeContext *compute = &renderer->crit;
+	if (compute->active || compute->readback_pending)
+		return false;
+	if (!compute->selection_ready)
+		return true;
+	GraphData *graph = &ctx->app_state->current_graph;
+	igraph_vector_int_t flags;
+	if (igraph_vector_int_init(&flags, compute->node_count) == IGRAPH_SUCCESS) {
+		for (uint32_t v = 0; v < compute->node_count; v++)
+			VECTOR(flags)[v] = compute->selection_flags[v];
+		const char *method = compute->weight_mode == CRIT_WEIGHT_SPLC ? "splc" : (compute->weight_mode == CRIT_WEIGHT_SPC ? "spc" : (compute->weight_mode == CRIT_WEIGHT_SPE ? "spe" : "unit"));
+		char attr[64];
+		snprintf(attr, sizeof(attr), "main-path-basket-%s", method);
+		graph_cache_store_vertex_attr_int(&graph->g, attr, &flags);
+		graph_reset_emphasis(graph);
+		for (uint32_t v = 0; v < graph->node_count; v++)
+			if (!VECTOR(flags)[v])
+				graph->nodes[v].emphasis = EMPHASIS_DIMMED;
+		renderer->needsAttributeUpload = VK_TRUE;
+		renderer_update_graph(renderer, graph);
+		igraph_vector_int_destroy(&flags);
+	}
+	compute->selection_ready = false;
+	free(compute->selection_flags);
+	compute->selection_flags = NULL;
+	return true;
 }
