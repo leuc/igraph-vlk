@@ -8,6 +8,7 @@
 #include "graph/graph_animation.h"
 #include "graph/graph_color.h"
 #include "graph/graph_core.h"
+#include "graph/main_path.h"
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_compute.h"
 
@@ -187,8 +188,10 @@ bool poll_splc_gpu(ExecutionContext *ctx)
 	// SPLC per-frame dispatch happens in renderer_draw_frame.
 	// This poll manages the lifecycle: once splc_active goes false (all levels
 	// dispatched and readback done), the job is complete.
-	if (!r->splc.active && !r->splc.readback_pending)
+	if (!r->splc.active && !r->splc.readback_pending) {
+		main_path_play_weighting(r, &ctx->app_state->current_graph, "main-path-weight-splc");
 		return true;
+	}
 
 	return false;
 }

@@ -7,13 +7,16 @@
 #define GRAPH_ANIMATION_H
 
 #include "graph/graph_types.h"
-#include "vulkan/vulkan_types.h"
+#include "vulkan/renderer_anim.h"
 
 typedef struct
 {
 	const int *node_steps;
 	const float *node_values;
 	const float *edge_values;
+	const uint32_t *edge_event_offsets;
+	const RendererAnimEvent *edge_events;
+	uint32_t edge_event_count;
 	float duration;
 } GraphAnimationRequest;
 

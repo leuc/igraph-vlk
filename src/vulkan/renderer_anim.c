@@ -32,9 +32,23 @@ static void renderer_anim_ensure_edge_capacity(Renderer *r, uint32_t count)
 
 	VK_DESTROY_BUFFER(r->core.device, r->anim.channels.edge_source, r->anim.channels.edge_source_memory);
 	VK_DESTROY_BUFFER(r->core.device, r->anim.channels.edge_value, r->anim.channels.edge_value_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->anim.channels.edge_event_offsets, r->anim.channels.edge_event_offsets_memory);
 	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(uint32_t) * capacity, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->anim.channels.edge_source, &r->anim.channels.edge_source_memory);
 	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(float) * capacity, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->anim.channels.edge_value, &r->anim.channels.edge_value_memory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(uint32_t) * (capacity + 1), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->anim.channels.edge_event_offsets, &r->anim.channels.edge_event_offsets_memory);
 	r->anim.channels.edge_capacity = capacity;
+	r->anim.channels.edge_event_offset_capacity = capacity + 1;
+}
+
+static void renderer_anim_ensure_event_capacity(Renderer *r, uint32_t count)
+{
+	uint32_t capacity = count > 0 ? count : 1;
+	if (r->anim.channels.edge_event_capacity >= capacity)
+		return;
+
+	VK_DESTROY_BUFFER(r->core.device, r->anim.channels.edge_events, r->anim.channels.edge_events_memory);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(RendererAnimEvent) * capacity, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &r->anim.channels.edge_events, &r->anim.channels.edge_events_memory);
+	r->anim.channels.edge_event_capacity = capacity;
 }
 
 static void renderer_anim_upload_ints(Renderer *r, VkDeviceMemory memory, const int *data, uint32_t count, int neutral)
@@ -94,15 +108,14 @@ static void renderer_anim_write_channel_descriptors(Renderer *r)
 	VkDescriptorBufferInfo edge_source = {r->anim.channels.edge_source, 0, sizeof(uint32_t) * r->anim.channels.edge_capacity};
 	VkDescriptorBufferInfo edge_value = {r->anim.channels.edge_value, 0, sizeof(float) * r->anim.channels.edge_capacity};
 	VkDescriptorBufferInfo node_value = {r->anim.channels.node_value, 0, sizeof(float) * r->anim.channels.node_capacity};
+	VkDescriptorBufferInfo edge_event_offsets = {r->anim.channels.edge_event_offsets, 0, sizeof(uint32_t) * r->anim.channels.edge_event_offset_capacity};
+	VkDescriptorBufferInfo edge_events = {r->anim.channels.edge_events, 0, sizeof(RendererAnimEvent) * r->anim.channels.edge_event_capacity};
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4; i++) {
 		VkWriteDescriptorSet writes[] = {
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 5, &node_step, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 6, &edge_source, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 7, &edge_value, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 8, &node_value, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 5, &node_step, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 6, &edge_source, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 7, &edge_value, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 8, &node_value, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 9, &edge_event_offsets, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 10, &edge_events, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
 		};
-		vkUpdateDescriptorSets(r->core.device, 4, writes, 0, NULL);
+		vkUpdateDescriptorSets(r->core.device, 6, writes, 0, NULL);
 	}
 }
 
@@ -144,10 +157,21 @@ void renderer_anim_play(Renderer *r, const RendererAnimClip *clip)
 
 	renderer_anim_ensure_node_capacity(r, clip->node_count);
 	renderer_anim_ensure_edge_capacity(r, clip->edge_count);
+	renderer_anim_ensure_event_capacity(r, clip->edge_event_count);
 	renderer_anim_upload_ints(r, r->anim.channels.node_step_memory, clip->node_steps, clip->node_count, 0);
 	renderer_anim_upload_floats(r, r->anim.channels.node_value_memory, clip->node_values, clip->node_count, 1.0f);
 	renderer_anim_upload_uints(r, r->anim.channels.edge_source_memory, clip->edge_sources, clip->edge_count, 0);
 	renderer_anim_upload_floats(r, r->anim.channels.edge_value_memory, clip->edge_values, clip->edge_count, 1.0f);
+	if (clip->edge_event_offsets)
+		update_buffer(r->core.device, r->anim.channels.edge_event_offsets_memory, sizeof(uint32_t) * (clip->edge_count + 1), clip->edge_event_offsets);
+	else
+		renderer_anim_upload_uints(r, r->anim.channels.edge_event_offsets_memory, NULL, clip->edge_count + 1, 0);
+	if (clip->edge_events && clip->edge_event_count > 0)
+		update_buffer(r->core.device, r->anim.channels.edge_events_memory, sizeof(RendererAnimEvent) * clip->edge_event_count, clip->edge_events);
+	else {
+		RendererAnimEvent neutral = {0};
+		update_buffer(r->core.device, r->anim.channels.edge_events_memory, sizeof(neutral), &neutral);
+	}
 	renderer_anim_write_channel_descriptors(r);
 
 	int max_step = 0;
@@ -156,7 +180,15 @@ void renderer_anim_play(Renderer *r, const RendererAnimClip *clip)
 			if (clip->node_steps[i] > max_step)
 				max_step = clip->node_steps[i];
 	}
-	r->anim.data.seq_duration = (max_step > 0 && clip->duration > 0.0f) ? clip->duration : 0.0f;
+	float event_end = 0.0f;
+	for (uint32_t i = 0; clip->edge_events && i < clip->edge_event_count; i++) {
+		float end = clip->edge_events[i].start_time + clip->edge_events[i].duration;
+		if (end > event_end)
+			event_end = end;
+	}
+	r->anim.data.seq_duration = clip->duration > event_end ? clip->duration : event_end;
+	if (max_step == 0 && event_end == 0.0f)
+		r->anim.data.seq_duration = 0.0f;
 	r->anim.data.seq_stride = max_step > 0 ? r->anim.data.seq_duration / (float)max_step : 0.0f;
 	r->anim.seq_start_time = r->anim.data.time;
 	r->anim.data.seq_time = 0.0f;
@@ -168,6 +200,12 @@ void renderer_anim_clear(Renderer *r)
 	renderer_anim_play(r, &clip);
 }
 
+void renderer_anim_reset(Renderer *r, uint32_t node_count, uint32_t edge_count)
+{
+	RendererAnimClip clip = {.node_count = node_count, .edge_count = edge_count};
+	renderer_anim_play(r, &clip);
+}
+
 void renderer_anim_cleanup(Renderer *r)
 {
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++)
@@ -176,4 +214,6 @@ void renderer_anim_cleanup(Renderer *r)
 	VK_DESTROY_BUFFER(r->core.device, r->anim.channels.node_value, r->anim.channels.node_value_memory);
 	VK_DESTROY_BUFFER(r->core.device, r->anim.channels.edge_source, r->anim.channels.edge_source_memory);
 	VK_DESTROY_BUFFER(r->core.device, r->anim.channels.edge_value, r->anim.channels.edge_value_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->anim.channels.edge_event_offsets, r->anim.channels.edge_event_offsets_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->anim.channels.edge_events, r->anim.channels.edge_events_memory);
 }

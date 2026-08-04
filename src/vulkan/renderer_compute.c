@@ -499,7 +499,7 @@ void renderer_readback_splc_weights(Renderer *r, GraphData *graph)
 	igraph_vector_int_destroy(&out_neis);
 	free(splc_edges);
 
-	graph_cache_store_edge_attr(&graph->g, "splc-weight", &splc_weights);
+	graph_cache_store_edge_attr(&graph->g, "main-path-weight-splc", &splc_weights);
 	igraph_vector_destroy(&splc_weights);
 
 	printf("SPLC readback: %u edges, max weight: %.2f, total: %.2f\n", e_idx, max_w, total_w);

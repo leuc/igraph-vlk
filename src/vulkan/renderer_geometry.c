@@ -4,6 +4,7 @@
  */
 
 #include "vulkan/renderer_geometry.h"
+#include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_compute.h"
 
 #include <math.h>
@@ -18,6 +19,9 @@
 
 void renderer_update_graph(Renderer *r, GraphData *graph)
 {
+	uint32_t previous_node_count = r->node.count;
+	uint32_t previous_edge_count = r->edge.count;
+
 	// Ring-buffered fence sync instead of vkDeviceWaitIdle
 	uint32_t ringIdx = r->graphUpdateRingIndex;
 	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->graphUpdateFences[ringIdx], VK_TRUE, UINT64_MAX), "Failed to wait for graph update fences");
@@ -30,6 +34,8 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 
 	r->node.count = graph->node_count;
 	r->edge.count = graph->edge_count;
+	if (r->anim.buffers[0] != VK_NULL_HANDLE && (previous_node_count != graph->node_count || previous_edge_count != graph->edge_count))
+		renderer_anim_reset(r, graph->node_count, graph->edge_count);
 
 	// Pre-allocate or grow node buffers (split: position + attribute)
 	if (r->node.capacity < graph->node_count) {

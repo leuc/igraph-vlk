@@ -35,6 +35,9 @@ static void graph_animation_submit(Renderer *renderer, const GraphData *graph, c
 		.node_count = graph->node_count,
 		.edge_count = graph->edge_count,
 		.duration = request->duration,
+		.edge_event_offsets = request->edge_event_offsets,
+		.edge_events = request->edge_events,
+		.edge_event_count = request->edge_event_count,
 	};
 	renderer_anim_play(renderer, &clip);
 	free(edge_sources);

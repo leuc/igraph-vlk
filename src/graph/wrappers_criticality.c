@@ -9,6 +9,7 @@
 #include "graph/graph_animation.h"
 #include "graph/graph_color.h"
 #include "graph/graph_core.h"
+#include "graph/main_path.h"
 #include "graph/worker_thread.h"
 #include "graph/wrappers_splc.h"
 #include "ui/menu.h"
@@ -278,37 +279,7 @@ static igraph_vector_int_t *crit_extract_main_path(const igraph_t *g, const floa
 	return path;
 }
 
-static int crit_cmp_ranked(const void *a, const void *b)
-{
-	const double *x = (const double *)a, *y = (const double *)b;
-	if (x[0] != y[0])
-		return x[0] < y[0] ? -1 : 1;
-	return x[1] < y[1] ? -1 : 1;
-}
-
-// Reveal order: lowest criticality first, so the core of the DAG appears
-// before the periphery. Mirrors the rank upload in apply_path_cover_result.
-static int *crit_ranks_by_criticality(const double *c, igraph_integer_t n)
-{
-	double *pairs = malloc(sizeof(double) * 2 * (size_t)n);
-	int *ranks = malloc(sizeof(int) * (size_t)n);
-	if (!pairs || !ranks) {
-		free(pairs);
-		free(ranks);
-		return NULL;
-	}
-	for (igraph_integer_t i = 0; i < n; i++) {
-		pairs[2 * i] = c[i];
-		pairs[2 * i + 1] = (double)i;
-	}
-	qsort(pairs, (size_t)n, sizeof(double) * 2, crit_cmp_ranked);
-	for (igraph_integer_t i = 0; i < n; i++)
-		ranks[(igraph_integer_t)pairs[2 * i + 1]] = (int)i;
-	free(pairs);
-	return ranks;
-}
-
-static void crit_store_results(GraphData *graph, uint32_t weight_mode, const double *c, const igraph_vector_int_t *basket_flags, const igraph_vector_int_t *main_path_flags)
+static void crit_store_results(GraphData *graph, uint32_t weight_mode, const double *c, const igraph_vector_int_t *basket_flags)
 {
 	igraph_integer_t n = igraph_vcount(&graph->g);
 
@@ -320,7 +291,6 @@ static void crit_store_results(GraphData *graph, uint32_t weight_mode, const dou
 		igraph_vector_destroy(&values);
 	}
 	graph_cache_store_vertex_attr_int(&graph->g, crit_basket_attr_name(weight_mode), basket_flags);
-	graph_cache_store_vertex_attr_int(&graph->g, "main-path", main_path_flags);
 }
 
 // The SPLC animation accumulates only the forward traversal count W_u, so the
@@ -360,8 +330,8 @@ static void crit_store_path_count_weights(GraphData *graph, const float *lnW, co
 		VECTOR(spc)[e] = linear;
 	}
 
-	graph_cache_store_edge_attr(&graph->g, "spe-weight", &spe);
-	graph_cache_store_edge_attr(&graph->g, "spc-weight", &spc);
+	graph_cache_store_edge_attr(&graph->g, "main-path-weight-spe", &spe);
+	graph_cache_store_edge_attr(&graph->g, "main-path-weight-spc", &spc);
 	igraph_vector_destroy(&spe);
 	igraph_vector_destroy(&spc);
 
@@ -484,7 +454,7 @@ bool poll_criticality_gpu(ExecutionContext *ctx)
 		free(path);
 	}
 
-	crit_store_results(graph, weight_mode, c, &basket_flags, &main_path_flags);
+	crit_store_results(graph, weight_mode, c, &basket_flags);
 	crit_store_path_count_weights(graph, lnW, lnX);
 
 	const char *mode_label = weight_mode == CRIT_WEIGHT_SPE ? "SPE" : "unit";
@@ -496,20 +466,11 @@ bool poll_criticality_gpu(ExecutionContext *ctx)
 	snprintf(msg, sizeof(msg), "Criticality (%s): basket %lld nodes, main path %lld, coverage %.2f", mode_label, (long long)zero_basket_size, (long long)path_len, coverage_zero);
 	worker_thread_set_status_message(msg);
 
-	// Reveal the core first, and dim everything outside the basket so it
-	// stays visually distinct once the reveal finishes.
+	// Weighting owns the replay; Basket and Optimal Path are separate menu
+	// selections over the persisted edge attributes.
 	graph_reset_emphasis(graph);
 	graph_animation_clear(r);
-	int *ranks = crit_ranks_by_criticality(c, n);
-	if (ranks) {
-		GraphAnimationRequest request = {.node_steps = ranks, .duration = 3.0f};
-		graph_animation_play(r, graph, &request);
-		free(ranks);
-	}
-
-	for (igraph_integer_t v = 0; v < n; v++)
-		if (!VECTOR(basket_flags)[v])
-			graph->nodes[v].emphasis = EMPHASIS_DIMMED;
+	main_path_play_weighting(r, graph, weight_mode == CRIT_WEIGHT_SPE ? "main-path-weight-spe" : "main-path-weight-spc");
 
 	graph_detect_filterable_attrs(graph);
 	menu_populate_attribute_filters(state->app_ctx.menu.root, graph);

@@ -272,8 +272,14 @@ typedef struct
 		VkDeviceMemory edge_source_memory;
 		VkBuffer edge_value;
 		VkDeviceMemory edge_value_memory;
+		VkBuffer edge_event_offsets;
+		VkDeviceMemory edge_event_offsets_memory;
+		VkBuffer edge_events;
+		VkDeviceMemory edge_events_memory;
 		uint32_t node_capacity;
 		uint32_t edge_capacity;
+		uint32_t edge_event_offset_capacity;
+		uint32_t edge_event_capacity;
 	} channels;
 } AnimStateBuffers;
 

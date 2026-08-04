@@ -52,6 +52,24 @@ layout(std430, binding = 7) readonly buffer EdgeAnimationValue
 	float edgeValue[];
 };
 
+layout(std430, binding = 9) readonly buffer EdgeAnimationEventOffsets
+{
+	uint edgeEventOffsets[];
+};
+
+struct EdgeAnimationEvent
+{
+	float start_time;
+	float duration;
+	float value;
+	float _reserved;
+};
+
+layout(std430, binding = 10) readonly buffer EdgeAnimationEvents
+{
+	EdgeAnimationEvent edgeEvents[];
+};
+
 layout(push_constant) uniform SPLCConstants
 {
 	layout(offset = 128) uint segmentsPerEdge;
@@ -82,7 +100,7 @@ void main()
 	fragColor = inColor;
 	uint edge_index = gl_VertexIndex / (splcPC.segmentsPerEdge * 2);
 	const float FADE = 0.3;
-	float reveal_t = smoothstep(0.0, FADE, anim.seq_time - float(nodeStep[edgeSource[edge_index]]) * anim.seq_stride);
+	float reveal_t = anim.seq_duration > 0.0 ? smoothstep(0.0, FADE, anim.seq_time - float(nodeStep[edgeSource[edge_index]]) * anim.seq_stride) : 1.0;
 	if (max_w > 0.0) {
 		float w = splc_edges[edge_index].weight;
 		float intensity = clamp(pow(log(w + 1.0) / log(max_w + 1.0), 0.3), 0.0, 1.0);
@@ -92,6 +110,18 @@ void main()
 		float intensity = clamp(pow(edgeValue[edge_index], 0.3), 0.0, 1.0);
 		fragColor = base * (0.2 + 0.8 * intensity);
 	}
+
+	float event_pulse = 0.0;
+	for (uint i = edgeEventOffsets[edge_index]; i < edgeEventOffsets[edge_index + 1]; i++) {
+		EdgeAnimationEvent event = edgeEvents[i];
+		if (event.duration <= 0.0)
+			continue;
+		float progress = (anim.seq_time - event.start_time) / event.duration;
+		float leading = smoothstep(inNormalizedPos - 0.12, inNormalizedPos, progress);
+		float trailing = 1.0 - smoothstep(inNormalizedPos, inNormalizedPos + 0.18, progress);
+		event_pulse = max(event_pulse, leading * trailing * clamp(event.value, 0.0, 1.0));
+	}
+	fragColor += inColor * event_pulse;
 	fragSelected = inSelected;
 	fragNormalizedPos = inNormalizedPos;
 	fragVisible = inVisible;
