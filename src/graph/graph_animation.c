@@ -52,8 +52,6 @@ void graph_animation_clear(Renderer *renderer)
 	if (!renderer)
 		return;
 	renderer_anim_clear(renderer);
-	renderer->crit.active = false;
-	renderer->crit.readback_pending = false;
 }
 
 static igraph_integer_t graph_animation_source(const GraphData *graph)

@@ -6,11 +6,13 @@
 #include "vulkan/renderer_criticality.h"
 
 #include <math.h>
+#include <float.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "graph/graph_core.h"
 #include "vulkan/buffers.h"
+#include "vulkan/renderer_anim.h"
 #include "vulkan/utils.h"
 
 #define CRIT_WORKGROUP_SIZE 64
@@ -163,6 +165,17 @@ void renderer_destroy_criticality_buffers(Renderer *r)
 	ctx->selection_flags = NULL;
 }
 
+void renderer_cancel_main_path(Renderer *r)
+{
+	if (!r)
+		return;
+	r->crit.active = false;
+	r->crit.readback_pending = false;
+	r->crit.selection_ready = false;
+	free(r->crit.selection_flags);
+	r->crit.selection_flags = NULL;
+}
+
 static void crit_write_descriptors(Renderer *r)
 {
 	CritComputeContext *ctx = &r->crit;
@@ -278,9 +291,18 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 	update_buffer(dev, ctx->display_edges_memory, display_edge_size, display_edges);
 	uint32_t zero_max = 0;
 	update_buffer(dev, ctx->display_max_memory, sizeof(zero_max), &zero_max);
-	if (selection_weights)
-		update_buffer(dev, ctx->edge_weights_memory, sizeof(float) * ctx->graph_edge_count, VECTOR(*selection_weights));
-	else {
+	if (selection_weights) {
+		float *selection_values = calloc(ctx->graph_edge_count > 0 ? ctx->graph_edge_count : 1, sizeof(float));
+		if (!selection_values) {
+			free(display_edges);
+			renderer_destroy_criticality_buffers(r);
+			return false;
+		}
+		for (uint32_t e = 0; e < ctx->graph_edge_count; e++)
+			selection_values[e] = (float)VECTOR(*selection_weights)[e];
+		update_buffer(dev, ctx->edge_weights_memory, sizeof(float) * (ctx->graph_edge_count > 0 ? ctx->graph_edge_count : 1), selection_values);
+		free(selection_values);
+	} else {
 		float *zero_weights = calloc(ctx->graph_edge_count > 0 ? ctx->graph_edge_count : 1, sizeof(float));
 		if (zero_weights) {
 			update_buffer(dev, ctx->edge_weights_memory, sizeof(float) * (ctx->graph_edge_count > 0 ? ctx->graph_edge_count : 1), zero_weights);
@@ -336,6 +358,38 @@ bool renderer_start_main_path_selection(Renderer *r)
 		ctx->level_interval = 0.016;
 	ctx->last_level_time = r->anim.data.time;
 	printf("[MainPath] selection start: method=%u levels=%d tick=%.3fs\n", ctx->weight_mode, ctx->num_levels, ctx->level_interval);
+	return true;
+}
+
+bool renderer_start_main_path_reveal(Renderer *r, const GraphData *graph, const igraph_vector_int_t *levels)
+{
+	if (!r || !graph || !levels || igraph_vector_int_size(levels) != (igraph_integer_t)graph->node_count)
+		return false;
+	uint32_t node_count = graph->node_count;
+	uint32_t edge_count = graph->edge_count;
+	int *node_steps = malloc(sizeof(int) * (node_count > 0 ? node_count : 1));
+	uint32_t *edge_sources = malloc(sizeof(uint32_t) * (edge_count > 0 ? edge_count : 1));
+	if (!node_steps || !edge_sources) {
+		free(node_steps);
+		free(edge_sources);
+		return false;
+	}
+	for (uint32_t v = 0; v < node_count; v++)
+		node_steps[v] = VECTOR(*levels)[v];
+	for (uint32_t e = 0; e < edge_count; e++)
+		edge_sources[e] = graph->edges[e].from;
+	int phases = r->crit.selection_run || r->crit.weight_mode == CRIT_WEIGHT_SPC || r->crit.weight_mode == CRIT_WEIGHT_SPE ? 2 : 1;
+	float duration = (float)(r->crit.level_interval * r->crit.num_levels * phases);
+	RendererAnimClip clip = {
+		.node_steps = node_steps,
+		.edge_sources = edge_sources,
+		.node_count = node_count,
+		.edge_count = edge_count,
+		.duration = duration,
+	};
+	renderer_anim_play(r, &clip);
+	free(node_steps);
+	free(edge_sources);
 	return true;
 }
 

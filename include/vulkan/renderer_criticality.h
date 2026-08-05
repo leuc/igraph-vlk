@@ -41,6 +41,9 @@ bool renderer_start_main_path_weighting(Renderer *r);
 /** Start the height/depth passes after the method's required count sweeps. */
 bool renderer_start_main_path_selection(Renderer *r);
 
+/** Start the shared node/edge reveal using the prepared DAG levels. */
+bool renderer_start_main_path_reveal(Renderer *r, const GraphData *graph, const igraph_vector_int_t *levels);
+
 /** Record the next forward or reverse level dispatch into a frame command buffer. */
 void renderer_dispatch_main_path_weight_level(Renderer *r, VkCommandBuffer cmd);
 
@@ -52,5 +55,6 @@ void renderer_readback_main_path_selection(Renderer *r);
 
 /** Release all criticality GPU buffers and host-side level bookkeeping. */
 void renderer_destroy_criticality_buffers(Renderer *r);
+void renderer_cancel_main_path(Renderer *r);
 
 #endif

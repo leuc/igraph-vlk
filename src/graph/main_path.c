@@ -14,7 +14,7 @@
 
 #include "graph/graph_color.h"
 #include "graph/graph_core.h"
-#include "graph/wrappers_splc.h"
+#include "graph/graph_animation.h"
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_criticality.h"
 
@@ -22,6 +22,15 @@ typedef enum {
 	MAIN_PATH_SELECT_BASKET,
 	MAIN_PATH_SELECT_PATH,
 } MainPathSelection;
+
+typedef struct
+{
+	igraph_vector_int_t levels;
+	int num_levels;
+	igraph_integer_t node_count;
+	uint32_t weight_mode;
+	const char *weight_attr;
+} MainPathPrep;
 
 typedef struct
 {
@@ -42,9 +51,135 @@ static const char *main_path_method_name(const char *weight_attr)
 {
 	if (strcmp(weight_attr, "main-path-weight-splc") == 0)
 		return "splc";
+	if (strcmp(weight_attr, "main-path-weight-unit") == 0)
+		return "unit";
 	if (strcmp(weight_attr, "main-path-weight-spc") == 0)
 		return "spc";
-	return "spe";
+	if (strcmp(weight_attr, "main-path-weight-spe") == 0)
+		return "spe";
+	return "unknown";
+}
+
+static bool main_path_calculate_levels(const igraph_t *graph, igraph_vector_int_t *levels)
+{
+	igraph_integer_t n = igraph_vcount(graph);
+	if (n == 0 || !igraph_is_directed(graph))
+		return false;
+	igraph_bool_t is_dag = false;
+	if (igraph_is_dag(graph, &is_dag) != IGRAPH_SUCCESS || !is_dag)
+		return false;
+	igraph_vector_int_t order;
+	if (igraph_vector_int_init(&order, 0) != IGRAPH_SUCCESS)
+		return false;
+	if (igraph_topological_sorting(graph, &order, IGRAPH_OUT) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(&order);
+		return false;
+	}
+	if (igraph_vector_int_init(levels, n) != IGRAPH_SUCCESS) {
+		igraph_vector_int_destroy(&order);
+		return false;
+	}
+	igraph_vector_int_null(levels);
+	for (igraph_integer_t i = 0; i < igraph_vector_int_size(&order); i++) {
+		igraph_integer_t u = VECTOR(order)[i];
+		igraph_vector_int_t neighbours;
+		if (igraph_vector_int_init(&neighbours, 0) != IGRAPH_SUCCESS) {
+			igraph_vector_int_destroy(levels);
+			igraph_vector_int_destroy(&order);
+			return false;
+		}
+		if (igraph_neighbors(graph, &neighbours, u, IGRAPH_OUT, IGRAPH_LOOPS, IGRAPH_NO_MULTIPLE) != IGRAPH_SUCCESS) {
+			igraph_vector_int_destroy(&neighbours);
+			igraph_vector_int_destroy(levels);
+			igraph_vector_int_destroy(&order);
+			return false;
+		}
+		for (igraph_integer_t j = 0; j < igraph_vector_int_size(&neighbours); j++) {
+			igraph_integer_t v = VECTOR(neighbours)[j];
+			if (VECTOR(*levels)[v] < VECTOR(*levels)[u] + 1)
+				VECTOR(*levels)[v] = VECTOR(*levels)[u] + 1;
+		}
+		igraph_vector_int_destroy(&neighbours);
+	}
+	igraph_vector_int_destroy(&order);
+	return true;
+}
+
+static void *main_path_prepare_weighting(ExecutionContext *ctx, uint32_t weight_mode, const char *weight_attr)
+{
+	if (!ctx || !ctx->app_state || !ctx->app_state->current_graph.graph_initialized)
+		return NULL;
+	GraphData *graph = &ctx->app_state->current_graph;
+	if (igraph_vcount(&graph->g) == 0 || !igraph_is_directed(&graph->g)) {
+		fprintf(stderr, "[Main Path] weighting requires a non-empty directed DAG\n");
+		return NULL;
+	}
+	igraph_bool_t is_dag = false;
+	if (igraph_is_dag(&graph->g, &is_dag) != IGRAPH_SUCCESS || !is_dag) {
+		fprintf(stderr, "[Main Path] graph contains cycles; use the explicit cycle-cleanup command first\n");
+		return NULL;
+	}
+	MainPathPrep *prep = calloc(1, sizeof(*prep));
+	if (!prep || !main_path_calculate_levels(&graph->g, &prep->levels)) {
+		free(prep);
+		return NULL;
+	}
+	prep->num_levels = 0;
+	for (igraph_integer_t i = 0; i < igraph_vector_int_size(&prep->levels); i++)
+		if (VECTOR(prep->levels)[i] + 1 > prep->num_levels)
+			prep->num_levels = VECTOR(prep->levels)[i] + 1;
+	prep->node_count = igraph_vcount(&graph->g);
+	prep->weight_mode = weight_mode;
+	prep->weight_attr = weight_attr;
+	return prep;
+}
+
+void *compute_splc_animation(ExecutionContext *ctx) { return main_path_prepare_weighting(ctx, CRIT_WEIGHT_SPLC, "main-path-weight-splc"); }
+void *compute_main_path_spc(ExecutionContext *ctx) { return main_path_prepare_weighting(ctx, CRIT_WEIGHT_SPC, "main-path-weight-spc"); }
+void *compute_main_path_unit(ExecutionContext *ctx) { return main_path_prepare_weighting(ctx, CRIT_WEIGHT_UNIT, "main-path-weight-unit"); }
+void *compute_main_path_spe(ExecutionContext *ctx) { return main_path_prepare_weighting(ctx, CRIT_WEIGHT_SPE, "main-path-weight-spe"); }
+
+void free_main_path_prep(void *result_data)
+{
+	MainPathPrep *prep = result_data;
+	if (!prep)
+		return;
+	igraph_vector_int_destroy(&prep->levels);
+	free(prep);
+}
+
+void free_main_path_weighting_result(void *result_data) { free_main_path_prep(result_data); }
+
+static void main_path_apply_weighting(ExecutionContext *ctx, MainPathPrep *prep)
+{
+	if (!ctx || !ctx->app_state || !prep)
+		return;
+	AppState *state = ctx->app_state;
+	GraphData *graph = &state->current_graph;
+	if (prep->node_count != (igraph_integer_t)graph->node_count)
+		return;
+	graph_reset_emphasis(graph);
+	graph_animation_clear(&state->renderer);
+	renderer_cancel_main_path(&state->renderer);
+	state->renderer.needsAttributeUpload = VK_TRUE;
+	if (!graph_rebuild_edges(graph))
+		return;
+	renderer_update_graph(&state->renderer, graph);
+	if (!renderer_init_criticality_buffers(&state->renderer, graph, &prep->levels, prep->num_levels, prep->weight_mode, NULL) || !renderer_start_main_path_weighting(&state->renderer))
+		fprintf(stderr, "[Main Path] failed to initialize weighting\n");
+	else if (!renderer_start_main_path_reveal(&state->renderer, graph, &prep->levels))
+		fprintf(stderr, "[Main Path] failed to initialize node/edge reveal\n");
+	state->renderer.label.tree_needs_rebuild = true;
+}
+
+void apply_splc_animation(ExecutionContext *ctx, void *result_data) { main_path_apply_weighting(ctx, result_data); }
+void apply_main_path_weighting(ExecutionContext *ctx, void *result_data) { main_path_apply_weighting(ctx, result_data); }
+bool poll_splc_gpu(ExecutionContext *ctx) { return poll_main_path_weighting(ctx); }
+bool poll_main_path_weighting(ExecutionContext *ctx)
+{
+	if (!ctx || !ctx->app_state)
+		return true;
+	return !ctx->app_state->renderer.crit.active && !ctx->app_state->renderer.crit.readback_pending;
 }
 
 static bool main_path_build_adjacency(const igraph_t *graph, uint32_t **out_first, uint32_t **out_next, uint32_t **out_from, uint32_t **out_to)
@@ -90,7 +225,7 @@ static bool main_path_topological_order(const igraph_t *graph, igraph_vector_int
 	return true;
 }
 
-static bool main_path_best_path(const igraph_t *graph, const igraph_vector_int_t *order, const uint32_t *first, const uint32_t *next, const uint32_t *to, const float *weights, const float *residual, MainPathPath *out)
+static bool main_path_best_path(const igraph_t *graph, const igraph_vector_int_t *order, const uint32_t *first, const uint32_t *next, const uint32_t *to, const igraph_real_t *weights, const float *residual, MainPathPath *out)
 {
 	igraph_integer_t n = igraph_vcount(graph);
 	float *score = malloc(sizeof(float) * (size_t)n);
@@ -127,7 +262,7 @@ static bool main_path_best_path(const igraph_t *graph, const igraph_vector_int_t
 		if (score[u] == -FLT_MAX)
 			continue;
 		for (uint32_t e = first[u]; e != UINT32_MAX; e = next[e]) {
-			float value = residual ? residual[e] : weights[e];
+			float value = residual ? residual[e] : (float)weights[e];
 			if (!(value > 0.0f) || !isfinite(value))
 				continue;
 			uint32_t v = to[e];
@@ -161,7 +296,7 @@ static bool main_path_best_path(const igraph_t *graph, const igraph_vector_int_t
 	for (int v = sink; previous[v] >= 0;) {
 		uint32_t e = (uint32_t)previous[v];
 		out->edges[out->count++] = e;
-		float value = residual ? residual[e] : weights[e];
+		float value = residual ? residual[e] : (float)weights[e];
 		if (value < out->bottleneck)
 			out->bottleneck = value;
 		igraph_integer_t u, ignored;
@@ -199,7 +334,7 @@ static void *main_path_compute_selection(ExecutionContext *ctx, const char *weig
 		return NULL;
 	}
 	for (uint32_t e = 0; e < graph->edge_count; e++)
-		if (!isfinite(VECTOR(values)[e])) {
+		if (!isfinite(VECTOR(values)[e]) || fabs(VECTOR(values)[e]) > FLT_MAX) {
 			fprintf(stderr, "[Main Path] Selection rejects overflowing SPC weights; use SPE\n");
 			igraph_vector_destroy(&values);
 			return NULL;
@@ -257,7 +392,7 @@ static void *main_path_compute_selection(ExecutionContext *ctx, const char *weig
 			flags[v] = fabsf(H - height[v] - depth[v]) < 1e-4f ? 1 : 0;
 	} else {
 		MainPathPath path = {0};
-		if (main_path_best_path(&graph->g, &order, first, next, to, (const float *)VECTOR(values), NULL, &path)) {
+		if (main_path_best_path(&graph->g, &order, first, next, to, VECTOR(values), NULL, &path)) {
 			for (uint32_t i = 0; i < path.count; i++) {
 				flags[from[path.edges[i]]] = 1;
 				flags[to[path.edges[i]]] = 1;
@@ -287,12 +422,7 @@ static void *main_path_compute_selection(ExecutionContext *ctx, const char *weig
 
 static void *main_path_prepare_basket(ExecutionContext *ctx, uint32_t weight_mode, const char *weight_attr)
 {
-	MainPathPrep *prep = main_path_prepare(ctx);
-	if (prep) {
-		prep->weight_mode = weight_mode;
-		prep->weight_attr = weight_attr;
-	}
-	return prep;
+	return main_path_prepare_weighting(ctx, weight_mode, weight_attr);
 }
 
 void *compute_main_path_splc_basket(ExecutionContext *ctx)
@@ -346,6 +476,7 @@ void apply_main_path_selection(ExecutionContext *ctx, void *result_data)
 	snprintf(attr, sizeof(attr), "main-path-%s-%s", result->selection == MAIN_PATH_SELECT_BASKET ? "basket" : "path", main_path_method_name(result->weight_attr));
 	graph_cache_store_vertex_attr_int(&graph->g, attr, &flags);
 	graph_reset_emphasis(graph);
+	renderer_cancel_main_path(renderer);
 	for (uint32_t v = 0; v < graph->node_count; v++)
 		if (!VECTOR(flags)[v])
 			graph->nodes[v].emphasis = EMPHASIS_DIMMED;
@@ -381,17 +512,20 @@ void apply_main_path_basket(ExecutionContext *ctx, void *result_data)
 		return;
 	}
 	for (uint32_t e = 0; e < graph->edge_count; e++)
-		if (!isfinite(VECTOR(weights)[e])) {
+		if (!isfinite(VECTOR(weights)[e]) || fabs(VECTOR(weights)[e]) > FLT_MAX) {
 			fprintf(stderr, "[Main Path] Basket rejects overflowing weights; use SPE\n");
 			igraph_vector_destroy(&weights);
 			return;
 		}
 	graph_reset_emphasis(graph);
+	renderer_cancel_main_path(&state->renderer);
 	if (!graph_rebuild_edges(graph))
 		return;
 	renderer_update_graph(&state->renderer, graph);
 	if (!renderer_init_criticality_buffers(&state->renderer, graph, &prep->levels, prep->num_levels, prep->weight_mode, &weights) || !renderer_start_main_path_selection(&state->renderer))
 		fprintf(stderr, "[MainPath] failed to initialize GPU basket selection\n");
+	else if (!renderer_start_main_path_reveal(&state->renderer, graph, &prep->levels))
+		fprintf(stderr, "[MainPath] failed to initialize node/edge reveal\n");
 	igraph_vector_destroy(&weights);
 }
 

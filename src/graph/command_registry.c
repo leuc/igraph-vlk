@@ -11,7 +11,6 @@
 #include "graph/wrappers_centrality.h"
 #include "graph/wrappers_community.h"
 #include "graph/wrappers_constructors.h"
-#include "graph/wrappers_criticality.h"
 #include "graph/wrappers_cycles.h"
 #include "graph/wrappers_filter.h"
 #include "graph/wrappers_flow.h"
@@ -19,7 +18,6 @@
 #include "graph/wrappers_layout.h"
 #include "graph/wrappers_path_cover.h"
 #include "graph/wrappers_paths.h"
-#include "graph/wrappers_splc.h"
 #include "graph/wrappers_structural.h"
 
 const CommandDef g_command_registry[] = {
