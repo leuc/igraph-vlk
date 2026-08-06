@@ -75,6 +75,7 @@ void graph_animation_clear(Renderer *renderer, const GraphData *graph)
 {
 	if (!renderer || !graph)
 		return;
+	renderer->needsAttributeUpload = VK_TRUE;
 	renderer_anim_clear(renderer, graph);
 }
 
