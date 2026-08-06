@@ -23,10 +23,9 @@ static float *crit_copy_values(Renderer *r, VkDeviceMemory mem, uint32_t n);
 // Topology construction
 // ============================================================================
 
-// Builds a CSR adjacency in one direction. Mirrors splc_build_topology()'s
-// two-pass shape (count degrees, then fill), but is direction-parameterised so
-// the same code produces both the forward (IGRAPH_OUT) and reverse (IGRAPH_IN)
-// adjacency the gather sweeps need.
+// Builds a CSR adjacency in one direction. The same two-pass shape produces
+// both the forward (IGRAPH_OUT) and reverse (IGRAPH_IN) adjacency needed by
+// the gather sweeps.
 static bool crit_build_csr(const igraph_t *g, igraph_integer_t n, igraph_neimode_t mode, CritNode **out_nodes, CritEdge **out_edges, uint32_t *out_edge_count)
 {
 	CritNode *nodes = calloc((size_t)n, sizeof(CritNode));

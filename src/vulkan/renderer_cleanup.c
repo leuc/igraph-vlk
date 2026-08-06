@@ -19,7 +19,7 @@
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
 
-void cleanup_uniform_buffers(Renderer *r)
+static void cleanup_uniform_buffers(Renderer *r)
 {
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++)
 		VK_DESTROY_BUFFER(r->core.device, r->ubo.buffers[i], r->ubo.memory[i]);
@@ -29,7 +29,7 @@ void cleanup_uniform_buffers(Renderer *r)
 	}
 }
 
-void cleanup_compute_context(Renderer *r)
+static void cleanup_compute_context(Renderer *r)
 {
 	if (r->computeCtx.fence != VK_NULL_HANDLE)
 		vkDestroyFence(r->core.device, r->computeCtx.fence, NULL);
@@ -44,7 +44,7 @@ void cleanup_compute_context(Renderer *r)
 	VK_DESTROY_BUFFER(r->core.device, r->computeCtx.hubBuf, r->computeCtx.hubMem);
 }
 
-void cleanup_geometry_buffers(Renderer *r)
+static void cleanup_geometry_buffers(Renderer *r)
 {
 	VK_DESTROY_BUFFER(r->core.device, r->labelVertexBuffer, r->labelVertexBufferMemory);
 	VK_DESTROY_BUFFER(r->core.device, r->edge.position, r->edge.position_memory);
@@ -60,7 +60,7 @@ void cleanup_geometry_buffers(Renderer *r)
 	VK_DESTROY_BUFFER(r->core.device, r->uiBgInstanceBuffer, r->uiBgInstanceBufferMemory);
 }
 
-void cleanup_menu_label_atlases(Renderer *r)
+static void cleanup_menu_label_atlases(Renderer *r)
 {
 	VK_DESTROY_BUFFER(r->core.device, r->menu.quad_vertex, r->menu.quad_vertex_memory);
 	VK_DESTROY_BUFFER(r->core.device, r->menu.quad_index, r->menu.quad_index_memory);
@@ -74,7 +74,7 @@ void cleanup_menu_label_atlases(Renderer *r)
 	VK_DESTROY_BUFFER(r->core.device, r->detail.instance, r->detail.instance_memory);
 }
 
-void cleanup_xr_resources(Renderer *r)
+static void cleanup_xr_resources(Renderer *r)
 {
 	if (!r->xrFramebuffers)
 		return;
@@ -98,29 +98,8 @@ void cleanup_xr_resources(Renderer *r)
 	free(r->xrDepthImageViews);
 }
 
-void cleanup_splc_pipelines_core(Renderer *r)
+static void cleanup_renderer_resources(Renderer *r)
 {
-	VK_DESTROY_BUFFER(r->core.device, r->splc.nodes_buffer, r->splc.nodes_memory);
-	VK_DESTROY_BUFFER(r->core.device, r->splc.edges_buffer, r->splc.edges_memory);
-	VK_DESTROY_BUFFER(r->core.device, r->splc.traffic_buffer, r->splc.traffic_memory);
-	VK_DESTROY_BUFFER(r->core.device, r->splc.level_buffer, r->splc.level_memory);
-	if (r->splc.level_groups) {
-		for (int i = 0; i < r->splc.num_levels; i++) {
-			if (r->splc.level_groups[i])
-				igraph_vector_int_destroy(r->splc.level_groups[i]);
-			free(r->splc.level_groups[i]);
-		}
-		free(r->splc.level_groups);
-	}
-	if (r->descriptors.splc_pool != VK_NULL_HANDLE)
-		vkDestroyDescriptorPool(r->core.device, r->descriptors.splc_pool, NULL);
-	if (r->pipelines.compute_splc != VK_NULL_HANDLE)
-		vkDestroyPipeline(r->core.device, r->pipelines.compute_splc, NULL);
-	if (r->splc.pipeline_layout != VK_NULL_HANDLE)
-		vkDestroyPipelineLayout(r->core.device, r->splc.pipeline_layout, NULL);
-	if (r->descriptors.splc_compute_layout != VK_NULL_HANDLE)
-		vkDestroyDescriptorSetLayout(r->core.device, r->descriptors.splc_compute_layout, NULL);
-
 	renderer_destroy_criticality_buffers(r);
 	if (r->descriptors.crit_pool != VK_NULL_HANDLE)
 		vkDestroyDescriptorPool(r->core.device, r->descriptors.crit_pool, NULL);
@@ -186,5 +165,5 @@ void renderer_cleanup(Renderer *r)
 	cleanup_geometry_buffers(r);
 	cleanup_menu_label_atlases(r);
 	cleanup_xr_resources(r);
-	cleanup_splc_pipelines_core(r);
+	cleanup_renderer_resources(r);
 }

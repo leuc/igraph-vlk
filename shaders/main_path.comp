@@ -128,7 +128,7 @@ float softplus(float value)
 	return value > 20.0 ? value : log(1.0 + exp(value));
 }
 
-void record_display_edges(CritNode n, float score)
+void record_animation_edges(CritNode n, float score)
 {
 	uint encoded_score = floatBitsToUint(score);
 	for (uint i = 0u; i < n.degree; i++) {
@@ -138,7 +138,7 @@ void record_display_edges(CritNode n, float score)
 	}
 }
 
-void record_projected_display_edges(uint source, CritNode n)
+void record_projected_animation_edges(uint source, CritNode n)
 {
 	for (uint i = 0u; i < n.degree; i++) {
 		CritEdge edge = out_edges[n.edge_offset + i];
@@ -149,10 +149,10 @@ void record_projected_display_edges(uint source, CritNode n)
 	}
 }
 
-void record_forward_display_edges(CritNode n, float log_count)
+void record_forward_animation_edges(CritNode n, float log_count)
 {
 	float score = pc.weight_mode == WEIGHT_UNIT ? 1.0 : (pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_count, 0.0) : softplus(log_count));
-	record_display_edges(n, score);
+	record_animation_edges(n, score);
 }
 
 float selection_weight(CritEdge edge)
@@ -194,7 +194,7 @@ void main()
 		lnW[v] = value;
 		// Every method exposes this forward prefix sweep. SPC/SPE then refine
 		// the same edges in reverse with their suffix count in STAGE_LNX.
-		record_forward_display_edges(out_nodes[v], value);
+		record_forward_animation_edges(out_nodes[v], value);
 		return;
 	}
 
@@ -212,7 +212,7 @@ void main()
 		}
 		lnX[v] = value;
 		if (pc.weight_mode == WEIGHT_SPC || pc.weight_mode == WEIGHT_SPE)
-			record_projected_display_edges(v, n);
+			record_projected_animation_edges(v, n);
 		return;
 	}
 

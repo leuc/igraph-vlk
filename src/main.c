@@ -219,7 +219,7 @@ int main(int argc, char **argv)
 		app.delta_time = currentFrame - app.time;
 		app.time = currentFrame;
 
-		// Push timing to renderer — before update_app_state() so SPLC/BCGL init reads fresh time
+		// Push timing to renderer before update_app_state() so GPU work reads fresh time.
 		renderer_anim_update(&app.renderer, app.time, app.delta_time, app.frame_count);
 		renderer_transition_update(&app.renderer, app.delta_time);
 

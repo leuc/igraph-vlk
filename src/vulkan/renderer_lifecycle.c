@@ -16,7 +16,6 @@
 #include "vulkan/pipeline_graphics.h"
 #include "vulkan/pipeline_ui.h"
 #include "vulkan/renderer_anim.h"
-#include "vulkan/renderer_compute.h"
 #include "vulkan/renderer_geometry.h"
 #include "vulkan/renderer_pipelines.h"
 #include "vulkan/renderer_transition.h"
@@ -166,21 +165,6 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->computeCtx.cmdPool = VK_NULL_HANDLE;
 	r->computeCtx.fence = VK_NULL_HANDLE;
 	r->computeCtx.initialized = VK_FALSE;
-
-	r->splc.nodes_buffer = VK_NULL_HANDLE;
-	r->splc.nodes_memory = VK_NULL_HANDLE;
-	r->splc.edges_buffer = VK_NULL_HANDLE;
-	r->splc.edges_memory = VK_NULL_HANDLE;
-	r->splc.traffic_buffer = VK_NULL_HANDLE;
-	r->splc.traffic_memory = VK_NULL_HANDLE;
-	r->splc.level_buffer = VK_NULL_HANDLE;
-	r->splc.level_memory = VK_NULL_HANDLE;
-	r->splc.level_groups = NULL;
-	r->splc.num_levels = 0;
-	r->splc.current_level = 0;
-	r->splc.last_level_time = 0.0;
-	r->splc.level_interval = 0.5f;
-	r->splc.active = false;
 
 	// Field-by-field rather than a memset: renderer_create_pipelines() above
 	// has already filled in r->crit.pipeline_layout, which must survive.

@@ -15,7 +15,7 @@
 
 // ============================================================================
 // Worker: Compute and remove feedback arc set to make graph acyclic.
-// Modifies graph in-place (same pattern as compute_splc_animation).
+// Modifies graph in-place before Main Path preparation.
 // Returns graph pointer on success, NULL on failure.
 // ============================================================================
 void *compute_remove_feedback_arc_set(ExecutionContext *ctx)

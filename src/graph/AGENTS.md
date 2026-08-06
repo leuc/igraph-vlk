@@ -71,8 +71,8 @@ Per-directory guide for `src/graph/` and `include/graph/`. See root `AGENTS.md` 
 | `include/graph/wrappers_community.h` | Community wrapper declarations, `apply_community_membership`, `free_community_membership` |
 | `src/graph/wrappers_cycles.c` | Cycle analysis: feedback arc set removal |
 | `include/graph/wrappers_cycles.h` | Cycles wrapper declarations, `free_noop` |
-| `src/graph/wrappers_splc.c` | SPLC (Search Path Link Count) animation + DAG level calculation |
-| `include/graph/wrappers_splc.h` | SPLC declarations, `poll_splc_gpu` |
+| `src/graph/main_path.c` | Main Path preparation, criticality weighting, selection, and result application |
+| `include/graph/main_path.h` | Main Path command callbacks and selection APIs |
 
 ## Graph Generation Wrappers
 
@@ -151,7 +151,7 @@ typedef struct CommandDef {
    ```c
    {"Category/Subcategory", "unique_id", "Display Name", compute_func, apply_func, free_func},
    ```
-   - For GPU-accelerated commands, add `gpu_poll_func` as 7th arg (e.g., `poll_bcgl_gpu`, `poll_splc_gpu`). Pass `NULL` for CPU-only.
+   - For GPU-accelerated commands, add `gpu_poll_func` as 7th arg (e.g., `poll_bcgl_gpu`, `poll_main_path_weighting`). Pass `NULL` for CPU-only.
    - `category_path`: / separated folders (creates tree).
    - `command_id`: Unique ID for lookup.
    - Auto-sorted by registry order.

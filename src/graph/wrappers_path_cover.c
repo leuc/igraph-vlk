@@ -26,7 +26,7 @@ typedef struct
 	bool is_antichain;
 } PathCoverResult;
 
-// Directed/cycle check mirrors compute_splc_animation's block exactly:
+// Directed/cycle check mirrors Main Path preparation's block exactly:
 // deletes any feedback-arc-set edges in place on the live graph to force a
 // DAG, since igraph_minimum_path_cover requires one.
 static bool path_cover_ensure_dag(igraph_t *graph, const char *label)
@@ -332,7 +332,7 @@ void *compute_min_chain_cover_trigger(ExecutionContext *ctx)
 	return path_cover_result_alloc(ranks, vcount, false);
 }
 
-// Matches apply_kcore_tree_trigger's shape, plus apply_splc_animation's
+// Matches apply_kcore_tree_trigger's shape, plus Main Path weighting's
 // edge-rebuild step (the worker may have deleted feedback-arc-set edges in
 // place to force a DAG).
 void apply_path_cover_result(ExecutionContext *ctx, void *result_data)

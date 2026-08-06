@@ -25,23 +25,9 @@
 
 typedef enum { ROUTING_MODE_STRAIGHT = 0, ROUTING_MODE_SPHERICAL_PCB = 1 } EdgeRoutingMode;
 
-// SPLC compute buffer types
-typedef struct
-{
-	uint32_t edge_offset;
-	uint32_t out_degree;
-} SPLCNode;
-
-typedef struct
-{
-	uint32_t target_node;
-	float weight;
-} SPLCEdge;
-
 // Generalised criticality compute types (arXiv:2512.12355 section 2.5).
-// Same CSR shape as SPLCNode/SPLCEdge, but used for both the forward
-// (out-edge) and reverse (in-edge) adjacency, so the field names are
-// direction-neutral.
+// The same CSR shape is used for both forward and reverse adjacency, so the
+// field names are direction-neutral.
 typedef struct
 {
 	uint32_t edge_offset;
@@ -336,7 +322,6 @@ typedef struct
 	int presentQueueFamily;
 	int computeQueueFamily;
 	VkPhysicalDeviceProperties deviceProperties;
-	bool has_atomic_float;
 } VulkanCore;
 
 typedef struct
@@ -382,7 +367,6 @@ typedef struct
 	VkPipeline textQuad;
 	VkPipeline ray;
 	VkPipeline compute_spherical;
-	VkPipeline compute_splc;
 	VkPipeline compute_criticality;
 } Pipelines;
 
@@ -390,43 +374,15 @@ typedef struct
 {
 	VkDescriptorSetLayout layout;
 	VkDescriptorSetLayout compute_layout;
-	VkDescriptorSetLayout splc_compute_layout;
 	VkDescriptorPool pool;
 	VkDescriptorSet *sets;
 	VkDescriptorSet *text_quad_sets;
 	VkDescriptorSet *node_label_sets;
 	VkDescriptorSet *detail_card_sets;
-	VkDescriptorPool splc_pool;
-	VkDescriptorSet splc_set;
 	VkDescriptorSetLayout crit_compute_layout;
 	VkDescriptorPool crit_pool;
 	VkDescriptorSet crit_set;
 } Descriptors;
-
-typedef struct
-{
-	VkBuffer nodes_buffer;
-	VkDeviceMemory nodes_memory;
-	VkBuffer edges_buffer;
-	VkDeviceMemory edges_memory;
-	VkBuffer traffic_buffer;
-	VkDeviceMemory traffic_memory;
-	VkBuffer level_buffer;
-	VkDeviceMemory level_memory;
-	igraph_vector_int_t **level_groups;
-	int num_levels;
-	int current_level;
-	double last_level_time;
-	float level_interval;
-	bool active;
-	bool readback_pending;
-	VkPipelineLayout pipeline_layout;
-	// Edge count the edges_buffer/edges_memory were actually sized for — the
-	// deduplicated (IGRAPH_NO_MULTIPLE) SPLC edge count, which is smaller than
-	// GraphData.edge_count whenever the graph has multi-edges. Readback must
-	// map by this, not graph->edge_count, or it oversteps the buffer.
-	uint32_t buffer_edge_count;
-} SPLCComputeContext;
 
 // Main-path dynamic-programming buffers. Levels are uploaded once as a single
 // permutation and dispatched one renderer tick at a time.
@@ -642,9 +598,6 @@ typedef struct Renderer
 
 	// Persistent compute context
 	ComputeContext computeCtx;
-
-	// SPLC (Search Path Link Count) animation
-	SPLCComputeContext splc;
 
 	// Generalised criticality / baskets of nodes (arXiv:2512.12355 §2.5)
 	CritComputeContext crit;

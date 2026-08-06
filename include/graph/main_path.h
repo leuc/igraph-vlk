@@ -8,16 +8,13 @@
 
 #include "interaction/state.h"
 
-void *compute_splc_animation(ExecutionContext *ctx);
+void *compute_main_path_splc(ExecutionContext *ctx);
 void *compute_main_path_spc(ExecutionContext *ctx);
 void *compute_main_path_unit(ExecutionContext *ctx);
 void *compute_main_path_spe(ExecutionContext *ctx);
-void apply_splc_animation(ExecutionContext *ctx, void *result_data);
 void apply_main_path_weighting(ExecutionContext *ctx, void *result_data);
-bool poll_splc_gpu(ExecutionContext *ctx);
 bool poll_main_path_weighting(ExecutionContext *ctx);
 void free_main_path_prep(void *result_data);
-void free_main_path_weighting_result(void *result_data);
 
 void *compute_main_path_splc_basket(ExecutionContext *ctx);
 void *compute_main_path_spc_basket(ExecutionContext *ctx);

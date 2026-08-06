@@ -134,7 +134,7 @@ static void *main_path_prepare_weighting(ExecutionContext *ctx, uint32_t weight_
 	return prep;
 }
 
-void *compute_splc_animation(ExecutionContext *ctx)
+void *compute_main_path_splc(ExecutionContext *ctx)
 {
 	return main_path_prepare_weighting(ctx, CRIT_WEIGHT_SPLC, "main-path-weight-splc");
 }
@@ -160,11 +160,6 @@ void free_main_path_prep(void *result_data)
 	free(prep);
 }
 
-void free_main_path_weighting_result(void *result_data)
-{
-	free_main_path_prep(result_data);
-}
-
 static void main_path_apply_weighting(ExecutionContext *ctx, MainPathPrep *prep)
 {
 	if (!ctx || !ctx->app_state || !prep)
@@ -184,17 +179,9 @@ static void main_path_apply_weighting(ExecutionContext *ctx, MainPathPrep *prep)
 	state->renderer.label.tree_needs_rebuild = true;
 }
 
-void apply_splc_animation(ExecutionContext *ctx, void *result_data)
-{
-	main_path_apply_weighting(ctx, result_data);
-}
 void apply_main_path_weighting(ExecutionContext *ctx, void *result_data)
 {
 	main_path_apply_weighting(ctx, result_data);
-}
-bool poll_splc_gpu(ExecutionContext *ctx)
-{
-	return poll_main_path_weighting(ctx);
 }
 bool poll_main_path_weighting(ExecutionContext *ctx)
 {

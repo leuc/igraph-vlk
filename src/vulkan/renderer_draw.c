@@ -10,7 +10,6 @@
 
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_anim.h"
-#include "vulkan/renderer_compute.h"
 #include "vulkan/renderer_criticality.h"
 #include "vulkan/renderer_lifecycle.h"
 #include "vulkan/utils.h"

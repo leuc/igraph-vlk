@@ -25,39 +25,10 @@ void renderer_create_compute_pipelines(Renderer *r)
 	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &computePipelineInfoSpherical, NULL, &r->pipelines.compute_spherical), "Failed to create compute spherical pipeline");
 	vkDestroyShaderModule(r->core.device, sphericalShaderModule, NULL);
 
-	// Main Path is a pure gather DP and needs no atomic-float extension.
+	// Main Path is a pure gather DP using integer atomics for the shared maximum.
 	renderer_create_criticality_compute_pipeline(r);
 	renderer_create_bcgl_compute_pipeline(r);
 }
-
-#if 0
-void renderer_create_splc_compute_pipeline(Renderer *r)
-{
-	VkDescriptorSetLayoutBinding splcBindings[] = {
-		{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
-	};
-	VkDescriptorSetLayoutCreateInfo splcLayoutInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 5, .pBindings = splcBindings};
-	VK_CHECK(vkCreateDescriptorSetLayout(r->core.device, &splcLayoutInfo, NULL, &r->descriptors.splc_compute_layout), "Failed to create SPLC compute descriptor set layout");
-
-	VkPushConstantRange splcPushConstant = {.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = sizeof(uint32_t)};
-	VkPipelineLayoutCreateInfo splcPipelineLayoutInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1, .pSetLayouts = &r->descriptors.splc_compute_layout, .pushConstantRangeCount = 1, .pPushConstantRanges = &splcPushConstant};
-	VK_CHECK(vkCreatePipelineLayout(r->core.device, &splcPipelineLayoutInfo, NULL, &r->splc.pipeline_layout), "Failed to create SPLC compute pipeline layout");
-
-	VkShaderModule splcShaderModule = VK_NULL_HANDLE;
-	VK_CHECK(create_shader_module(r->core.device, SPLC_COMP_SHADER_PATH, &splcShaderModule), "Failed to create SPLC compute shader module");
-	VkPipelineShaderStageCreateInfo splcStage = VK_SHADER_STAGE_COMP(splcShaderModule);
-	VkComputePipelineCreateInfo splcPipelineInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = splcStage, .layout = r->splc.pipeline_layout};
-	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &splcPipelineInfo, NULL, &r->pipelines.compute_splc), "Failed to create SPLC compute pipeline");
-	vkDestroyShaderModule(r->core.device, splcShaderModule, NULL);
-
-	VkDescriptorPoolSize splcPoolSizes = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 5};
-	VkDescriptorPoolCreateInfo splcPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &splcPoolSizes};
-	VK_CHECK(vkCreateDescriptorPool(r->core.device, &splcPoolInfo, NULL, &r->descriptors.splc_pool), "Failed to create SPLC descriptor pool");
-
-	VkDescriptorSetAllocateInfo splcDescSetInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorPool = r->descriptors.splc_pool, .descriptorSetCount = 1, .pSetLayouts = &r->descriptors.splc_compute_layout};
-	VK_CHECK(vkAllocateDescriptorSets(r->core.device, &splcDescSetInfo, &r->descriptors.splc_set), "Failed to allocate SPLC descriptor set");
-}
-#endif
 
 // Bindings 0-3: forward and reverse CSR (nodes, edges) x (out, in)
 // Binding 4:    node ids grouped by level

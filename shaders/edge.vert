@@ -37,11 +37,11 @@ layout(std430, binding = 2) readonly buffer EdgeAnimation
 }
 edge_anim;
 
-layout(push_constant) uniform SPLCConstants
+layout(push_constant) uniform EdgePushConstants
 {
 	layout(offset = 128) uint segmentsPerEdge;
 }
-splcPC;
+edgePC;
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inColor;
@@ -67,7 +67,7 @@ void main()
 	vec3 pos = mix(prevInPosition, inPosition, anim.transition_t);
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(pos, 1.0);
 
-	uint edge_index = gl_VertexIndex / (splcPC.segmentsPerEdge * 2);
+	uint edge_index = gl_VertexIndex / (edgePC.segmentsPerEdge * 2);
 	float max_strength = uintBitsToFloat(edge_anim.strength_max_bits);
 	float intensity = max_strength > 0.0 ? clamp(edge_anim.edges[edge_index].strength / max_strength, 0.0, 1.0) : 0.0;
 	intensity = pow(intensity, 0.3);

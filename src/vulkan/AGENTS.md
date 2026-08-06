@@ -7,7 +7,7 @@ Per-directory guide for `src/vulkan/` and `include/vulkan/`. See root `AGENTS.md
 | File | Role |
 |------|------|
 | `include/vulkan/renderer.h` | Public renderer API (`renderer_update_graph`, `renderer_render_ray`) |
-| `include/vulkan/vulkan_types.h` | `Renderer`, `SPLCNode`, `SPLCEdge`, `BCGLNodeData`, `BCGLPushConstants`, `EdgeRoutingMode` types; all Vulkan struct definitions |
+| `include/vulkan/vulkan_types.h` | `Renderer`, animation, criticality, BCGL, and edge-routing types; all Vulkan struct definitions |
 | `src/vulkan/renderer_lifecycle.c` | Renderer init, cleanup, window resize recreation |
 | `include/vulkan/renderer_lifecycle.h` | Lifecycle API |
 | `src/vulkan/renderer_draw.c` | Main draw loop, frame submission |
@@ -22,7 +22,7 @@ Per-directory guide for `src/vulkan/` and `include/vulkan/`. See root `AGENTS.md
 | `include/vulkan/renderer_ui.h` | UI rendering API |
 | `src/vulkan/renderer_camera.c` | Camera uniform buffer updates |
 | `include/vulkan/renderer_camera.h` | Camera rendering API |
-| `src/vulkan/renderer_compute.c` | Compute dispatch (SPLC, routing, BCGL) |
+| `src/vulkan/renderer_compute.c` | Spherical edge-routing compute dispatch |
 | `include/vulkan/renderer_compute.h` | Compute dispatch API |
 | `src/vulkan/renderer_update_node_labels.c` | Dynamic node label updates |
 | `include/vulkan/renderer_update_node_labels.h` | Label update API |
@@ -64,12 +64,12 @@ Shaders auto-compile to SPIRV in `build/shaders/*.spv` using glslangValidator.
 | File | Role |
 |------|------|
 | `shaders/node.vert` / `node.frag` | Node billboard quad with SDF shape rendering |
-| `shaders/edge.vert` / `edge.frag` | Edge line/curve with SPLC weight coloring |
+| `shaders/edge.vert` / `edge.frag` | Edge line/curve with animation strength and emphasis coloring |
 | `shaders/label.vert` / `label.frag` | Billboarded text labels |
 | `shaders/ui.vert` / `ui.frag` | 2D HUD overlay |
 | `shaders/menu.vert` / `menu.frag` | Menu card billboards with title bar + items |
 | `shaders/textquad.vert` / `textquad.frag` | Generic text-bearing quads |
 | `shaders/ray.vert` / `ray.frag` | Debug ray visualization |
 | `shaders/routing.comp` | Spherical PCB edge routing (GPU compute) |
-| `shaders/splc.comp` | SPLC traffic simulation (GPU compute) |
+| `shaders/main_path.comp` | Main Path criticality and presentation-strength compute |
 | `shaders/bcgl.comp` | BCGL binary classification graph layout (GPU compute) |

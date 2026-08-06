@@ -28,7 +28,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->graphUpdateFences[ringIdx], VK_TRUE, UINT64_MAX), "Failed to wait for graph update fences");
 	VK_CHECK(vkResetFences(r->core.device, 1, &r->graphUpdateFences[ringIdx]), "Failed to reset graph update fences");
 
-	// If edge count changed while SPLC was active, reset to avoid stale/out-of-bounds reads
+	// If edge count changed while Main Path was active, reset to avoid stale reads.
 	if (r->crit.active && r->edge.count != graph->edge_count) {
 		renderer_cancel_main_path(r);
 		renderer_anim_clear(r, graph);
