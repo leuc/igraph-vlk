@@ -105,6 +105,8 @@ static void cleanup_renderer_resources(Renderer *r)
 		vkDestroyDescriptorPool(r->core.device, r->descriptors.crit_pool, NULL);
 	if (r->pipelines.compute_criticality != VK_NULL_HANDLE)
 		vkDestroyPipeline(r->core.device, r->pipelines.compute_criticality, NULL);
+	if (r->pipelines.compute_criticality_fp64 != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->pipelines.compute_criticality_fp64, NULL);
 	if (r->crit.pipeline_layout != VK_NULL_HANDLE)
 		vkDestroyPipelineLayout(r->core.device, r->crit.pipeline_layout, NULL);
 	if (r->descriptors.crit_compute_layout != VK_NULL_HANDLE)

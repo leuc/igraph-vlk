@@ -1,5 +1,17 @@
 #version 450
 
+#ifdef CRIT_FP64
+#extension GL_ARB_gpu_shader_fp64 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float64 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_atomic_int64 : require
+#define Value double
+#define VALUE_WORD_COUNT 2u
+#else
+#define Value float
+#define VALUE_WORD_COUNT 1u
+#endif
+
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 #define STAGE_LNW 0u
@@ -59,22 +71,22 @@ layout(std430, binding = 4) readonly buffer LevelBuffer
 
 layout(std430, binding = 5) buffer LnWBuffer
 {
-	float lnW[];
+	Value lnW[];
 };
 
 layout(std430, binding = 6) buffer LnXBuffer
 {
-	float lnX[];
+	Value lnX[];
 };
 
 layout(std430, binding = 7) buffer HeightBuffer
 {
-	float height[];
+	Value height[];
 };
 
 layout(std430, binding = 8) buffer DepthBuffer
 {
-	float depth[];
+	Value depth[];
 };
 
 struct EdgeAnim
@@ -98,11 +110,16 @@ layout(std430, binding = 10) buffer ResultBuffer
 	uint edge_count;
 	uint node_count;
 	uint status;
-	uint criticality_max_bits;
-	uint sink_height_bits;
+	uint value_word_count;
+#ifdef CRIT_FP64
+	uint64_t criticality_max_bits;
+	uint64_t sink_height_bits;
+#else
+	uvec2 criticality_max_bits;
+	uvec2 sink_height_bits;
+#endif
 	uint sink_node;
-	uint _reserved0;
-	uint _reserved1;
+	uint _reserved;
 	uint data[];
 }
 result;
@@ -123,28 +140,135 @@ uint weight_offset()
 
 uint predecessor_offset()
 {
-	return result.edge_count;
+	return result.edge_count * result.value_word_count;
 }
 
 uint basket_offset()
 {
-	return result.edge_count + result.node_count;
+	return predecessor_offset() + result.node_count;
 }
 
 uint path_offset()
 {
-	return result.edge_count + 2u * result.node_count;
+	return basket_offset() + result.node_count;
 }
 
-float softplus(float value)
+Value value_exp(Value value)
 {
-	return value > 20.0 ? value : log(1.0 + exp(value));
+#ifdef CRIT_FP64
+	if (value > 709.782712893384)
+		return 1.0 / 0.0;
+	if (value < -708.396418532264)
+		return 0.0;
+	int exponent = int(floor(value * 1.4426950408889634));
+	Value remainder = value - Value(exponent) * 0.6931471805599453;
+	Value term = 1.0;
+	Value sum = 1.0;
+	for (int i = 1; i <= 18; i++) {
+		term *= remainder / Value(i);
+		sum += term;
+	}
+	uint64_t exponent_bits = uint64_t(exponent + 1023) << 52u;
+	Value scale = packDouble2x32(uvec2(uint(exponent_bits), uint(exponent_bits >> 32u)));
+	return sum * scale;
+#else
+	return exp(value);
+#endif
 }
 
-bool criticality_equal(float a, float b)
+Value value_log(Value value)
 {
-	float scale = max(max(abs(a), abs(b)), 1.0);
+#ifdef CRIT_FP64
+	uvec2 bits = unpackDouble2x32(value);
+	uint exponent_bits = (bits.y >> 20u) & 0x7ffu;
+	bits.y = (bits.y & 0x000fffffu) | 0x3ff00000u;
+	Value mantissa = packDouble2x32(bits);
+	Value z = (mantissa - 1.0) / (mantissa + 1.0);
+	Value z_squared = z * z;
+	Value term = z;
+	Value sum = z;
+	for (int denominator = 3; denominator <= 49; denominator += 2) {
+		term *= z_squared;
+		sum += term / Value(denominator);
+	}
+	return 2.0 * sum + Value(int(exponent_bits) - 1023) * 0.6931471805599453;
+#else
+	return log(value);
+#endif
+}
+
+Value softplus(Value value)
+{
+	return value > 20.0 ? value : value_log(1.0 + value_exp(value));
+}
+
+void store_weight(uint edge_id, Value value)
+{
+#ifdef CRIT_FP64
+	uvec2 bits = unpackDouble2x32(value);
+	result.data[weight_offset() + 2u * edge_id] = bits.x;
+	result.data[weight_offset() + 2u * edge_id + 1u] = bits.y;
+#else
+	result.data[weight_offset() + edge_id] = floatBitsToUint(value);
+#endif
+}
+
+Value load_weight(uint edge_id)
+{
+#ifdef CRIT_FP64
+	uint offset = weight_offset() + 2u * edge_id;
+	return packDouble2x32(uvec2(result.data[offset], result.data[offset + 1u]));
+#else
+	return uintBitsToFloat(result.data[weight_offset() + edge_id]);
+#endif
+}
+
+Value criticality_maximum()
+{
+#ifdef CRIT_FP64
+	return packDouble2x32(uvec2(uint(result.criticality_max_bits), uint(result.criticality_max_bits >> 32u)));
+#else
+	return uintBitsToFloat(result.criticality_max_bits.x);
+#endif
+}
+
+Value sink_height_maximum()
+{
+#ifdef CRIT_FP64
+	return packDouble2x32(uvec2(uint(result.sink_height_bits), uint(result.sink_height_bits >> 32u)));
+#else
+	return uintBitsToFloat(result.sink_height_bits.x);
+#endif
+}
+
+void reduce_criticality_max(Value value)
+{
+#ifdef CRIT_FP64
+	uvec2 bits = unpackDouble2x32(value);
+	atomicMax(result.criticality_max_bits, uint64_t(bits.x) | (uint64_t(bits.y) << 32u));
+#else
+	atomicMax(result.criticality_max_bits.x, floatBitsToUint(value));
+#endif
+}
+
+void reduce_sink_height(Value value)
+{
+#ifdef CRIT_FP64
+	uvec2 bits = unpackDouble2x32(value);
+	atomicMax(result.sink_height_bits, uint64_t(bits.x) | (uint64_t(bits.y) << 32u));
+#else
+	atomicMax(result.sink_height_bits.x, floatBitsToUint(value));
+#endif
+}
+
+bool criticality_equal(Value a, Value b)
+{
+	Value scale = max(max(abs(a), abs(b)), 1.0);
+#ifdef CRIT_FP64
+	return abs(a - b) <= max(1e-9, 1e-12 * scale);
+#else
 	return abs(a - b) <= max(1e-4, 1e-5 * scale);
+#endif
 }
 
 float finite_presentation(float value)
@@ -163,9 +287,9 @@ void write_presentation(uint edge_id, float strength)
 	atomicMax(edge_anim.strength_max_bits, floatBitsToUint(strength));
 }
 
-void record_forward_animation_edges(CritNode n, float log_count)
+void record_forward_animation_edges(CritNode n, Value log_count)
 {
-	float score = pc.weight_mode == WEIGHT_UNIT ? 1.0 : (pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_count, 0.0) : softplus(log_count));
+	float score = float(pc.weight_mode == WEIGHT_UNIT ? 1.0 : (pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_count, 0.0) : softplus(log_count)));
 	for (uint i = 0u; i < n.degree; i++)
 		write_presentation(out_edges[n.edge_offset + i].pad, score);
 }
@@ -174,8 +298,8 @@ void record_projected_animation_edges(uint source, CritNode n)
 {
 	for (uint i = 0u; i < n.degree; i++) {
 		CritEdge edge = out_edges[n.edge_offset + i];
-		float log_weight = lnW[source] + lnX[edge.node];
-		float score = pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_weight, 0.0) : softplus(log_weight);
+		Value log_weight = lnW[source] + lnX[edge.node];
+		float score = float(pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_weight, 0.0) : softplus(log_weight));
 		write_presentation(edge.pad, score);
 	}
 }
@@ -185,14 +309,14 @@ void materialize(uint v)
 	CritNode n = out_nodes[v];
 	for (uint i = 0u; i < n.degree; i++) {
 		CritEdge edge = out_edges[n.edge_offset + i];
-		float log_weight = pc.weight_mode == WEIGHT_SPLC ? lnW[v] : lnW[v] + lnX[edge.node];
-		float analysis = pc.weight_mode == WEIGHT_UNIT ? 1.0 : (pc.weight_mode == WEIGHT_SPE ? log_weight : exp(log_weight));
+		Value log_weight = pc.weight_mode == WEIGHT_SPLC ? lnW[v] : lnW[v] + lnX[edge.node];
+		Value analysis = pc.weight_mode == WEIGHT_UNIT ? 1.0 : (pc.weight_mode == WEIGHT_SPE ? log_weight : value_exp(log_weight));
 		if (isnan(analysis))
 			atomicOr(result.status, RESULT_INVALID);
 		else if (isinf(analysis))
 			atomicOr(result.status, RESULT_OVERFLOW);
-		result.data[weight_offset() + edge.pad] = floatBitsToUint(analysis);
-		float presentation = pc.weight_mode == WEIGHT_UNIT ? 1.0 : (pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_weight, 0.0) : softplus(log_weight));
+		store_weight(edge.pad, analysis);
+		float presentation = float(pc.weight_mode == WEIGHT_UNIT ? 1.0 : (pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_weight, 0.0) : softplus(log_weight)));
 		write_presentation(edge.pad, presentation);
 	}
 }
@@ -205,13 +329,13 @@ void compute_height(uint v)
 		return;
 	}
 	CritNode n = in_nodes[v];
-	float best = 0.0;
+	Value best = 0.0;
 	uint best_predecessor = INVALID_NODE;
 	uint best_edge = INVALID_NODE;
 	for (uint i = 0u; i < n.degree; i++) {
 		CritEdge edge = in_edges[n.edge_offset + i];
-		float weight = uintBitsToFloat(result.data[weight_offset() + edge.pad]);
-		float candidate = height[edge.node] + weight;
+		Value weight = load_weight(edge.pad);
+		Value candidate = height[edge.node] + weight;
 		if (isnan(candidate)) {
 			atomicOr(result.status, RESULT_INVALID);
 			continue;
@@ -237,11 +361,11 @@ void compute_depth(uint v)
 		return;
 	}
 	CritNode n = out_nodes[v];
-	float best = 0.0;
+	Value best = 0.0;
 	for (uint i = 0u; i < n.degree; i++) {
 		CritEdge edge = out_edges[n.edge_offset + i];
-		float weight = uintBitsToFloat(result.data[weight_offset() + edge.pad]);
-		float candidate = weight + depth[edge.node];
+		Value weight = load_weight(edge.pad);
+		Value candidate = weight + depth[edge.node];
 		if (isnan(candidate)) {
 			atomicOr(result.status, RESULT_INVALID);
 			continue;
@@ -259,19 +383,19 @@ void reduce_node(uint v)
 {
 	if (result.status != 0u)
 		return;
-	atomicMax(result.criticality_max_bits, floatBitsToUint(height[v] + depth[v]));
+	reduce_criticality_max(height[v] + depth[v]);
 	if (out_nodes[v].degree == 0u)
-		atomicMax(result.sink_height_bits, floatBitsToUint(height[v]));
+		reduce_sink_height(height[v]);
 }
 
 void write_flags(uint v)
 {
 	if (result.status != 0u)
 		return;
-	float maximum = uintBitsToFloat(result.criticality_max_bits);
-	float sink_height = uintBitsToFloat(result.sink_height_bits);
+	Value maximum = criticality_maximum();
+	Value sink_height = sink_height_maximum();
 	result.data[basket_offset() + v] = criticality_equal(maximum, height[v] + depth[v]) ? 1u : 0u;
-	if (out_nodes[v].degree == 0u && abs(sink_height - height[v]) < 1e-4)
+	if (out_nodes[v].degree == 0u && criticality_equal(sink_height, height[v]))
 		atomicMin(result.sink_node, v);
 }
 
@@ -308,23 +432,23 @@ void main()
 	uint v = level_nodes[pc.level_offset + idx];
 	if (pc.stage == STAGE_LNW) {
 		CritNode n = in_nodes[v];
-		float value = 0.0;
+		Value value = 0.0;
 		if (pc.weight_mode == WEIGHT_SPLC) {
-			float maximum = 0.0;
+			Value maximum = 0.0;
 			for (uint i = 0u; i < n.degree; i++)
 				maximum = max(maximum, lnW[in_edges[n.edge_offset + i].node]);
-			float sum = exp(-maximum);
+			Value sum = value_exp(-maximum);
 			for (uint i = 0u; i < n.degree; i++)
-				sum += exp(lnW[in_edges[n.edge_offset + i].node] - maximum);
-			value = maximum + log(sum);
+				sum += value_exp(lnW[in_edges[n.edge_offset + i].node] - maximum);
+			value = maximum + value_log(sum);
 		} else if (n.degree != 0u) {
-			float maximum = -1.0 / 0.0;
+			Value maximum = -1.0 / 0.0;
 			for (uint i = 0u; i < n.degree; i++)
 				maximum = max(maximum, lnW[in_edges[n.edge_offset + i].node]);
-			float sum = 0.0;
+			Value sum = 0.0;
 			for (uint i = 0u; i < n.degree; i++)
-				sum += exp(lnW[in_edges[n.edge_offset + i].node] - maximum);
-			value = maximum + log(sum);
+				sum += value_exp(lnW[in_edges[n.edge_offset + i].node] - maximum);
+			value = maximum + value_log(sum);
 		}
 		lnW[v] = value;
 		record_forward_animation_edges(out_nodes[v], value);
@@ -332,15 +456,15 @@ void main()
 	}
 	if (pc.stage == STAGE_LNX) {
 		CritNode n = out_nodes[v];
-		float value = 0.0;
+		Value value = 0.0;
 		if (n.degree != 0u) {
-			float maximum = -1.0 / 0.0;
+			Value maximum = -1.0 / 0.0;
 			for (uint i = 0u; i < n.degree; i++)
 				maximum = max(maximum, lnX[out_edges[n.edge_offset + i].node]);
-			float sum = 0.0;
+			Value sum = 0.0;
 			for (uint i = 0u; i < n.degree; i++)
-				sum += exp(lnX[out_edges[n.edge_offset + i].node] - maximum);
-			value = maximum + log(sum);
+				sum += value_exp(lnX[out_edges[n.edge_offset + i].node] - maximum);
+			value = maximum + value_log(sum);
 		}
 		lnX[v] = value;
 		if (pc.weight_mode == WEIGHT_SPC || pc.weight_mode == WEIGHT_SPE)

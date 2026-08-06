@@ -4,6 +4,9 @@
  */
 
 #include "vulkan/pipeline_compute.h"
+
+#include <stdio.h>
+
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_bcgl.h"
 #include "vulkan/utils.h"
@@ -56,6 +59,21 @@ void renderer_create_criticality_compute_pipeline(Renderer *r)
 	VkComputePipelineCreateInfo critPipelineInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = critStage, .layout = r->crit.pipeline_layout};
 	VK_CHECK(vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &critPipelineInfo, NULL, &r->pipelines.compute_criticality), "Failed to create criticality compute pipeline");
 	vkDestroyShaderModule(r->core.device, critShaderModule, NULL);
+	if (r->core.main_path_fp64) {
+		VkShaderModule fp64_shader_module = VK_NULL_HANDLE;
+		VkResult fp64_result = create_shader_module(r->core.device, MAIN_PATH_FP64_COMP_SHADER_PATH, &fp64_shader_module);
+		if (fp64_result == VK_SUCCESS) {
+			VkPipelineShaderStageCreateInfo fp64_stage = VK_SHADER_STAGE_COMP(fp64_shader_module);
+			VkComputePipelineCreateInfo fp64_pipeline_info = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, .stage = fp64_stage, .layout = r->crit.pipeline_layout};
+			fp64_result = vkCreateComputePipelines(r->core.device, VK_NULL_HANDLE, 1, &fp64_pipeline_info, NULL, &r->pipelines.compute_criticality_fp64);
+		}
+		if (fp64_shader_module != VK_NULL_HANDLE)
+			vkDestroyShaderModule(r->core.device, fp64_shader_module, NULL);
+		if (fp64_result != VK_SUCCESS) {
+			fprintf(stderr, "[Vulkan] Main Path FP64 pipeline unavailable (VkResult %d); using FP32\n", fp64_result);
+			r->core.main_path_fp64 = false;
+		}
+	}
 
 	VkDescriptorPoolSize critPoolSizes = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, CRIT_BINDING_COUNT};
 	VkDescriptorPoolCreateInfo critPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &critPoolSizes};

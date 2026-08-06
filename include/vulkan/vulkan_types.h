@@ -296,6 +296,7 @@ typedef struct
 	int presentQueueFamily;
 	int computeQueueFamily;
 	VkPhysicalDeviceProperties deviceProperties;
+	bool main_path_fp64;
 } VulkanCore;
 
 typedef struct
@@ -342,6 +343,7 @@ typedef struct
 	VkPipeline ray;
 	VkPipeline compute_spherical;
 	VkPipeline compute_criticality;
+	VkPipeline compute_criticality_fp64;
 } Pipelines;
 
 typedef struct
@@ -390,6 +392,8 @@ typedef struct
 	int num_levels;
 	uint32_t node_count;
 	uint32_t weight_mode;
+	uint32_t value_word_count;
+	bool use_fp64;
 	bool active;
 	bool readback_pending;
 	int current_level;

@@ -5,7 +5,9 @@
 
 #include "vulkan/criticality_types.h"
 
+#include <float.h>
 #include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +16,14 @@
 #define BINDING_COUNT 11
 #define WORKGROUP_SIZE 64
 #define TOLERANCE 1e-4f
+
+#ifdef CRITICALITY_TEST_FP64
+typedef double TestValue;
+#define TEST_VALUE_WORDS 2u
+#else
+typedef float TestValue;
+#define TEST_VALUE_WORDS 1u
+#endif
 
 typedef struct
 {
@@ -82,6 +92,29 @@ static float bits_float(uint32_t bits)
 	float value;
 	memcpy(&value, &bits, sizeof(value));
 	return value;
+}
+
+static TestValue result_value(const uint32_t *words)
+{
+#ifdef CRITICALITY_TEST_FP64
+	uint64_t bits = (uint64_t)words[0] | ((uint64_t)words[1] << 32u);
+	double value;
+	memcpy(&value, &bits, sizeof(value));
+	return value;
+#else
+	return bits_float(words[0]);
+#endif
+}
+
+static TestValue header_value(uint64_t bits)
+{
+#ifdef CRITICALITY_TEST_FP64
+	double value;
+	memcpy(&value, &bits, sizeof(value));
+	return value;
+#else
+	return bits_float((uint32_t)bits);
+#endif
 }
 
 static uint32_t find_memory_type(VkPhysicalDevice physical, uint32_t filter, VkMemoryPropertyFlags properties)
@@ -167,6 +200,28 @@ static int harness_init(Harness *h)
 	VK_TRY(vkEnumeratePhysicalDevices(h->instance, &physical_count, physical_devices), "vkEnumeratePhysicalDevices");
 	h->physical = physical_devices[0];
 	free(physical_devices);
+#ifdef CRITICALITY_TEST_FP64
+	VkPhysicalDeviceProperties properties;
+	vkGetPhysicalDeviceProperties(h->physical, &properties);
+	VkPhysicalDeviceShaderAtomicInt64Features atomic_features = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES};
+	VkPhysicalDeviceFeatures2 features = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &atomic_features};
+	vkGetPhysicalDeviceFeatures2(h->physical, &features);
+	uint32_t extension_count = 0;
+	vkEnumerateDeviceExtensionProperties(h->physical, NULL, &extension_count, NULL);
+	VkExtensionProperties *extensions = malloc(sizeof(*extensions) * extension_count);
+	if (!extensions)
+		return 1;
+	vkEnumerateDeviceExtensionProperties(h->physical, NULL, &extension_count, extensions);
+	bool has_atomic_extension = false;
+	for (uint32_t i = 0; i < extension_count; i++)
+		if (strcmp(extensions[i].extensionName, VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME) == 0)
+			has_atomic_extension = true;
+	free(extensions);
+	if (!features.features.shaderFloat64 || !features.features.shaderInt64 || !atomic_features.shaderBufferInt64Atomics || (properties.apiVersion < VK_API_VERSION_1_2 && !has_atomic_extension)) {
+		printf("FP64 criticality test skipped: required Vulkan features unavailable\n");
+		return 77;
+	}
+#endif
 	uint32_t family_count = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(h->physical, &family_count, NULL);
 	VkQueueFamilyProperties *families = malloc(sizeof(*families) * family_count);
@@ -185,6 +240,18 @@ static int harness_init(Harness *h)
 	float priority = 1.0f;
 	VkDeviceQueueCreateInfo queue_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = h->queue_family, .queueCount = 1, .pQueuePriorities = &priority};
 	VkDeviceCreateInfo device_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue_info};
+#ifdef CRITICALITY_TEST_FP64
+	VkPhysicalDeviceShaderAtomicInt64Features enabled_atomic = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES, .shaderBufferInt64Atomics = VK_TRUE};
+	VkPhysicalDeviceFeatures2 enabled_features = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &enabled_atomic};
+	enabled_features.features.shaderFloat64 = VK_TRUE;
+	enabled_features.features.shaderInt64 = VK_TRUE;
+	const char *atomic_extension = VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME;
+	if (properties.apiVersion < VK_API_VERSION_1_2) {
+		device_info.enabledExtensionCount = 1;
+		device_info.ppEnabledExtensionNames = &atomic_extension;
+	}
+	device_info.pNext = &enabled_features;
+#endif
 	VK_TRY(vkCreateDevice(h->physical, &device_info, NULL, &h->device), "vkCreateDevice");
 	vkGetDeviceQueue(h->device, h->queue_family, 0, &h->queue);
 	VkDescriptorSetLayoutBinding bindings[BINDING_COUNT];
@@ -251,9 +318,9 @@ static int harness_upload_graph(Harness *h, const GraphSpec *graph)
 	harness_destroy_graph(h);
 	VkDeviceSize node_size = sizeof(CritNode) * graph->node_count;
 	VkDeviceSize edge_size = sizeof(CritEdge) * (graph->edge_count > 0 ? graph->edge_count : 1);
-	VkDeviceSize value_size = sizeof(float) * graph->node_count;
+	VkDeviceSize value_size = sizeof(TestValue) * graph->node_count;
 	VkDeviceSize animation_size = sizeof(EdgeAnimHeader) + sizeof(EdgeAnim) * (graph->edge_count > 0 ? graph->edge_count : 1);
-	VkDeviceSize result_size = crit_result_buffer_size(graph->edge_count, graph->node_count);
+	VkDeviceSize result_size = crit_result_buffer_size(graph->edge_count, graph->node_count, TEST_VALUE_WORDS);
 	VkDeviceSize sizes[BINDING_COUNT] = {node_size, edge_size, node_size, edge_size, sizeof(uint32_t) * graph->node_count, value_size, value_size, value_size, value_size, animation_size, result_size};
 	for (uint32_t i = 0; i < BINDING_COUNT; i++)
 		if (create_buffer(h, i, sizes[i]) != 0)
@@ -273,9 +340,9 @@ static int harness_upload_graph(Harness *h, const GraphSpec *graph)
 
 static int harness_reset_run(Harness *h, const GraphSpec *graph)
 {
-	float *zeros = calloc(graph->node_count, sizeof(float));
+	TestValue *zeros = calloc(graph->node_count, sizeof(TestValue));
 	unsigned char *animation = calloc(1, sizeof(EdgeAnimHeader) + sizeof(EdgeAnim) * (graph->edge_count > 0 ? graph->edge_count : 1));
-	unsigned char *result = calloc(1, crit_result_buffer_size(graph->edge_count, graph->node_count));
+	unsigned char *result = calloc(1, crit_result_buffer_size(graph->edge_count, graph->node_count, TEST_VALUE_WORDS));
 	if (!zeros || !animation || !result) {
 		free(zeros);
 		free(animation);
@@ -285,12 +352,13 @@ static int harness_reset_run(Harness *h, const GraphSpec *graph)
 	CritResultHeader *header = (CritResultHeader *)result;
 	header->edge_count = graph->edge_count;
 	header->node_count = graph->node_count;
+	header->value_word_count = TEST_VALUE_WORDS;
 	header->sink_node = UINT32_MAX;
 	uint32_t *data = (uint32_t *)(result + sizeof(*header));
 	for (uint32_t v = 0; v < graph->node_count; v++)
-		data[crit_result_predecessor_offset(graph->edge_count) + v] = UINT32_MAX;
-	size_t value_size = sizeof(float) * graph->node_count;
-	int failed = upload(h, BUF_LNW, zeros, value_size) || upload(h, BUF_LNX, zeros, value_size) || upload(h, BUF_HEIGHT, zeros, value_size) || upload(h, BUF_DEPTH, zeros, value_size) || upload(h, BUF_EDGE_ANIM, animation, sizeof(EdgeAnimHeader) + sizeof(EdgeAnim) * (graph->edge_count > 0 ? graph->edge_count : 1)) || upload(h, BUF_RESULT, result, crit_result_buffer_size(graph->edge_count, graph->node_count));
+		data[crit_result_predecessor_offset(graph->edge_count, TEST_VALUE_WORDS) + v] = UINT32_MAX;
+	size_t value_size = sizeof(TestValue) * graph->node_count;
+	int failed = upload(h, BUF_LNW, zeros, value_size) || upload(h, BUF_LNX, zeros, value_size) || upload(h, BUF_HEIGHT, zeros, value_size) || upload(h, BUF_DEPTH, zeros, value_size) || upload(h, BUF_EDGE_ANIM, animation, sizeof(EdgeAnimHeader) + sizeof(EdgeAnim) * (graph->edge_count > 0 ? graph->edge_count : 1)) || upload(h, BUF_RESULT, result, crit_result_buffer_size(graph->edge_count, graph->node_count, TEST_VALUE_WORDS));
 	free(zeros);
 	free(animation);
 	free(result);
@@ -356,7 +424,7 @@ static int harness_run(Harness *h, const GraphSpec *graph, uint32_t mode)
 	return 0;
 }
 
-static int check_float_array(const char *name, const float *got, const float *expected, uint32_t count)
+static int check_float_array(const char *name, const TestValue *got, const float *expected, uint32_t count)
 {
 	int failures = 0;
 	for (uint32_t i = 0; i < count; i++)
@@ -397,11 +465,11 @@ static int check_base_mode(Harness *h, uint32_t mode, const char *name)
 {
 	if (harness_run(h, &base_graph, mode) != 0)
 		return 1;
-	float lnw[BASE_NODES];
-	float lnx[BASE_NODES];
-	float height[BASE_NODES];
-	float depth[BASE_NODES];
-	unsigned char result_bytes[sizeof(CritResultHeader) + sizeof(uint32_t) * (BASE_EDGES + 3 * BASE_NODES)];
+	TestValue lnw[BASE_NODES];
+	TestValue lnx[BASE_NODES];
+	TestValue height[BASE_NODES];
+	TestValue depth[BASE_NODES];
+	unsigned char result_bytes[sizeof(CritResultHeader) + sizeof(uint32_t) * (TEST_VALUE_WORDS * BASE_EDGES + 3 * BASE_NODES)];
 	unsigned char animation_bytes[sizeof(EdgeAnimHeader) + sizeof(EdgeAnim) * BASE_EDGES];
 	if (download(h, BUF_LNW, lnw, sizeof(lnw)) || download(h, BUF_LNX, lnx, sizeof(lnx)) || download(h, BUF_HEIGHT, height, sizeof(height)) || download(h, BUF_DEPTH, depth, sizeof(depth)) || download(h, BUF_RESULT, result_bytes, sizeof(result_bytes)) || download(h, BUF_EDGE_ANIM, animation_bytes, sizeof(animation_bytes)))
 		return 1;
@@ -426,8 +494,8 @@ static int check_base_mode(Harness *h, uint32_t mode, const char *name)
 	EdgeAnim *animation_edges = (EdgeAnim *)(animation_bytes + sizeof(*animation_header));
 	float expected_weights[BASE_EDGES];
 	float expected_strengths[BASE_EDGES];
-	float got_weights[BASE_EDGES];
-	float got_strengths[BASE_EDGES];
+	TestValue got_weights[BASE_EDGES];
+	TestValue got_strengths[BASE_EDGES];
 	float expected_strength_max = 0.0f;
 	for (uint32_t e = 0; e < BASE_EDGES; e++) {
 		uint32_t source = e < 3 ? 0 : (e < 4 ? 1 : (e < 5 ? 2 : (e < 7 ? 3 : (e < 8 ? 4 : (e < 9 ? 5 : 7)))));
@@ -435,7 +503,7 @@ static int check_base_mode(Harness *h, uint32_t mode, const char *name)
 		float log_weight = mode == CRIT_WEIGHT_SPLC ? splc_lnw[source] : regular_lnw[source] + ((mode == CRIT_WEIGHT_SPC || mode == CRIT_WEIGHT_SPE) ? suffix[target] : 0.0f);
 		expected_weights[e] = mode == CRIT_WEIGHT_UNIT ? 1.0f : (mode == CRIT_WEIGHT_SPE ? log_weight : expf(log_weight));
 		expected_strengths[e] = mode == CRIT_WEIGHT_UNIT ? 1.0f : (mode == CRIT_WEIGHT_SPE ? fmaxf(1.0f + log_weight, 0.0f) : (log_weight > 20.0f ? log_weight : logf(1.0f + expf(log_weight))));
-		got_weights[e] = bits_float(data[crit_result_weight_offset() + e]);
+		got_weights[e] = result_value(data + crit_result_weight_offset() + TEST_VALUE_WORDS * e);
 		got_strengths[e] = animation_edges[e].strength;
 		expected_strength_max = fmaxf(expected_strength_max, expected_strengths[e]);
 	}
@@ -449,10 +517,10 @@ static int check_base_mode(Harness *h, uint32_t mode, const char *name)
 	failures += check_float_array("presentation", got_strengths, expected_strengths, BASE_EDGES);
 	failures += check_float_array("height", height, expected_height, BASE_NODES);
 	failures += check_float_array("depth", depth, expected_depth, BASE_NODES);
-	failures += check_uint_array("predecessor", data + crit_result_predecessor_offset(BASE_EDGES), predecessors, BASE_NODES);
-	failures += check_uint_array("basket", data + crit_result_basket_offset(BASE_EDGES, BASE_NODES), basket, BASE_NODES);
-	failures += check_uint_array("path", data + crit_result_path_offset(BASE_EDGES, BASE_NODES), path, BASE_NODES);
-	if (header->status != 0 || fabsf(bits_float(header->criticality_max_bits) - maximum) > TOLERANCE || fabsf(bits_float(header->sink_height_bits) - maximum) > TOLERANCE || header->sink_node != 6 || fabsf(bits_float(animation_header->strength_max_bits) - expected_strength_max) > TOLERANCE) {
+	failures += check_uint_array("predecessor", data + crit_result_predecessor_offset(BASE_EDGES, TEST_VALUE_WORDS), predecessors, BASE_NODES);
+	failures += check_uint_array("basket", data + crit_result_basket_offset(BASE_EDGES, BASE_NODES, TEST_VALUE_WORDS), basket, BASE_NODES);
+	failures += check_uint_array("path", data + crit_result_path_offset(BASE_EDGES, BASE_NODES, TEST_VALUE_WORDS), path, BASE_NODES);
+	if (header->status != 0 || fabs(header_value(header->criticality_max_bits) - maximum) > TOLERANCE || fabs(header_value(header->sink_height_bits) - maximum) > TOLERANCE || header->sink_node != 6 || fabsf(bits_float(animation_header->strength_max_bits) - expected_strength_max) > TOLERANCE) {
 		fprintf(stderr, "%s header mismatch\n", name);
 		failures++;
 	}
@@ -472,14 +540,14 @@ static int check_zero_weight_tie(Harness *h)
 	GraphSpec graph = {3, 2, 2, out_nodes, out_edges, in_nodes, in_edges, levels, offsets, sizes};
 	if (harness_upload_graph(h, &graph) || harness_run(h, &graph, CRIT_WEIGHT_SPE))
 		return 1;
-	unsigned char bytes[sizeof(CritResultHeader) + sizeof(uint32_t) * 11];
+	unsigned char bytes[sizeof(CritResultHeader) + sizeof(uint32_t) * (2 * TEST_VALUE_WORDS + 9)];
 	if (download(h, BUF_RESULT, bytes, sizeof(bytes)))
 		return 1;
 	CritResultHeader *header = (CritResultHeader *)bytes;
 	uint32_t *data = (uint32_t *)(bytes + sizeof(*header));
 	uint32_t expected_predecessors[3] = {UINT32_MAX, UINT32_MAX, 1};
 	uint32_t expected_path[3] = {0, 1, 1};
-	int failures = check_uint_array("zero predecessor", data + crit_result_predecessor_offset(2), expected_predecessors, 3) + check_uint_array("zero path", data + crit_result_path_offset(2, 3), expected_path, 3);
+	int failures = check_uint_array("zero predecessor", data + crit_result_predecessor_offset(2, TEST_VALUE_WORDS), expected_predecessors, 3) + check_uint_array("zero path", data + crit_result_path_offset(2, 3, TEST_VALUE_WORDS), expected_path, 3);
 	if (header->status != 0 || header->sink_node != 2)
 		failures++;
 	printf("zero-weight SPE tie: %s\n", failures == 0 ? "ok" : "failed");
@@ -502,16 +570,15 @@ static int check_empty_edges(Harness *h)
 	uint32_t *data = (uint32_t *)(bytes + sizeof(*header));
 	uint32_t expected_basket[2] = {1, 1};
 	uint32_t expected_path[2] = {1, 0};
-	int failures = check_uint_array("empty basket", data + crit_result_basket_offset(0, 2), expected_basket, 2) + check_uint_array("empty path", data + crit_result_path_offset(0, 2), expected_path, 2);
+	int failures = check_uint_array("empty basket", data + crit_result_basket_offset(0, 2, TEST_VALUE_WORDS), expected_basket, 2) + check_uint_array("empty path", data + crit_result_path_offset(0, 2, TEST_VALUE_WORDS), expected_path, 2);
 	if (header->status != 0 || header->sink_node != 0)
 		failures++;
 	printf("empty-edge sink tie: %s\n", failures == 0 ? "ok" : "failed");
 	return failures;
 }
 
-static int check_overflow(Harness *h, uint32_t mode, const char *name)
+static int check_range(Harness *h, uint32_t mode, const char *name, uint32_t node_count, bool expect_overflow)
 {
-	const uint32_t node_count = 140;
 	const uint32_t edge_count = 2 * (node_count - 1);
 	CritNode *out_nodes = calloc(node_count, sizeof(*out_nodes));
 	CritNode *in_nodes = calloc(node_count, sizeof(*in_nodes));
@@ -537,13 +604,43 @@ static int check_overflow(Harness *h, uint32_t mode, const char *name)
 	}
 	GraphSpec graph = {node_count, edge_count, node_count, out_nodes, out_edges, in_nodes, in_edges, levels, offsets, sizes};
 	int failures = harness_upload_graph(h, &graph) || harness_run(h, &graph, mode);
-	unsigned char *result = malloc(crit_result_buffer_size(edge_count, node_count));
+	unsigned char *result = malloc(crit_result_buffer_size(edge_count, node_count, TEST_VALUE_WORDS));
 	unsigned char *animation = malloc(sizeof(EdgeAnimHeader) + sizeof(EdgeAnim) * edge_count);
-	if (!failures && result && animation && !download(h, BUF_RESULT, result, crit_result_buffer_size(edge_count, node_count)) && !download(h, BUF_EDGE_ANIM, animation, sizeof(EdgeAnimHeader) + sizeof(EdgeAnim) * edge_count)) {
+	if (!failures && result && animation && !download(h, BUF_RESULT, result, crit_result_buffer_size(edge_count, node_count, TEST_VALUE_WORDS)) && !download(h, BUF_EDGE_ANIM, animation, sizeof(EdgeAnimHeader) + sizeof(EdgeAnim) * edge_count)) {
 		CritResultHeader *header = (CritResultHeader *)result;
+		uint32_t *data = (uint32_t *)(result + sizeof(*header));
 		EdgeAnim *edges = (EdgeAnim *)(animation + sizeof(EdgeAnimHeader));
+#ifdef CRITICALITY_TEST_FP64
+		if (expect_overflow) {
+			if ((header->status & CRIT_RESULT_OVERFLOW) == 0 || (header->status & CRIT_RESULT_INVALID) != 0)
+				failures++;
+		} else {
+			if (header->status != 0)
+				failures++;
+			bool exceeds_float = false;
+			for (uint32_t e = 0; e < edge_count; e++)
+				if (result_value(data + TEST_VALUE_WORDS * e) > FLT_MAX) {
+					exceeds_float = true;
+					break;
+				}
+			if (!exceeds_float)
+				failures++;
+			double expected_last = mode == CRIT_WEIGHT_SPLC ? ldexp(1.0, (int)node_count - 1) - 1.0 : ldexp(1.0, (int)node_count - 2);
+			double last_weight = result_value(data + TEST_VALUE_WORDS * (edge_count - 1));
+			if (fabs(last_weight - expected_last) > 1e-12 * expected_last)
+				failures++;
+			size_t basket_offset = crit_result_basket_offset(edge_count, node_count, TEST_VALUE_WORDS);
+			size_t path_offset = crit_result_path_offset(edge_count, node_count, TEST_VALUE_WORDS);
+			for (uint32_t v = 0; v < node_count; v++)
+				if (data[path_offset + v] != 0 && data[basket_offset + v] == 0) {
+					failures++;
+					break;
+				}
+		}
+#else
 		if ((header->status & CRIT_RESULT_OVERFLOW) == 0 || (header->status & CRIT_RESULT_INVALID) != 0)
 			failures++;
+#endif
 		for (uint32_t e = 0; e < edge_count; e++)
 			if (!isfinite(edges[e].strength)) {
 				failures++;
@@ -561,16 +658,23 @@ static int check_overflow(Harness *h, uint32_t mode, const char *name)
 	free(levels);
 	free(offsets);
 	free(sizes);
-	printf("%s overflow: %s\n", name, failures == 0 ? "ok" : "failed");
+	printf("%s %s: %s\n", name,
+#ifdef CRITICALITY_TEST_FP64
+		   expect_overflow ? "FP64 overflow" : "FP64 high range",
+#else
+		   "overflow",
+#endif
+		   failures == 0 ? "ok" : "failed");
 	return failures;
 }
 
 int main(void)
 {
 	Harness harness;
-	if (harness_init(&harness) != 0) {
+	int init_result = harness_init(&harness);
+	if (init_result != 0) {
 		harness_destroy(&harness);
-		return 1;
+		return init_result;
 	}
 	if (harness_upload_graph(&harness, &base_graph) != 0) {
 		harness_destroy(&harness);
@@ -583,8 +687,15 @@ int main(void)
 	failures += check_base_mode(&harness, CRIT_WEIGHT_SPE, "SPE");
 	failures += check_zero_weight_tie(&harness);
 	failures += check_empty_edges(&harness);
-	failures += check_overflow(&harness, CRIT_WEIGHT_SPLC, "SPLC");
-	failures += check_overflow(&harness, CRIT_WEIGHT_SPC, "SPC");
+#ifdef CRITICALITY_TEST_FP64
+	failures += check_range(&harness, CRIT_WEIGHT_SPLC, "SPLC", 140, false);
+	failures += check_range(&harness, CRIT_WEIGHT_SPC, "SPC", 140, false);
+	failures += check_range(&harness, CRIT_WEIGHT_SPLC, "SPLC", 1100, true);
+	failures += check_range(&harness, CRIT_WEIGHT_SPC, "SPC", 1100, true);
+#else
+	failures += check_range(&harness, CRIT_WEIGHT_SPLC, "SPLC", 140, true);
+	failures += check_range(&harness, CRIT_WEIGHT_SPC, "SPC", 140, true);
+#endif
 	harness_destroy(&harness);
 	if (failures != 0) {
 		fprintf(stderr, "criticality_test: %d failures\n", failures);

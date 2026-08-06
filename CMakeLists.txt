@@ -76,6 +76,10 @@ foreach(shader ${SHADERS})
 	list(APPEND SPIRV_SHADERS ${_spirv})
 endforeach()
 
+set(MAIN_PATH_FP64_SPIRV "${CMAKE_BINARY_DIR}/shaders/main_path_fp64.comp.spv")
+add_custom_command(OUTPUT ${MAIN_PATH_FP64_SPIRV} COMMAND ${GLSL_COMPILER} -V -DCRIT_FP64=1 ${CMAKE_CURRENT_SOURCE_DIR}/shaders/main_path.comp -o ${MAIN_PATH_FP64_SPIRV} DEPENDS shaders/main_path.comp COMMENT "Compiling main_path.comp FP64 variant to SPIR-V")
+list(APPEND SPIRV_SHADERS ${MAIN_PATH_FP64_SPIRV})
+
 # Lets test targets that load a .spv at runtime depend on the compiled shaders
 # without pulling in the whole application.
 add_custom_target(shaders DEPENDS ${SPIRV_SHADERS})
@@ -198,7 +202,7 @@ if(USE_OPENXR)
 	target_link_libraries(igraph-vlk PRIVATE OpenXR::openxr_loader)
 endif()
 
-target_compile_definitions(igraph-vlk PRIVATE NODE_VERT_SHADER_PATH="shaders/node.vert.spv" NODE_FRAG_SHADER_PATH="shaders/node.frag.spv" EDGE_VERT_SHADER_PATH="shaders/edge.vert.spv" EDGE_FRAG_SHADER_PATH="shaders/edge.frag.spv" LABEL_VERT_SHADER_PATH="shaders/label.vert.spv" LABEL_FRAG_SHADER_PATH="shaders/label.frag.spv" UI_VERT_SHADER_PATH="shaders/ui.vert.spv" UI_FRAG_SHADER_PATH="shaders/ui.frag.spv" MENU_VERT_SHADER_PATH="shaders/menu.vert.spv" MENU_FRAG_SHADER_PATH="shaders/menu.frag.spv" TEXTQUAD_VERT_SHADER_PATH="shaders/textquad.vert.spv" TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv" ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv" MAIN_PATH_COMP_SHADER_PATH="shaders/main_path.comp.spv" BCGL_COMP_SHADER_PATH="shaders/bcgl.comp.spv" RAY_VERT_SHADER_PATH="shaders/ray.vert.spv" RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv")
+target_compile_definitions(igraph-vlk PRIVATE NODE_VERT_SHADER_PATH="shaders/node.vert.spv" NODE_FRAG_SHADER_PATH="shaders/node.frag.spv" EDGE_VERT_SHADER_PATH="shaders/edge.vert.spv" EDGE_FRAG_SHADER_PATH="shaders/edge.frag.spv" LABEL_VERT_SHADER_PATH="shaders/label.vert.spv" LABEL_FRAG_SHADER_PATH="shaders/label.frag.spv" UI_VERT_SHADER_PATH="shaders/ui.vert.spv" UI_FRAG_SHADER_PATH="shaders/ui.frag.spv" MENU_VERT_SHADER_PATH="shaders/menu.vert.spv" MENU_FRAG_SHADER_PATH="shaders/menu.frag.spv" TEXTQUAD_VERT_SHADER_PATH="shaders/textquad.vert.spv" TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv" ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv" MAIN_PATH_COMP_SHADER_PATH="shaders/main_path.comp.spv" MAIN_PATH_FP64_COMP_SHADER_PATH="shaders/main_path_fp64.comp.spv" BCGL_COMP_SHADER_PATH="shaders/bcgl.comp.spv" RAY_VERT_SHADER_PATH="shaders/ray.vert.spv" RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv")
 
 # Standalone test for dynamic k-core maintenance (not installed)
 enable_testing()
@@ -305,6 +309,17 @@ if(NOT MSVC)
 	target_link_libraries(criticality_test PRIVATE m)
 endif()
 add_test(NAME criticality_test COMMAND criticality_test)
+
+add_executable(criticality_fp64_test tests/criticality_test.c)
+add_dependencies(criticality_fp64_test shaders)
+target_include_directories(criticality_fp64_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${Vulkan_INCLUDE_DIRS})
+target_compile_definitions(criticality_fp64_test PRIVATE CRITICALITY_TEST_FP64=1 CRITICALITY_TEST_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/main_path_fp64.comp.spv")
+target_link_libraries(criticality_fp64_test PRIVATE ${Vulkan_LIBRARIES})
+if(NOT MSVC)
+	target_link_libraries(criticality_fp64_test PRIVATE m)
+endif()
+add_test(NAME criticality_fp64_test COMMAND criticality_fp64_test)
+set_tests_properties(criticality_fp64_test PROPERTIES SKIP_RETURN_CODE 77)
 
 add_executable(main_path_cache_test tests/main_path_cache_test.c src/graph/main_path_cache.c)
 target_include_directories(main_path_cache_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${IGRAPH_INCLUDE_DIRS})

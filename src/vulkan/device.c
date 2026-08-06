@@ -136,6 +136,7 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 	core->graphicsQueue = VK_NULL_HANDLE;
 	core->presentQueue = VK_NULL_HANDLE;
 	core->surface = VK_NULL_HANDLE;
+	core->main_path_fp64 = false;
 
 	// Query available extensions
 	uint32_t availableExtCount = 0;
@@ -290,6 +291,14 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 
 	if (core->physicalDevice == VK_NULL_HANDLE)
 		exit_with_error("Failed to find a suitable GPU");
+	vkGetPhysicalDeviceProperties(core->physicalDevice, &core->deviceProperties);
+	VkPhysicalDeviceShaderAtomicInt64Features supported_atomic_int64 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES};
+	VkPhysicalDeviceFeatures2 supported_features = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &supported_atomic_int64};
+	vkGetPhysicalDeviceFeatures2(core->physicalDevice, &supported_features);
+	bool atomic_int64_core = core->deviceProperties.apiVersion >= VK_API_VERSION_1_2;
+	bool atomic_int64_extension = has_device_extension(core->physicalDevice, VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME);
+	core->main_path_fp64 = supported_features.features.shaderFloat64 && supported_features.features.shaderInt64 && supported_atomic_int64.shaderBufferInt64Atomics && (atomic_int64_core || atomic_int64_extension);
+	printf("[Vulkan] Main Path FP64: shaderFloat64=%u shaderInt64=%u shaderBufferInt64Atomics=%u atomicInt64=%s result=%s\n", supported_features.features.shaderFloat64, supported_features.features.shaderInt64, supported_atomic_int64.shaderBufferInt64Atomics, atomic_int64_core ? "core-1.2" : (atomic_int64_extension ? "extension" : "unavailable"), core->main_path_fp64 ? "enabled" : "FP32 fallback");
 
 	VkQueueFamilyInfo queueFamilyInfo = find_queue_families(core->physicalDevice, core->surface);
 	if (queueFamilyInfo.graphicsFamily == -1 || queueFamilyInfo.presentFamily == -1)
@@ -325,6 +334,8 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 			exit_with_error("Missing required Vulkan device extension");
 		}
 	}
+	if (core->main_path_fp64 && !atomic_int64_core)
+		deviceExtensions[deviceExtensionCount++] = VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME;
 
 	// Add VK_KHR_portability_subset if both portability enumeration and the subset extension are available
 	if (hasPortability && has_device_extension(core->physicalDevice, "VK_KHR_portability_subset")) {
@@ -370,7 +381,11 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 	// Validate all requested extensions against actual device support
 	deviceExtensionCount = validate_device_extensions(core->physicalDevice, deviceExtensions, deviceExtensionCount);
 
-	VkDeviceCreateInfo deviceInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = NULL, .queueCreateInfoCount = queueCreateInfoCount, .pQueueCreateInfos = queueCreateInfos, .enabledExtensionCount = deviceExtensionCount, .ppEnabledExtensionNames = deviceExtensions, .pEnabledFeatures = NULL, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
+	VkPhysicalDeviceShaderAtomicInt64Features enabled_atomic_int64 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES, .shaderBufferInt64Atomics = core->main_path_fp64};
+	VkPhysicalDeviceFeatures2 enabled_features = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = core->main_path_fp64 ? &enabled_atomic_int64 : NULL};
+	enabled_features.features.shaderFloat64 = core->main_path_fp64;
+	enabled_features.features.shaderInt64 = core->main_path_fp64;
+	VkDeviceCreateInfo deviceInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &enabled_features, .queueCreateInfoCount = queueCreateInfoCount, .pQueueCreateInfos = queueCreateInfos, .enabledExtensionCount = deviceExtensionCount, .ppEnabledExtensionNames = deviceExtensions, .pEnabledFeatures = NULL, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
 	VK_CHECK(vkCreateDevice(core->physicalDevice, &deviceInfo, NULL, &core->device), "Failed to create logical device");
 
 	for (uint32_t i = 0; i < deviceExtensionStrdupCount; i++)
@@ -385,8 +400,6 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 	} else {
 		core->computeQueue = core->graphicsQueue;
 	}
-
-	vkGetPhysicalDeviceProperties(core->physicalDevice, &core->deviceProperties);
 }
 
 void vulkan_device_destroy(VulkanCore *core)

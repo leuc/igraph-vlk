@@ -43,43 +43,47 @@ typedef struct
 	uint32_t edge_count;
 	uint32_t node_count;
 	uint32_t status;
-	uint32_t criticality_max_bits;
-	uint32_t sink_height_bits;
+	uint32_t value_word_count;
+	uint64_t criticality_max_bits;
+	uint64_t sink_height_bits;
 	uint32_t sink_node;
-	uint32_t _reserved[2];
+	uint32_t _reserved;
 } CritResultHeader;
 
-_Static_assert(sizeof(CritResultHeader) == 32, "CritResultHeader must match the std430 block in main_path.comp");
+_Static_assert(sizeof(CritResultHeader) == 40, "CritResultHeader must match the std430 block in main_path.comp");
+_Static_assert(offsetof(CritResultHeader, criticality_max_bits) == 16, "criticality maximum must be 64-bit aligned");
+_Static_assert(offsetof(CritResultHeader, sink_height_bits) == 24, "sink height must be 64-bit aligned");
+_Static_assert(offsetof(CritResultHeader, sink_node) == 32, "sink node offset must match main_path.comp");
 
 static inline size_t crit_result_weight_offset(void)
 {
 	return 0;
 }
 
-static inline size_t crit_result_predecessor_offset(uint32_t edge_count)
+static inline size_t crit_result_predecessor_offset(uint32_t edge_count, uint32_t value_word_count)
 {
-	return edge_count;
+	return (size_t)edge_count * value_word_count;
 }
 
-static inline size_t crit_result_basket_offset(uint32_t edge_count, uint32_t node_count)
+static inline size_t crit_result_basket_offset(uint32_t edge_count, uint32_t node_count, uint32_t value_word_count)
 {
-	return edge_count + node_count;
+	return crit_result_predecessor_offset(edge_count, value_word_count) + node_count;
 }
 
-static inline size_t crit_result_path_offset(uint32_t edge_count, uint32_t node_count)
+static inline size_t crit_result_path_offset(uint32_t edge_count, uint32_t node_count, uint32_t value_word_count)
 {
-	return edge_count + 2u * node_count;
+	return crit_result_basket_offset(edge_count, node_count, value_word_count) + node_count;
 }
 
-static inline size_t crit_result_data_word_count(uint32_t edge_count, uint32_t node_count)
+static inline size_t crit_result_data_word_count(uint32_t edge_count, uint32_t node_count, uint32_t value_word_count)
 {
-	size_t count = edge_count + 3u * node_count;
+	size_t count = (size_t)edge_count * value_word_count + 3u * node_count;
 	return count > 0 ? count : 1;
 }
 
-static inline size_t crit_result_buffer_size(uint32_t edge_count, uint32_t node_count)
+static inline size_t crit_result_buffer_size(uint32_t edge_count, uint32_t node_count, uint32_t value_word_count)
 {
-	return sizeof(CritResultHeader) + sizeof(uint32_t) * crit_result_data_word_count(edge_count, node_count);
+	return sizeof(CritResultHeader) + sizeof(uint32_t) * crit_result_data_word_count(edge_count, node_count, value_word_count);
 }
 
 #endif

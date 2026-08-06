@@ -134,6 +134,8 @@ void renderer_destroy_criticality_buffers(Renderer *r)
 	ctx->num_levels = 0;
 	ctx->node_count = 0;
 	ctx->graph_edge_count = 0;
+	ctx->value_word_count = 1;
+	ctx->use_fp64 = false;
 	ctx->active = false;
 	ctx->readback_pending = false;
 }
@@ -169,6 +171,8 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 	ctx->node_count = (uint32_t)n;
 	ctx->num_levels = num_levels;
 	ctx->weight_mode = weight_mode;
+	ctx->use_fp64 = r->core.main_path_fp64 && (weight_mode == CRIT_WEIGHT_SPLC || weight_mode == CRIT_WEIGHT_SPC);
+	ctx->value_word_count = ctx->use_fp64 ? 2u : 1u;
 	ctx->graph_edge_count = (uint32_t)igraph_ecount(&graph->g);
 
 	CritNode *out_nodes = NULL;
@@ -186,8 +190,8 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 		return false;
 	}
 
-	VkDeviceSize result_size = crit_result_buffer_size(ctx->graph_edge_count, ctx->node_count);
-	float *zeros = calloc((size_t)n, sizeof(float));
+	VkDeviceSize result_size = crit_result_buffer_size(ctx->graph_edge_count, ctx->node_count, ctx->value_word_count);
+	void *zeros = calloc((size_t)n, ctx->use_fp64 ? sizeof(double) : sizeof(float));
 	unsigned char *result_bytes = calloc(1, (size_t)result_size);
 	if (!zeros || !result_bytes) {
 		free(zeros);
@@ -203,10 +207,11 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 	CritResultHeader *header = (CritResultHeader *)result_bytes;
 	header->edge_count = ctx->graph_edge_count;
 	header->node_count = ctx->node_count;
+	header->value_word_count = ctx->value_word_count;
 	header->sink_node = UINT32_MAX;
 	uint32_t *data = (uint32_t *)(result_bytes + sizeof(*header));
 	for (uint32_t v = 0; v < ctx->node_count; v++)
-		data[crit_result_predecessor_offset(ctx->graph_edge_count) + v] = UINT32_MAX;
+		data[crit_result_predecessor_offset(ctx->graph_edge_count, ctx->value_word_count) + v] = UINT32_MAX;
 
 	VkDevice device = r->core.device;
 	VkPhysicalDevice physical = r->core.physicalDevice;
@@ -215,7 +220,7 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 	VkDeviceSize out_edge_size = sizeof(CritEdge) * (out_edge_count > 0 ? out_edge_count : 1);
 	VkDeviceSize in_edge_size = sizeof(CritEdge) * (in_edge_count > 0 ? in_edge_count : 1);
 	VkDeviceSize level_size = sizeof(uint32_t) * (size_t)n;
-	VkDeviceSize value_size = sizeof(float) * (size_t)n;
+	VkDeviceSize value_size = (ctx->use_fp64 ? sizeof(double) : sizeof(float)) * (size_t)n;
 	VK_CREATE_HOST_BUFFER(device, physical, node_size, usage, &ctx->out_nodes_buffer, &ctx->out_nodes_memory);
 	VK_CREATE_HOST_BUFFER(device, physical, out_edge_size, usage, &ctx->out_edges_buffer, &ctx->out_edges_memory);
 	VK_CREATE_HOST_BUFFER(device, physical, node_size, usage, &ctx->in_nodes_buffer, &ctx->in_nodes_memory);
@@ -300,7 +305,7 @@ bool renderer_start_main_path_weighting(Renderer *r, const GraphData *graph, con
 		return false;
 	ctx->last_level_time = r->anim.data.time - ctx->level_interval;
 	ctx->active = true;
-	printf("[MainPath] start: method=%u levels=%d tick=%.3fs\n", ctx->weight_mode, ctx->num_levels, ctx->level_interval);
+	printf("[MainPath] start: method=%u precision=%s levels=%d tick=%.3fs\n", ctx->weight_mode, ctx->use_fp64 ? "fp64" : "fp32", ctx->num_levels, ctx->level_interval);
 	return true;
 }
 
@@ -349,7 +354,7 @@ void renderer_dispatch_main_path_weight_level(Renderer *r, VkCommandBuffer comma
 	CritComputeContext *ctx = &r->crit;
 	if (!ctx->active || ctx->readback_pending)
 		return;
-	vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, r->pipelines.compute_criticality);
+	vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx->use_fp64 ? r->pipelines.compute_criticality_fp64 : r->pipelines.compute_criticality);
 	vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx->pipeline_layout, 0, 1, &r->descriptors.crit_set, 0, NULL);
 	int level = ctx->current_level;
 	uint32_t count = ctx->level_sizes[level];
@@ -400,14 +405,42 @@ static float crit_float_from_bits(uint32_t bits)
 	return value;
 }
 
-static void crit_print_readback(const char *method, const CritResultHeader *header, const uint32_t *data, const float *lnw, const float *lnx, const float *height, const float *depth)
+static double crit_double_from_words(const uint32_t *words)
+{
+	uint64_t bits = (uint64_t)words[0] | ((uint64_t)words[1] << 32u);
+	double value;
+	memcpy(&value, &bits, sizeof(value));
+	return value;
+}
+
+static double crit_result_value(uint64_t bits, uint32_t value_word_count)
+{
+	if (value_word_count == 2) {
+		double value;
+		memcpy(&value, &bits, sizeof(value));
+		return value;
+	}
+	return crit_float_from_bits((uint32_t)bits);
+}
+
+static double crit_node_value(const void *values, uint32_t index, uint32_t value_word_count)
+{
+	return value_word_count == 2 ? ((const double *)values)[index] : ((const float *)values)[index];
+}
+
+static double crit_weight_value(const uint32_t *data, uint32_t edge, uint32_t value_word_count)
+{
+	return value_word_count == 2 ? crit_double_from_words(data + 2u * edge) : crit_float_from_bits(data[edge]);
+}
+
+static void crit_print_readback(const char *method, const CritResultHeader *header, const uint32_t *data, const void *lnw, const void *lnx, const void *height, const void *depth)
 {
 	uint32_t basket_count = 0;
 	uint32_t path_count = 0;
 	uint32_t path_outside_basket = 0;
-	size_t predecessor_offset = crit_result_predecessor_offset(header->edge_count);
-	size_t basket_offset = crit_result_basket_offset(header->edge_count, header->node_count);
-	size_t path_offset = crit_result_path_offset(header->edge_count, header->node_count);
+	size_t predecessor_offset = crit_result_predecessor_offset(header->edge_count, header->value_word_count);
+	size_t basket_offset = crit_result_basket_offset(header->edge_count, header->node_count, header->value_word_count);
+	size_t path_offset = crit_result_path_offset(header->edge_count, header->node_count, header->value_word_count);
 	for (uint32_t v = 0; v < header->node_count; v++) {
 		bool in_basket = data[basket_offset + v] != 0;
 		bool in_path = data[path_offset + v] != 0;
@@ -415,7 +448,7 @@ static void crit_print_readback(const char *method, const CritResultHeader *head
 		path_count += in_path;
 		path_outside_basket += in_path && !in_basket;
 	}
-	printf("[MainPath] readback: method=%s status=0x%x maximum=%.9g sink=%u sink_height=%.9g basket=%u path=%u path_outside_basket=%u\n", method, header->status, crit_float_from_bits(header->criticality_max_bits), header->sink_node, crit_float_from_bits(header->sink_height_bits), basket_count, path_count, path_outside_basket);
+	printf("[MainPath] readback: method=%s precision=%s status=0x%x maximum=%.17g sink=%u sink_height=%.17g basket=%u path=%u path_outside_basket=%u\n", method, header->value_word_count == 2 ? "fp64" : "fp32", header->status, crit_result_value(header->criticality_max_bits, header->value_word_count), header->sink_node, crit_result_value(header->sink_height_bits, header->value_word_count), basket_count, path_count, path_outside_basket);
 	printf("[MainPath] basket nodes:");
 	uint32_t printed = 0;
 	for (uint32_t v = 0; v < header->node_count; v++)
@@ -436,11 +469,15 @@ static void crit_print_readback(const char *method, const CritResultHeader *head
 		if (data[basket_offset + v] == 0 && data[path_offset + v] == 0)
 			continue;
 		uint32_t predecessor = data[predecessor_offset + v];
-		float slack = crit_float_from_bits(header->criticality_max_bits) - height[v] - depth[v];
+		double node_lnw = crit_node_value(lnw, v, header->value_word_count);
+		double node_lnx = crit_node_value(lnx, v, header->value_word_count);
+		double node_height = crit_node_value(height, v, header->value_word_count);
+		double node_depth = crit_node_value(depth, v, header->value_word_count);
+		double slack = crit_result_value(header->criticality_max_bits, header->value_word_count) - node_height - node_depth;
 		if (predecessor == UINT32_MAX)
-			printf("[MainPath] node=%u lnW=%.9g lnX=%.9g height=%.9g depth=%.9g slack=%.9g predecessor=none basket=%u path=%u\n", v, lnw[v], lnx[v], height[v], depth[v], slack, data[basket_offset + v], data[path_offset + v]);
+			printf("[MainPath] node=%u lnW=%.17g lnX=%.17g height=%.17g depth=%.17g slack=%.17g predecessor=none basket=%u path=%u\n", v, node_lnw, node_lnx, node_height, node_depth, slack, data[basket_offset + v], data[path_offset + v]);
 		else
-			printf("[MainPath] node=%u lnW=%.9g lnX=%.9g height=%.9g depth=%.9g slack=%.9g predecessor=%u basket=%u path=%u\n", v, lnw[v], lnx[v], height[v], depth[v], slack, predecessor, data[basket_offset + v], data[path_offset + v]);
+			printf("[MainPath] node=%u lnW=%.17g lnX=%.17g height=%.17g depth=%.17g slack=%.17g predecessor=%u basket=%u path=%u\n", v, node_lnw, node_lnx, node_height, node_depth, slack, predecessor, data[basket_offset + v], data[path_offset + v]);
 		detail_count++;
 	}
 	if (basket_count + path_outside_basket > detail_count)
@@ -454,15 +491,15 @@ void renderer_readback_main_path_result(Renderer *r, GraphData *graph)
 	CritComputeContext *ctx = &r->crit;
 	if (!graph || graph->node_count != ctx->node_count || graph->edge_count != ctx->graph_edge_count)
 		return;
-	VkDeviceSize result_size = crit_result_buffer_size(ctx->graph_edge_count, ctx->node_count);
+	VkDeviceSize result_size = crit_result_buffer_size(ctx->graph_edge_count, ctx->node_count, ctx->value_word_count);
 	unsigned char *result_bytes = crit_copy_memory(r, ctx->result_memory, result_size);
 	VkDeviceSize animation_size = sizeof(RendererAnimEdgeHeader) + sizeof(RendererAnimEdge) * ctx->graph_edge_count;
 	unsigned char *animation_bytes = crit_copy_memory(r, r->anim.edge_memory, animation_size);
-	VkDeviceSize node_values_size = sizeof(float) * ctx->node_count;
-	float *lnw = crit_copy_memory(r, ctx->lnw_memory, node_values_size);
-	float *lnx = crit_copy_memory(r, ctx->lnx_memory, node_values_size);
-	float *height = crit_copy_memory(r, ctx->height_memory, node_values_size);
-	float *depth = crit_copy_memory(r, ctx->depth_memory, node_values_size);
+	VkDeviceSize node_values_size = (ctx->use_fp64 ? sizeof(double) : sizeof(float)) * ctx->node_count;
+	void *lnw = crit_copy_memory(r, ctx->lnw_memory, node_values_size);
+	void *lnx = crit_copy_memory(r, ctx->lnx_memory, node_values_size);
+	void *height = crit_copy_memory(r, ctx->height_memory, node_values_size);
+	void *depth = crit_copy_memory(r, ctx->depth_memory, node_values_size);
 	if (!result_bytes || !animation_bytes) {
 		free(result_bytes);
 		free(animation_bytes);
@@ -473,7 +510,7 @@ void renderer_readback_main_path_result(Renderer *r, GraphData *graph)
 		return;
 	}
 	CritResultHeader *header = (CritResultHeader *)result_bytes;
-	if (header->node_count != ctx->node_count || header->edge_count != ctx->graph_edge_count) {
+	if (header->node_count != ctx->node_count || header->edge_count != ctx->graph_edge_count || header->value_word_count != ctx->value_word_count) {
 		free(result_bytes);
 		free(animation_bytes);
 		free(lnw);
@@ -514,15 +551,12 @@ void renderer_readback_main_path_result(Renderer *r, GraphData *graph)
 		return;
 	}
 	for (uint32_t e = 0; e < ctx->graph_edge_count; e++) {
-		uint32_t bits = data[crit_result_weight_offset() + e];
-		float weight;
-		memcpy(&weight, &bits, sizeof(weight));
-		VECTOR(weights)[e] = weight;
+		VECTOR(weights)[e] = crit_weight_value(data + crit_result_weight_offset(), e, ctx->value_word_count);
 		VECTOR(strengths)[e] = animation_edges[e].strength;
 	}
 	for (uint32_t v = 0; v < ctx->node_count; v++) {
-		VECTOR(basket)[v] = data[crit_result_basket_offset(ctx->graph_edge_count, ctx->node_count) + v];
-		VECTOR(path)[v] = data[crit_result_path_offset(ctx->graph_edge_count, ctx->node_count) + v];
+		VECTOR(basket)[v] = data[crit_result_basket_offset(ctx->graph_edge_count, ctx->node_count, ctx->value_word_count) + v];
+		VECTOR(path)[v] = data[crit_result_path_offset(ctx->graph_edge_count, ctx->node_count, ctx->value_word_count) + v];
 	}
 	char weight_attr[64];
 	char strength_attr[64];
