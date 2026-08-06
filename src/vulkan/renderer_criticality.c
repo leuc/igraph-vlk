@@ -393,6 +393,62 @@ static const char *crit_method_name(uint32_t weight_mode)
 	return weight_mode == CRIT_WEIGHT_SPLC ? "splc" : (weight_mode == CRIT_WEIGHT_UNIT ? "unit" : (weight_mode == CRIT_WEIGHT_SPC ? "spc" : "spe"));
 }
 
+static float crit_float_from_bits(uint32_t bits)
+{
+	float value;
+	memcpy(&value, &bits, sizeof(value));
+	return value;
+}
+
+static void crit_print_readback(const char *method, const CritResultHeader *header, const uint32_t *data, const float *lnw, const float *lnx, const float *height, const float *depth)
+{
+	uint32_t basket_count = 0;
+	uint32_t path_count = 0;
+	uint32_t path_outside_basket = 0;
+	size_t predecessor_offset = crit_result_predecessor_offset(header->edge_count);
+	size_t basket_offset = crit_result_basket_offset(header->edge_count, header->node_count);
+	size_t path_offset = crit_result_path_offset(header->edge_count, header->node_count);
+	for (uint32_t v = 0; v < header->node_count; v++) {
+		bool in_basket = data[basket_offset + v] != 0;
+		bool in_path = data[path_offset + v] != 0;
+		basket_count += in_basket;
+		path_count += in_path;
+		path_outside_basket += in_path && !in_basket;
+	}
+	printf("[MainPath] readback: method=%s status=0x%x maximum=%.9g sink=%u sink_height=%.9g basket=%u path=%u path_outside_basket=%u\n", method, header->status, crit_float_from_bits(header->criticality_max_bits), header->sink_node, crit_float_from_bits(header->sink_height_bits), basket_count, path_count, path_outside_basket);
+	printf("[MainPath] basket nodes:");
+	uint32_t printed = 0;
+	for (uint32_t v = 0; v < header->node_count; v++)
+		if (data[basket_offset + v] != 0 && printed++ < 128)
+			printf(" %u", v);
+	if (basket_count > 128)
+		printf(" ... (%u more)", basket_count - 128);
+	printf("\n[MainPath] optimal path nodes:");
+	printed = 0;
+	for (uint32_t v = 0; v < header->node_count; v++)
+		if (data[path_offset + v] != 0 && printed++ < 128)
+			printf(" %u", v);
+	if (path_count > 128)
+		printf(" ... (%u more)", path_count - 128);
+	printf("\n");
+	uint32_t detail_count = 0;
+	for (uint32_t v = 0; v < header->node_count && detail_count < 128; v++) {
+		if (data[basket_offset + v] == 0 && data[path_offset + v] == 0)
+			continue;
+		uint32_t predecessor = data[predecessor_offset + v];
+		float slack = crit_float_from_bits(header->criticality_max_bits) - height[v] - depth[v];
+		if (predecessor == UINT32_MAX)
+			printf("[MainPath] node=%u lnW=%.9g lnX=%.9g height=%.9g depth=%.9g slack=%.9g predecessor=none basket=%u path=%u\n", v, lnw[v], lnx[v], height[v], depth[v], slack, data[basket_offset + v], data[path_offset + v]);
+		else
+			printf("[MainPath] node=%u lnW=%.9g lnX=%.9g height=%.9g depth=%.9g slack=%.9g predecessor=%u basket=%u path=%u\n", v, lnw[v], lnx[v], height[v], depth[v], slack, predecessor, data[basket_offset + v], data[path_offset + v]);
+		detail_count++;
+	}
+	if (basket_count + path_outside_basket > detail_count)
+		printf("[MainPath] selected-node detail truncated: showing %u entries\n", detail_count);
+	if (path_outside_basket != 0)
+		fprintf(stderr, "[Main Path] %s invariant failure: Optimal Path is not a subset of Basket\n", method);
+}
+
 void renderer_readback_main_path_result(Renderer *r, GraphData *graph)
 {
 	CritComputeContext *ctx = &r->crit;
@@ -402,19 +458,36 @@ void renderer_readback_main_path_result(Renderer *r, GraphData *graph)
 	unsigned char *result_bytes = crit_copy_memory(r, ctx->result_memory, result_size);
 	VkDeviceSize animation_size = sizeof(RendererAnimEdgeHeader) + sizeof(RendererAnimEdge) * ctx->graph_edge_count;
 	unsigned char *animation_bytes = crit_copy_memory(r, r->anim.edge_memory, animation_size);
+	VkDeviceSize node_values_size = sizeof(float) * ctx->node_count;
+	float *lnw = crit_copy_memory(r, ctx->lnw_memory, node_values_size);
+	float *lnx = crit_copy_memory(r, ctx->lnx_memory, node_values_size);
+	float *height = crit_copy_memory(r, ctx->height_memory, node_values_size);
+	float *depth = crit_copy_memory(r, ctx->depth_memory, node_values_size);
 	if (!result_bytes || !animation_bytes) {
 		free(result_bytes);
 		free(animation_bytes);
+		free(lnw);
+		free(lnx);
+		free(height);
+		free(depth);
 		return;
 	}
 	CritResultHeader *header = (CritResultHeader *)result_bytes;
 	if (header->node_count != ctx->node_count || header->edge_count != ctx->graph_edge_count) {
 		free(result_bytes);
 		free(animation_bytes);
+		free(lnw);
+		free(lnx);
+		free(height);
+		free(depth);
 		return;
 	}
 	uint32_t *data = (uint32_t *)(result_bytes + sizeof(*header));
 	RendererAnimEdge *animation_edges = (RendererAnimEdge *)(animation_bytes + sizeof(RendererAnimEdgeHeader));
+	if (lnw && lnx && height && depth)
+		crit_print_readback(crit_method_name(ctx->weight_mode), header, data, lnw, lnx, height, depth);
+	else
+		fprintf(stderr, "[Main Path] numerical readback diagnostics unavailable\n");
 	igraph_vector_t weights;
 	igraph_vector_t strengths;
 	igraph_vector_int_t basket;
@@ -434,6 +507,10 @@ void renderer_readback_main_path_result(Renderer *r, GraphData *graph)
 			igraph_vector_int_destroy(&path);
 		free(result_bytes);
 		free(animation_bytes);
+		free(lnw);
+		free(lnx);
+		free(height);
+		free(depth);
 		return;
 	}
 	for (uint32_t e = 0; e < ctx->graph_edge_count; e++) {
@@ -474,4 +551,8 @@ void renderer_readback_main_path_result(Renderer *r, GraphData *graph)
 	igraph_vector_int_destroy(&path);
 	free(result_bytes);
 	free(animation_bytes);
+	free(lnw);
+	free(lnx);
+	free(height);
+	free(depth);
 }

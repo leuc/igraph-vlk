@@ -13,13 +13,17 @@ void main_path_cache_remove_method(igraph_t *graph, const char *method)
 {
 	char name[64];
 	snprintf(name, sizeof(name), "main-path-weight-%s", method);
-	igraph_cattribute_remove_e(graph, name);
+	if (igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_EDGE, name))
+		igraph_cattribute_remove_e(graph, name);
 	snprintf(name, sizeof(name), "main-path-strength-%s", method);
-	igraph_cattribute_remove_e(graph, name);
+	if (igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_EDGE, name))
+		igraph_cattribute_remove_e(graph, name);
 	snprintf(name, sizeof(name), "main-path-basket-%s", method);
-	igraph_cattribute_remove_v(graph, name);
+	if (igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_VERTEX, name))
+		igraph_cattribute_remove_v(graph, name);
 	snprintf(name, sizeof(name), "main-path-path-%s", method);
-	igraph_cattribute_remove_v(graph, name);
+	if (igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_VERTEX, name))
+		igraph_cattribute_remove_v(graph, name);
 }
 
 static bool main_path_cache_load_edge(const igraph_t *graph, const char *name, igraph_vector_t *values)

@@ -141,6 +141,12 @@ float softplus(float value)
 	return value > 20.0 ? value : log(1.0 + exp(value));
 }
 
+bool criticality_equal(float a, float b)
+{
+	float scale = max(max(abs(a), abs(b)), 1.0);
+	return abs(a - b) <= max(1e-4, 1e-5 * scale);
+}
+
 float finite_presentation(float value)
 {
 	if (isnan(value)) {
@@ -264,7 +270,7 @@ void write_flags(uint v)
 		return;
 	float maximum = uintBitsToFloat(result.criticality_max_bits);
 	float sink_height = uintBitsToFloat(result.sink_height_bits);
-	result.data[basket_offset() + v] = abs(maximum - height[v] - depth[v]) < 1e-4 ? 1u : 0u;
+	result.data[basket_offset() + v] = criticality_equal(maximum, height[v] + depth[v]) ? 1u : 0u;
 	if (out_nodes[v].degree == 0u && abs(sink_height - height[v]) < 1e-4)
 		atomicMin(result.sink_node, v);
 }
