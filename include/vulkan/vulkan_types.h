@@ -14,9 +14,11 @@
 #include <vulkan/vulkan.h>
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "graph/graph_types.h"
 
+#include "vulkan/criticality_types.h"
 #include "vulkan/text.h"
 
 #define MAX_FRAMES_IN_FLIGHT 2
@@ -24,34 +26,6 @@
 #define GRAPH_UPDATE_RING_SIZE 3
 
 typedef enum { ROUTING_MODE_STRAIGHT = 0, ROUTING_MODE_SPHERICAL_PCB = 1 } EdgeRoutingMode;
-
-// Generalised criticality compute types (arXiv:2512.12355 section 2.5).
-// The same CSR shape is used for both forward and reverse adjacency, so the
-// field names are direction-neutral.
-typedef struct
-{
-	uint32_t edge_offset;
-	uint32_t degree;
-} CritNode;
-
-typedef struct
-{
-	uint32_t node;
-	uint32_t pad;
-} CritEdge;
-
-// Must match the stage/weight_mode constants in shaders/main_path.comp
-typedef enum { CRIT_STAGE_LNW = 0, CRIT_STAGE_LNX = 1, CRIT_STAGE_HEIGHT = 2, CRIT_STAGE_DEPTH = 3 } CritStage;
-
-typedef enum { CRIT_WEIGHT_SPLC = 0, CRIT_WEIGHT_UNIT = 1, CRIT_WEIGHT_SPC = 2, CRIT_WEIGHT_SPE = 3 } CritWeightMode;
-
-typedef struct
-{
-	uint32_t level_offset;
-	uint32_t num_nodes_in_level;
-	uint32_t stage;
-	uint32_t weight_mode;
-} CritPushConstants;
 
 // BCGL (Binary Classification-Based Graph Layout) compute types
 typedef struct
@@ -406,8 +380,8 @@ typedef struct
 	VkDeviceMemory height_memory;
 	VkBuffer depth_buffer;
 	VkDeviceMemory depth_memory;
-	VkBuffer edge_weights_buffer;
-	VkDeviceMemory edge_weights_memory;
+	VkBuffer result_buffer;
+	VkDeviceMemory result_memory;
 
 	VkPipelineLayout pipeline_layout;
 
@@ -418,9 +392,6 @@ typedef struct
 	uint32_t weight_mode;
 	bool active;
 	bool readback_pending;
-	bool selection_run;
-	bool selection_ready;
-	int *selection_flags;
 	int current_level;
 	uint32_t stage;
 	double last_level_time;

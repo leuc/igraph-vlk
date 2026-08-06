@@ -104,24 +104,20 @@ void renderer_anim_upload(Renderer *r, uint32_t ubo_idx)
 	memcpy(r->anim.mapped[ubo_idx], &r->anim.data, sizeof(GlobalAnimState));
 }
 
-void renderer_anim_play(Renderer *r, const RendererAnimClip *clip)
+bool renderer_anim_play(Renderer *r, const RendererAnimClip *clip)
 {
 	if (!r || !clip)
-		return;
+		return false;
 
-	if (r->anim.owner == RENDERER_ANIM_MAIN_PATH)
-		renderer_cancel_main_path(r);
-	renderer_wait_frames_idle(r);
-	renderer_anim_ensure_node_capacity(r, clip->node_count);
-	renderer_anim_ensure_edge_capacity(r, clip->edge_count);
-
-	RendererAnimNode *nodes = calloc(r->anim.node_capacity, sizeof(RendererAnimNode));
-	VkDeviceSize edge_size = sizeof(RendererAnimEdgeHeader) + sizeof(RendererAnimEdge) * r->anim.edge_capacity;
+	uint32_t node_capacity = r->anim.node_capacity > clip->node_count ? r->anim.node_capacity : (clip->node_count > 0 ? clip->node_count : 1);
+	uint32_t edge_capacity = r->anim.edge_capacity > clip->edge_count ? r->anim.edge_capacity : (clip->edge_count > 0 ? clip->edge_count : 1);
+	RendererAnimNode *nodes = calloc(node_capacity, sizeof(RendererAnimNode));
+	VkDeviceSize edge_size = sizeof(RendererAnimEdgeHeader) + sizeof(RendererAnimEdge) * edge_capacity;
 	unsigned char *edges = calloc(1, edge_size);
 	if (!nodes || !edges) {
 		free(nodes);
 		free(edges);
-		return;
+		return false;
 	}
 	if (clip->nodes && clip->node_count > 0)
 		memcpy(nodes, clip->nodes, sizeof(RendererAnimNode) * clip->node_count);
@@ -138,6 +134,11 @@ void renderer_anim_play(Renderer *r, const RendererAnimClip *clip)
 	if (clip->edges && clip->edge_count > 0)
 		memcpy(edges + sizeof(*header), clip->edges, sizeof(RendererAnimEdge) * clip->edge_count);
 
+	if (r->anim.owner == RENDERER_ANIM_MAIN_PATH)
+		renderer_cancel_main_path(r);
+	renderer_wait_frames_idle(r);
+	renderer_anim_ensure_node_capacity(r, clip->node_count);
+	renderer_anim_ensure_edge_capacity(r, clip->edge_count);
 	update_buffer(r->core.device, r->anim.node_memory, sizeof(RendererAnimNode) * r->anim.node_capacity, nodes);
 	update_buffer(r->core.device, r->anim.edge_memory, edge_size, edges);
 	renderer_anim_write_descriptors(r);
@@ -150,6 +151,7 @@ void renderer_anim_play(Renderer *r, const RendererAnimClip *clip)
 
 	free(nodes);
 	free(edges);
+	return true;
 }
 
 void renderer_anim_clear(Renderer *r, const GraphData *graph)

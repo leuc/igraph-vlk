@@ -128,10 +128,7 @@ void renderer_draw_frame(Renderer *r, GraphData *graph)
 
 	if (r->crit.readback_pending) {
 		renderer_wait_frames_idle(r);
-		if (r->crit.selection_run)
-			renderer_readback_main_path_selection(r);
-		else
-			renderer_readback_main_path_weights(r, graph);
+		renderer_readback_main_path_result(r, graph);
 		r->crit.readback_pending = false;
 		r->crit.active = false;
 	}

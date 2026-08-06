@@ -135,6 +135,7 @@ add_executable(
 	src/graph/graph_actions.c
 	src/graph/graph_animation.c
 	src/graph/main_path.c
+	src/graph/main_path_cache.c
 	# Layout wrappers (split by algorithm)
 	src/graph/layouts_force_fr.c
 	src/graph/layouts_drl.c
@@ -304,6 +305,14 @@ if(NOT MSVC)
 	target_link_libraries(criticality_test PRIVATE m)
 endif()
 add_test(NAME criticality_test COMMAND criticality_test)
+
+add_executable(main_path_cache_test tests/main_path_cache_test.c src/graph/main_path_cache.c)
+target_include_directories(main_path_cache_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${IGRAPH_INCLUDE_DIRS})
+target_link_libraries(main_path_cache_test PRIVATE igraph::igraph)
+if(NOT MSVC)
+	target_link_libraries(main_path_cache_test PRIVATE m)
+endif()
+add_test(NAME main_path_cache_test COMMAND main_path_cache_test)
 
 # Pure animation timing and presentation-strength helpers.
 add_executable(renderer_anim_values_test tests/renderer_anim_values_test.c src/vulkan/renderer_anim_values.c)

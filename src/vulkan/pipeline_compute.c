@@ -34,7 +34,7 @@ void renderer_create_compute_pipelines(Renderer *r)
 // Binding 4:    node ids grouped by level
 // Bindings 5-8: lnW, lnX, height, depth
 // Binding 9: shared live edge presentation state
-// Binding 10: raw persisted edge weights used only by basket selection
+// Binding 10: packed analysis, predecessor, and selection result
 #define CRIT_BINDING_COUNT 11
 
 void renderer_create_criticality_compute_pipeline(Renderer *r)

@@ -25,7 +25,7 @@ void renderer_anim_init(Renderer *r);
 void renderer_anim_update(Renderer *r, float time, float delta_time, uint32_t frame_count);
 void renderer_anim_upload(Renderer *r, uint32_t ubo_idx);
 void renderer_anim_cleanup(Renderer *r);
-void renderer_anim_play(Renderer *r, const RendererAnimClip *clip);
+bool renderer_anim_play(Renderer *r, const RendererAnimClip *clip);
 void renderer_anim_clear(Renderer *r, const GraphData *graph);
 void renderer_anim_reset(Renderer *r, const GraphData *graph);
 

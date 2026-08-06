@@ -1,38 +1,24 @@
 #version 450
 
-// Price & Evans (2025) — Understanding Main Path Analysis
-// arXiv:2512.12355 [physics.soc-ph], section 2.5 "Baskets of Nodes"
-// https://doi.org/10.48550/arXiv.2512.12355
-//
-// The shared Main Path compute shader. Four level-synchronous dynamic
-// programming sweeps over a DAG:
-//
-//   stage 0  lnW(v) = ln(number of paths source -> v)     eq. 2.8b
-//   stage 1  lnX(v) = ln(number of paths v -> sink)       eq. 2.8c
-//   stage 2  h(v)   = max weight of any path source -> v  eq. 2.12
-//   stage 3  d(v)   = max weight of any path v -> sink    eq. 2.13
-//
-// The host assigns levels by longest-path relaxation, so every edge (u, v)
-// has level(v) > level(u). Dispatching levels in ascending order for stages
-// 0 and 2, and descending order for stages 1 and 3, therefore guarantees
-// every value read has already been finalised: all four sweeps are pure
-// gathers and need no atomics at all.
-//
-// Path counts grow factorially with graph size (section 2.6), so they are
-// carried as natural logarithms and combined with a shifted log-sum-exp.
-// The entropy (SPE) edge weight is then just lnW(u) + lnX(v), eq. 2.8a.
-
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 #define STAGE_LNW 0u
 #define STAGE_LNX 1u
-#define STAGE_HEIGHT 2u
-#define STAGE_DEPTH 3u
+#define STAGE_MATERIALIZE 2u
+#define STAGE_HEIGHT 3u
+#define STAGE_DEPTH 4u
+#define STAGE_REDUCE 5u
+#define STAGE_FLAGS 6u
+#define STAGE_PATH_TRACE 7u
 
 #define WEIGHT_SPLC 0u
 #define WEIGHT_UNIT 1u
 #define WEIGHT_SPC 2u
 #define WEIGHT_SPE 3u
+
+#define RESULT_OVERFLOW (1u << 0u)
+#define RESULT_INVALID (1u << 1u)
+#define INVALID_NODE 0xffffffffu
 
 struct CritNode
 {
@@ -46,7 +32,6 @@ struct CritEdge
 	uint pad;
 };
 
-// Forward (out-edge) CSR: successors of v
 layout(std430, binding = 0) readonly buffer OutNodeBuffer
 {
 	CritNode out_nodes[];
@@ -57,7 +42,6 @@ layout(std430, binding = 1) readonly buffer OutEdgeBuffer
 	CritEdge out_edges[];
 };
 
-// Reverse (in-edge) CSR: predecessors of v
 layout(std430, binding = 2) readonly buffer InNodeBuffer
 {
 	CritNode in_nodes[];
@@ -68,7 +52,6 @@ layout(std430, binding = 3) readonly buffer InEdgeBuffer
 	CritEdge in_edges[];
 };
 
-// All node ids, grouped by level; one contiguous run per level
 layout(std430, binding = 4) readonly buffer LevelBuffer
 {
 	uint level_nodes[];
@@ -107,12 +90,22 @@ layout(std430, binding = 9) buffer EdgeAnimation
 	uint _pad1;
 	uint _pad2;
 	EdgeAnim edges[];
-} edge_anim;
+}
+edge_anim;
 
-layout(std430, binding = 10) readonly buffer EdgeWeightBuffer
+layout(std430, binding = 10) buffer ResultBuffer
 {
-	float edge_weights[];
-};
+	uint edge_count;
+	uint node_count;
+	uint status;
+	uint criticality_max_bits;
+	uint sink_height_bits;
+	uint sink_node;
+	uint _reserved0;
+	uint _reserved1;
+	uint data[];
+}
+result;
 
 layout(push_constant) uniform Constants
 {
@@ -123,120 +116,246 @@ layout(push_constant) uniform Constants
 }
 pc;
 
+uint weight_offset()
+{
+	return 0u;
+}
+
+uint predecessor_offset()
+{
+	return result.edge_count;
+}
+
+uint basket_offset()
+{
+	return result.edge_count + result.node_count;
+}
+
+uint path_offset()
+{
+	return result.edge_count + 2u * result.node_count;
+}
+
 float softplus(float value)
 {
 	return value > 20.0 ? value : log(1.0 + exp(value));
 }
 
-void record_animation_edges(CritNode n, float score)
+float finite_presentation(float value)
 {
-	uint encoded_score = floatBitsToUint(score);
-	for (uint i = 0u; i < n.degree; i++) {
-		uint edge_id = out_edges[n.edge_offset + i].pad;
-		edge_anim.edges[edge_id].strength = score;
-		atomicMax(edge_anim.strength_max_bits, encoded_score);
+	if (isnan(value)) {
+		atomicOr(result.status, RESULT_INVALID);
+		return 0.0;
 	}
+	return isinf(value) ? uintBitsToFloat(0x7f7fffffu) : max(value, 0.0);
+}
+
+void write_presentation(uint edge_id, float strength)
+{
+	strength = finite_presentation(strength);
+	edge_anim.edges[edge_id].strength = strength;
+	atomicMax(edge_anim.strength_max_bits, floatBitsToUint(strength));
+}
+
+void record_forward_animation_edges(CritNode n, float log_count)
+{
+	float score = pc.weight_mode == WEIGHT_UNIT ? 1.0 : (pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_count, 0.0) : softplus(log_count));
+	for (uint i = 0u; i < n.degree; i++)
+		write_presentation(out_edges[n.edge_offset + i].pad, score);
 }
 
 void record_projected_animation_edges(uint source, CritNode n)
 {
 	for (uint i = 0u; i < n.degree; i++) {
 		CritEdge edge = out_edges[n.edge_offset + i];
-		float log_count = lnW[source] + lnX[edge.node];
-		float score = pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_count, 0.0) : softplus(log_count);
-		edge_anim.edges[edge.pad].strength = score;
-		atomicMax(edge_anim.strength_max_bits, floatBitsToUint(score));
+		float log_weight = lnW[source] + lnX[edge.node];
+		float score = pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_weight, 0.0) : softplus(log_weight);
+		write_presentation(edge.pad, score);
 	}
 }
 
-void record_forward_animation_edges(CritNode n, float log_count)
+void materialize(uint v)
 {
-	float score = pc.weight_mode == WEIGHT_UNIT ? 1.0 : (pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_count, 0.0) : softplus(log_count));
-	record_animation_edges(n, score);
+	CritNode n = out_nodes[v];
+	for (uint i = 0u; i < n.degree; i++) {
+		CritEdge edge = out_edges[n.edge_offset + i];
+		float log_weight = pc.weight_mode == WEIGHT_SPLC ? lnW[v] : lnW[v] + lnX[edge.node];
+		float analysis = pc.weight_mode == WEIGHT_UNIT ? 1.0 : (pc.weight_mode == WEIGHT_SPE ? log_weight : exp(log_weight));
+		if (isnan(analysis))
+			atomicOr(result.status, RESULT_INVALID);
+		else if (isinf(analysis))
+			atomicOr(result.status, RESULT_OVERFLOW);
+		result.data[weight_offset() + edge.pad] = floatBitsToUint(analysis);
+		float presentation = pc.weight_mode == WEIGHT_UNIT ? 1.0 : (pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_weight, 0.0) : softplus(log_weight));
+		write_presentation(edge.pad, presentation);
+	}
 }
 
-float selection_weight(CritEdge edge)
+void compute_height(uint v)
 {
-	return edge_weights[edge.pad];
+	if (result.status != 0u) {
+		height[v] = 0.0;
+		result.data[predecessor_offset() + v] = INVALID_NODE;
+		return;
+	}
+	CritNode n = in_nodes[v];
+	float best = 0.0;
+	uint best_predecessor = INVALID_NODE;
+	uint best_edge = INVALID_NODE;
+	for (uint i = 0u; i < n.degree; i++) {
+		CritEdge edge = in_edges[n.edge_offset + i];
+		float weight = uintBitsToFloat(result.data[weight_offset() + edge.pad]);
+		float candidate = height[edge.node] + weight;
+		if (isnan(candidate)) {
+			atomicOr(result.status, RESULT_INVALID);
+			continue;
+		}
+		if (isinf(candidate)) {
+			atomicOr(result.status, RESULT_OVERFLOW);
+			continue;
+		}
+		if (candidate > best || (candidate == best && edge.pad < best_edge)) {
+			best = candidate;
+			best_predecessor = edge.node;
+			best_edge = edge.pad;
+		}
+	}
+	height[v] = best;
+	result.data[predecessor_offset() + v] = best_predecessor;
+}
+
+void compute_depth(uint v)
+{
+	if (result.status != 0u) {
+		depth[v] = 0.0;
+		return;
+	}
+	CritNode n = out_nodes[v];
+	float best = 0.0;
+	for (uint i = 0u; i < n.degree; i++) {
+		CritEdge edge = out_edges[n.edge_offset + i];
+		float weight = uintBitsToFloat(result.data[weight_offset() + edge.pad]);
+		float candidate = weight + depth[edge.node];
+		if (isnan(candidate)) {
+			atomicOr(result.status, RESULT_INVALID);
+			continue;
+		}
+		if (isinf(candidate)) {
+			atomicOr(result.status, RESULT_OVERFLOW);
+			continue;
+		}
+		best = max(best, candidate);
+	}
+	depth[v] = best;
+}
+
+void reduce_node(uint v)
+{
+	if (result.status != 0u)
+		return;
+	atomicMax(result.criticality_max_bits, floatBitsToUint(height[v] + depth[v]));
+	if (out_nodes[v].degree == 0u)
+		atomicMax(result.sink_height_bits, floatBitsToUint(height[v]));
+}
+
+void write_flags(uint v)
+{
+	if (result.status != 0u)
+		return;
+	float maximum = uintBitsToFloat(result.criticality_max_bits);
+	float sink_height = uintBitsToFloat(result.sink_height_bits);
+	result.data[basket_offset() + v] = abs(maximum - height[v] - depth[v]) < 1e-4 ? 1u : 0u;
+	if (out_nodes[v].degree == 0u && abs(sink_height - height[v]) < 1e-4)
+		atomicMin(result.sink_node, v);
+}
+
+void trace_path()
+{
+	if (result.status != 0u)
+		return;
+	uint v = result.sink_node;
+	for (uint i = 0u; i < result.node_count; i++) {
+		if (v == INVALID_NODE)
+			return;
+		if (v >= result.node_count) {
+			atomicOr(result.status, RESULT_INVALID);
+			return;
+		}
+		result.data[path_offset() + v] = 1u;
+		v = result.data[predecessor_offset() + v];
+	}
+	if (v != INVALID_NODE)
+		atomicOr(result.status, RESULT_INVALID);
 }
 
 void main()
 {
 	uint idx = gl_GlobalInvocationID.x;
+	if (pc.stage == STAGE_PATH_TRACE) {
+		if (idx == 0u)
+			trace_path();
+		return;
+	}
 	if (idx >= pc.num_nodes_in_level)
 		return;
 
 	uint v = level_nodes[pc.level_offset + idx];
-
 	if (pc.stage == STAGE_LNW) {
-		// SPLC counts every path ending at v, including the length-zero path.
-		// Therefore W(v) = 1 + sum(pred W), unlike SPC's source-rooted count.
-		// Unit/SPC/SPE retain the source-rooted convention of Price & Evans.
 		CritNode n = in_nodes[v];
 		float value = 0.0;
 		if (pc.weight_mode == WEIGHT_SPLC) {
-			float m = 0.0;
+			float maximum = 0.0;
 			for (uint i = 0u; i < n.degree; i++)
-				m = max(m, lnW[in_edges[n.edge_offset + i].node]);
-			float sum = exp(-m);
+				maximum = max(maximum, lnW[in_edges[n.edge_offset + i].node]);
+			float sum = exp(-maximum);
 			for (uint i = 0u; i < n.degree; i++)
-				sum += exp(lnW[in_edges[n.edge_offset + i].node] - m);
-			value = m + log(sum);
+				sum += exp(lnW[in_edges[n.edge_offset + i].node] - maximum);
+			value = maximum + log(sum);
 		} else if (n.degree != 0u) {
-			float m = -1.0 / 0.0;
+			float maximum = -1.0 / 0.0;
 			for (uint i = 0u; i < n.degree; i++)
-				m = max(m, lnW[in_edges[n.edge_offset + i].node]);
+				maximum = max(maximum, lnW[in_edges[n.edge_offset + i].node]);
 			float sum = 0.0;
 			for (uint i = 0u; i < n.degree; i++)
-				sum += exp(lnW[in_edges[n.edge_offset + i].node] - m);
-			value = m + log(sum);
+				sum += exp(lnW[in_edges[n.edge_offset + i].node] - maximum);
+			value = maximum + log(sum);
 		}
 		lnW[v] = value;
-		// Every method exposes this forward prefix sweep. SPC/SPE then refine
-		// the same edges in reverse with their suffix count in STAGE_LNX.
 		record_forward_animation_edges(out_nodes[v], value);
 		return;
 	}
-
 	if (pc.stage == STAGE_LNX) {
 		CritNode n = out_nodes[v];
 		float value = 0.0;
 		if (n.degree != 0u) {
-			float m = -1.0 / 0.0;
+			float maximum = -1.0 / 0.0;
 			for (uint i = 0u; i < n.degree; i++)
-				m = max(m, lnX[out_edges[n.edge_offset + i].node]);
+				maximum = max(maximum, lnX[out_edges[n.edge_offset + i].node]);
 			float sum = 0.0;
 			for (uint i = 0u; i < n.degree; i++)
-				sum += exp(lnX[out_edges[n.edge_offset + i].node] - m);
-			value = m + log(sum);
+				sum += exp(lnX[out_edges[n.edge_offset + i].node] - maximum);
+			value = maximum + log(sum);
 		}
 		lnX[v] = value;
 		if (pc.weight_mode == WEIGHT_SPC || pc.weight_mode == WEIGHT_SPE)
 			record_projected_animation_edges(v, n);
 		return;
 	}
-
-	if (pc.stage == STAGE_HEIGHT) {
-		CritNode n = in_nodes[v];
-		float best = 0.0;
-		for (uint i = 0u; i < n.degree; i++) {
-			CritEdge edge = in_edges[n.edge_offset + i];
-			uint u = edge.node;
-			float w = selection_weight(edge);
-			best = max(best, height[u] + w);
-		}
-		height[v] = best;
+	if (pc.stage == STAGE_MATERIALIZE) {
+		materialize(v);
 		return;
 	}
-
-	// STAGE_DEPTH
-	CritNode n = out_nodes[v];
-	float best = 0.0;
-	for (uint i = 0u; i < n.degree; i++) {
-		CritEdge edge = out_edges[n.edge_offset + i];
-		uint s = edge.node;
-		float w = selection_weight(edge);
-		best = max(best, depth[s] + w);
+	if (pc.stage == STAGE_HEIGHT) {
+		compute_height(v);
+		return;
 	}
-	depth[v] = best;
+	if (pc.stage == STAGE_DEPTH) {
+		compute_depth(v);
+		return;
+	}
+	if (pc.stage == STAGE_REDUCE) {
+		reduce_node(v);
+		return;
+	}
+	write_flags(v);
 }
