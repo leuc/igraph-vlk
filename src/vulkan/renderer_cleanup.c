@@ -104,7 +104,6 @@ void cleanup_splc_pipelines_core(Renderer *r)
 	VK_DESTROY_BUFFER(r->core.device, r->splc.edges_buffer, r->splc.edges_memory);
 	VK_DESTROY_BUFFER(r->core.device, r->splc.traffic_buffer, r->splc.traffic_memory);
 	VK_DESTROY_BUFFER(r->core.device, r->splc.level_buffer, r->splc.level_memory);
-	VK_DESTROY_BUFFER(r->core.device, r->splc.max_buffer, r->splc.max_memory);
 	if (r->splc.level_groups) {
 		for (int i = 0; i < r->splc.num_levels; i++) {
 			if (r->splc.level_groups[i])

@@ -233,6 +233,34 @@ typedef struct
 	mat4 proj;
 } UniformBufferObject;
 
+typedef enum {
+	RENDERER_ANIM_NONE = 0,
+	RENDERER_ANIM_HOST,
+	RENDERER_ANIM_MAIN_PATH,
+} RendererAnimOwner;
+
+enum {
+	RENDERER_ANIM_REVEAL_NODES = 1u << 0,
+	RENDERER_ANIM_REVEAL_EDGES = 1u << 1,
+};
+
+typedef struct
+{
+	float reveal_at;
+} RendererAnimNode;
+
+typedef struct
+{
+	float reveal_at;
+	float strength;
+} RendererAnimEdge;
+
+typedef struct
+{
+	uint32_t strength_max_bits;
+	uint32_t _reserved[3];
+} RendererAnimEdgeHeader;
+
 typedef struct
 {
 	VkBuffer *buffers;
@@ -247,9 +275,9 @@ typedef struct
 	float delta_time;
 	uint32_t frame_count;
 	float transition_t;
-	float seq_time;
-	float seq_stride;
-	float seq_duration;
+	float playhead;
+	float fade;
+	uint32_t reveal_mask;
 	float _reserved;
 } GlobalAnimState;
 
@@ -261,26 +289,14 @@ typedef struct
 	VkDeviceMemory memory[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
 	void *mapped[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS];
 	GlobalAnimState data;
-	float seq_start_time;
-	struct
-	{
-		VkBuffer node_step;
-		VkDeviceMemory node_step_memory;
-		VkBuffer node_value;
-		VkDeviceMemory node_value_memory;
-		VkBuffer edge_source;
-		VkDeviceMemory edge_source_memory;
-		VkBuffer edge_value;
-		VkDeviceMemory edge_value_memory;
-		VkBuffer edge_event_offsets;
-		VkDeviceMemory edge_event_offsets_memory;
-		VkBuffer edge_events;
-		VkDeviceMemory edge_events_memory;
-		uint32_t node_capacity;
-		uint32_t edge_capacity;
-		uint32_t edge_event_offset_capacity;
-		uint32_t edge_event_capacity;
-	} channels;
+	float start_time;
+	RendererAnimOwner owner;
+	VkBuffer node_buffer;
+	VkDeviceMemory node_memory;
+	uint32_t node_capacity;
+	VkBuffer edge_buffer;
+	VkDeviceMemory edge_memory;
+	uint32_t edge_capacity;
 } AnimStateBuffers;
 
 typedef struct
@@ -404,8 +420,6 @@ typedef struct
 	float level_interval;
 	bool active;
 	bool readback_pending;
-	VkBuffer max_buffer;
-	VkDeviceMemory max_memory;
 	VkPipelineLayout pipeline_layout;
 	// Edge count the edges_buffer/edges_memory were actually sized for — the
 	// deduplicated (IGRAPH_NO_MULTIPLE) SPLC edge count, which is smaller than
@@ -436,10 +450,6 @@ typedef struct
 	VkDeviceMemory height_memory;
 	VkBuffer depth_buffer;
 	VkDeviceMemory depth_memory;
-	VkBuffer display_edges_buffer;
-	VkDeviceMemory display_edges_memory;
-	VkBuffer display_max_buffer;
-	VkDeviceMemory display_max_memory;
 	VkBuffer edge_weights_buffer;
 	VkDeviceMemory edge_weights_memory;
 

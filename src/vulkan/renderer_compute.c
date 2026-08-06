@@ -161,8 +161,6 @@ static void splc_destroy_old_buffers(Renderer *r)
 	r->splc.traffic_memory = VK_NULL_HANDLE;
 	r->splc.level_buffer = VK_NULL_HANDLE;
 	r->splc.level_memory = VK_NULL_HANDLE;
-	r->splc.max_buffer = VK_NULL_HANDLE;
-	r->splc.max_memory = VK_NULL_HANDLE;
 
 	if (r->splc.level_groups) {
 		for (int i = 0; i < r->splc.num_levels; i++) {
@@ -193,22 +191,15 @@ void renderer_splc_clear_visualization(Renderer *r)
 		return;
 	r->splc.active = false;
 	r->splc.readback_pending = false;
-	if (r->splc.max_memory != VK_NULL_HANDLE) {
-		uint32_t zero = 0;
-		update_buffer(r->core.device, r->splc.max_memory, sizeof(uint32_t), &zero);
-	}
 }
 
 static void splc_create_fallback_buffers(Renderer *r, uint32_t m)
 {
 	VkDeviceSize edge_buf_size = sizeof(SPLCEdge) * m;
 	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, edge_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc.edges_buffer, &r->splc.edges_memory);
-	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc.max_buffer, &r->splc.max_memory);
 	SPLCEdge *zero_edges = calloc(m, sizeof(SPLCEdge));
 	update_buffer(r->core.device, r->splc.edges_memory, edge_buf_size, zero_edges);
 	free(zero_edges);
-	uint32_t zero_max = 0;
-	update_buffer(r->core.device, r->splc.max_memory, sizeof(uint32_t), &zero_max);
 }
 
 static void splc_write_graphics_descriptors(Renderer *r)
@@ -216,13 +207,9 @@ static void splc_write_graphics_descriptors(Renderer *r)
 	if (r->descriptors.sets == NULL)
 		return;
 	VkDescriptorBufferInfo edgeWeightInfo = {r->splc.edges_buffer, 0, VK_WHOLE_SIZE};
-	VkDescriptorBufferInfo maxWeightInfo = {r->splc.max_buffer, 0, VK_WHOLE_SIZE};
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-		VkWriteDescriptorSet descWrites[] = {
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 2, &edgeWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 3, &maxWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-		};
-		vkUpdateDescriptorSets(r->core.device, 2, descWrites, 0, NULL);
+		VkWriteDescriptorSet write = VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 2, &edgeWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		vkUpdateDescriptorSets(r->core.device, 1, &write, 0, NULL);
 	}
 }
 
@@ -319,13 +306,10 @@ static void splc_create_gpu_buffers(Renderer *r, igraph_integer_t n, uint32_t to
 	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, edge_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc.edges_buffer, &r->splc.edges_memory);
 	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, traffic_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc.traffic_buffer, &r->splc.traffic_memory);
 	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, level_buf_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc.level_buffer, &r->splc.level_memory);
-	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc.max_buffer, &r->splc.max_memory);
 
 	update_buffer(r->core.device, r->splc.nodes_memory, node_buf_size, splc_nodes);
 	update_buffer(r->core.device, r->splc.edges_memory, edge_buf_size, splc_edges);
 	update_buffer(r->core.device, r->splc.traffic_memory, traffic_buf_size, traffic);
-	uint32_t zero_max = 0;
-	update_buffer(r->core.device, r->splc.max_memory, sizeof(uint32_t), &zero_max);
 }
 
 static void splc_write_compute_descriptors(Renderer *r)
@@ -334,9 +318,8 @@ static void splc_write_compute_descriptors(Renderer *r)
 	VkDescriptorBufferInfo edgeInfo = {r->splc.edges_buffer, 0, VK_WHOLE_SIZE};
 	VkDescriptorBufferInfo trafficInfo = {r->splc.traffic_buffer, 0, VK_WHOLE_SIZE};
 	VkDescriptorBufferInfo levelInfo = {r->splc.level_buffer, 0, VK_WHOLE_SIZE};
-	VkDescriptorBufferInfo maxInfo = {r->splc.max_buffer, 0, VK_WHOLE_SIZE};
 	VkWriteDescriptorSet splcWrites[] = {
-		VK_WRITE_DESC_BUFFER(r->descriptors.splc_set, 0, &nodeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.splc_set, 1, &edgeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.splc_set, 2, &trafficInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.splc_set, 3, &levelInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.splc_set, 4, &maxInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+		VK_WRITE_DESC_BUFFER(r->descriptors.splc_set, 0, &nodeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.splc_set, 1, &edgeInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.splc_set, 2, &trafficInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER), VK_WRITE_DESC_BUFFER(r->descriptors.splc_set, 3, &levelInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
 	};
 	vkUpdateDescriptorSets(r->core.device, 5, splcWrites, 0, NULL);
 }

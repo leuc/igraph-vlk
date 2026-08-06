@@ -12,16 +12,12 @@
 typedef struct
 {
 	const int *node_steps;
-	const float *node_values;
 	const float *edge_values;
-	const uint32_t *edge_event_offsets;
-	const RendererAnimEvent *edge_events;
-	uint32_t edge_event_count;
 	float duration;
 } GraphAnimationRequest;
 
 void graph_animation_play(Renderer *renderer, const GraphData *graph, const GraphAnimationRequest *request);
-void graph_animation_clear(Renderer *renderer);
+void graph_animation_clear(Renderer *renderer, const GraphData *graph);
 void graph_animation_play_bfs(Renderer *renderer, const GraphData *graph);
 void graph_animation_play_dfs(Renderer *renderer, const GraphData *graph);
 void graph_animation_play_topological(Renderer *renderer, const GraphData *graph);

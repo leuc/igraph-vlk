@@ -761,7 +761,7 @@ void apply_centrality_scores(ExecutionContext *ctx, void *result_data)
 
 	// Rank never wants leftover dimming/reveal state from a prior Follow command
 	graph_reset_emphasis(data);
-	graph_animation_clear(renderer);
+	graph_animation_clear(renderer, data);
 
 	// Find min/max for normalization
 	igraph_real_t min_v, max_v;
@@ -829,19 +829,25 @@ void apply_edge_centrality_scores(ExecutionContext *ctx, void *result_data)
 
 	// Rank never wants leftover dimming/reveal state from a prior Follow command
 	graph_reset_emphasis(data);
-	graph_animation_clear(renderer);
+	graph_animation_clear(renderer, data);
 
 	// Find min/max for normalization
 	igraph_real_t min_v, max_v;
 	igraph_vector_minmax(scores, &min_v, &max_v);
 	igraph_real_t range = max_v - min_v;
 
-	// Map scores to edge weight (drives alpha in the renderer)
+	// Map scores to the shared transient presentation-strength buffer.
+	float *edge_values = malloc(sizeof(float) * data->edge_count);
+	if (!edge_values)
+		return;
 	for (uint32_t i = 0; i < data->edge_count; i++) {
 		igraph_real_t val = VECTOR(*scores)[i];
 		float normalized = (range > 0) ? (float)((val - min_v) / range) : 1.0f;
-		data->edges[i].weight = normalized;
+		edge_values[i] = normalized;
 	}
+	GraphAnimationRequest request = {.edge_values = edge_values, .duration = 0.0f};
+	graph_animation_play(renderer, data, &request);
+	free(edge_values);
 
 	// Refresh renderer
 	renderer->needsAttributeUpload = VK_TRUE;

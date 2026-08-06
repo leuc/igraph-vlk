@@ -13,5 +13,6 @@ extern FontAtlas globalAtlas;
 
 bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr);
 bool renderer_recreate_swapchain(Renderer *r);
+void renderer_wait_frames_idle(Renderer *r);
 
 #endif

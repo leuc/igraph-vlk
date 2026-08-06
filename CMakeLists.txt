@@ -88,6 +88,7 @@ add_executable(
 	src/vulkan/renderer_draw.c
 	src/vulkan/renderer_camera.c
 	src/vulkan/renderer_anim.c
+	src/vulkan/renderer_anim_values.c
 	src/vulkan/renderer_labels.c
 	src/vulkan/renderer_geometry.c
 	src/vulkan/renderer_compute.c
@@ -303,6 +304,14 @@ if(NOT MSVC)
 	target_link_libraries(criticality_test PRIVATE m)
 endif()
 add_test(NAME criticality_test COMMAND criticality_test)
+
+# Pure animation timing and presentation-strength helpers.
+add_executable(renderer_anim_values_test tests/renderer_anim_values_test.c src/vulkan/renderer_anim_values.c)
+target_include_directories(renderer_anim_values_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+if(NOT MSVC)
+	target_link_libraries(renderer_anim_values_test PRIVATE m)
+endif()
+add_test(NAME renderer_anim_values_test COMMAND renderer_anim_values_test)
 
 install(TARGETS igraph-vlk DESTINATION bin)
 install(DIRECTORY ${CMAKE_BINARY_DIR}/shaders/ DESTINATION share/igraph-vlk/shaders FILES_MATCHING PATTERN "*.spv")

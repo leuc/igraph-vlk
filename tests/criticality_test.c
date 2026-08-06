@@ -31,7 +31,7 @@
 #define OUT_EDGE_COUNT 10
 #define IN_EDGE_COUNT 10
 #define NUM_LEVELS 5
-#define BINDING_COUNT 12
+#define BINDING_COUNT 11
 #define WORKGROUP_SIZE 64
 
 #define CRIT_STAGE_LNW 0u
@@ -59,9 +59,15 @@ typedef struct
 
 typedef struct
 {
-	uint32_t target_node;
-	float weight;
-} DisplayEdge;
+	uint32_t strength_max_bits;
+	uint32_t _reserved[3];
+} EdgeAnimHeader;
+
+typedef struct
+{
+	float reveal_at;
+	float strength;
+} EdgeAnim;
 
 typedef struct
 {
@@ -329,14 +335,14 @@ static void harness_destroy(Harness *h)
 }
 
 // Buffer indices, matching the shader's binding numbers
-enum { BUF_OUT_NODES = 0, BUF_OUT_EDGES, BUF_IN_NODES, BUF_IN_EDGES, BUF_LEVELS, BUF_LNW, BUF_LNX, BUF_HEIGHT, BUF_DEPTH, BUF_DISPLAY_EDGES, BUF_DISPLAY_MAX, BUF_EDGE_WEIGHTS };
+enum { BUF_OUT_NODES = 0, BUF_OUT_EDGES, BUF_IN_NODES, BUF_IN_EDGES, BUF_LEVELS, BUF_LNW, BUF_LNX, BUF_HEIGHT, BUF_DEPTH, BUF_EDGE_ANIM, BUF_EDGE_WEIGHTS };
 
 static int harness_upload_graph(Harness *h)
 {
 	VkDeviceSize node_size = sizeof(CritNode) * NODE_COUNT;
 	VkDeviceSize value_size = sizeof(float) * NODE_COUNT;
 
-	if (create_buffer(h, BUF_OUT_NODES, node_size) || create_buffer(h, BUF_OUT_EDGES, sizeof(CritEdge) * OUT_EDGE_COUNT) || create_buffer(h, BUF_IN_NODES, node_size) || create_buffer(h, BUF_IN_EDGES, sizeof(CritEdge) * IN_EDGE_COUNT) || create_buffer(h, BUF_LEVELS, sizeof(uint32_t) * NODE_COUNT) || create_buffer(h, BUF_LNW, value_size) || create_buffer(h, BUF_LNX, value_size) || create_buffer(h, BUF_HEIGHT, value_size) || create_buffer(h, BUF_DEPTH, value_size) || create_buffer(h, BUF_DISPLAY_EDGES, sizeof(CritEdge) * OUT_EDGE_COUNT) || create_buffer(h, BUF_DISPLAY_MAX, sizeof(uint32_t)) || create_buffer(h, BUF_EDGE_WEIGHTS, sizeof(float) * OUT_EDGE_COUNT))
+	if (create_buffer(h, BUF_OUT_NODES, node_size) || create_buffer(h, BUF_OUT_EDGES, sizeof(CritEdge) * OUT_EDGE_COUNT) || create_buffer(h, BUF_IN_NODES, node_size) || create_buffer(h, BUF_IN_EDGES, sizeof(CritEdge) * IN_EDGE_COUNT) || create_buffer(h, BUF_LEVELS, sizeof(uint32_t) * NODE_COUNT) || create_buffer(h, BUF_LNW, value_size) || create_buffer(h, BUF_LNX, value_size) || create_buffer(h, BUF_HEIGHT, value_size) || create_buffer(h, BUF_DEPTH, value_size) || create_buffer(h, BUF_EDGE_ANIM, sizeof(EdgeAnimHeader) + sizeof(EdgeAnim) * OUT_EDGE_COUNT) || create_buffer(h, BUF_EDGE_WEIGHTS, sizeof(float) * OUT_EDGE_COUNT))
 		return 1;
 
 	CritEdge out_edges[OUT_EDGE_COUNT] = {0};
@@ -350,10 +356,13 @@ static int harness_upload_graph(Harness *h)
 		in_edges[i] = (CritEdge){g_in_sources[i], in_edge_ids[i]};
 
 	float zeros[NODE_COUNT] = {0};
-	CritEdge display_edges[OUT_EDGE_COUNT] = {0};
-	uint32_t display_max = 0;
+	EdgeAnimHeader edge_header = {0};
+	EdgeAnim edge_anim[OUT_EDGE_COUNT] = {0};
 	float edge_weights[OUT_EDGE_COUNT] = {0};
-	if (upload(h, BUF_OUT_NODES, g_out_nodes, node_size) || upload(h, BUF_OUT_EDGES, out_edges, sizeof(out_edges)) || upload(h, BUF_IN_NODES, g_in_nodes, node_size) || upload(h, BUF_IN_EDGES, in_edges, sizeof(in_edges)) || upload(h, BUF_LEVELS, g_level_perm, sizeof(g_level_perm)) || upload(h, BUF_LNW, zeros, value_size) || upload(h, BUF_LNX, zeros, value_size) || upload(h, BUF_HEIGHT, zeros, value_size) || upload(h, BUF_DEPTH, zeros, value_size) || upload(h, BUF_DISPLAY_EDGES, display_edges, sizeof(display_edges)) || upload(h, BUF_DISPLAY_MAX, &display_max, sizeof(display_max)) || upload(h, BUF_EDGE_WEIGHTS, edge_weights, sizeof(edge_weights)))
+	unsigned char packed_edge_anim[sizeof(EdgeAnimHeader) + sizeof(edge_anim)] = {0};
+	memcpy(packed_edge_anim, &edge_header, sizeof(edge_header));
+	memcpy(packed_edge_anim + sizeof(edge_header), edge_anim, sizeof(edge_anim));
+	if (upload(h, BUF_OUT_NODES, g_out_nodes, node_size) || upload(h, BUF_OUT_EDGES, out_edges, sizeof(out_edges)) || upload(h, BUF_IN_NODES, g_in_nodes, node_size) || upload(h, BUF_IN_EDGES, in_edges, sizeof(in_edges)) || upload(h, BUF_LEVELS, g_level_perm, sizeof(g_level_perm)) || upload(h, BUF_LNW, zeros, value_size) || upload(h, BUF_LNX, zeros, value_size) || upload(h, BUF_HEIGHT, zeros, value_size) || upload(h, BUF_DEPTH, zeros, value_size) || upload(h, BUF_EDGE_ANIM, packed_edge_anim, sizeof(packed_edge_anim)) || upload(h, BUF_EDGE_WEIGHTS, edge_weights, sizeof(edge_weights)))
 		return 1;
 
 	VkDescriptorBufferInfo infos[BINDING_COUNT];
@@ -470,16 +479,22 @@ static float softplus(float value)
 
 static int check_live_weights(Harness *h, uint32_t weight_mode, const char *name)
 {
-	DisplayEdge zero_edges[OUT_EDGE_COUNT] = {0};
-	uint32_t zero_max = 0;
-	if (upload(h, BUF_DISPLAY_EDGES, zero_edges, sizeof(zero_edges)) || upload(h, BUF_DISPLAY_MAX, &zero_max, sizeof(zero_max)))
+	EdgeAnimHeader zero_header = {0};
+	EdgeAnim zero_edges[OUT_EDGE_COUNT] = {0};
+	unsigned char packed_edge_anim[sizeof(EdgeAnimHeader) + sizeof(zero_edges)] = {0};
+	memcpy(packed_edge_anim, &zero_header, sizeof(zero_header));
+	memcpy(packed_edge_anim + sizeof(zero_header), zero_edges, sizeof(zero_edges));
+	if (upload(h, BUF_EDGE_ANIM, packed_edge_anim, sizeof(packed_edge_anim)))
 		return 1;
 	if (harness_run(h, weight_mode) != 0)
 		return 1;
-	DisplayEdge edges[OUT_EDGE_COUNT];
-	uint32_t max_bits = 0;
-	if (download(h, BUF_DISPLAY_EDGES, edges, sizeof(edges)) || download(h, BUF_DISPLAY_MAX, &max_bits, sizeof(max_bits)))
+	EdgeAnimHeader header;
+	EdgeAnim edges[OUT_EDGE_COUNT];
+	unsigned char packed_result[sizeof(header) + sizeof(edges)];
+	if (download(h, BUF_EDGE_ANIM, packed_result, sizeof(packed_result)))
 		return 1;
+	memcpy(&header, packed_result, sizeof(header));
+	memcpy(edges, packed_result + sizeof(header), sizeof(edges));
 	int failures = 0;
 	float expected_max = 0.0f;
 	for (int e = 0; e < OUT_EDGE_COUNT; e++) {
@@ -487,15 +502,15 @@ static int check_live_weights(Harness *h, uint32_t weight_mode, const char *name
 		if (weight_mode == CRIT_WEIGHT_SPC || weight_mode == CRIT_WEIGHT_SPE)
 			score += g_expect_lnx[g_out_targets[e]];
 		float expected = weight_mode == CRIT_WEIGHT_SPE ? 1.0f + score : softplus(score);
-		if (fabsf(edges[e].weight - expected) > TOLERANCE) {
-			fprintf(stderr, "  %s display[%d]: got %.6f, expected %.6f\n", name, e, (double)edges[e].weight, (double)expected);
+		if (fabsf(edges[e].strength - expected) > TOLERANCE) {
+			fprintf(stderr, "  %s display[%d]: got %.6f, expected %.6f\n", name, e, (double)edges[e].strength, (double)expected);
 			failures++;
 		}
 		if (expected > expected_max)
 			expected_max = expected;
 	}
 	float max_weight = 0.0f;
-	memcpy(&max_weight, &max_bits, sizeof(max_weight));
+	memcpy(&max_weight, &header.strength_max_bits, sizeof(max_weight));
 	if (fabsf(max_weight - expected_max) > TOLERANCE) {
 		fprintf(stderr, "  %s display max: got %.6f, expected %.6f\n", name, (double)max_weight, (double)expected_max);
 		failures++;

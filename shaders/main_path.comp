@@ -94,23 +94,22 @@ layout(std430, binding = 8) buffer DepthBuffer
 	float depth[];
 };
 
-struct DisplayEdge
+struct EdgeAnim
 {
-	uint target_node;
-	float weight;
+	float reveal_at;
+	float strength;
 };
 
-layout(std430, binding = 9) buffer DisplayEdgeBuffer
+layout(std430, binding = 9) buffer EdgeAnimation
 {
-	DisplayEdge display_edges[];
-};
+	uint strength_max_bits;
+	uint _pad0;
+	uint _pad1;
+	uint _pad2;
+	EdgeAnim edges[];
+} edge_anim;
 
-layout(std430, binding = 10) buffer DisplayMaxBuffer
-{
-	uint display_max_weight_uint;
-};
-
-layout(std430, binding = 11) readonly buffer EdgeWeightBuffer
+layout(std430, binding = 10) readonly buffer EdgeWeightBuffer
 {
 	float edge_weights[];
 };
@@ -134,8 +133,8 @@ void record_display_edges(CritNode n, float score)
 	uint encoded_score = floatBitsToUint(score);
 	for (uint i = 0u; i < n.degree; i++) {
 		uint edge_id = out_edges[n.edge_offset + i].pad;
-		display_edges[edge_id].weight = score;
-		atomicMax(display_max_weight_uint, encoded_score);
+		edge_anim.edges[edge_id].strength = score;
+		atomicMax(edge_anim.strength_max_bits, encoded_score);
 	}
 }
 
@@ -144,15 +143,15 @@ void record_projected_display_edges(uint source, CritNode n)
 	for (uint i = 0u; i < n.degree; i++) {
 		CritEdge edge = out_edges[n.edge_offset + i];
 		float log_count = lnW[source] + lnX[edge.node];
-		float score = pc.weight_mode == WEIGHT_SPE ? 1.0 + log_count : softplus(log_count);
-		display_edges[edge.pad].weight = score;
-		atomicMax(display_max_weight_uint, floatBitsToUint(score));
+		float score = pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_count, 0.0) : softplus(log_count);
+		edge_anim.edges[edge.pad].strength = score;
+		atomicMax(edge_anim.strength_max_bits, floatBitsToUint(score));
 	}
 }
 
 void record_forward_display_edges(CritNode n, float log_count)
 {
-	float score = pc.weight_mode == WEIGHT_UNIT ? 1.0 : (pc.weight_mode == WEIGHT_SPE ? 1.0 + log_count : softplus(log_count));
+	float score = pc.weight_mode == WEIGHT_UNIT ? 1.0 : (pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_count, 0.0) : softplus(log_count));
 	record_display_edges(n, score);
 }
 

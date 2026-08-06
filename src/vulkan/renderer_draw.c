@@ -52,8 +52,6 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdDraw(cmd, r->edge.vertex_count, 1, 0, 0);
 	}
 	if (r->showNodes && r->node.count > 0) {
-		float a = 1.0f;
-		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 4, &a);
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.node);
 		VkBuffer prevNodeBuf = (r->transition.active && r->transition.prev_node_position != VK_NULL_HANDLE) ? r->transition.prev_node_position : r->node.position;
 		VkBuffer vbs[] = {r->nodeVertexBuffer, r->node.position, r->node.attribute, prevNodeBuf};
@@ -130,6 +128,7 @@ void renderer_draw_frame(Renderer *r, GraphData *graph)
 	VK_CHECK(vkWaitForFences(r->core.device, 1, &r->commands.inFlightFences[r->commands.currentFrame], VK_TRUE, UINT64_MAX), "Failed to wait for in-flight fences");
 
 	if (r->crit.readback_pending) {
+		renderer_wait_frames_idle(r);
 		if (r->crit.selection_run)
 			renderer_readback_main_path_selection(r);
 		else

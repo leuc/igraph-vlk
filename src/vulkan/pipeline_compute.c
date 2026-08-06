@@ -62,9 +62,9 @@ void renderer_create_splc_compute_pipeline(Renderer *r)
 // Bindings 0-3: forward and reverse CSR (nodes, edges) x (out, in)
 // Binding 4:    node ids grouped by level
 // Bindings 5-8: lnW, lnX, height, depth
-// Bindings 9-10: live edge display scores and their current maximum
-// Binding 11: raw persisted edge weights used only by basket selection
-#define CRIT_BINDING_COUNT 12
+// Binding 9: shared live edge presentation state
+// Binding 10: raw persisted edge weights used only by basket selection
+#define CRIT_BINDING_COUNT 11
 
 void renderer_create_criticality_compute_pipeline(Renderer *r)
 {

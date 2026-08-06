@@ -657,7 +657,7 @@ void apply_community_membership(ExecutionContext *ctx, void *result_data)
 
 	// Group never wants leftover dimming/reveal state from a prior Follow command
 	graph_reset_emphasis(data);
-	graph_animation_clear(renderer);
+	graph_animation_clear(renderer, data);
 
 	// Calculate cluster count and sizes
 	int cluster_count = 0;

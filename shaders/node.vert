@@ -14,19 +14,21 @@ layout(binding = 4) uniform GlobalAnimState
 	float delta_time;
 	uint frame_count;
 	float transition_t;
-	float seq_time;
-	float seq_stride;
-	float seq_duration;
+	float playhead;
+	float fade;
+	uint reveal_mask;
 	float _reserved;
 }
 anim;
 
-layout(std430, binding = 5) readonly buffer NodeAnimationStep {
-	int nodeStep[];
+struct NodeAnim
+{
+	float reveal_at;
 };
 
-layout(std430, binding = 8) readonly buffer NodeAnimationValue {
-	float nodeValue[];
+layout(std430, binding = 5) readonly buffer NodeAnimation
+{
+	NodeAnim nodes[];
 };
 
 layout(location = 0) in vec3 inPosition;
@@ -43,7 +45,12 @@ layout(location = 1) out vec3 fragColor;
 layout(location = 2) out flat int fragDegree;
 layout(location = 3) out float fragSelected;
 layout(location = 4) out float fragVisible;
-layout(location = 5) out flat int fragBfsRank;
+layout(location = 5) out float fragReveal;
+
+float reveal_value(float reveal_at)
+{
+	return (anim.reveal_mask & 1u) != 0u ? smoothstep(0.0, max(anim.fade, 0.001), anim.playhead - reveal_at) : 1.0;
+}
 
 void main()
 {
@@ -74,5 +81,5 @@ void main()
 	fragDegree = instanceDegree;
 	fragSelected = instanceSelected;
 	fragVisible = instanceVisible;
-	fragBfsRank = nodeStep[gl_InstanceIndex];
+	fragReveal = reveal_value(nodes[gl_InstanceIndex].reveal_at);
 }

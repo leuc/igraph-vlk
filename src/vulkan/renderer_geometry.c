@@ -15,6 +15,7 @@
 #include "interaction/camera.h"
 #include "interaction/state.h"
 #include "vulkan/buffers.h"
+#include "vulkan/renderer_criticality.h"
 #include "vulkan/utils.h"
 
 void renderer_update_graph(Renderer *r, GraphData *graph)
@@ -29,13 +30,14 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 
 	// If edge count changed while SPLC was active, reset to avoid stale/out-of-bounds reads
 	if (r->crit.active && r->edge.count != graph->edge_count) {
-		r->crit.active = false;
+		renderer_cancel_main_path(r);
+		renderer_anim_clear(r, graph);
 	}
 
 	r->node.count = graph->node_count;
 	r->edge.count = graph->edge_count;
 	if (r->anim.buffers[0] != VK_NULL_HANDLE && (previous_node_count != graph->node_count || previous_edge_count != graph->edge_count))
-		renderer_anim_reset(r, graph->node_count, graph->edge_count);
+		renderer_anim_reset(r, graph);
 
 	// Pre-allocate or grow node buffers (split: position + attribute)
 	if (r->node.capacity < graph->node_count) {
@@ -165,11 +167,6 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 		if (cEdges)
 			free(cEdges);
 	} else {
-		float maxWeight = 0.0f;
-		for (uint32_t i = 0; i < graph->edge_count; i++)
-			if (graph->edges[i].weight > maxWeight)
-				maxWeight = graph->edges[i].weight;
-
 		for (uint32_t i = 0; i < graph->edge_count; i++) {
 			vec3 p1, p2;
 			glm_vec3_scale(graph->nodes[graph->edges[i].from].position, r->layoutScale, p1);
@@ -177,19 +174,12 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 
 			float edge_vis = (graph->nodes[graph->edges[i].from].visible > 0.5f && graph->nodes[graph->edges[i].to].visible > 0.5f && graph->edges[i].visible > 0.5f) ? 1.0f : 0.0f;
 
-			float alpha = 1.0f;
-			if (maxWeight > 0.0f) {
-				alpha = graph->edges[i].weight / maxWeight;
-				if (alpha < 0.01f)
-					alpha = 0.01f;
-			}
-
 			memcpy(edgePositions[idx].pos, p1, 12);
 			glm_vec3_scale(graph->nodes[graph->edges[i].from].color, graph->nodes[graph->edges[i].from].emphasis * graph->edges[i].emphasis, edgeAttributes[idx].color);
 			edgeAttributes[idx].selected = graph->edges[i].selected;
 			edgeAttributes[idx].normalized_pos = 0.0f;
 			edgeAttributes[idx].visible = edge_vis;
-			edgeAttributes[idx].alpha = alpha;
+			edgeAttributes[idx].alpha = 1.0f;
 			idx++;
 
 			memcpy(edgePositions[idx].pos, p2, 12);
@@ -197,7 +187,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 			edgeAttributes[idx].selected = graph->edges[i].selected;
 			edgeAttributes[idx].normalized_pos = 1.0f;
 			edgeAttributes[idx].visible = edge_vis;
-			edgeAttributes[idx].alpha = alpha;
+			edgeAttributes[idx].alpha = 1.0f;
 			idx++;
 		}
 	}

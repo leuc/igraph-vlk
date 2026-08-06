@@ -27,6 +27,13 @@
 FontAtlas globalAtlas;
 static bool atlasLoaded = false;
 
+void renderer_wait_frames_idle(Renderer *r)
+{
+	if (!r || !r->core.device)
+		return;
+	VK_CHECK(vkWaitForFences(r->core.device, MAX_FRAMES_IN_FLIGHT, r->commands.inFlightFences, VK_TRUE, UINT64_MAX), "Failed to wait for in-flight frames");
+}
+
 bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 {
 	// BCGL zero-init — must come before any pipeline/buffer creation so we start clean
@@ -67,10 +74,8 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	vulkan_render_pass_create(&r->renderPass, &r->core, &r->swapchain);
 	vulkan_commands_create(&r->commands, &r->core, r->swapchain.imageCount);
 
-	VkDescriptorSetLayoutBinding descriptorSetLayoutBindings[] = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL}, {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}, {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}, {4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, NULL}, {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, NULL}, {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, NULL}, {7, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, NULL}, {8, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, NULL}, {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, NULL}, {10, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, NULL}};
-	VkDescriptorBindingFlags bindingFlags[] = {0, 0, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT, 0, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT};
-	VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO, .bindingCount = 11, .pBindingFlags = bindingFlags};
-	VkDescriptorSetLayoutCreateInfo layoutInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .pNext = &bindingFlagsInfo, .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT, .bindingCount = 11, .pBindings = descriptorSetLayoutBindings};
+	VkDescriptorSetLayoutBinding descriptorSetLayoutBindings[] = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL}, {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}, {4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, NULL}, {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}};
+	VkDescriptorSetLayoutCreateInfo layoutInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 5, .pBindings = descriptorSetLayoutBindings};
 	VK_CHECK(vkCreateDescriptorSetLayout(r->core.device, &layoutInfo, NULL, &r->descriptors.layout), "Failed to create descriptor set layout");
 
 	VkPushConstantRange pushConstantRange = {.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, .offset = 0, .size = sizeof(mat4) * 2 + sizeof(float) + sizeof(uint32_t) + sizeof(float) * 2};
@@ -170,8 +175,6 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->splc.traffic_memory = VK_NULL_HANDLE;
 	r->splc.level_buffer = VK_NULL_HANDLE;
 	r->splc.level_memory = VK_NULL_HANDLE;
-	r->splc.max_buffer = VK_NULL_HANDLE;
-	r->splc.max_memory = VK_NULL_HANDLE;
 	r->splc.level_groups = NULL;
 	r->splc.num_levels = 0;
 	r->splc.current_level = 0;
@@ -199,10 +202,6 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->crit.height_memory = VK_NULL_HANDLE;
 	r->crit.depth_buffer = VK_NULL_HANDLE;
 	r->crit.depth_memory = VK_NULL_HANDLE;
-	r->crit.display_edges_buffer = VK_NULL_HANDLE;
-	r->crit.display_edges_memory = VK_NULL_HANDLE;
-	r->crit.display_max_buffer = VK_NULL_HANDLE;
-	r->crit.display_max_memory = VK_NULL_HANDLE;
 	r->crit.edge_weights_buffer = VK_NULL_HANDLE;
 	r->crit.edge_weights_memory = VK_NULL_HANDLE;
 	r->crit.level_offsets = NULL;
@@ -238,7 +237,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	}
 
 	VkDescriptorPoolSize descriptorPoolSizes[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 8}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4}, {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 32}};
-	VkDescriptorPoolCreateInfo descriptorPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT, .poolSizeCount = 3, .pPoolSizes = descriptorPoolSizes, .maxSets = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4};
+	VkDescriptorPoolCreateInfo descriptorPoolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .poolSizeCount = 3, .pPoolSizes = descriptorPoolSizes, .maxSets = MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4};
 	VK_CHECK(vkCreateDescriptorPool(r->core.device, &descriptorPoolInfo, NULL, &r->descriptors.pool), "Failed to create descriptor pool");
 
 	VkDescriptorSetLayout descriptorSetLayouts[MAX_FRAMES_IN_FLIGHT * MAX_VIEWS * 4];
@@ -261,31 +260,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	}
 
 	renderer_anim_init(r);
-	renderer_anim_reset(r, graph->node_count, graph->edge_count);
-
-	// Create a dummy SPLC max weight buffer so binding 3 is always valid
-	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->splc.max_buffer, &r->splc.max_memory);
-	uint32_t zero = 0;
-	update_buffer(r->core.device, r->splc.max_memory, sizeof(uint32_t), &zero);
-
-	// Update graphics descriptor sets with SPLC SSBOs (binding 2 = edge weights, binding 3 = max weight)
-	if (r->splc.edges_buffer != VK_NULL_HANDLE) {
-		VkDescriptorBufferInfo edgeWeightInfo = {r->splc.edges_buffer, 0, VK_WHOLE_SIZE};
-		VkDescriptorBufferInfo maxWeightInfo = {r->splc.max_buffer, 0, VK_WHOLE_SIZE};
-		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-			VkWriteDescriptorSet descWrites[] = {
-				VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 2, &edgeWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-				VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 3, &maxWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-			};
-			vkUpdateDescriptorSets(r->core.device, 2, descWrites, 0, NULL);
-		}
-	} else {
-		VkDescriptorBufferInfo maxWeightInfo = {r->splc.max_buffer, 0, VK_WHOLE_SIZE};
-		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-			VkWriteDescriptorSet maxWrite = VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 3, &maxWeightInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-			vkUpdateDescriptorSets(r->core.device, 1, &maxWrite, 0, NULL);
-		}
-	}
+	renderer_anim_clear(r, graph);
 
 	// Initialize menu text atlas (will be populated on first menu buffer generation)
 	if (!text_atlas_init(&r->menu.text_atlas, 2048, 512)) {

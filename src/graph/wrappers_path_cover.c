@@ -349,7 +349,7 @@ void apply_path_cover_result(ExecutionContext *ctx, void *result_data)
 	}
 
 	graph_reset_emphasis(graph);
-	graph_animation_clear(&state->renderer);
+	graph_animation_clear(&state->renderer, graph);
 
 	state->renderer.needsAttributeUpload = VK_TRUE;
 	if (!graph_rebuild_edges(graph)) {

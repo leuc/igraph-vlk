@@ -1,36 +1,11 @@
 #version 450
 
-layout(binding = 4) uniform GlobalAnimState
-{
-	float time;
-	float delta_time;
-	uint frame_count;
-	float transition_t;
-	float seq_time;
-	float seq_stride;
-	float seq_duration;
-	float _reserved;
-}
-anim;
-
-layout(std430, binding = 5) readonly buffer NodeAnimationStep {
-	int nodeStep[];
-};
-
-layout(push_constant) uniform Constants
-{
-	float alpha;
-}
-pc;
-
-layout(binding = 1) uniform sampler2D texSampler;
-
 layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec3 fragColor;
 layout(location = 2) in flat int fragDegree;
 layout(location = 3) in float fragSelected;
 layout(location = 4) in float fragVisible;
-layout(location = 5) in flat int fragBfsRank;
+layout(location = 5) in float fragReveal;
 
 layout(location = 0) out vec4 outColor;
 
@@ -39,8 +14,9 @@ void main()
 	if (fragVisible < 0.5)
 		discard;
 
-	const float FADE = 0.3;
-	vec3 c = mix(vec3(0.15), fragColor, smoothstep(0.0, FADE, anim.seq_time - float(fragBfsRank) * anim.seq_stride));
+	vec3 c = mix(vec3(0.15), fragColor, fragReveal);
+	if (fragSelected > 0.5)
+		c = min(c * 1.4 + vec3(0.1), vec3(1.0));
 
 	vec2 uv = fragTexCoord;
 	float dist = length(uv);

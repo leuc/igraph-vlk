@@ -80,7 +80,7 @@ void apply_bfs_trigger(ExecutionContext *ctx, void *result_data)
 		return;
 	AppState *state = ctx->app_state;
 	graph_reset_emphasis(&state->current_graph);
-	graph_animation_clear(&state->renderer);
+	graph_animation_clear(&state->renderer, &state->current_graph);
 	graph_animation_play_bfs(&state->renderer, &state->current_graph);
 }
 
@@ -91,7 +91,7 @@ void apply_dfs_trigger(ExecutionContext *ctx, void *result_data)
 		return;
 	AppState *state = ctx->app_state;
 	graph_reset_emphasis(&state->current_graph);
-	graph_animation_clear(&state->renderer);
+	graph_animation_clear(&state->renderer, &state->current_graph);
 	graph_animation_play_dfs(&state->renderer, &state->current_graph);
 }
 
@@ -102,7 +102,7 @@ void apply_topo_trigger(ExecutionContext *ctx, void *result_data)
 		return;
 	AppState *state = ctx->app_state;
 	graph_reset_emphasis(&state->current_graph);
-	graph_animation_clear(&state->renderer);
+	graph_animation_clear(&state->renderer, &state->current_graph);
 	graph_animation_play_topological(&state->renderer, &state->current_graph);
 }
 

@@ -46,7 +46,7 @@ void apply_filter_reset(ExecutionContext *ctx, void *result_data)
 	(void)result_data;
 	AppState *state = ctx->app_state;
 	graph_reset_emphasis(&state->current_graph);
-	graph_animation_clear(&state->renderer);
+	graph_animation_clear(&state->renderer, &state->current_graph);
 	graph_filter_reset_visibility(&state->current_graph);
 	state->renderer.needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(&state->renderer, &state->current_graph);
@@ -61,7 +61,7 @@ void apply_filter_by_attr(ExecutionContext *ctx, void *result_data)
 	AppState *state = ctx->app_state;
 	FilterParams *fp = (FilterParams *)result_data;
 	graph_reset_emphasis(&state->current_graph);
-	graph_animation_clear(&state->renderer);
+	graph_animation_clear(&state->renderer, &state->current_graph);
 	graph_filter_by_attribute(&state->current_graph, fp->attr_name, fp->attr_value);
 	state->renderer.needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(&state->renderer, &state->current_graph);
@@ -76,7 +76,7 @@ void apply_filter_edge_reset(ExecutionContext *ctx, void *result_data)
 	(void)result_data;
 	AppState *state = ctx->app_state;
 	graph_reset_emphasis(&state->current_graph);
-	graph_animation_clear(&state->renderer);
+	graph_animation_clear(&state->renderer, &state->current_graph);
 	graph_filter_reset_edge_visibility(&state->current_graph);
 	state->renderer.needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(&state->renderer, &state->current_graph);
@@ -90,7 +90,7 @@ void apply_filter_by_edge_attr(ExecutionContext *ctx, void *result_data)
 	AppState *state = ctx->app_state;
 	FilterParams *fp = (FilterParams *)result_data;
 	graph_reset_emphasis(&state->current_graph);
-	graph_animation_clear(&state->renderer);
+	graph_animation_clear(&state->renderer, &state->current_graph);
 	graph_filter_by_edge_attribute(&state->current_graph, fp->attr_name, fp->attr_value);
 	state->renderer.needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(&state->renderer, &state->current_graph);

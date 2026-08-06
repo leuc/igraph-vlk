@@ -1,18 +1,5 @@
 #version 450
 
-layout(binding = 4) uniform GlobalAnimState
-{
-	float time;
-	float delta_time;
-	uint frame_count;
-	float transition_t;
-	float seq_time;
-	float seq_stride;
-	float seq_duration;
-	float _reserved;
-}
-anim;
-
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in float fragSelected;
 layout(location = 2) in float fragNormalizedPos;
@@ -27,10 +14,10 @@ void main()
 		discard;
 
 	float alpha = fragAlpha;
-	vec3 finalColor = fragColor;
-
+	vec3 final_color = fragColor;
 	if (fragSelected > 0.5) {
+		final_color = min(final_color * 1.4 + vec3(0.1), vec3(1.0));
 		alpha = 1.0;
 	}
-	outColor = vec4(finalColor, alpha);
+	outColor = vec4(final_color, alpha);
 }

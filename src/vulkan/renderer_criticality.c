@@ -5,8 +5,8 @@
 
 #include "vulkan/renderer_criticality.h"
 
-#include <math.h>
 #include <float.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -105,6 +105,10 @@ static bool crit_build_level_permutation(CritComputeContext *ctx, const igraph_v
 	uint32_t *cursor = calloc((size_t)num_levels, sizeof(uint32_t));
 	if (!cursor) {
 		free(perm);
+		free(ctx->level_offsets);
+		free(ctx->level_sizes);
+		ctx->level_offsets = NULL;
+		ctx->level_sizes = NULL;
 		return false;
 	}
 	for (igraph_integer_t i = 0; i < n; i++) {
@@ -146,8 +150,6 @@ void renderer_destroy_criticality_buffers(Renderer *r)
 	crit_destroy_buffer(dev, &ctx->lnx_buffer, &ctx->lnx_memory);
 	crit_destroy_buffer(dev, &ctx->height_buffer, &ctx->height_memory);
 	crit_destroy_buffer(dev, &ctx->depth_buffer, &ctx->depth_memory);
-	crit_destroy_buffer(dev, &ctx->display_edges_buffer, &ctx->display_edges_memory);
-	crit_destroy_buffer(dev, &ctx->display_max_buffer, &ctx->display_max_memory);
 	crit_destroy_buffer(dev, &ctx->edge_weights_buffer, &ctx->edge_weights_memory);
 
 	free(ctx->level_offsets);
@@ -180,28 +182,12 @@ static void crit_write_descriptors(Renderer *r)
 {
 	CritComputeContext *ctx = &r->crit;
 	VkDescriptorBufferInfo infos[] = {
-		{ctx->out_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->out_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->level_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnw_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnx_buffer, 0, VK_WHOLE_SIZE}, {ctx->height_buffer, 0, VK_WHOLE_SIZE}, {ctx->depth_buffer, 0, VK_WHOLE_SIZE}, {ctx->display_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->display_max_buffer, 0, VK_WHOLE_SIZE}, {ctx->edge_weights_buffer, 0, VK_WHOLE_SIZE},
+		{ctx->out_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->out_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->level_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnw_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnx_buffer, 0, VK_WHOLE_SIZE}, {ctx->height_buffer, 0, VK_WHOLE_SIZE}, {ctx->depth_buffer, 0, VK_WHOLE_SIZE}, {r->anim.edge_buffer, 0, VK_WHOLE_SIZE}, {ctx->edge_weights_buffer, 0, VK_WHOLE_SIZE},
 	};
-	VkWriteDescriptorSet writes[12];
-	for (uint32_t i = 0; i < 12; i++)
+	VkWriteDescriptorSet writes[11];
+	for (uint32_t i = 0; i < 11; i++)
 		writes[i] = VK_WRITE_DESC_BUFFER(r->descriptors.crit_set, i, &infos[i], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-	vkUpdateDescriptorSets(r->core.device, 12, writes, 0, NULL);
-}
-
-static void crit_write_graphics_descriptors(Renderer *r)
-{
-	CritComputeContext *ctx = &r->crit;
-	if (!r->descriptors.sets)
-		return;
-	VkDescriptorBufferInfo edge_info = {ctx->display_edges_buffer, 0, VK_WHOLE_SIZE};
-	VkDescriptorBufferInfo max_info = {ctx->display_max_buffer, 0, VK_WHOLE_SIZE};
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-		VkWriteDescriptorSet writes[] = {
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 2, &edge_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-			VK_WRITE_DESC_BUFFER(r->descriptors.sets[i], 3, &max_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
-		};
-		vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
-	}
+	vkUpdateDescriptorSets(r->core.device, 11, writes, 0, NULL);
 }
 
 bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igraph_vector_int_t *levels, int num_levels, uint32_t weight_mode, const igraph_vector_t *selection_weights)
@@ -247,7 +233,6 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 	VkDeviceSize in_edge_size = sizeof(CritEdge) * (in_edge_count > 0 ? in_edge_count : 1);
 	VkDeviceSize level_size = sizeof(uint32_t) * (size_t)n;
 	VkDeviceSize value_size = sizeof(float) * (size_t)n;
-	VkDeviceSize display_edge_size = sizeof(SPLCEdge) * (ctx->graph_edge_count > 0 ? ctx->graph_edge_count : 1);
 
 	VK_CREATE_HOST_BUFFER(dev, phys, node_size, usage, &ctx->out_nodes_buffer, &ctx->out_nodes_memory);
 	VK_CREATE_HOST_BUFFER(dev, phys, out_edge_size, usage, &ctx->out_edges_buffer, &ctx->out_edges_memory);
@@ -258,14 +243,14 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 	VK_CREATE_HOST_BUFFER(dev, phys, value_size, usage, &ctx->lnx_buffer, &ctx->lnx_memory);
 	VK_CREATE_HOST_BUFFER(dev, phys, value_size, usage, &ctx->height_buffer, &ctx->height_memory);
 	VK_CREATE_HOST_BUFFER(dev, phys, value_size, usage, &ctx->depth_buffer, &ctx->depth_memory);
-	VK_CREATE_HOST_BUFFER(dev, phys, display_edge_size, usage, &ctx->display_edges_buffer, &ctx->display_edges_memory);
-	VK_CREATE_HOST_BUFFER(dev, phys, sizeof(uint32_t), usage, &ctx->display_max_buffer, &ctx->display_max_memory);
 	VK_CREATE_HOST_BUFFER(dev, phys, sizeof(float) * (ctx->graph_edge_count > 0 ? ctx->graph_edge_count : 1), usage, &ctx->edge_weights_buffer, &ctx->edge_weights_memory);
 
 	update_buffer(dev, ctx->out_nodes_memory, node_size, out_nodes);
-	update_buffer(dev, ctx->out_edges_memory, sizeof(CritEdge) * out_edge_count, out_edges);
+	if (out_edge_count > 0)
+		update_buffer(dev, ctx->out_edges_memory, sizeof(CritEdge) * out_edge_count, out_edges);
 	update_buffer(dev, ctx->in_nodes_memory, node_size, in_nodes);
-	update_buffer(dev, ctx->in_edges_memory, sizeof(CritEdge) * in_edge_count, in_edges);
+	if (in_edge_count > 0)
+		update_buffer(dev, ctx->in_edges_memory, sizeof(CritEdge) * in_edge_count, in_edges);
 	update_buffer(dev, ctx->level_memory, level_size, perm);
 
 	float *zeros = calloc((size_t)n, sizeof(float));
@@ -276,25 +261,9 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 		update_buffer(dev, ctx->depth_memory, value_size, zeros);
 		free(zeros);
 	}
-	SPLCEdge *display_edges = calloc(ctx->graph_edge_count > 0 ? ctx->graph_edge_count : 1, sizeof(SPLCEdge));
-	if (!display_edges) {
-		free(out_nodes);
-		free(out_edges);
-		free(in_nodes);
-		free(in_edges);
-		free(perm);
-		renderer_destroy_criticality_buffers(r);
-		return false;
-	}
-	for (uint32_t e = 0; e < ctx->graph_edge_count; e++)
-		display_edges[e].target_node = graph->edges[e].to;
-	update_buffer(dev, ctx->display_edges_memory, display_edge_size, display_edges);
-	uint32_t zero_max = 0;
-	update_buffer(dev, ctx->display_max_memory, sizeof(zero_max), &zero_max);
 	if (selection_weights) {
 		float *selection_values = calloc(ctx->graph_edge_count > 0 ? ctx->graph_edge_count : 1, sizeof(float));
 		if (!selection_values) {
-			free(display_edges);
 			renderer_destroy_criticality_buffers(r);
 			return false;
 		}
@@ -309,8 +278,6 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 			free(zero_weights);
 		}
 	}
-	free(display_edges);
-
 	free(out_nodes);
 	free(out_edges);
 	free(in_nodes);
@@ -318,78 +285,102 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 	free(perm);
 
 	crit_write_descriptors(r);
-	crit_write_graphics_descriptors(r);
 
 	return true;
 }
 
-bool renderer_start_main_path_weighting(Renderer *r)
+static bool crit_start_animation(Renderer *r, const GraphData *graph, const igraph_vector_int_t *levels, RendererAnimOwner owner)
 {
 	CritComputeContext *ctx = &r->crit;
-	if (ctx->num_levels <= 0 || ctx->display_edges_buffer == VK_NULL_HANDLE)
+	uint32_t node_count = graph->node_count;
+	uint32_t edge_count = graph->edge_count;
+	RendererAnimNode *nodes = calloc(node_count > 0 ? node_count : 1, sizeof(RendererAnimNode));
+	RendererAnimEdge *edges = calloc(edge_count > 0 ? edge_count : 1, sizeof(RendererAnimEdge));
+	if (!nodes || !edges) {
+		free(nodes);
+		free(edges);
 		return false;
-	ctx->active = true;
+	}
+	for (uint32_t v = 0; v < node_count; v++) {
+		int level = VECTOR(*levels)[v];
+		nodes[v].reveal_at = renderer_anim_reveal_at(level, (float)ctx->level_interval);
+	}
+	bool all_zero = edge_count > 0;
+	float max_strength = 0.0f;
+	for (uint32_t e = 0; e < edge_count; e++) {
+		edges[e].reveal_at = nodes[graph->edges[e].from].reveal_at;
+		edges[e].strength = owner == RENDERER_ANIM_MAIN_PATH ? 0.0f : renderer_anim_host_strength(graph->edges[e].weight);
+		if (edges[e].strength > 0.0f)
+			all_zero = false;
+		if (edges[e].strength > max_strength)
+			max_strength = edges[e].strength;
+	}
+	if (owner == RENDERER_ANIM_HOST && all_zero) {
+		max_strength = 1.0f;
+		for (uint32_t e = 0; e < edge_count; e++)
+			edges[e].strength = 1.0f;
+	}
+	RendererAnimClip clip = {
+		.nodes = nodes,
+		.edges = edges,
+		.node_count = node_count,
+		.edge_count = edge_count,
+		.strength_max = max_strength,
+		.fade = 0.3f,
+		.reveal_mask = RENDERER_ANIM_REVEAL_NODES | RENDERER_ANIM_REVEAL_EDGES,
+		.owner = owner,
+	};
+	renderer_anim_play(r, &clip);
+	free(nodes);
+	free(edges);
+	crit_write_descriptors(r);
+	return true;
+}
+
+bool renderer_start_main_path_weighting(Renderer *r, const GraphData *graph, const igraph_vector_int_t *levels)
+{
+	if (!r || !graph || !levels)
+		return false;
+	CritComputeContext *ctx = &r->crit;
+	if (ctx->num_levels <= 0 || r->anim.edge_buffer == VK_NULL_HANDLE)
+		return false;
+	ctx->active = false;
 	ctx->readback_pending = false;
 	ctx->selection_run = false;
 	ctx->stage = CRIT_STAGE_LNW;
 	ctx->current_level = 0;
-	int phases = ctx->weight_mode == CRIT_WEIGHT_SPC || ctx->weight_mode == CRIT_WEIGHT_SPE ? 2 : 1;
-	ctx->level_interval = 5.0 / (double)(ctx->num_levels * phases);
+	ctx->level_interval = 5.0 / (double)ctx->num_levels;
 	if (ctx->level_interval < 0.016)
 		ctx->level_interval = 0.016;
-	ctx->last_level_time = r->anim.data.time;
+	if (!crit_start_animation(r, graph, levels, RENDERER_ANIM_MAIN_PATH))
+		return false;
+	ctx->last_level_time = r->anim.data.time - ctx->level_interval;
+	ctx->active = true;
 	printf("[MainPath] start: method=%s levels=%d tick=%.3fs\n", ctx->weight_mode == CRIT_WEIGHT_SPLC ? "SPLC" : (ctx->weight_mode == CRIT_WEIGHT_UNIT ? "Unit" : (ctx->weight_mode == CRIT_WEIGHT_SPC ? "SPC" : "SPE")), ctx->num_levels, ctx->level_interval);
 	return true;
 }
 
-bool renderer_start_main_path_selection(Renderer *r)
+bool renderer_start_main_path_selection(Renderer *r, const GraphData *graph, const igraph_vector_int_t *levels)
 {
-	CritComputeContext *ctx = &r->crit;
-	if (ctx->num_levels <= 0 || ctx->display_edges_buffer == VK_NULL_HANDLE)
+	if (!r || !graph || !levels)
 		return false;
-	ctx->active = true;
+	CritComputeContext *ctx = &r->crit;
+	if (ctx->num_levels <= 0 || r->anim.edge_buffer == VK_NULL_HANDLE)
+		return false;
+	ctx->active = false;
 	ctx->readback_pending = false;
 	ctx->selection_run = true;
 	ctx->selection_ready = false;
 	ctx->stage = CRIT_STAGE_HEIGHT;
 	ctx->current_level = 0;
-	ctx->level_interval = 5.0 / (double)(ctx->num_levels * 2);
+	ctx->level_interval = 5.0 / (double)ctx->num_levels;
 	if (ctx->level_interval < 0.016)
 		ctx->level_interval = 0.016;
-	ctx->last_level_time = r->anim.data.time;
+	if (!crit_start_animation(r, graph, levels, RENDERER_ANIM_HOST))
+		return false;
+	ctx->last_level_time = r->anim.data.time - ctx->level_interval;
+	ctx->active = true;
 	printf("[MainPath] selection start: method=%u levels=%d tick=%.3fs\n", ctx->weight_mode, ctx->num_levels, ctx->level_interval);
-	return true;
-}
-
-bool renderer_start_main_path_reveal(Renderer *r, const GraphData *graph, const igraph_vector_int_t *levels)
-{
-	if (!r || !graph || !levels || igraph_vector_int_size(levels) != (igraph_integer_t)graph->node_count)
-		return false;
-	uint32_t node_count = graph->node_count;
-	uint32_t edge_count = graph->edge_count;
-	int *node_steps = malloc(sizeof(int) * (node_count > 0 ? node_count : 1));
-	uint32_t *edge_sources = malloc(sizeof(uint32_t) * (edge_count > 0 ? edge_count : 1));
-	if (!node_steps || !edge_sources) {
-		free(node_steps);
-		free(edge_sources);
-		return false;
-	}
-	for (uint32_t v = 0; v < node_count; v++)
-		node_steps[v] = VECTOR(*levels)[v];
-	for (uint32_t e = 0; e < edge_count; e++)
-		edge_sources[e] = graph->edges[e].from;
-	int phases = r->crit.selection_run || r->crit.weight_mode == CRIT_WEIGHT_SPC || r->crit.weight_mode == CRIT_WEIGHT_SPE ? 2 : 1;
-	float duration = (float)(r->crit.level_interval * r->crit.num_levels * phases);
-	RendererAnimClip clip = {
-		.node_steps = node_steps,
-		.edge_sources = edge_sources,
-		.node_count = node_count,
-		.edge_count = edge_count,
-		.duration = duration,
-	};
-	renderer_anim_play(r, &clip);
-	free(node_steps);
-	free(edge_sources);
 	return true;
 }
 
@@ -510,7 +501,6 @@ void renderer_readback_main_path_weights(Renderer *r, GraphData *graph)
 			weight = log_weight;
 		}
 		VECTOR(weights)[e] = weight;
-		graph->edges[e].weight = weight;
 		if (isfinite(weight) && weight > max_weight)
 			max_weight = weight;
 		total += weight;

@@ -230,29 +230,14 @@ void apply_maxflow_sampling(ExecutionContext *ctx, void *result_data)
 	state->renderer.needsAttributeUpload = VK_TRUE;
 
 	graph_reset_emphasis(graph_data);
-	graph_animation_clear(&state->renderer);
+	graph_animation_clear(&state->renderer, graph_data);
 
 	if (!graph_rebuild_edges(graph_data)) {
 		fprintf(stderr, "[maxflow apply] graph_rebuild_edges failed\n");
 		return;
 	}
-	for (int i = 0; i < graph_data->edge_count; i++) {
-		graph_data->edges[i].weight = flow_result->edge_flows[i];
-	}
-	float *edge_values = NULL;
-	if (flow_result->max_flow_value > 0.0f) {
-		edge_values = malloc(sizeof(float) * graph_data->edge_count);
-		if (!edge_values) {
-			fprintf(stderr, "[maxflow apply] Failed to allocate normalized edge values\n");
-			return;
-		}
-		float denominator = logf(flow_result->max_flow_value + 1.0f);
-		for (uint32_t i = 0; i < graph_data->edge_count; i++)
-			edge_values[i] = logf(flow_result->edge_flows[i] + 1.0f) / denominator;
-	}
-	GraphAnimationRequest request = {.node_steps = flow_result->node_ranks, .edge_values = edge_values, .duration = 4.0f};
+	GraphAnimationRequest request = {.node_steps = flow_result->node_ranks, .edge_values = flow_result->edge_flows, .duration = 4.0f};
 	graph_animation_play(&state->renderer, graph_data, &request);
-	free(edge_values);
 
 	renderer_update_graph(&state->renderer, graph_data);
 	state->renderer.label.tree_needs_rebuild = true;

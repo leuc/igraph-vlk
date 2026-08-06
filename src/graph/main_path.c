@@ -12,9 +12,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "graph/graph_animation.h"
 #include "graph/graph_color.h"
 #include "graph/graph_core.h"
-#include "graph/graph_animation.h"
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_criticality.h"
 
@@ -134,10 +134,22 @@ static void *main_path_prepare_weighting(ExecutionContext *ctx, uint32_t weight_
 	return prep;
 }
 
-void *compute_splc_animation(ExecutionContext *ctx) { return main_path_prepare_weighting(ctx, CRIT_WEIGHT_SPLC, "main-path-weight-splc"); }
-void *compute_main_path_spc(ExecutionContext *ctx) { return main_path_prepare_weighting(ctx, CRIT_WEIGHT_SPC, "main-path-weight-spc"); }
-void *compute_main_path_unit(ExecutionContext *ctx) { return main_path_prepare_weighting(ctx, CRIT_WEIGHT_UNIT, "main-path-weight-unit"); }
-void *compute_main_path_spe(ExecutionContext *ctx) { return main_path_prepare_weighting(ctx, CRIT_WEIGHT_SPE, "main-path-weight-spe"); }
+void *compute_splc_animation(ExecutionContext *ctx)
+{
+	return main_path_prepare_weighting(ctx, CRIT_WEIGHT_SPLC, "main-path-weight-splc");
+}
+void *compute_main_path_spc(ExecutionContext *ctx)
+{
+	return main_path_prepare_weighting(ctx, CRIT_WEIGHT_SPC, "main-path-weight-spc");
+}
+void *compute_main_path_unit(ExecutionContext *ctx)
+{
+	return main_path_prepare_weighting(ctx, CRIT_WEIGHT_UNIT, "main-path-weight-unit");
+}
+void *compute_main_path_spe(ExecutionContext *ctx)
+{
+	return main_path_prepare_weighting(ctx, CRIT_WEIGHT_SPE, "main-path-weight-spe");
+}
 
 void free_main_path_prep(void *result_data)
 {
@@ -148,7 +160,10 @@ void free_main_path_prep(void *result_data)
 	free(prep);
 }
 
-void free_main_path_weighting_result(void *result_data) { free_main_path_prep(result_data); }
+void free_main_path_weighting_result(void *result_data)
+{
+	free_main_path_prep(result_data);
+}
 
 static void main_path_apply_weighting(ExecutionContext *ctx, MainPathPrep *prep)
 {
@@ -159,22 +174,28 @@ static void main_path_apply_weighting(ExecutionContext *ctx, MainPathPrep *prep)
 	if (prep->node_count != (igraph_integer_t)graph->node_count)
 		return;
 	graph_reset_emphasis(graph);
-	graph_animation_clear(&state->renderer);
-	renderer_cancel_main_path(&state->renderer);
+	graph_animation_clear(&state->renderer, graph);
 	state->renderer.needsAttributeUpload = VK_TRUE;
 	if (!graph_rebuild_edges(graph))
 		return;
 	renderer_update_graph(&state->renderer, graph);
-	if (!renderer_init_criticality_buffers(&state->renderer, graph, &prep->levels, prep->num_levels, prep->weight_mode, NULL) || !renderer_start_main_path_weighting(&state->renderer))
+	if (!renderer_init_criticality_buffers(&state->renderer, graph, &prep->levels, prep->num_levels, prep->weight_mode, NULL) || !renderer_start_main_path_weighting(&state->renderer, graph, &prep->levels))
 		fprintf(stderr, "[Main Path] failed to initialize weighting\n");
-	else if (!renderer_start_main_path_reveal(&state->renderer, graph, &prep->levels))
-		fprintf(stderr, "[Main Path] failed to initialize node/edge reveal\n");
 	state->renderer.label.tree_needs_rebuild = true;
 }
 
-void apply_splc_animation(ExecutionContext *ctx, void *result_data) { main_path_apply_weighting(ctx, result_data); }
-void apply_main_path_weighting(ExecutionContext *ctx, void *result_data) { main_path_apply_weighting(ctx, result_data); }
-bool poll_splc_gpu(ExecutionContext *ctx) { return poll_main_path_weighting(ctx); }
+void apply_splc_animation(ExecutionContext *ctx, void *result_data)
+{
+	main_path_apply_weighting(ctx, result_data);
+}
+void apply_main_path_weighting(ExecutionContext *ctx, void *result_data)
+{
+	main_path_apply_weighting(ctx, result_data);
+}
+bool poll_splc_gpu(ExecutionContext *ctx)
+{
+	return poll_main_path_weighting(ctx);
+}
 bool poll_main_path_weighting(ExecutionContext *ctx)
 {
 	if (!ctx || !ctx->app_state)
@@ -522,10 +543,8 @@ void apply_main_path_basket(ExecutionContext *ctx, void *result_data)
 	if (!graph_rebuild_edges(graph))
 		return;
 	renderer_update_graph(&state->renderer, graph);
-	if (!renderer_init_criticality_buffers(&state->renderer, graph, &prep->levels, prep->num_levels, prep->weight_mode, &weights) || !renderer_start_main_path_selection(&state->renderer))
+	if (!renderer_init_criticality_buffers(&state->renderer, graph, &prep->levels, prep->num_levels, prep->weight_mode, &weights) || !renderer_start_main_path_selection(&state->renderer, graph, &prep->levels))
 		fprintf(stderr, "[MainPath] failed to initialize GPU basket selection\n");
-	else if (!renderer_start_main_path_reveal(&state->renderer, graph, &prep->levels))
-		fprintf(stderr, "[MainPath] failed to initialize node/edge reveal\n");
 	igraph_vector_destroy(&weights);
 }
 

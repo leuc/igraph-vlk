@@ -36,13 +36,10 @@
 bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igraph_vector_int_t *levels, int num_levels, uint32_t weight_mode, const igraph_vector_t *selection_weights);
 
 /** Start one live, level-ticked main-path weighting run. */
-bool renderer_start_main_path_weighting(Renderer *r);
+bool renderer_start_main_path_weighting(Renderer *r, const GraphData *graph, const igraph_vector_int_t *levels);
 
 /** Start the height/depth passes after the method's required count sweeps. */
-bool renderer_start_main_path_selection(Renderer *r);
-
-/** Start the shared node/edge reveal using the prepared DAG levels. */
-bool renderer_start_main_path_reveal(Renderer *r, const GraphData *graph, const igraph_vector_int_t *levels);
+bool renderer_start_main_path_selection(Renderer *r, const GraphData *graph, const igraph_vector_int_t *levels);
 
 /** Record the next forward or reverse level dispatch into a frame command buffer. */
 void renderer_dispatch_main_path_weight_level(Renderer *r, VkCommandBuffer cmd);
