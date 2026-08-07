@@ -15,6 +15,7 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 #define WEIGHT_UNIT 1u
 #define WEIGHT_SPC 2u
 #define WEIGHT_SPE 3u
+#define WEIGHT_NPPC 4u
 
 #define RESULT_OVERFLOW (1u << 0u)
 #define RESULT_INVALID (1u << 1u)
@@ -107,6 +108,11 @@ layout(std430, binding = 10) buffer ResultBuffer
 }
 result;
 
+layout(std430, binding = 11) buffer ReachabilityBuffer
+{
+	uint reachability[];
+};
+
 layout(push_constant) uniform Constants
 {
 	uint level_offset;
@@ -177,6 +183,29 @@ void record_projected_animation_edges(uint source, CritNode n)
 		float log_weight = lnW[source] + lnX[edge.node];
 		float score = pc.weight_mode == WEIGHT_SPE ? max(1.0 + log_weight, 0.0) : softplus(log_weight);
 		write_presentation(edge.pad, score);
+	}
+}
+
+void compute_reachability(uint v, bool reverse)
+{
+	uint words = (result.node_count + 31u) / 32u;
+	CritNode n = reverse ? out_nodes[v] : in_nodes[v];
+	uint count = 0u;
+	for (uint word = 0u; word < words; word++) {
+		uint value = word == v / 32u ? 1u << (v % 32u) : 0u;
+		for (uint i = 0u; i < n.degree; i++) {
+			uint adjacent = reverse ? out_edges[n.edge_offset + i].node : in_edges[n.edge_offset + i].node;
+			value |= reachability[adjacent * words + word];
+		}
+		reachability[v * words + word] = value;
+		count += bitCount(value);
+	}
+	float log_count = log(float(count));
+	if (reverse)
+		lnX[v] = log_count;
+	else {
+		lnW[v] = log_count;
+		record_forward_animation_edges(out_nodes[v], log_count);
 	}
 }
 
@@ -307,6 +336,10 @@ void main()
 
 	uint v = level_nodes[pc.level_offset + idx];
 	if (pc.stage == STAGE_LNW) {
+		if (pc.weight_mode == WEIGHT_NPPC) {
+			compute_reachability(v, false);
+			return;
+		}
 		CritNode n = in_nodes[v];
 		float value = 0.0;
 		if (pc.weight_mode == WEIGHT_SPLC) {
@@ -331,6 +364,11 @@ void main()
 		return;
 	}
 	if (pc.stage == STAGE_LNX) {
+		if (pc.weight_mode == WEIGHT_NPPC) {
+			compute_reachability(v, true);
+			record_projected_animation_edges(v, out_nodes[v]);
+			return;
+		}
 		CritNode n = out_nodes[v];
 		float value = 0.0;
 		if (n.degree != 0u) {

@@ -6,6 +6,7 @@
 #ifndef VULKAN_CRITICALITY_TYPES_H
 #define VULKAN_CRITICALITY_TYPES_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -23,7 +24,7 @@ typedef struct
 
 typedef enum { CRIT_STAGE_LNW = 0, CRIT_STAGE_LNX = 1, CRIT_STAGE_MATERIALIZE = 2, CRIT_STAGE_HEIGHT = 3, CRIT_STAGE_DEPTH = 4, CRIT_STAGE_REDUCE = 5, CRIT_STAGE_FLAGS = 6, CRIT_STAGE_PATH_TRACE = 7 } CritStage;
 
-typedef enum { CRIT_WEIGHT_SPLC = 0, CRIT_WEIGHT_UNIT = 1, CRIT_WEIGHT_SPC = 2, CRIT_WEIGHT_SPE = 3 } CritWeightMode;
+typedef enum { CRIT_WEIGHT_SPLC = 0, CRIT_WEIGHT_UNIT = 1, CRIT_WEIGHT_SPC = 2, CRIT_WEIGHT_SPE = 3, CRIT_WEIGHT_NPPC = 4 } CritWeightMode;
 
 typedef struct
 {
@@ -80,6 +81,22 @@ static inline size_t crit_result_data_word_count(uint32_t edge_count, uint32_t n
 static inline size_t crit_result_buffer_size(uint32_t edge_count, uint32_t node_count)
 {
 	return sizeof(CritResultHeader) + sizeof(uint32_t) * crit_result_data_word_count(edge_count, node_count);
+}
+
+static inline size_t crit_reachability_word_count(uint32_t node_count)
+{
+	return ((size_t)node_count + 31u) / 32u;
+}
+
+static inline size_t crit_reachability_buffer_size(uint32_t node_count)
+{
+	size_t words = crit_reachability_word_count(node_count);
+	return sizeof(uint32_t) * (size_t)node_count * words;
+}
+
+static inline bool crit_reachability_fits(uint32_t node_count, size_t maximum_size)
+{
+	return crit_reachability_buffer_size(node_count) <= maximum_size;
 }
 
 #endif

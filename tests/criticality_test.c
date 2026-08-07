@@ -11,7 +11,7 @@
 #include <string.h>
 #include <vulkan/vulkan.h>
 
-#define BINDING_COUNT 11
+#define BINDING_COUNT 12
 #define WORKGROUP_SIZE 64
 #define TOLERANCE 1e-4f
 
@@ -59,7 +59,7 @@ typedef struct
 	VkDeviceMemory memories[BINDING_COUNT];
 } Harness;
 
-enum { BUF_OUT_NODES = 0, BUF_OUT_EDGES, BUF_IN_NODES, BUF_IN_EDGES, BUF_LEVELS, BUF_LNW, BUF_LNX, BUF_HEIGHT, BUF_DEPTH, BUF_EDGE_ANIM, BUF_RESULT };
+enum { BUF_OUT_NODES = 0, BUF_OUT_EDGES, BUF_IN_NODES, BUF_IN_EDGES, BUF_LEVELS, BUF_LNW, BUF_LNX, BUF_HEIGHT, BUF_DEPTH, BUF_EDGE_ANIM, BUF_RESULT, BUF_REACHABILITY };
 
 #define VK_TRY(expression, message) \
 	do { \
@@ -254,7 +254,8 @@ static int harness_upload_graph(Harness *h, const GraphSpec *graph)
 	VkDeviceSize value_size = sizeof(float) * graph->node_count;
 	VkDeviceSize animation_size = sizeof(EdgeAnimHeader) + sizeof(EdgeAnim) * (graph->edge_count > 0 ? graph->edge_count : 1);
 	VkDeviceSize result_size = crit_result_buffer_size(graph->edge_count, graph->node_count);
-	VkDeviceSize sizes[BINDING_COUNT] = {node_size, edge_size, node_size, edge_size, sizeof(uint32_t) * graph->node_count, value_size, value_size, value_size, value_size, animation_size, result_size};
+	VkDeviceSize reachability_size = crit_reachability_buffer_size(graph->node_count);
+	VkDeviceSize sizes[BINDING_COUNT] = {node_size, edge_size, node_size, edge_size, sizeof(uint32_t) * graph->node_count, value_size, value_size, value_size, value_size, animation_size, result_size, reachability_size};
 	for (uint32_t i = 0; i < BINDING_COUNT; i++)
 		if (create_buffer(h, i, sizes[i]) != 0)
 			return 1;
@@ -325,7 +326,7 @@ static int harness_run(Harness *h, const GraphSpec *graph, uint32_t mode)
 		dispatch(h, graph->level_offsets[level], graph->level_sizes[level], CRIT_STAGE_LNW, mode);
 		compute_barrier(h);
 	}
-	if (mode == CRIT_WEIGHT_SPC || mode == CRIT_WEIGHT_SPE)
+	if (mode == CRIT_WEIGHT_SPC || mode == CRIT_WEIGHT_SPE || mode == CRIT_WEIGHT_NPPC)
 		for (uint32_t i = 0; i < graph->num_levels; i++) {
 			uint32_t level = graph->num_levels - 1 - i;
 			dispatch(h, graph->level_offsets[level], graph->level_sizes[level], CRIT_STAGE_LNX, mode);
@@ -392,6 +393,19 @@ static const uint32_t base_level_nodes[BASE_NODES] = {0, 1, 2, 7, 3, 4, 5, 6};
 static const uint32_t base_level_offsets[BASE_LEVELS] = {0, 1, 4, 5, 7};
 static const uint32_t base_level_sizes[BASE_LEVELS] = {1, 3, 1, 2, 1};
 static const GraphSpec base_graph = {BASE_NODES, BASE_EDGES, BASE_LEVELS, base_out_nodes, base_out_edges, base_in_nodes, base_in_edges, base_level_nodes, base_level_offsets, base_level_sizes};
+
+#define PAPER_NODES 7
+#define PAPER_EDGES 9
+#define PAPER_LEVELS 6
+
+static const CritNode paper_out_nodes[PAPER_NODES] = {{0, 2}, {2, 1}, {3, 2}, {5, 1}, {6, 2}, {8, 1}, {9, 0}};
+static const CritEdge paper_out_edges[PAPER_EDGES] = {{1, 0}, {5, 1}, {2, 2}, {3, 3}, {4, 4}, {6, 5}, {5, 6}, {6, 7}, {6, 8}};
+static const CritNode paper_in_nodes[PAPER_NODES] = {{0, 0}, {0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 2}, {6, 3}};
+static const CritEdge paper_in_edges[PAPER_EDGES] = {{0, 0}, {1, 2}, {2, 3}, {2, 4}, {0, 1}, {4, 6}, {3, 5}, {4, 7}, {5, 8}};
+static const uint32_t paper_level_nodes[PAPER_NODES] = {0, 1, 2, 3, 4, 5, 6};
+static const uint32_t paper_level_offsets[PAPER_LEVELS] = {0, 1, 2, 3, 5, 6};
+static const uint32_t paper_level_sizes[PAPER_LEVELS] = {1, 1, 1, 2, 1, 1};
+static const GraphSpec paper_graph = {PAPER_NODES, PAPER_EDGES, PAPER_LEVELS, paper_out_nodes, paper_out_edges, paper_in_nodes, paper_in_edges, paper_level_nodes, paper_level_offsets, paper_level_sizes};
 
 static int check_base_mode(Harness *h, uint32_t mode, const char *name)
 {
@@ -460,6 +474,93 @@ static int check_base_mode(Harness *h, uint32_t mode, const char *name)
 	return failures;
 }
 
+static int check_nppc_paper_oracle(Harness *h)
+{
+	if (harness_upload_graph(h, &paper_graph) || harness_run(h, &paper_graph, CRIT_WEIGHT_NPPC))
+		return 1;
+	float lnw[PAPER_NODES];
+	float lnx[PAPER_NODES];
+	float height[PAPER_NODES];
+	float depth[PAPER_NODES];
+	unsigned char result_bytes[sizeof(CritResultHeader) + sizeof(uint32_t) * (PAPER_EDGES + 3 * PAPER_NODES)];
+	if (download(h, BUF_LNW, lnw, sizeof(lnw)) || download(h, BUF_LNX, lnx, sizeof(lnx)) || download(h, BUF_HEIGHT, height, sizeof(height)) || download(h, BUF_DEPTH, depth, sizeof(depth)) || download(h, BUF_RESULT, result_bytes, sizeof(result_bytes)))
+		return 1;
+
+	static const float expected_lnw[PAPER_NODES] = {0.0f, 0.69314718056f, 1.09861228867f, 1.38629436112f, 1.38629436112f, 1.60943791243f, 1.94591014906f};
+	static const float expected_lnx[PAPER_NODES] = {1.94591014906f, 1.79175946923f, 1.60943791243f, 0.69314718056f, 1.09861228867f, 0.69314718056f, 0.0f};
+	static const float expected_height[PAPER_NODES] = {0.0f, 6.0f, 16.0f, 22.0f, 25.0f, 33.0f, 38.0f};
+	static const float expected_depth[PAPER_NODES] = {38.0f, 32.0f, 22.0f, 4.0f, 13.0f, 5.0f, 0.0f};
+	static const float expected_weights[PAPER_EDGES] = {6.0f, 2.0f, 10.0f, 6.0f, 9.0f, 4.0f, 8.0f, 4.0f, 5.0f};
+	static const char *arc_names[PAPER_EDGES] = {"3->5", "3->21", "5->12", "12->15", "12->20", "15->22", "20->21", "20->22", "21->22"};
+	static const uint32_t expected_predecessors[PAPER_NODES] = {UINT32_MAX, 0, 1, 2, 2, 4, 5};
+	static const uint32_t expected_basket[PAPER_NODES] = {1, 1, 1, 0, 1, 1, 1};
+	static const uint32_t expected_path[PAPER_NODES] = {1, 1, 1, 0, 1, 1, 1};
+
+	CritResultHeader *header = (CritResultHeader *)result_bytes;
+	uint32_t *data = (uint32_t *)(result_bytes + sizeof(*header));
+	int failures = 0;
+	failures += check_float_array("NPPC lnW", lnw, expected_lnw, PAPER_NODES);
+	failures += check_float_array("NPPC lnX", lnx, expected_lnx, PAPER_NODES);
+	failures += check_float_array("NPPC height", height, expected_height, PAPER_NODES);
+	failures += check_float_array("NPPC depth", depth, expected_depth, PAPER_NODES);
+	for (uint32_t e = 0; e < PAPER_EDGES; e++) {
+		float weight = bits_float(data[crit_result_weight_offset() + e]);
+		if (fabsf(weight - expected_weights[e]) > TOLERANCE) {
+			fprintf(stderr, "NPPC %s: got %.6f expected %.6f\n", arc_names[e], (double)weight, (double)expected_weights[e]);
+			failures++;
+		}
+	}
+	failures += check_uint_array("NPPC predecessor", data + crit_result_predecessor_offset(PAPER_EDGES), expected_predecessors, PAPER_NODES);
+	failures += check_uint_array("NPPC basket", data + crit_result_basket_offset(PAPER_EDGES, PAPER_NODES), expected_basket, PAPER_NODES);
+	failures += check_uint_array("NPPC path", data + crit_result_path_offset(PAPER_EDGES, PAPER_NODES), expected_path, PAPER_NODES);
+	if (header->status != 0 || fabsf(bits_float(header->criticality_max_bits) - 38.0f) > TOLERANCE || fabsf(bits_float(header->sink_height_bits) - 38.0f) > TOLERANCE || header->sink_node != 6) {
+		fprintf(stderr, "NPPC paper oracle header mismatch\n");
+		failures++;
+	}
+	printf("NPPC 1989 paper oracle: %s\n", failures == 0 ? "ok" : "failed");
+	return failures;
+}
+
+static int check_reachability_sizing(void)
+{
+	int failures = 0;
+	if (crit_reachability_word_count(7) != 1 || crit_reachability_buffer_size(7) != 28)
+		failures++;
+	if (crit_reachability_word_count(33) != 2 || crit_reachability_buffer_size(33) != 264)
+		failures++;
+	if (!crit_reachability_fits(33, 264) || crit_reachability_fits(33, 263))
+		failures++;
+	printf("NPPC reachability sizing: %s\n", failures == 0 ? "ok" : "failed");
+	return failures;
+}
+
+static int check_nppc_chain_parallel(Harness *h)
+{
+	static const CritNode out_nodes[4] = {{0, 2}, {2, 1}, {3, 1}, {4, 0}};
+	static const CritEdge out_edges[4] = {{1, 0}, {1, 1}, {2, 2}, {3, 3}};
+	static const CritNode in_nodes[4] = {{0, 0}, {0, 2}, {2, 1}, {3, 1}};
+	static const CritEdge in_edges[4] = {{0, 0}, {0, 1}, {1, 2}, {2, 3}};
+	static const uint32_t levels[4] = {0, 1, 2, 3};
+	static const uint32_t offsets[4] = {0, 1, 2, 3};
+	static const uint32_t sizes[4] = {1, 1, 1, 1};
+	GraphSpec graph = {4, 4, 4, out_nodes, out_edges, in_nodes, in_edges, levels, offsets, sizes};
+	if (harness_upload_graph(h, &graph) || harness_run(h, &graph, CRIT_WEIGHT_NPPC))
+		return 1;
+	unsigned char bytes[sizeof(CritResultHeader) + sizeof(uint32_t) * 16];
+	if (download(h, BUF_RESULT, bytes, sizeof(bytes)))
+		return 1;
+	uint32_t *data = (uint32_t *)(bytes + sizeof(CritResultHeader));
+	static const float expected[4] = {3.0f, 3.0f, 4.0f, 3.0f};
+	int failures = 0;
+	for (uint32_t e = 0; e < 4; e++) {
+		float weight = bits_float(data[crit_result_weight_offset() + e]);
+		if (fabsf(weight - expected[e]) > TOLERANCE)
+			failures++;
+	}
+	printf("NPPC chain and parallel edges: %s\n", failures == 0 ? "ok" : "failed");
+	return failures;
+}
+
 static int check_zero_weight_tie(Harness *h)
 {
 	static const CritNode out_nodes[3] = {{0, 1}, {1, 1}, {2, 0}};
@@ -506,6 +607,15 @@ static int check_empty_edges(Harness *h)
 	if (header->status != 0 || header->sink_node != 0)
 		failures++;
 	printf("empty-edge sink tie: %s\n", failures == 0 ? "ok" : "failed");
+	if (harness_run(h, &graph, CRIT_WEIGHT_NPPC) || download(h, BUF_RESULT, bytes, sizeof(bytes)))
+		return failures + 1;
+	header = (CritResultHeader *)bytes;
+	data = (uint32_t *)(bytes + sizeof(*header));
+	failures += check_uint_array("empty NPPC basket", data + crit_result_basket_offset(0, 2), expected_basket, 2);
+	failures += check_uint_array("empty NPPC path", data + crit_result_path_offset(0, 2), expected_path, 2);
+	if (header->status != 0 || header->sink_node != 0)
+		failures++;
+	printf("empty-edge NPPC tie: %s\n", failures == 0 ? "ok" : "failed");
 	return failures;
 }
 
@@ -581,6 +691,9 @@ int main(void)
 	failures += check_base_mode(&harness, CRIT_WEIGHT_UNIT, "Unit");
 	failures += check_base_mode(&harness, CRIT_WEIGHT_SPC, "SPC");
 	failures += check_base_mode(&harness, CRIT_WEIGHT_SPE, "SPE");
+	failures += check_nppc_paper_oracle(&harness);
+	failures += check_reachability_sizing();
+	failures += check_nppc_chain_parallel(&harness);
 	failures += check_zero_weight_tie(&harness);
 	failures += check_empty_edges(&harness);
 	failures += check_overflow(&harness, CRIT_WEIGHT_SPLC, "SPLC");

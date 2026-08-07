@@ -121,6 +121,11 @@ void *compute_main_path_spe(ExecutionContext *ctx)
 	return main_path_prepare_weighting(ctx, CRIT_WEIGHT_SPE, "spe");
 }
 
+void *compute_main_path_nppc(ExecutionContext *ctx)
+{
+	return main_path_prepare_weighting(ctx, CRIT_WEIGHT_NPPC, "nppc");
+}
+
 void free_main_path_prep(void *result_data)
 {
 	MainPathPrep *prep = result_data;
@@ -186,6 +191,11 @@ void *compute_main_path_unit_basket(ExecutionContext *ctx)
 	return main_path_load_selection(ctx, "unit", "basket");
 }
 
+void *compute_main_path_nppc_basket(ExecutionContext *ctx)
+{
+	return main_path_load_selection(ctx, "nppc", "basket");
+}
+
 void *compute_main_path_splc_path(ExecutionContext *ctx)
 {
 	return main_path_load_selection(ctx, "splc", "path");
@@ -204,6 +214,11 @@ void *compute_main_path_spe_path(ExecutionContext *ctx)
 void *compute_main_path_unit_path(ExecutionContext *ctx)
 {
 	return main_path_load_selection(ctx, "unit", "path");
+}
+
+void *compute_main_path_nppc_path(ExecutionContext *ctx)
+{
+	return main_path_load_selection(ctx, "nppc", "path");
 }
 
 void apply_main_path_selection(ExecutionContext *ctx, void *result_data)

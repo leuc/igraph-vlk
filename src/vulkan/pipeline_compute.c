@@ -35,7 +35,8 @@ void renderer_create_compute_pipelines(Renderer *r)
 // Bindings 5-8: lnW, lnX, height, depth
 // Binding 9: shared live edge presentation state
 // Binding 10: packed analysis, predecessor, and selection result
-#define CRIT_BINDING_COUNT 11
+// Binding 11: NPPC reachability bitsets
+#define CRIT_BINDING_COUNT 12
 
 void renderer_create_criticality_compute_pipeline(Renderer *r)
 {

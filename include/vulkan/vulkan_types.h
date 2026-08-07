@@ -380,6 +380,8 @@ typedef struct
 	VkDeviceMemory height_memory;
 	VkBuffer depth_buffer;
 	VkDeviceMemory depth_memory;
+	VkBuffer reachability_buffer;
+	VkDeviceMemory reachability_memory;
 	VkBuffer result_buffer;
 	VkDeviceMemory result_memory;
 

@@ -5,6 +5,7 @@
 
 #include "vulkan/buffers.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,19 +24,59 @@ uint32_t find_memory_type(VkPhysicalDevice physicalDevice, uint32_t typeFilter, 
 	return 0;
 }
 
-void create_buffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer, VkDeviceMemory *bufferMemory)
+static bool try_find_memory_type(VkPhysicalDevice physical_device, uint32_t type_filter, VkMemoryPropertyFlags properties, uint32_t *memory_type)
 {
+	VkPhysicalDeviceMemoryProperties memory_properties;
+	vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
+	for (uint32_t i = 0; i < memory_properties.memoryTypeCount; i++) {
+		if ((type_filter & (1u << i)) && (memory_properties.memoryTypes[i].propertyFlags & properties) == properties) {
+			*memory_type = i;
+			return true;
+		}
+	}
+	return false;
+}
+
+VkResult try_create_buffer(VkDevice device, VkPhysicalDevice physical_device, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory)
+{
+	*buffer = VK_NULL_HANDLE;
+	*buffer_memory = VK_NULL_HANDLE;
 	VkBufferCreateInfo bufferInfo = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size, .usage = usage, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
-	VK_CHECK(vkCreateBuffer(device, &bufferInfo, NULL, buffer), "Failed to create buffer");
+	VkResult result = vkCreateBuffer(device, &bufferInfo, NULL, buffer);
+	if (result != VK_SUCCESS)
+		return result;
 	VkMemoryRequirements memReqs;
 	vkGetBufferMemoryRequirements(device, *buffer, &memReqs);
 	VkPhysicalDeviceProperties props;
-	vkGetPhysicalDeviceProperties(physicalDevice, &props);
+	vkGetPhysicalDeviceProperties(physical_device, &props);
 	VkDeviceSize atomSize = props.limits.nonCoherentAtomSize;
 	VkDeviceSize allocSize = VK_ALIGN_UP(memReqs.size, atomSize);
-	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = find_memory_type(physicalDevice, memReqs.memoryTypeBits, properties)};
-	VK_CHECK(vkAllocateMemory(device, &allocInfo, NULL, bufferMemory), "Failed to allocate buffer memory");
-	VK_CHECK(vkBindBufferMemory(device, *buffer, *bufferMemory, 0), "Failed to bind buffer memory");
+	uint32_t memory_type;
+	if (!try_find_memory_type(physical_device, memReqs.memoryTypeBits, properties, &memory_type)) {
+		vkDestroyBuffer(device, *buffer, NULL);
+		*buffer = VK_NULL_HANDLE;
+		return VK_ERROR_FEATURE_NOT_PRESENT;
+	}
+	VkMemoryAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = allocSize, .memoryTypeIndex = memory_type};
+	result = vkAllocateMemory(device, &allocInfo, NULL, buffer_memory);
+	if (result != VK_SUCCESS) {
+		vkDestroyBuffer(device, *buffer, NULL);
+		*buffer = VK_NULL_HANDLE;
+		return result;
+	}
+	result = vkBindBufferMemory(device, *buffer, *buffer_memory, 0);
+	if (result != VK_SUCCESS) {
+		vkFreeMemory(device, *buffer_memory, NULL);
+		vkDestroyBuffer(device, *buffer, NULL);
+		*buffer_memory = VK_NULL_HANDLE;
+		*buffer = VK_NULL_HANDLE;
+	}
+	return result;
+}
+
+void create_buffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer, VkDeviceMemory *bufferMemory)
+{
+	VK_CHECK(try_create_buffer(device, physicalDevice, size, usage, properties, buffer, bufferMemory), "Failed to create buffer");
 }
 
 void update_buffer(VkDevice device, VkDeviceMemory memory, VkDeviceSize size, const void *data)

@@ -19,9 +19,10 @@
  *   height max weight of any path source -> v       eq. 2.12
  *   depth  max weight of any path v -> sink         eq. 2.13
  *
- * SPLC and Unit use the forward count sweep. SPC and SPE also use the reverse
- * sweep. The remaining result stages run together after the final visible
- * sweep.
+ * SPLC and Unit use the forward count sweep. SPC, SPE, and NPPC also use the
+ * reverse sweep. NPPC replaces path-count recurrence with exact predecessor
+ * and successor reachability sets. The remaining result stages run together
+ * after the final visible sweep.
  */
 
 /**
@@ -30,7 +31,7 @@
  * @param graph       Graph data; must be a DAG (caller's responsibility)
  * @param levels      Per-node level from calculate_dag_levels(), size n
  * @param num_levels  max_level + 1
- * @param weight_mode CRIT_WEIGHT_SPLC, CRIT_WEIGHT_UNIT, CRIT_WEIGHT_SPC, or CRIT_WEIGHT_SPE
+ * @param weight_mode CRIT_WEIGHT_SPLC, CRIT_WEIGHT_UNIT, CRIT_WEIGHT_SPC, CRIT_WEIGHT_SPE, or CRIT_WEIGHT_NPPC
  * @return true on success
  */
 bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igraph_vector_int_t *levels, int num_levels, uint32_t weight_mode);

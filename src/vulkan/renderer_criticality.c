@@ -126,6 +126,7 @@ void renderer_destroy_criticality_buffers(Renderer *r)
 	crit_destroy_buffer(device, &ctx->lnx_buffer, &ctx->lnx_memory);
 	crit_destroy_buffer(device, &ctx->height_buffer, &ctx->height_memory);
 	crit_destroy_buffer(device, &ctx->depth_buffer, &ctx->depth_memory);
+	crit_destroy_buffer(device, &ctx->reachability_buffer, &ctx->reachability_memory);
 	crit_destroy_buffer(device, &ctx->result_buffer, &ctx->result_memory);
 	free(ctx->level_offsets);
 	free(ctx->level_sizes);
@@ -150,12 +151,12 @@ static void crit_write_descriptors(Renderer *r)
 {
 	CritComputeContext *ctx = &r->crit;
 	VkDescriptorBufferInfo infos[] = {
-		{ctx->out_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->out_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->level_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnw_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnx_buffer, 0, VK_WHOLE_SIZE}, {ctx->height_buffer, 0, VK_WHOLE_SIZE}, {ctx->depth_buffer, 0, VK_WHOLE_SIZE}, {r->anim.edge_buffer, 0, VK_WHOLE_SIZE}, {ctx->result_buffer, 0, VK_WHOLE_SIZE},
+		{ctx->out_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->out_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->level_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnw_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnx_buffer, 0, VK_WHOLE_SIZE}, {ctx->height_buffer, 0, VK_WHOLE_SIZE}, {ctx->depth_buffer, 0, VK_WHOLE_SIZE}, {r->anim.edge_buffer, 0, VK_WHOLE_SIZE}, {ctx->result_buffer, 0, VK_WHOLE_SIZE}, {ctx->reachability_buffer, 0, VK_WHOLE_SIZE},
 	};
-	VkWriteDescriptorSet writes[11];
-	for (uint32_t i = 0; i < 11; i++)
+	VkWriteDescriptorSet writes[12];
+	for (uint32_t i = 0; i < 12; i++)
 		writes[i] = VK_WRITE_DESC_BUFFER(r->descriptors.crit_set, i, &infos[i], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-	vkUpdateDescriptorSets(r->core.device, 11, writes, 0, NULL);
+	vkUpdateDescriptorSets(r->core.device, 12, writes, 0, NULL);
 }
 
 bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igraph_vector_int_t *levels, int num_levels, uint32_t weight_mode)
@@ -216,6 +217,34 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 	VkDeviceSize in_edge_size = sizeof(CritEdge) * (in_edge_count > 0 ? in_edge_count : 1);
 	VkDeviceSize level_size = sizeof(uint32_t) * (size_t)n;
 	VkDeviceSize value_size = sizeof(float) * (size_t)n;
+	VkDeviceSize reachability_size = weight_mode == CRIT_WEIGHT_NPPC ? crit_reachability_buffer_size((uint32_t)n) : sizeof(uint32_t);
+	if (weight_mode == CRIT_WEIGHT_NPPC && !crit_reachability_fits((uint32_t)n, r->core.deviceProperties.limits.maxStorageBufferRange)) {
+		fprintf(stderr, "[Main Path] NPPC requires %llu bytes of reachability storage, exceeding the device limit of %u bytes\n", (unsigned long long)reachability_size, r->core.deviceProperties.limits.maxStorageBufferRange);
+		free(zeros);
+		free(result_bytes);
+		free(out_nodes);
+		free(out_edges);
+		free(in_nodes);
+		free(in_edges);
+		free(permutation);
+		renderer_destroy_criticality_buffers(r);
+		return false;
+	}
+	VkResult reachability_result = try_create_buffer(device, physical, reachability_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &ctx->reachability_buffer, &ctx->reachability_memory);
+	if (reachability_result != VK_SUCCESS) {
+		fprintf(stderr, "[Main Path] unable to allocate %llu bytes for the reachability binding (VkResult %d)\n", (unsigned long long)reachability_size, reachability_result);
+		free(zeros);
+		free(result_bytes);
+		free(out_nodes);
+		free(out_edges);
+		free(in_nodes);
+		free(in_edges);
+		free(permutation);
+		renderer_destroy_criticality_buffers(r);
+		return false;
+	}
+	if (weight_mode == CRIT_WEIGHT_NPPC)
+		printf("[MainPath] NPPC reachability storage: %llu bytes (%.2f MiB), nodes=%u, words-per-node=%zu\n", (unsigned long long)reachability_size, (double)reachability_size / (1024.0 * 1024.0), ctx->node_count, crit_reachability_word_count(ctx->node_count));
 	VK_CREATE_HOST_BUFFER(device, physical, node_size, usage, &ctx->out_nodes_buffer, &ctx->out_nodes_memory);
 	VK_CREATE_HOST_BUFFER(device, physical, out_edge_size, usage, &ctx->out_edges_buffer, &ctx->out_edges_memory);
 	VK_CREATE_HOST_BUFFER(device, physical, node_size, usage, &ctx->in_nodes_buffer, &ctx->in_nodes_memory);
@@ -361,7 +390,7 @@ void renderer_dispatch_main_path_weight_level(Renderer *r, VkCommandBuffer comma
 	if (ctx->stage == CRIT_STAGE_LNW) {
 		ctx->current_level++;
 		if (ctx->current_level == ctx->num_levels) {
-			if (ctx->weight_mode == CRIT_WEIGHT_SPC || ctx->weight_mode == CRIT_WEIGHT_SPE) {
+			if (ctx->weight_mode == CRIT_WEIGHT_SPC || ctx->weight_mode == CRIT_WEIGHT_SPE || ctx->weight_mode == CRIT_WEIGHT_NPPC) {
 				ctx->stage = CRIT_STAGE_LNX;
 				ctx->current_level = ctx->num_levels - 1;
 			} else {
@@ -390,7 +419,20 @@ static void *crit_copy_memory(Renderer *r, VkDeviceMemory memory, VkDeviceSize s
 
 static const char *crit_method_name(uint32_t weight_mode)
 {
-	return weight_mode == CRIT_WEIGHT_SPLC ? "splc" : (weight_mode == CRIT_WEIGHT_UNIT ? "unit" : (weight_mode == CRIT_WEIGHT_SPC ? "spc" : "spe"));
+	switch (weight_mode) {
+	case CRIT_WEIGHT_SPLC:
+		return "splc";
+	case CRIT_WEIGHT_UNIT:
+		return "unit";
+	case CRIT_WEIGHT_SPC:
+		return "spc";
+	case CRIT_WEIGHT_SPE:
+		return "spe";
+	case CRIT_WEIGHT_NPPC:
+		return "nppc";
+	default:
+		return "unknown";
+	}
 }
 
 static float crit_float_from_bits(uint32_t bits)

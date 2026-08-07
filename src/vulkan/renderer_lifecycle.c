@@ -186,6 +186,8 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->crit.height_memory = VK_NULL_HANDLE;
 	r->crit.depth_buffer = VK_NULL_HANDLE;
 	r->crit.depth_memory = VK_NULL_HANDLE;
+	r->crit.reachability_buffer = VK_NULL_HANDLE;
+	r->crit.reachability_memory = VK_NULL_HANDLE;
 	r->crit.result_buffer = VK_NULL_HANDLE;
 	r->crit.result_memory = VK_NULL_HANDLE;
 	r->crit.level_offsets = NULL;
