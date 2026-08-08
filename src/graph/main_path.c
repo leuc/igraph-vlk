@@ -571,6 +571,34 @@ void *compute_main_path_nppc_network(ExecutionContext *ctx)
 	return main_path_search_tag(result, "nppc", "network");
 }
 
+// Valued network (Hummon & Carley 1993, https://doi.org/10.1016/0378-8733(93)90022-D, p.93 --
+// their own case study used >=25 of an observed max of 80, i.e. ~31%, an explicitly arbitrary
+// cutoff, not a rule; relative to the observed max, not to node_count -- see
+// main_path_search_valued_network's doc comment for why)
+
+#define MAIN_PATH_VALUED_NETWORK_THRESHOLD_FRACTION 0.3
+
+void *compute_main_path_splc_valued_network(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "splc", &in))
+		return NULL;
+	MainPathSelectionResult *result = main_path_search_valued_network(in.graph, &in.weights, in.node_count, in.edge_count, MAIN_PATH_VALUED_NETWORK_THRESHOLD_FRACTION);
+	main_path_search_free_inputs(&in);
+	if (result) {
+		uint32_t flagged = 0;
+		float max_tie_frequency = 0.0f;
+		for (uint32_t v = 0; v < result->node_count; v++)
+			if (result->flags[v])
+				flagged++;
+		for (uint32_t e = 0; e < result->edge_count; e++)
+			if (result->strengths[e] > max_tie_frequency)
+				max_tie_frequency = result->strengths[e];
+		fprintf(stderr, "[Main Path] valued network (splc): %u/%u nodes flagged, max tie frequency %.0f, threshold %.1f (%.0f%% of max) over %u sampled paths\n", flagged, result->node_count, max_tie_frequency, MAIN_PATH_VALUED_NETWORK_THRESHOLD_FRACTION * max_tie_frequency, MAIN_PATH_VALUED_NETWORK_THRESHOLD_FRACTION * 100.0, result->node_count);
+	}
+	return main_path_search_tag(result, "splc", "valued_network");
+}
+
 void apply_main_path_selection(ExecutionContext *ctx, void *result_data)
 {
 	MainPathSelectionResult *result = result_data;

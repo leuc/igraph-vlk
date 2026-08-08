@@ -264,3 +264,85 @@ MainPathSelectionResult *main_path_search_network(const igraph_t *graph, const i
 	free(flags);
 	return result;
 }
+
+MainPathSelectionResult *main_path_search_valued_network(const igraph_t *graph, const igraph_vector_t *weights, uint32_t node_count, uint32_t edge_count, double threshold_fraction)
+{
+	igraph_vector_t tie_frequency;
+	if (igraph_vector_init(&tie_frequency, edge_count) != IGRAPH_SUCCESS)
+		return NULL;
+	igraph_vector_null(&tie_frequency);
+
+	igraph_vector_int_t out_edges;
+	if (igraph_vector_int_init(&out_edges, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(&tie_frequency);
+		return NULL;
+	}
+
+	igraph_rng_t *rng = igraph_rng_default();
+	bool ok = true;
+	for (uint32_t start = 0; start < node_count && ok; start++) {
+		igraph_integer_t current = (igraph_integer_t)start;
+		for (;;) {
+			if (igraph_incident(graph, &out_edges, current, IGRAPH_OUT, IGRAPH_LOOPS) != IGRAPH_SUCCESS) {
+				ok = false;
+				break;
+			}
+			igraph_integer_t out_degree = igraph_vector_int_size(&out_edges);
+			if (out_degree == 0)
+				break;
+
+			double total_weight = 0.0;
+			for (igraph_integer_t i = 0; i < out_degree; i++)
+				total_weight += VECTOR(*weights)[VECTOR(out_edges)[i]];
+
+			double r = igraph_rng_get_unif(rng, 0.0, total_weight);
+			double cumulative = 0.0;
+			igraph_integer_t selected = VECTOR(out_edges)[out_degree - 1];
+			for (igraph_integer_t i = 0; i < out_degree; i++) {
+				igraph_integer_t e = VECTOR(out_edges)[i];
+				cumulative += VECTOR(*weights)[e];
+				if (r <= cumulative) {
+					selected = e;
+					break;
+				}
+			}
+
+			VECTOR(tie_frequency)[selected] += 1.0;
+			current = IGRAPH_TO(graph, selected);
+		}
+	}
+	igraph_vector_int_destroy(&out_edges);
+	if (!ok) {
+		igraph_vector_destroy(&tie_frequency);
+		return NULL;
+	}
+
+	// Threshold relative to the max tie frequency actually observed in this run, not to
+	// node_count: on a broad/large DAG, probability mass disperses across many parallel edges
+	// instead of concentrating, so the achievable max stays small regardless of graph size --
+	// a fixed fraction of node_count can demand more than any edge could ever reach. Matches
+	// main_path_search_multiple's tolerance_pct, which is likewise relative to the current step's
+	// observed max, not to any global graph-size-derived quantity.
+	double max_tie_frequency = 0.0;
+	for (uint32_t e = 0; e < edge_count; e++)
+		if (VECTOR(tie_frequency)[e] > max_tie_frequency)
+			max_tie_frequency = VECTOR(tie_frequency)[e];
+	double threshold = threshold_fraction * max_tie_frequency;
+	bool *flags = calloc(node_count > 0 ? node_count : 1, sizeof(bool));
+	if (!flags) {
+		igraph_vector_destroy(&tie_frequency);
+		return NULL;
+	}
+	for (uint32_t e = 0; e < edge_count; e++) {
+		double freq = VECTOR(tie_frequency)[e];
+		if (freq <= 0.0 || freq < threshold)
+			continue;
+		flags[IGRAPH_FROM(graph, e)] = true;
+		flags[IGRAPH_TO(graph, e)] = true;
+	}
+
+	MainPathSelectionResult *result = main_path_search_alloc_result(&tie_frequency, flags, node_count, edge_count);
+	free(flags);
+	igraph_vector_destroy(&tie_frequency);
+	return result;
+}

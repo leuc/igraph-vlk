@@ -148,6 +148,7 @@ const CommandDef g_command_registry[] = {
 	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Link Count (SPLC)", "main_path_splc_multiple", "Multiple (20%)", compute_main_path_splc_multiple, apply_main_path_selection, free_main_path_selection},
 	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Link Count (SPLC)", "main_path_splc_key_route", "Key-Route (K=10)", compute_main_path_splc_key_route, apply_main_path_selection, free_main_path_selection},
 	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Link Count (SPLC)", "main_path_splc_network", "Network", compute_main_path_splc_network, apply_main_path_selection, free_main_path_selection},
+	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Link Count (SPLC)", "main_path_splc_valued_network", "Valued Network (Hummon & Carley 1993)", compute_main_path_splc_valued_network, apply_main_path_selection, free_main_path_selection},
 
 	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Count (SPC)", "main_path_spc_local", "Local", compute_main_path_spc_local, apply_main_path_selection, free_main_path_selection},
 	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Count (SPC)", "main_path_spc_backward_local", "Backward Local", compute_main_path_spc_backward_local, apply_main_path_selection, free_main_path_selection},

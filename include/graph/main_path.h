@@ -63,6 +63,9 @@ void *compute_main_path_spe_network(ExecutionContext *ctx);
 void *compute_main_path_unit_network(ExecutionContext *ctx);
 void *compute_main_path_nppc_network(ExecutionContext *ctx);
 
+// Valued network (Hummon & Carley 1993) -- SPLC-only, see main_path_search.h
+void *compute_main_path_splc_valued_network(ExecutionContext *ctx);
+
 void apply_main_path_selection(ExecutionContext *ctx, void *result_data);
 void free_main_path_selection(void *result_data);
 

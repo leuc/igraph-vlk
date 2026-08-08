@@ -56,4 +56,35 @@ MainPathSelectionResult *main_path_search_key_route(const igraph_t *graph, const
 // graph, using that source's own best outgoing arc(s) rather than a single graph-wide winner.
 MainPathSelectionResult *main_path_search_network(const igraph_t *graph, const igraph_vector_t *weights, const igraph_vector_t *strengths, uint32_t node_count, uint32_t edge_count);
 
+// Hummon, N.P. & Carley, K. (1993), "Social networks as normal science," Social Networks 15(1),
+// 71-106, https://doi.org/10.1016/0378-8733(93)90022-D, pp. 82-84, 93-94. SPLC-only by design (see
+// compute_main_path_splc_valued_network in main_path.c) -- this method is intrinsically paired with
+// Hummon & Doreian (1989)'s exhaustive-search-tree tie-frequency weighting (Sedgewick 1983, ch.39),
+// which is what this app's SPLC Step-1 weighting already computes via a polynomial topological-order
+// DP (Batagelj 2003) equivalent to that exhaustive enumeration.
+//
+// From every node, repeatedly choose one outgoing edge with probability proportional to its weight
+// (a uniform random draw against the relative cumulative distribution of outgoing weights, p.82)
+// until a sink is reached -- one sampled main path per node. Accumulates tie frequency: how many of
+// the node_count sampled paths traverse each edge. Keeps only ties with tie frequency >=
+// threshold_fraction * (the max tie frequency actually observed in this run) -- relative to the
+// observed max, not to node_count or edge_count: on a broad/large DAG, probability mass disperses
+// across many parallel edges instead of concentrating, so the achievable max stays small regardless
+// of graph size, and a threshold derived from graph size rather than the observed max can end up
+// unreachable by any edge. Matches main_path_search_multiple's tolerance_pct, which is likewise
+// relative to the current step's own observed max. Their own case study's cutoff (>=25 of an
+// observed max of 80, i.e. ~31%) is stated as arbitrary, not a rule -- exposed as a caller parameter
+// here, matching this file's tolerance_pct/num_seeds parameters, and flags both endpoints of every
+// surviving tie. Own engineering choice: the source
+// additionally links surviving ties into separately-labeled connected components ("main path
+// structures") for interpretive grouping (p.93-94); MainPathSelectionResult's flags has no slot for
+// a component id, so that grouping is not representable here and is dropped -- the flagged node set
+// itself (the union of all structures) is unaffected. result->strengths is tie frequency, not a
+// pass-through of the input weights unlike the other search variants in this file -- tie frequency
+// is the paper's own key statistic ("the tie frequency measures the size of tributaries," p.83).
+// Endpoint frequency (p.83) is part of the paper's Stage 2 bookkeeping but is not computed here:
+// nothing in this function's output consumes it (own scoping choice, consistent with dropping
+// component-id labeling above).
+MainPathSelectionResult *main_path_search_valued_network(const igraph_t *graph, const igraph_vector_t *weights, uint32_t node_count, uint32_t edge_count, double threshold_fraction);
+
 #endif

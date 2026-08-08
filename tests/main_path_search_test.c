@@ -60,6 +60,129 @@ static void check_flags(const MainPathSelectionResult *result, const char *label
 	}
 }
 
+// Conservation invariant (derived here, not sourced): a DAG walk never revisits a node, so for
+// every node with at least one outgoing edge, the number of sampled walks passing through it (1
+// for its own originating walk, plus however many arrive via an inbound tie) always continues
+// onward via exactly one outbound tie. Holds regardless of the RNG's random draws, so this is
+// checkable without seeding it.
+static void check_tie_frequency_conservation(const igraph_t *graph, const MainPathSelectionResult *result, const char *label, uint32_t node_count)
+{
+	if (!result) {
+		fprintf(stderr, "main_path_search_test: FAILED: %s: result is NULL\n", label);
+		g_failures++;
+		return;
+	}
+	igraph_vector_int_t incident;
+	if (igraph_vector_int_init(&incident, 0) != IGRAPH_SUCCESS) {
+		g_failures++;
+		return;
+	}
+	for (uint32_t v = 0; v < node_count; v++) {
+		double outflow = 0.0, inflow = 0.0;
+		if (igraph_incident(graph, &incident, (igraph_integer_t)v, IGRAPH_OUT, IGRAPH_LOOPS) != IGRAPH_SUCCESS) {
+			g_failures++;
+			continue;
+		}
+		igraph_integer_t out_degree = igraph_vector_int_size(&incident);
+		for (igraph_integer_t i = 0; i < out_degree; i++)
+			outflow += result->strengths[VECTOR(incident)[i]];
+		if (igraph_incident(graph, &incident, (igraph_integer_t)v, IGRAPH_IN, IGRAPH_LOOPS) != IGRAPH_SUCCESS) {
+			g_failures++;
+			continue;
+		}
+		igraph_integer_t in_degree = igraph_vector_int_size(&incident);
+		for (igraph_integer_t i = 0; i < in_degree; i++)
+			inflow += result->strengths[VECTOR(incident)[i]];
+		if (out_degree == 0)
+			continue;
+		if (outflow != 1.0 + inflow) {
+			fprintf(stderr, "main_path_search_test: FAILED: %s: node %u outflow=%g inflow=%g\n", label, v, outflow, inflow);
+			g_failures++;
+		}
+	}
+	igraph_vector_int_destroy(&incident);
+}
+
+// Valued network (Hummon & Carley 1993) chain graph: no branching means the probabilistic
+// selection never actually has a choice to make, so tie frequency is exactly hand-computable.
+// S=0 A=1 B=2 T=3 with S->A->B->T. Every node is a walk-origin (node_count=4 walks): the walk from
+// S uses all 3 edges, from A uses the last 2, from B uses the last 1, from T terminates immediately
+// (T has no outgoing edges). tie_frequency: S->A=1, A->B=2, B->T=3.
+static void test_valued_network_chain_graph(void)
+{
+	igraph_t graph;
+	if (igraph_small(&graph, 4, IGRAPH_DIRECTED, 0, 1, 1, 2, 2, 3, -1) != IGRAPH_SUCCESS) {
+		g_failures++;
+		return;
+	}
+	igraph_vector_t weights;
+	if (igraph_vector_init(&weights, 3) != IGRAPH_SUCCESS) {
+		igraph_destroy(&graph);
+		g_failures++;
+		return;
+	}
+	for (int e = 0; e < 3; e++)
+		VECTOR(weights)[e] = 1.0;
+
+	// threshold_fraction=0.0: every edge with any usage (all three) survives -- every node flagged.
+	MainPathSelectionResult *all = main_path_search_valued_network(&graph, &weights, 4, 3, 0.0);
+	const int all_expected[] = {0, 1, 2, 3};
+	check_flags(all, "valued network chain threshold=0 flags everything used", all_expected, 4, 4);
+	if (all) {
+		check(all->strengths[0] == 1.0f, "valued network chain tie frequency S->A == 1");
+		check(all->strengths[1] == 2.0f, "valued network chain tie frequency A->B == 2");
+		check(all->strengths[2] == 3.0f, "valued network chain tie frequency B->T == 3");
+	}
+	main_path_cache_selection_free(all);
+
+	// threshold_fraction=0.5 -> threshold=0.5*max(3)=1.5: only A->B (2) and B->T (3) reach it;
+	// S->A (1) does not.
+	MainPathSelectionResult *half = main_path_search_valued_network(&graph, &weights, 4, 3, 0.5);
+	const int half_expected[] = {1, 2, 3};
+	check_flags(half, "valued network chain threshold=0.5 drops the weakest tie", half_expected, 3, 4);
+	main_path_cache_selection_free(half);
+
+	// threshold_fraction=1.1 -> threshold=1.1*max(3)=3.3, exceeding the max frequency actually
+	// observed (no edge can be used by more walks than the strictly-decreasing walk count along
+	// this chain, so 3 is the ceiling here): nothing survives.
+	MainPathSelectionResult *none = main_path_search_valued_network(&graph, &weights, 4, 3, 1.1);
+	check_flags(none, "valued network chain threshold>1.0 flags nothing", NULL, 0, 4);
+	main_path_cache_selection_free(none);
+
+	igraph_vector_destroy(&weights);
+	igraph_destroy(&graph);
+}
+
+// Conservation invariants (see check_tie_frequency_conservation) on the baseline toy DAG below,
+// valid regardless of the RNG's random draws.
+static void test_valued_network_conservation(void)
+{
+	igraph_t graph;
+	if (igraph_small(&graph, 6, IGRAPH_DIRECTED, 0, 1, 1, 3, 3, 5, 0, 2, 2, 4, 4, 5, -1) != IGRAPH_SUCCESS) {
+		g_failures++;
+		return;
+	}
+	const double w[6] = {10, 3, 3, 6, 9, 9};
+	igraph_vector_t weights;
+	if (igraph_vector_init(&weights, 6) != IGRAPH_SUCCESS) {
+		igraph_destroy(&graph);
+		g_failures++;
+		return;
+	}
+	for (int e = 0; e < 6; e++)
+		VECTOR(weights)[e] = w[e];
+
+	MainPathSelectionResult *result = main_path_search_valued_network(&graph, &weights, 6, 6, 0.0);
+	check_tie_frequency_conservation(&graph, result, "valued network baseline conservation", 6);
+	if (result)
+		for (uint32_t e = 0; e < 6; e++)
+			check(result->strengths[e] >= 0.0f && result->strengths[e] <= 6.0f, "valued network baseline tie frequency in [0, node_count]");
+	main_path_cache_selection_free(result);
+
+	igraph_vector_destroy(&weights);
+	igraph_destroy(&graph);
+}
+
 // Baseline toy DAG (path-search-variants.md's own worked example):
 //   S->A 10   A->C 3   C->T 3
 //   S->B 6    B->D 9   D->T 9
@@ -196,6 +319,8 @@ int main(void)
 	test_baseline_graph();
 	test_key_route_divergence_graph();
 	test_multiple_tolerance_graph();
+	test_valued_network_chain_graph();
+	test_valued_network_conservation();
 
 	if (g_failures != 0) {
 		fprintf(stderr, "main_path_search_test: %d failures\n", g_failures);
