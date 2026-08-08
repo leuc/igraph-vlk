@@ -296,7 +296,7 @@ add_test(NAME picking_test COMMAND picking_test)
 # Headless Vulkan test for shaders/main_path.comp (arXiv:2512.12355 §2.5).
 # Compute-only, so it needs no window or surface — any Vulkan ICD will do,
 # including the lavapipe software rasterizer.
-add_executable(criticality_test tests/criticality_test.c)
+add_executable(criticality_test tests/criticality_test.c tests/criticality_test_harness.c)
 add_dependencies(criticality_test shaders)
 target_include_directories(criticality_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${Vulkan_INCLUDE_DIRS})
 target_compile_definitions(criticality_test PRIVATE CRITICALITY_TEST_SHADER_PATH="${CMAKE_BINARY_DIR}/shaders/main_path.comp.spv")
