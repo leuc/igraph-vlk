@@ -13,6 +13,7 @@
 #include "graph/graph_color.h"
 #include "graph/graph_core.h"
 #include "graph/main_path_cache.h"
+#include "graph/main_path_search.h"
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_criticality.h"
@@ -247,6 +248,313 @@ void *compute_main_path_unit_path(ExecutionContext *ctx)
 void *compute_main_path_nppc_path(ExecutionContext *ctx)
 {
 	return main_path_load_selection(ctx, "nppc", "path");
+}
+
+// Loaded inputs shared by every Local/Backward-Local/Multiple/Key-Route/Network selection below
+// (Liu & Lu 2012 variants not covered by the GPU-computed Global/Basket selections above): the
+// graph plus its already-cached main-path-weight-{method}/main-path-strength-{method} edges.
+// Unlike Basket/Optimal Path, these selections are recomputed fresh on every call rather than
+// cached as attributes (see main_path_search.h).
+typedef struct
+{
+	igraph_vector_t weights;
+	igraph_vector_t strengths;
+	igraph_t *graph;
+	uint32_t node_count;
+	uint32_t edge_count;
+} MainPathSearchInputs;
+
+static bool main_path_search_load_inputs(ExecutionContext *ctx, const char *method, MainPathSearchInputs *inputs)
+{
+	if (!ctx || !ctx->app_state || !ctx->app_state->current_graph.graph_initialized)
+		return false;
+	GraphData *graph = &ctx->app_state->current_graph;
+	if (igraph_vector_init(&inputs->weights, 0) != IGRAPH_SUCCESS)
+		return false;
+	if (igraph_vector_init(&inputs->strengths, 0) != IGRAPH_SUCCESS) {
+		igraph_vector_destroy(&inputs->weights);
+		return false;
+	}
+	if (!main_path_cache_load_weight_and_strength(&graph->g, method, graph->edge_count, &inputs->weights, &inputs->strengths)) {
+		igraph_vector_destroy(&inputs->strengths);
+		igraph_vector_destroy(&inputs->weights);
+		return false;
+	}
+	inputs->graph = &graph->g;
+	inputs->node_count = graph->node_count;
+	inputs->edge_count = graph->edge_count;
+	return true;
+}
+
+static void main_path_search_free_inputs(MainPathSearchInputs *inputs)
+{
+	igraph_vector_destroy(&inputs->strengths);
+	igraph_vector_destroy(&inputs->weights);
+}
+
+// Local main path
+
+void *compute_main_path_splc_local(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "splc", &in))
+		return NULL;
+	void *result = main_path_search_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_spc_local(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "spc", &in))
+		return NULL;
+	void *result = main_path_search_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_spe_local(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "spe", &in))
+		return NULL;
+	void *result = main_path_search_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_unit_local(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "unit", &in))
+		return NULL;
+	void *result = main_path_search_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_nppc_local(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "nppc", &in))
+		return NULL;
+	void *result = main_path_search_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+// Backward local main path
+
+void *compute_main_path_splc_backward_local(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "splc", &in))
+		return NULL;
+	void *result = main_path_search_backward_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_spc_backward_local(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "spc", &in))
+		return NULL;
+	void *result = main_path_search_backward_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_spe_backward_local(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "spe", &in))
+		return NULL;
+	void *result = main_path_search_backward_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_unit_backward_local(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "unit", &in))
+		return NULL;
+	void *result = main_path_search_backward_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_nppc_backward_local(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "nppc", &in))
+		return NULL;
+	void *result = main_path_search_backward_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+// Multiple main paths (20% tolerance -- Liu & Lu 2012's own case-study value, p.535)
+
+#define MAIN_PATH_MULTIPLE_TOLERANCE_PCT 20.0
+
+void *compute_main_path_splc_multiple(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "splc", &in))
+		return NULL;
+	void *result = main_path_search_multiple(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_MULTIPLE_TOLERANCE_PCT);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_spc_multiple(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "spc", &in))
+		return NULL;
+	void *result = main_path_search_multiple(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_MULTIPLE_TOLERANCE_PCT);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_spe_multiple(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "spe", &in))
+		return NULL;
+	void *result = main_path_search_multiple(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_MULTIPLE_TOLERANCE_PCT);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_unit_multiple(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "unit", &in))
+		return NULL;
+	void *result = main_path_search_multiple(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_MULTIPLE_TOLERANCE_PCT);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_nppc_multiple(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "nppc", &in))
+		return NULL;
+	void *result = main_path_search_multiple(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_MULTIPLE_TOLERANCE_PCT);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+// Key-route main path (K=10 -- matches Jiang & Liu 2023's applied use of key-route search,
+// https://doi.org/10.1002/asi.24748 S4.2.2)
+
+#define MAIN_PATH_KEY_ROUTE_SEEDS 10
+
+void *compute_main_path_splc_key_route(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "splc", &in))
+		return NULL;
+	void *result = main_path_search_key_route(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_KEY_ROUTE_SEEDS);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_spc_key_route(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "spc", &in))
+		return NULL;
+	void *result = main_path_search_key_route(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_KEY_ROUTE_SEEDS);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_spe_key_route(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "spe", &in))
+		return NULL;
+	void *result = main_path_search_key_route(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_KEY_ROUTE_SEEDS);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_unit_key_route(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "unit", &in))
+		return NULL;
+	void *result = main_path_search_key_route(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_KEY_ROUTE_SEEDS);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_nppc_key_route(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "nppc", &in))
+		return NULL;
+	void *result = main_path_search_key_route(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_KEY_ROUTE_SEEDS);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+// Network of main paths
+
+void *compute_main_path_splc_network(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "splc", &in))
+		return NULL;
+	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_spc_network(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "spc", &in))
+		return NULL;
+	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_spe_network(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "spe", &in))
+		return NULL;
+	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_unit_network(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "unit", &in))
+		return NULL;
+	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
+}
+
+void *compute_main_path_nppc_network(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "nppc", &in))
+		return NULL;
+	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return result;
 }
 
 void apply_main_path_selection(ExecutionContext *ctx, void *result_data)

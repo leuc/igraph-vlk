@@ -36,13 +36,36 @@ static bool main_path_cache_load_vertex(const igraph_t *graph, const char *name,
 	return igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_VERTEX, name) && igraph_cattribute_VANV(graph, name, igraph_vss_all(), values) == IGRAPH_SUCCESS;
 }
 
-MainPathSelectionResult *main_path_cache_load_selection(const igraph_t *graph, const char *method, const char *selection, uint32_t node_count, uint32_t edge_count)
+bool main_path_cache_load_weight_and_strength(const igraph_t *graph, const char *method, uint32_t edge_count, igraph_vector_t *weights, igraph_vector_t *strengths)
 {
 	char weight_name[64];
 	char strength_name[64];
-	char flag_name[64];
 	snprintf(weight_name, sizeof(weight_name), "main-path-weight-%s", method);
 	snprintf(strength_name, sizeof(strength_name), "main-path-strength-%s", method);
+	if (!main_path_cache_load_edge(graph, weight_name, weights) || igraph_vector_size(weights) != edge_count) {
+		fprintf(stderr, "[Main Path] Run Weighting first\n");
+		return false;
+	}
+	for (uint32_t e = 0; e < edge_count; e++)
+		if (!isfinite(VECTOR(*weights)[e])) {
+			fprintf(stderr, "[Main Path] %s weighting overflowed; use SPE\n", method);
+			return false;
+		}
+	if (!main_path_cache_load_edge(graph, strength_name, strengths) || igraph_vector_size(strengths) != edge_count) {
+		fprintf(stderr, "[Main Path] Run Weighting first\n");
+		return false;
+	}
+	for (uint32_t e = 0; e < edge_count; e++)
+		if (!isfinite(VECTOR(*strengths)[e]) || VECTOR(*strengths)[e] < 0.0) {
+			fprintf(stderr, "[Main Path] cached presentation strengths are invalid\n");
+			return false;
+		}
+	return true;
+}
+
+MainPathSelectionResult *main_path_cache_load_selection(const igraph_t *graph, const char *method, const char *selection, uint32_t node_count, uint32_t edge_count)
+{
+	char flag_name[64];
 	snprintf(flag_name, sizeof(flag_name), "main-path-%s-%s", selection, method);
 	igraph_vector_t weights;
 	igraph_vector_t strengths;
@@ -58,24 +81,12 @@ MainPathSelectionResult *main_path_cache_load_selection(const igraph_t *graph, c
 		igraph_vector_destroy(&weights);
 		return NULL;
 	}
-	if (!main_path_cache_load_edge(graph, weight_name, &weights) || igraph_vector_size(&weights) != edge_count) {
+	if (!main_path_cache_load_weight_and_strength(graph, method, edge_count, &weights, &strengths))
+		goto fail;
+	if (!main_path_cache_load_vertex(graph, flag_name, &flags) || igraph_vector_size(&flags) != node_count) {
 		fprintf(stderr, "[Main Path] Run Weighting first\n");
 		goto fail;
 	}
-	for (uint32_t e = 0; e < edge_count; e++)
-		if (!isfinite(VECTOR(weights)[e])) {
-			fprintf(stderr, "[Main Path] %s weighting overflowed; use SPE\n", method);
-			goto fail;
-		}
-	if (!main_path_cache_load_edge(graph, strength_name, &strengths) || igraph_vector_size(&strengths) != edge_count || !main_path_cache_load_vertex(graph, flag_name, &flags) || igraph_vector_size(&flags) != node_count) {
-		fprintf(stderr, "[Main Path] Run Weighting first\n");
-		goto fail;
-	}
-	for (uint32_t e = 0; e < edge_count; e++)
-		if (!isfinite(VECTOR(strengths)[e]) || VECTOR(strengths)[e] < 0.0) {
-			fprintf(stderr, "[Main Path] cached presentation strengths are invalid\n");
-			goto fail;
-		}
 	MainPathSelectionResult *result = calloc(1, sizeof(*result));
 	if (result) {
 		result->strengths = malloc(sizeof(float) * (edge_count > 0 ? edge_count : 1));
