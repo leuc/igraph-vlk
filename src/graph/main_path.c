@@ -292,6 +292,20 @@ static void main_path_search_free_inputs(MainPathSearchInputs *inputs)
 	igraph_vector_destroy(&inputs->weights);
 }
 
+// Tags a freshly computed MainPathSelectionResult with the method/selection identity that
+// produced it, so apply_main_path_selection can persist main-path-{selection}-{method}
+// consistently for every selection (not just the GPU-cached Basket/Global Path, which are
+// already tagged inside main_path_cache_load_selection).
+static void *main_path_search_tag(void *result_data, const char *method, const char *selection)
+{
+	MainPathSelectionResult *result = result_data;
+	if (result) {
+		result->method = method;
+		result->selection = selection;
+	}
+	return result_data;
+}
+
 // Local main path
 
 void *compute_main_path_splc_local(ExecutionContext *ctx)
@@ -301,7 +315,7 @@ void *compute_main_path_splc_local(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "splc", "local");
 }
 
 void *compute_main_path_spc_local(ExecutionContext *ctx)
@@ -311,7 +325,7 @@ void *compute_main_path_spc_local(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "spc", "local");
 }
 
 void *compute_main_path_spe_local(ExecutionContext *ctx)
@@ -321,7 +335,7 @@ void *compute_main_path_spe_local(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "spe", "local");
 }
 
 void *compute_main_path_unit_local(ExecutionContext *ctx)
@@ -331,7 +345,7 @@ void *compute_main_path_unit_local(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "unit", "local");
 }
 
 void *compute_main_path_nppc_local(ExecutionContext *ctx)
@@ -341,7 +355,7 @@ void *compute_main_path_nppc_local(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "nppc", "local");
 }
 
 // Backward local main path
@@ -353,7 +367,7 @@ void *compute_main_path_splc_backward_local(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_backward_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "splc", "backward_local");
 }
 
 void *compute_main_path_spc_backward_local(ExecutionContext *ctx)
@@ -363,7 +377,7 @@ void *compute_main_path_spc_backward_local(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_backward_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "spc", "backward_local");
 }
 
 void *compute_main_path_spe_backward_local(ExecutionContext *ctx)
@@ -373,7 +387,7 @@ void *compute_main_path_spe_backward_local(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_backward_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "spe", "backward_local");
 }
 
 void *compute_main_path_unit_backward_local(ExecutionContext *ctx)
@@ -383,7 +397,7 @@ void *compute_main_path_unit_backward_local(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_backward_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "unit", "backward_local");
 }
 
 void *compute_main_path_nppc_backward_local(ExecutionContext *ctx)
@@ -393,7 +407,7 @@ void *compute_main_path_nppc_backward_local(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_backward_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "nppc", "backward_local");
 }
 
 // Multiple main paths (20% tolerance -- Liu & Lu 2012's own case-study value, p.535)
@@ -407,7 +421,7 @@ void *compute_main_path_splc_multiple(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_multiple(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_MULTIPLE_TOLERANCE_PCT);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "splc", "multiple");
 }
 
 void *compute_main_path_spc_multiple(ExecutionContext *ctx)
@@ -417,7 +431,7 @@ void *compute_main_path_spc_multiple(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_multiple(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_MULTIPLE_TOLERANCE_PCT);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "spc", "multiple");
 }
 
 void *compute_main_path_spe_multiple(ExecutionContext *ctx)
@@ -427,7 +441,7 @@ void *compute_main_path_spe_multiple(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_multiple(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_MULTIPLE_TOLERANCE_PCT);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "spe", "multiple");
 }
 
 void *compute_main_path_unit_multiple(ExecutionContext *ctx)
@@ -437,7 +451,7 @@ void *compute_main_path_unit_multiple(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_multiple(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_MULTIPLE_TOLERANCE_PCT);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "unit", "multiple");
 }
 
 void *compute_main_path_nppc_multiple(ExecutionContext *ctx)
@@ -447,7 +461,7 @@ void *compute_main_path_nppc_multiple(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_multiple(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_MULTIPLE_TOLERANCE_PCT);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "nppc", "multiple");
 }
 
 // Key-route main path (K=10 -- matches Jiang & Liu 2023's applied use of key-route search,
@@ -462,7 +476,7 @@ void *compute_main_path_splc_key_route(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_key_route(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_KEY_ROUTE_SEEDS);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "splc", "key_route");
 }
 
 void *compute_main_path_spc_key_route(ExecutionContext *ctx)
@@ -472,7 +486,7 @@ void *compute_main_path_spc_key_route(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_key_route(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_KEY_ROUTE_SEEDS);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "spc", "key_route");
 }
 
 void *compute_main_path_spe_key_route(ExecutionContext *ctx)
@@ -482,7 +496,7 @@ void *compute_main_path_spe_key_route(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_key_route(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_KEY_ROUTE_SEEDS);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "spe", "key_route");
 }
 
 void *compute_main_path_unit_key_route(ExecutionContext *ctx)
@@ -492,7 +506,7 @@ void *compute_main_path_unit_key_route(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_key_route(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_KEY_ROUTE_SEEDS);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "unit", "key_route");
 }
 
 void *compute_main_path_nppc_key_route(ExecutionContext *ctx)
@@ -502,7 +516,7 @@ void *compute_main_path_nppc_key_route(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_key_route(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_KEY_ROUTE_SEEDS);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "nppc", "key_route");
 }
 
 // Network of main paths
@@ -514,7 +528,7 @@ void *compute_main_path_splc_network(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "splc", "network");
 }
 
 void *compute_main_path_spc_network(ExecutionContext *ctx)
@@ -524,7 +538,7 @@ void *compute_main_path_spc_network(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "spc", "network");
 }
 
 void *compute_main_path_spe_network(ExecutionContext *ctx)
@@ -534,7 +548,7 @@ void *compute_main_path_spe_network(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "spe", "network");
 }
 
 void *compute_main_path_unit_network(ExecutionContext *ctx)
@@ -544,7 +558,7 @@ void *compute_main_path_unit_network(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "unit", "network");
 }
 
 void *compute_main_path_nppc_network(ExecutionContext *ctx)
@@ -554,7 +568,7 @@ void *compute_main_path_nppc_network(ExecutionContext *ctx)
 		return NULL;
 	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
-	return result;
+	return main_path_search_tag(result, "nppc", "network");
 }
 
 void apply_main_path_selection(ExecutionContext *ctx, void *result_data)
@@ -600,6 +614,22 @@ void apply_main_path_selection(ExecutionContext *ctx, void *result_data)
 			graph->nodes[v].emphasis = EMPHASIS_DIMMED;
 	renderer->needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(renderer, graph);
+	// Persist main-path-{selection}-{method} for every selection, not just the GPU-cached
+	// Basket/Global Path -- runs on the main thread (apply_ functions, unlike compute_ functions,
+	// never run on the worker thread), so mutating graph->g's cattributes here is safe; doing
+	// this from a compute_ function would race the main thread the way main_path_prepare()'s
+	// worker-thread edge deletion already does (see TODO.md).
+	if (result->method && result->selection) {
+		igraph_vector_int_t flags;
+		if (igraph_vector_int_init(&flags, result->node_count) == IGRAPH_SUCCESS) {
+			for (uint32_t v = 0; v < result->node_count; v++)
+				VECTOR(flags)[v] = result->flags[v];
+			char attr_name[64];
+			snprintf(attr_name, sizeof(attr_name), "main-path-%s-%s", result->selection, result->method);
+			graph_cache_store_vertex_attr_int(&graph->g, attr_name, &flags);
+			igraph_vector_int_destroy(&flags);
+		}
+	}
 }
 
 void free_main_path_selection(void *result_data)

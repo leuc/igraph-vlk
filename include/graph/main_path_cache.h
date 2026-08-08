@@ -16,6 +16,13 @@ typedef struct
 	int *flags;
 	uint32_t node_count;
 	uint32_t edge_count;
+	// Identity of the weighting method/selection that produced this result, e.g. "splc"/"local".
+	// Always a string literal owned by the caller (never freed) -- NULL for callers that don't
+	// need main-path-{selection}-{method} persisted (there are none today; every compute_main_path_*
+	// wrapper sets both, so apply_main_path_selection can persist consistently for every
+	// selection, not just the GPU-cached Basket/Global Path ones).
+	const char *method;
+	const char *selection;
 } MainPathSelectionResult;
 
 void main_path_cache_remove_method(igraph_t *graph, const char *method);

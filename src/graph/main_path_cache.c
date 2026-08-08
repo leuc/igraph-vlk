@@ -98,6 +98,8 @@ MainPathSelectionResult *main_path_cache_load_selection(const igraph_t *graph, c
 	}
 	result->node_count = node_count;
 	result->edge_count = edge_count;
+	result->method = method;
+	result->selection = selection;
 	for (uint32_t e = 0; e < edge_count; e++)
 		result->strengths[e] = (float)VECTOR(strengths)[e];
 	for (uint32_t v = 0; v < node_count; v++)
