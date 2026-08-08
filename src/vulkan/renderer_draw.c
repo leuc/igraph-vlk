@@ -148,9 +148,12 @@ void renderer_draw_frame(Renderer *r, GraphData *graph)
 	VK_CHECK(vkBeginCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame], &VK_CMD_BEGIN_INFO), "Failed to begin command buffer");
 
 	if (r->crit.active) {
-		double now = (double)r->anim.data.time;
-		if (now - r->crit.last_level_time >= r->crit.level_interval)
-			renderer_dispatch_main_path_weight_level(r, r->commands.commandBuffers[r->commands.currentFrame]);
+		renderer_tick_nppc_batch(r);
+		if (!r->crit.nppc_batch_pending) {
+			double now = (double)r->anim.data.time;
+			if (now - r->crit.last_level_time >= r->crit.level_interval)
+				renderer_dispatch_main_path_weight_level(r, r->commands.commandBuffers[r->commands.currentFrame]);
+		}
 	}
 
 	renderer_render_scene(r, r->commands.commandBuffers[r->commands.currentFrame], r->renderPass.renderPass, r->renderPass.framebuffers[imageIndex], r->swapchain.extent, r->ubo.data.view, r->ubo.data.proj, 0, false, (vec3){0}, (vec3){0});

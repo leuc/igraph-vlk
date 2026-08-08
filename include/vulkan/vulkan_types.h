@@ -380,8 +380,13 @@ typedef struct
 	VkDeviceMemory height_memory;
 	VkBuffer depth_buffer;
 	VkDeviceMemory depth_memory;
-	VkBuffer reachability_buffer;
+	VkBuffer reachability_buffer; // NPPC tile scratch: node_count * reachability_tile_word_count uints
 	VkDeviceMemory reachability_memory;
+	VkBuffer total_count_fwd_buffer; // NPPC exact ancestor popcount accumulator, one uint per node
+	VkDeviceMemory total_count_fwd_memory;
+	VkBuffer total_count_rev_buffer; // NPPC exact descendant popcount accumulator, one uint per node
+	VkDeviceMemory total_count_rev_memory;
+	uint32_t reachability_tile_word_count; // chosen NPPC tile width for this run (0 if not NPPC)
 	VkBuffer result_buffer;
 	VkDeviceMemory result_memory;
 
@@ -399,6 +404,14 @@ typedef struct
 	double last_level_time;
 	double level_interval;
 	uint32_t graph_edge_count;
+
+	// NPPC batch accumulation: ticked one tile per frame (renderer_tick_nppc_batch) instead of
+	// blocking the caller, so the app keeps rendering/responding between tiles.
+	bool nppc_batch_pending;
+	uint32_t nppc_batch_tile;
+	uint32_t nppc_batch_tile_count;
+	VkCommandBuffer nppc_batch_command_buffer;
+	VkFence nppc_batch_fence;
 } CritComputeContext;
 
 typedef struct

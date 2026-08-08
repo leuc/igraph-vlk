@@ -10,6 +10,8 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 #define STAGE_REDUCE 5u
 #define STAGE_FLAGS 6u
 #define STAGE_PATH_TRACE 7u
+#define STAGE_NPPC_ACCUMULATE_FWD 8u
+#define STAGE_NPPC_ACCUMULATE_REV 9u
 
 #define WEIGHT_SPLC 0u
 #define WEIGHT_UNIT 1u
@@ -110,7 +112,21 @@ result;
 
 layout(std430, binding = 11) buffer ReachabilityBuffer
 {
+	// One word-tile's worth of columns of the ancestor/descendant bitset: node_count * tile_word_count
+	// uints. Reused for both directions and overwritten every tile pass.
 	uint reachability[];
+};
+
+layout(std430, binding = 12) buffer TotalCountFwdBuffer
+{
+	// Exact running ancestor popcount per node, accumulated across tile passes.
+	uint total_count_fwd[];
+};
+
+layout(std430, binding = 13) buffer TotalCountRevBuffer
+{
+	// Exact running descendant popcount per node, accumulated across tile passes.
+	uint total_count_rev[];
 };
 
 layout(push_constant) uniform Constants
@@ -119,6 +135,8 @@ layout(push_constant) uniform Constants
 	uint num_nodes_in_level;
 	uint stage;
 	uint weight_mode;
+	uint tile_word_offset;
+	uint tile_word_count;
 }
 pc;
 
@@ -186,21 +204,32 @@ void record_projected_animation_edges(uint source, CritNode n)
 	}
 }
 
-void compute_reachability(uint v, bool reverse)
+void accumulate_reachability_tile(uint v, bool reverse)
 {
-	uint words = (result.node_count + 31u) / 32u;
 	CritNode n = reverse ? out_nodes[v] : in_nodes[v];
+	uint self_word = v / 32u;
 	uint count = 0u;
-	for (uint word = 0u; word < words; word++) {
-		uint value = word == v / 32u ? 1u << (v % 32u) : 0u;
+	for (uint word = 0u; word < pc.tile_word_count; word++) {
+		uint global_word = pc.tile_word_offset + word;
+		uint value = global_word == self_word ? 1u << (v % 32u) : 0u;
 		for (uint i = 0u; i < n.degree; i++) {
 			uint adjacent = reverse ? out_edges[n.edge_offset + i].node : in_edges[n.edge_offset + i].node;
-			value |= reachability[adjacent * words + word];
+			value |= reachability[adjacent * pc.tile_word_count + word];
 		}
-		reachability[v * words + word] = value;
+		reachability[v * pc.tile_word_count + word] = value;
 		count += bitCount(value);
 	}
-	float log_count = log(float(count));
+	// Exactly one invocation owns v per (tile, level) dispatch, and tile passes are
+	// barrier/submission-serialized on the host, so this is race-free without an atomic.
+	if (reverse)
+		total_count_rev[v] += count;
+	else
+		total_count_fwd[v] += count;
+}
+
+void finalize_reachability(uint v, bool reverse)
+{
+	float log_count = log(float(reverse ? total_count_rev[v] : total_count_fwd[v]));
 	if (reverse)
 		lnX[v] = log_count;
 	else {
@@ -335,9 +364,17 @@ void main()
 		return;
 
 	uint v = level_nodes[pc.level_offset + idx];
+	if (pc.stage == STAGE_NPPC_ACCUMULATE_FWD) {
+		accumulate_reachability_tile(v, false);
+		return;
+	}
+	if (pc.stage == STAGE_NPPC_ACCUMULATE_REV) {
+		accumulate_reachability_tile(v, true);
+		return;
+	}
 	if (pc.stage == STAGE_LNW) {
 		if (pc.weight_mode == WEIGHT_NPPC) {
-			compute_reachability(v, false);
+			finalize_reachability(v, false);
 			return;
 		}
 		CritNode n = in_nodes[v];
@@ -365,7 +402,7 @@ void main()
 	}
 	if (pc.stage == STAGE_LNX) {
 		if (pc.weight_mode == WEIGHT_NPPC) {
-			compute_reachability(v, true);
+			finalize_reachability(v, true);
 			record_projected_animation_edges(v, out_nodes[v]);
 			return;
 		}

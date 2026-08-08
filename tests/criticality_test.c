@@ -11,7 +11,7 @@
 #include <string.h>
 #include <vulkan/vulkan.h>
 
-#define BINDING_COUNT 12
+#define BINDING_COUNT 14
 #define WORKGROUP_SIZE 64
 #define TOLERANCE 1e-4f
 
@@ -57,9 +57,10 @@ typedef struct
 	VkCommandBuffer command_buffer;
 	VkBuffer buffers[BINDING_COUNT];
 	VkDeviceMemory memories[BINDING_COUNT];
+	uint32_t tile_word_count;
 } Harness;
 
-enum { BUF_OUT_NODES = 0, BUF_OUT_EDGES, BUF_IN_NODES, BUF_IN_EDGES, BUF_LEVELS, BUF_LNW, BUF_LNX, BUF_HEIGHT, BUF_DEPTH, BUF_EDGE_ANIM, BUF_RESULT, BUF_REACHABILITY };
+enum { BUF_OUT_NODES = 0, BUF_OUT_EDGES, BUF_IN_NODES, BUF_IN_EDGES, BUF_LEVELS, BUF_LNW, BUF_LNX, BUF_HEIGHT, BUF_DEPTH, BUF_EDGE_ANIM, BUF_RESULT, BUF_REACHABILITY, BUF_TOTAL_COUNT_FWD, BUF_TOTAL_COUNT_REV };
 
 #define VK_TRY(expression, message) \
 	do { \
@@ -94,9 +95,9 @@ static uint32_t find_memory_type(VkPhysicalDevice physical, uint32_t filter, VkM
 	return UINT32_MAX;
 }
 
-static int create_buffer(Harness *h, uint32_t binding, VkDeviceSize size)
+static int create_buffer(Harness *h, uint32_t binding, VkDeviceSize size, VkBufferUsageFlags usage)
 {
-	VkBufferCreateInfo info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+	VkBufferCreateInfo info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size, .usage = usage, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
 	VK_TRY(vkCreateBuffer(h->device, &info, NULL, &h->buffers[binding]), "vkCreateBuffer");
 	VkMemoryRequirements requirements;
 	vkGetBufferMemoryRequirements(h->device, h->buffers[binding], &requirements);
@@ -246,18 +247,25 @@ static void harness_destroy(Harness *h)
 		vkDestroyInstance(h->instance, NULL);
 }
 
-static int harness_upload_graph(Harness *h, const GraphSpec *graph)
+static int harness_upload_graph(Harness *h, const GraphSpec *graph, size_t nppc_tile_budget_bytes)
 {
 	harness_destroy_graph(h);
+	VkPhysicalDeviceProperties device_properties;
+	vkGetPhysicalDeviceProperties(h->physical, &device_properties);
 	VkDeviceSize node_size = sizeof(CritNode) * graph->node_count;
 	VkDeviceSize edge_size = sizeof(CritEdge) * (graph->edge_count > 0 ? graph->edge_count : 1);
 	VkDeviceSize value_size = sizeof(float) * graph->node_count;
 	VkDeviceSize animation_size = sizeof(EdgeAnimHeader) + sizeof(EdgeAnim) * (graph->edge_count > 0 ? graph->edge_count : 1);
 	VkDeviceSize result_size = crit_result_buffer_size(graph->edge_count, graph->node_count);
-	VkDeviceSize reachability_size = crit_reachability_buffer_size(graph->node_count);
-	VkDeviceSize sizes[BINDING_COUNT] = {node_size, edge_size, node_size, edge_size, sizeof(uint32_t) * graph->node_count, value_size, value_size, value_size, value_size, animation_size, result_size, reachability_size};
+	h->tile_word_count = crit_reachability_tile_word_count(graph->node_count, nppc_tile_budget_bytes, device_properties.limits.maxStorageBufferRange);
+	VkDeviceSize reachability_size = crit_reachability_tile_buffer_size(graph->node_count, h->tile_word_count);
+	VkDeviceSize total_count_size = crit_total_count_buffer_size(graph->node_count);
+	VkDeviceSize sizes[BINDING_COUNT] = {node_size, edge_size, node_size, edge_size, sizeof(uint32_t) * graph->node_count, value_size, value_size, value_size, value_size, animation_size, result_size, reachability_size, total_count_size, total_count_size};
+	VkBufferUsageFlags usages[BINDING_COUNT];
 	for (uint32_t i = 0; i < BINDING_COUNT; i++)
-		if (create_buffer(h, i, sizes[i]) != 0)
+		usages[i] = i == BUF_TOTAL_COUNT_FWD || i == BUF_TOTAL_COUNT_REV ? VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+	for (uint32_t i = 0; i < BINDING_COUNT; i++)
+		if (create_buffer(h, i, sizes[i], usages[i]) != 0)
 			return 1;
 	CritEdge dummy_edge = {0};
 	if (upload(h, BUF_OUT_NODES, graph->out_nodes, node_size) || upload(h, BUF_OUT_EDGES, graph->edge_count > 0 ? graph->out_edges : &dummy_edge, edge_size) || upload(h, BUF_IN_NODES, graph->in_nodes, node_size) || upload(h, BUF_IN_EDGES, graph->edge_count > 0 ? graph->in_edges : &dummy_edge, edge_size) || upload(h, BUF_LEVELS, graph->level_nodes, sizeof(uint32_t) * graph->node_count))
@@ -298,19 +306,50 @@ static int harness_reset_run(Harness *h, const GraphSpec *graph)
 	return failed;
 }
 
-static void dispatch(Harness *h, uint32_t offset, uint32_t count, uint32_t stage, uint32_t mode)
+static void dispatch_tile(Harness *h, uint32_t offset, uint32_t count, uint32_t stage, uint32_t mode, uint32_t tile_word_offset, uint32_t tile_word_count)
 {
 	if (count == 0)
 		return;
-	CritPushConstants constants = {offset, count, stage, mode};
+	CritPushConstants constants = {offset, count, stage, mode, tile_word_offset, tile_word_count};
 	vkCmdPushConstants(h->command_buffer, h->pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(constants), &constants);
 	vkCmdDispatch(h->command_buffer, (count + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1, 1);
+}
+
+static void dispatch(Harness *h, uint32_t offset, uint32_t count, uint32_t stage, uint32_t mode)
+{
+	dispatch_tile(h, offset, count, stage, mode, 0, 0);
 }
 
 static void compute_barrier(Harness *h)
 {
 	VkMemoryBarrier barrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT};
 	vkCmdPipelineBarrier(h->command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &barrier, 0, NULL, 0, NULL);
+}
+
+// Mirrors the tiles-outer/levels-inner batch accumulation renderer_criticality.c performs before
+// its per-frame reveal loop: exact popcounts land in the total_count buffers, consumed by the
+// STAGE_LNW/STAGE_LNX finalize path below exactly as in production.
+static void run_nppc_batch_accumulation(Harness *h, const GraphSpec *graph)
+{
+	vkCmdFillBuffer(h->command_buffer, h->buffers[BUF_TOTAL_COUNT_FWD], 0, VK_WHOLE_SIZE, 0u);
+	vkCmdFillBuffer(h->command_buffer, h->buffers[BUF_TOTAL_COUNT_REV], 0, VK_WHOLE_SIZE, 0u);
+	VkMemoryBarrier fill_barrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT};
+	vkCmdPipelineBarrier(h->command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &fill_barrier, 0, NULL, 0, NULL);
+
+	uint32_t total_words = (uint32_t)crit_reachability_word_count(graph->node_count);
+	uint32_t tile_words = h->tile_word_count;
+	for (uint32_t tile_offset = 0; tile_offset < total_words; tile_offset += tile_words) {
+		uint32_t tile_count = tile_offset + tile_words <= total_words ? tile_words : total_words - tile_offset;
+		for (uint32_t level = 0; level < graph->num_levels; level++) {
+			dispatch_tile(h, graph->level_offsets[level], graph->level_sizes[level], CRIT_STAGE_NPPC_ACCUMULATE_FWD, CRIT_WEIGHT_NPPC, tile_offset, tile_count);
+			compute_barrier(h);
+		}
+		for (uint32_t i = 0; i < graph->num_levels; i++) {
+			uint32_t level = graph->num_levels - 1 - i;
+			dispatch_tile(h, graph->level_offsets[level], graph->level_sizes[level], CRIT_STAGE_NPPC_ACCUMULATE_REV, CRIT_WEIGHT_NPPC, tile_offset, tile_count);
+			compute_barrier(h);
+		}
+	}
 }
 
 static int harness_run(Harness *h, const GraphSpec *graph, uint32_t mode)
@@ -322,6 +361,8 @@ static int harness_run(Harness *h, const GraphSpec *graph, uint32_t mode)
 	VK_TRY(vkBeginCommandBuffer(h->command_buffer, &begin), "vkBeginCommandBuffer");
 	vkCmdBindPipeline(h->command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, h->pipeline);
 	vkCmdBindDescriptorSets(h->command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, h->pipeline_layout, 0, 1, &h->descriptor_set, 0, NULL);
+	if (mode == CRIT_WEIGHT_NPPC)
+		run_nppc_batch_accumulation(h, graph);
 	for (uint32_t level = 0; level < graph->num_levels; level++) {
 		dispatch(h, graph->level_offsets[level], graph->level_sizes[level], CRIT_STAGE_LNW, mode);
 		compute_barrier(h);
@@ -476,7 +517,7 @@ static int check_base_mode(Harness *h, uint32_t mode, const char *name)
 
 static int check_nppc_paper_oracle(Harness *h)
 {
-	if (harness_upload_graph(h, &paper_graph) || harness_run(h, &paper_graph, CRIT_WEIGHT_NPPC))
+	if (harness_upload_graph(h, &paper_graph, CRIT_NPPC_TILE_BUDGET_BYTES) || harness_run(h, &paper_graph, CRIT_WEIGHT_NPPC))
 		return 1;
 	float lnw[PAPER_NODES];
 	float lnx[PAPER_NODES];
@@ -524,13 +565,24 @@ static int check_nppc_paper_oracle(Harness *h)
 static int check_reachability_sizing(void)
 {
 	int failures = 0;
-	if (crit_reachability_word_count(7) != 1 || crit_reachability_buffer_size(7) != 28)
+	size_t generous_budget = (size_t)1024 * 1024 * 1024;
+	if (crit_reachability_word_count(7) != 1)
 		failures++;
-	if (crit_reachability_word_count(33) != 2 || crit_reachability_buffer_size(33) != 264)
+	if (crit_reachability_tile_word_count(7, generous_budget, generous_budget) != 1)
 		failures++;
-	if (!crit_reachability_fits(33, 264) || crit_reachability_fits(33, 263))
+	if (crit_reachability_tile_word_count(33, generous_budget, generous_budget) != 2)
 		failures++;
-	printf("NPPC reachability sizing: %s\n", failures == 0 ? "ok" : "failed");
+	// A budget that only fits one word/node (4*33 bytes) must clamp the tile width to 1, not 2.
+	if (crit_reachability_tile_word_count(33, sizeof(uint32_t) * 33, generous_budget) != 1)
+		failures++;
+	// The device's maxStorageBufferRange must clamp just as the budget does.
+	if (crit_reachability_tile_word_count(33, generous_budget, sizeof(uint32_t) * 33) != 1)
+		failures++;
+	if (crit_reachability_tile_buffer_size(33, 1) != 132 || crit_reachability_tile_buffer_size(33, 2) != 264)
+		failures++;
+	if (crit_total_count_buffer_size(33) != 132)
+		failures++;
+	printf("NPPC reachability tile sizing: %s\n", failures == 0 ? "ok" : "failed");
 	return failures;
 }
 
@@ -544,7 +596,7 @@ static int check_nppc_chain_parallel(Harness *h)
 	static const uint32_t offsets[4] = {0, 1, 2, 3};
 	static const uint32_t sizes[4] = {1, 1, 1, 1};
 	GraphSpec graph = {4, 4, 4, out_nodes, out_edges, in_nodes, in_edges, levels, offsets, sizes};
-	if (harness_upload_graph(h, &graph) || harness_run(h, &graph, CRIT_WEIGHT_NPPC))
+	if (harness_upload_graph(h, &graph, CRIT_NPPC_TILE_BUDGET_BYTES) || harness_run(h, &graph, CRIT_WEIGHT_NPPC))
 		return 1;
 	unsigned char bytes[sizeof(CritResultHeader) + sizeof(uint32_t) * 16];
 	if (download(h, BUF_RESULT, bytes, sizeof(bytes)))
@@ -561,6 +613,80 @@ static int check_nppc_chain_parallel(Harness *h)
 	return failures;
 }
 
+// A 40-node chain forces crit_reachability_word_count() to 2 words, and forcing the tile budget
+// down to one word/node makes crit_reachability_tile_word_count() return 1 — genuinely exercising
+// the tiles-outer/levels-inner multi-pass accumulation (not just the single-tile collapse every
+// other NPPC test above exercises, since all of them have <=32 nodes). For a pure chain 0->1->...->N-1,
+// |R^{inv*}(k)| = k+1 and |R^*(k+1)| = N-1-k, so edge (k, k+1)'s exact NPPC weight is a closed form:
+// (k+1)*(N-1-k), independently checkable without a bitset.
+static int check_nppc_multi_tile(Harness *h)
+{
+	const uint32_t node_count = 40;
+	const uint32_t edge_count = node_count - 1;
+	CritNode *out_nodes = calloc(node_count, sizeof(*out_nodes));
+	CritNode *in_nodes = calloc(node_count, sizeof(*in_nodes));
+	CritEdge *out_edges = calloc(edge_count, sizeof(*out_edges));
+	CritEdge *in_edges = calloc(edge_count, sizeof(*in_edges));
+	uint32_t *levels = malloc(sizeof(*levels) * node_count);
+	uint32_t *offsets = malloc(sizeof(*offsets) * node_count);
+	uint32_t *sizes = malloc(sizeof(*sizes) * node_count);
+	if (!out_nodes || !in_nodes || !out_edges || !in_edges || !levels || !offsets || !sizes) {
+		free(out_nodes);
+		free(in_nodes);
+		free(out_edges);
+		free(in_edges);
+		free(levels);
+		free(offsets);
+		free(sizes);
+		return 1;
+	}
+	for (uint32_t v = 0; v < node_count; v++) {
+		levels[v] = v;
+		offsets[v] = v;
+		sizes[v] = 1;
+		out_nodes[v] = (CritNode){v, v + 1 < node_count ? 1 : 0};
+		in_nodes[v] = (CritNode){v == 0 ? 0 : v - 1, v == 0 ? 0 : 1};
+		if (v + 1 < node_count) {
+			out_edges[v] = (CritEdge){v + 1, v};
+			in_edges[v] = (CritEdge){v, v};
+		}
+	}
+	GraphSpec graph = {node_count, edge_count, node_count, out_nodes, out_edges, in_nodes, in_edges, levels, offsets, sizes};
+	int failures = harness_upload_graph(h, &graph, sizeof(uint32_t)) || harness_run(h, &graph, CRIT_WEIGHT_NPPC);
+	if (!failures && h->tile_word_count != 1) {
+		fprintf(stderr, "multi-tile NPPC: expected tile_word_count=1, got %u\n", h->tile_word_count);
+		failures++;
+	}
+	unsigned char *result = malloc(crit_result_buffer_size(edge_count, node_count));
+	if (!failures && result && !download(h, BUF_RESULT, result, crit_result_buffer_size(edge_count, node_count))) {
+		uint32_t *data = (uint32_t *)(result + sizeof(CritResultHeader));
+		for (uint32_t e = 0; e < edge_count; e++) {
+			float expected = (float)(e + 1) * (float)(node_count - 1 - e);
+			float weight = bits_float(data[crit_result_weight_offset() + e]);
+			// Weights here (up to ~400) are far larger than the other NPPC fixtures (<=10), so the
+			// same relative float32 log/exp round-trip error needs a scale-aware tolerance, not the
+			// fixed absolute TOLERANCE used for small-magnitude checks elsewhere in this file.
+			float scale_tolerance = fmaxf(TOLERANCE, expected * 1e-5f);
+			if (fabsf(weight - expected) > scale_tolerance) {
+				fprintf(stderr, "multi-tile NPPC edge %u: got %.6f expected %.6f\n", e, (double)weight, (double)expected);
+				failures++;
+			}
+		}
+	} else if (!failures) {
+		failures++;
+	}
+	free(result);
+	free(out_nodes);
+	free(in_nodes);
+	free(out_edges);
+	free(in_edges);
+	free(levels);
+	free(offsets);
+	free(sizes);
+	printf("NPPC forced multi-tile chain: %s\n", failures == 0 ? "ok" : "failed");
+	return failures;
+}
+
 static int check_zero_weight_tie(Harness *h)
 {
 	static const CritNode out_nodes[3] = {{0, 1}, {1, 1}, {2, 0}};
@@ -571,7 +697,7 @@ static int check_zero_weight_tie(Harness *h)
 	static const uint32_t offsets[2] = {0, 2};
 	static const uint32_t sizes[2] = {2, 1};
 	GraphSpec graph = {3, 2, 2, out_nodes, out_edges, in_nodes, in_edges, levels, offsets, sizes};
-	if (harness_upload_graph(h, &graph) || harness_run(h, &graph, CRIT_WEIGHT_SPE))
+	if (harness_upload_graph(h, &graph, CRIT_NPPC_TILE_BUDGET_BYTES) || harness_run(h, &graph, CRIT_WEIGHT_SPE))
 		return 1;
 	unsigned char bytes[sizeof(CritResultHeader) + sizeof(uint32_t) * 11];
 	if (download(h, BUF_RESULT, bytes, sizeof(bytes)))
@@ -594,7 +720,7 @@ static int check_empty_edges(Harness *h)
 	static const uint32_t offsets[1] = {0};
 	static const uint32_t sizes[1] = {2};
 	GraphSpec graph = {2, 0, 1, nodes, NULL, nodes, NULL, levels, offsets, sizes};
-	if (harness_upload_graph(h, &graph) || harness_run(h, &graph, CRIT_WEIGHT_UNIT))
+	if (harness_upload_graph(h, &graph, CRIT_NPPC_TILE_BUDGET_BYTES) || harness_run(h, &graph, CRIT_WEIGHT_UNIT))
 		return 1;
 	unsigned char bytes[sizeof(CritResultHeader) + sizeof(uint32_t) * 6];
 	if (download(h, BUF_RESULT, bytes, sizeof(bytes)))
@@ -646,7 +772,7 @@ static int check_overflow(Harness *h, uint32_t mode, const char *name)
 			}
 	}
 	GraphSpec graph = {node_count, edge_count, node_count, out_nodes, out_edges, in_nodes, in_edges, levels, offsets, sizes};
-	int failures = harness_upload_graph(h, &graph) || harness_run(h, &graph, mode);
+	int failures = harness_upload_graph(h, &graph, CRIT_NPPC_TILE_BUDGET_BYTES) || harness_run(h, &graph, mode);
 	unsigned char *result = malloc(crit_result_buffer_size(edge_count, node_count));
 	unsigned char *animation = malloc(sizeof(EdgeAnimHeader) + sizeof(EdgeAnim) * edge_count);
 	if (!failures && result && animation && !download(h, BUF_RESULT, result, crit_result_buffer_size(edge_count, node_count)) && !download(h, BUF_EDGE_ANIM, animation, sizeof(EdgeAnimHeader) + sizeof(EdgeAnim) * edge_count)) {
@@ -682,7 +808,7 @@ int main(void)
 		harness_destroy(&harness);
 		return 1;
 	}
-	if (harness_upload_graph(&harness, &base_graph) != 0) {
+	if (harness_upload_graph(&harness, &base_graph, CRIT_NPPC_TILE_BUDGET_BYTES) != 0) {
 		harness_destroy(&harness);
 		return 1;
 	}
@@ -694,6 +820,7 @@ int main(void)
 	failures += check_nppc_paper_oracle(&harness);
 	failures += check_reachability_sizing();
 	failures += check_nppc_chain_parallel(&harness);
+	failures += check_nppc_multi_tile(&harness);
 	failures += check_zero_weight_tie(&harness);
 	failures += check_empty_edges(&harness);
 	failures += check_overflow(&harness, CRIT_WEIGHT_SPLC, "SPLC");

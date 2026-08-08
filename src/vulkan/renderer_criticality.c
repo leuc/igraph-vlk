@@ -17,6 +17,8 @@
 
 #define CRIT_WORKGROUP_SIZE 64
 
+static void crit_start_nppc_batch(Renderer *r);
+
 static bool crit_build_csr(const igraph_t *g, igraph_integer_t n, igraph_neimode_t mode, CritNode **out_nodes, CritEdge **out_edges, uint32_t *out_edge_count)
 {
 	CritNode *nodes = calloc((size_t)n, sizeof(CritNode));
@@ -103,6 +105,49 @@ static bool crit_build_level_permutation(CritComputeContext *ctx, const igraph_v
 	return true;
 }
 
+// Scale the NPPC reachability tile budget to the actual hardware instead of a fixed constant:
+// use a conservative fraction of the largest device-local heap (leaving headroom for every other
+// buffer/texture/framebuffer the renderer holds), clamped later against maxStorageBufferRange by
+// crit_reachability_tile_word_count. Falls back to CRIT_NPPC_TILE_BUDGET_BYTES if heap detection
+// comes back empty (e.g. an unusual driver reporting no DEVICE_LOCAL heap).
+#define CRIT_NPPC_TILE_HEAP_FRACTION_DIVISOR 4
+
+static size_t crit_nppc_tile_budget_bytes(VkPhysicalDevice physical)
+{
+	VkPhysicalDeviceMemoryProperties memory_properties;
+	vkGetPhysicalDeviceMemoryProperties(physical, &memory_properties);
+	VkDeviceSize largest_device_local_heap = 0;
+	for (uint32_t i = 0; i < memory_properties.memoryHeapCount; i++)
+		if ((memory_properties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0 && memory_properties.memoryHeaps[i].size > largest_device_local_heap)
+			largest_device_local_heap = memory_properties.memoryHeaps[i].size;
+	if (largest_device_local_heap == 0)
+		return CRIT_NPPC_TILE_BUDGET_BYTES;
+	size_t heap_budget = (size_t)(largest_device_local_heap / CRIT_NPPC_TILE_HEAP_FRACTION_DIVISOR);
+	return heap_budget > CRIT_NPPC_TILE_BUDGET_BYTES ? heap_budget : CRIT_NPPC_TILE_BUDGET_BYTES;
+}
+
+// A tile's per-word work is O(edge_count) (one OR per edge per word, both sweep directions), so a
+// wide tile on a large graph can take long enough to execute that it visibly delays that frame's
+// presentation on the same queue, even though nothing blocks the CPU. Vulkan has no portable query
+// for compute throughput, so this is a static, hardware-informed (not measured) estimate: it caps
+// tile width so total per-tile word-work stays under a target GPU-time budget, using device type as
+// a coarse throughput proxy (discrete GPUs get a much larger allowance than integrated/software
+// devices). These throughput constants are deliberately conservative guesses, not benchmarked
+// figures — overall run time isn't a priority here (the reveal animation dominates it regardless),
+// only keeping any single tile from monopolizing the graphics queue long enough to be felt.
+#define CRIT_NPPC_TILE_TARGET_SECONDS 0.2
+#define CRIT_NPPC_DISCRETE_WORD_OPS_PER_SECOND ((double)5e9)
+#define CRIT_NPPC_INTEGRATED_WORD_OPS_PER_SECOND ((double)2e8)
+
+static uint32_t crit_nppc_tile_word_count_by_work(uint32_t edge_count, VkPhysicalDeviceType device_type)
+{
+	double ops_per_second = device_type == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? CRIT_NPPC_DISCRETE_WORD_OPS_PER_SECOND : CRIT_NPPC_INTEGRATED_WORD_OPS_PER_SECOND;
+	double word_budget = ops_per_second * CRIT_NPPC_TILE_TARGET_SECONDS / (double)(edge_count > 0 ? edge_count : 1);
+	if (word_budget < 1.0)
+		word_budget = 1.0;
+	return word_budget > (double)UINT32_MAX ? UINT32_MAX : (uint32_t)word_budget;
+}
+
 static void crit_destroy_buffer(VkDevice device, VkBuffer *buffer, VkDeviceMemory *memory)
 {
 	if (*buffer != VK_NULL_HANDLE)
@@ -117,6 +162,19 @@ void renderer_destroy_criticality_buffers(Renderer *r)
 {
 	CritComputeContext *ctx = &r->crit;
 	VkDevice device = r->core.device;
+	// A tile submitted by renderer_tick_nppc_batch may still be executing on the GPU; wait for it
+	// (at most one tile's worth of work, not the whole batch) before freeing buffers it references.
+	if (ctx->nppc_batch_pending && ctx->nppc_batch_fence != VK_NULL_HANDLE)
+		vkWaitForFences(device, 1, &ctx->nppc_batch_fence, VK_TRUE, UINT64_MAX);
+	if (ctx->nppc_batch_fence != VK_NULL_HANDLE)
+		vkDestroyFence(device, ctx->nppc_batch_fence, NULL);
+	if (ctx->nppc_batch_command_buffer != VK_NULL_HANDLE)
+		vkFreeCommandBuffers(device, r->commands.commandPool, 1, &ctx->nppc_batch_command_buffer);
+	ctx->nppc_batch_fence = VK_NULL_HANDLE;
+	ctx->nppc_batch_command_buffer = VK_NULL_HANDLE;
+	ctx->nppc_batch_pending = false;
+	ctx->nppc_batch_tile = 0;
+	ctx->nppc_batch_tile_count = 0;
 	crit_destroy_buffer(device, &ctx->out_nodes_buffer, &ctx->out_nodes_memory);
 	crit_destroy_buffer(device, &ctx->out_edges_buffer, &ctx->out_edges_memory);
 	crit_destroy_buffer(device, &ctx->in_nodes_buffer, &ctx->in_nodes_memory);
@@ -127,6 +185,8 @@ void renderer_destroy_criticality_buffers(Renderer *r)
 	crit_destroy_buffer(device, &ctx->height_buffer, &ctx->height_memory);
 	crit_destroy_buffer(device, &ctx->depth_buffer, &ctx->depth_memory);
 	crit_destroy_buffer(device, &ctx->reachability_buffer, &ctx->reachability_memory);
+	crit_destroy_buffer(device, &ctx->total_count_fwd_buffer, &ctx->total_count_fwd_memory);
+	crit_destroy_buffer(device, &ctx->total_count_rev_buffer, &ctx->total_count_rev_memory);
 	crit_destroy_buffer(device, &ctx->result_buffer, &ctx->result_memory);
 	free(ctx->level_offsets);
 	free(ctx->level_sizes);
@@ -135,6 +195,7 @@ void renderer_destroy_criticality_buffers(Renderer *r)
 	ctx->num_levels = 0;
 	ctx->node_count = 0;
 	ctx->graph_edge_count = 0;
+	ctx->reachability_tile_word_count = 0;
 	ctx->active = false;
 	ctx->readback_pending = false;
 }
@@ -151,12 +212,12 @@ static void crit_write_descriptors(Renderer *r)
 {
 	CritComputeContext *ctx = &r->crit;
 	VkDescriptorBufferInfo infos[] = {
-		{ctx->out_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->out_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->level_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnw_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnx_buffer, 0, VK_WHOLE_SIZE}, {ctx->height_buffer, 0, VK_WHOLE_SIZE}, {ctx->depth_buffer, 0, VK_WHOLE_SIZE}, {r->anim.edge_buffer, 0, VK_WHOLE_SIZE}, {ctx->result_buffer, 0, VK_WHOLE_SIZE}, {ctx->reachability_buffer, 0, VK_WHOLE_SIZE},
+		{ctx->out_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->out_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_nodes_buffer, 0, VK_WHOLE_SIZE}, {ctx->in_edges_buffer, 0, VK_WHOLE_SIZE}, {ctx->level_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnw_buffer, 0, VK_WHOLE_SIZE}, {ctx->lnx_buffer, 0, VK_WHOLE_SIZE}, {ctx->height_buffer, 0, VK_WHOLE_SIZE}, {ctx->depth_buffer, 0, VK_WHOLE_SIZE}, {r->anim.edge_buffer, 0, VK_WHOLE_SIZE}, {ctx->result_buffer, 0, VK_WHOLE_SIZE}, {ctx->reachability_buffer, 0, VK_WHOLE_SIZE}, {ctx->total_count_fwd_buffer, 0, VK_WHOLE_SIZE}, {ctx->total_count_rev_buffer, 0, VK_WHOLE_SIZE},
 	};
-	VkWriteDescriptorSet writes[12];
-	for (uint32_t i = 0; i < 12; i++)
+	VkWriteDescriptorSet writes[14];
+	for (uint32_t i = 0; i < 14; i++)
 		writes[i] = VK_WRITE_DESC_BUFFER(r->descriptors.crit_set, i, &infos[i], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-	vkUpdateDescriptorSets(r->core.device, 12, writes, 0, NULL);
+	vkUpdateDescriptorSets(r->core.device, 14, writes, 0, NULL);
 }
 
 bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igraph_vector_int_t *levels, int num_levels, uint32_t weight_mode)
@@ -217,9 +278,12 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 	VkDeviceSize in_edge_size = sizeof(CritEdge) * (in_edge_count > 0 ? in_edge_count : 1);
 	VkDeviceSize level_size = sizeof(uint32_t) * (size_t)n;
 	VkDeviceSize value_size = sizeof(float) * (size_t)n;
-	VkDeviceSize reachability_size = weight_mode == CRIT_WEIGHT_NPPC ? crit_reachability_buffer_size((uint32_t)n) : sizeof(uint32_t);
-	if (weight_mode == CRIT_WEIGHT_NPPC && !crit_reachability_fits((uint32_t)n, r->core.deviceProperties.limits.maxStorageBufferRange)) {
-		fprintf(stderr, "[Main Path] NPPC requires %llu bytes of reachability storage, exceeding the device limit of %u bytes\n", (unsigned long long)reachability_size, r->core.deviceProperties.limits.maxStorageBufferRange);
+	VkDeviceSize max_storage_buffer_range = r->core.deviceProperties.limits.maxStorageBufferRange;
+	ctx->reachability_tile_word_count = weight_mode == CRIT_WEIGHT_NPPC ? crit_reachability_tile_word_count((uint32_t)n, crit_nppc_tile_budget_bytes(physical), max_storage_buffer_range) : 0;
+	VkDeviceSize reachability_size = weight_mode == CRIT_WEIGHT_NPPC ? crit_reachability_tile_buffer_size((uint32_t)n, ctx->reachability_tile_word_count) : sizeof(uint32_t);
+	VkDeviceSize total_count_size = weight_mode == CRIT_WEIGHT_NPPC ? crit_total_count_buffer_size((uint32_t)n) : sizeof(uint32_t);
+	if (weight_mode == CRIT_WEIGHT_NPPC && (reachability_size > max_storage_buffer_range || total_count_size > max_storage_buffer_range)) {
+		fprintf(stderr, "[Main Path] NPPC requires at least %llu bytes even at the smallest reachability tile width (node_count=%u), exceeding the device limit of %llu bytes; tiling alone cannot make this graph fit on this device\n", (unsigned long long)reachability_size, ctx->node_count, (unsigned long long)max_storage_buffer_range);
 		free(zeros);
 		free(result_bytes);
 		free(out_nodes);
@@ -229,10 +293,21 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 		free(permutation);
 		renderer_destroy_criticality_buffers(r);
 		return false;
+	}
+	// Feasibility was already established against the memory-derived width above; shrinking it
+	// further for GPU-time reasons can only make it fit more easily, never break feasibility.
+	if (weight_mode == CRIT_WEIGHT_NPPC) {
+		uint32_t work_tile_word_count = crit_nppc_tile_word_count_by_work(ctx->graph_edge_count, r->core.deviceProperties.deviceType);
+		if (work_tile_word_count < ctx->reachability_tile_word_count)
+			ctx->reachability_tile_word_count = work_tile_word_count;
+		reachability_size = crit_reachability_tile_buffer_size((uint32_t)n, ctx->reachability_tile_word_count);
 	}
 	VkResult reachability_result = try_create_buffer(device, physical, reachability_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &ctx->reachability_buffer, &ctx->reachability_memory);
-	if (reachability_result != VK_SUCCESS) {
-		fprintf(stderr, "[Main Path] unable to allocate %llu bytes for the reachability binding (VkResult %d)\n", (unsigned long long)reachability_size, reachability_result);
+	VkBufferUsageFlags total_count_usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	VkResult total_count_fwd_result = reachability_result == VK_SUCCESS ? try_create_buffer(device, physical, total_count_size, total_count_usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &ctx->total_count_fwd_buffer, &ctx->total_count_fwd_memory) : reachability_result;
+	VkResult total_count_rev_result = total_count_fwd_result == VK_SUCCESS ? try_create_buffer(device, physical, total_count_size, total_count_usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &ctx->total_count_rev_buffer, &ctx->total_count_rev_memory) : total_count_fwd_result;
+	if (total_count_rev_result != VK_SUCCESS) {
+		fprintf(stderr, "[Main Path] unable to allocate reachability/total-count storage (VkResult %d)\n", total_count_rev_result);
 		free(zeros);
 		free(result_bytes);
 		free(out_nodes);
@@ -243,8 +318,11 @@ bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igra
 		renderer_destroy_criticality_buffers(r);
 		return false;
 	}
-	if (weight_mode == CRIT_WEIGHT_NPPC)
-		printf("[MainPath] NPPC reachability storage: %llu bytes (%.2f MiB), nodes=%u, words-per-node=%zu\n", (unsigned long long)reachability_size, (double)reachability_size / (1024.0 * 1024.0), ctx->node_count, crit_reachability_word_count(ctx->node_count));
+	if (weight_mode == CRIT_WEIGHT_NPPC) {
+		size_t total_words = crit_reachability_word_count(ctx->node_count);
+		uint32_t tile_count = (uint32_t)((total_words + ctx->reachability_tile_word_count - 1) / ctx->reachability_tile_word_count);
+		printf("[MainPath] NPPC reachability storage: %llu bytes/tile (%.2f MiB), nodes=%u, words-per-node=%zu, tile-words=%u, tiles=%u\n", (unsigned long long)reachability_size, (double)reachability_size / (1024.0 * 1024.0), ctx->node_count, total_words, ctx->reachability_tile_word_count, tile_count);
+	}
 	VK_CREATE_HOST_BUFFER(device, physical, node_size, usage, &ctx->out_nodes_buffer, &ctx->out_nodes_memory);
 	VK_CREATE_HOST_BUFFER(device, physical, out_edge_size, usage, &ctx->out_edges_buffer, &ctx->out_edges_memory);
 	VK_CREATE_HOST_BUFFER(device, physical, node_size, usage, &ctx->in_nodes_buffer, &ctx->in_nodes_memory);
@@ -327,6 +405,11 @@ bool renderer_start_main_path_weighting(Renderer *r, const GraphData *graph, con
 		ctx->level_interval = 0.016;
 	if (!crit_start_animation(r, graph, levels))
 		return false;
+	// Only start submitting NPPC batch tiles once every descriptor write for this run — including
+	// crit_start_animation's rewrite of the shared edge-animation binding — has settled, so no
+	// vkUpdateDescriptorSets ever races a tile's command buffer while it's still pending on the GPU.
+	if (ctx->weight_mode == CRIT_WEIGHT_NPPC)
+		crit_start_nppc_batch(r);
 	ctx->last_level_time = r->anim.data.time - ctx->level_interval;
 	ctx->active = true;
 	printf("[MainPath] start: method=%u levels=%d tick=%.3fs\n", ctx->weight_mode, ctx->num_levels, ctx->level_interval);
@@ -339,14 +422,108 @@ static void crit_compute_barrier(VkCommandBuffer command_buffer, VkPipelineStage
 	vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, destination_stages, 0, 1, &barrier, 0, NULL, 0, NULL);
 }
 
-static void crit_dispatch(Renderer *r, VkCommandBuffer command_buffer, uint32_t offset, uint32_t count, uint32_t stage)
+static void crit_dispatch_tile(Renderer *r, VkCommandBuffer command_buffer, uint32_t offset, uint32_t count, uint32_t stage, uint32_t tile_word_offset, uint32_t tile_word_count)
 {
 	if (count == 0)
 		return;
 	CritComputeContext *ctx = &r->crit;
-	CritPushConstants constants = {.level_offset = offset, .num_nodes_in_level = count, .stage = stage, .weight_mode = ctx->weight_mode};
+	CritPushConstants constants = {.level_offset = offset, .num_nodes_in_level = count, .stage = stage, .weight_mode = ctx->weight_mode, .tile_word_offset = tile_word_offset, .tile_word_count = tile_word_count};
 	vkCmdPushConstants(command_buffer, ctx->pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(constants), &constants);
 	vkCmdDispatch(command_buffer, (count + CRIT_WORKGROUP_SIZE - 1) / CRIT_WORKGROUP_SIZE, 1, 1);
+}
+
+static void crit_dispatch(Renderer *r, VkCommandBuffer command_buffer, uint32_t offset, uint32_t count, uint32_t stage)
+{
+	crit_dispatch_tile(r, command_buffer, offset, count, stage, 0, 0);
+}
+
+// Exact NPPC reachability accumulation, ticked one tile per frame instead of run synchronously to
+// completion (see renderer_tick_nppc_batch). Chunk-outer/level-inner: each word-tile gets a
+// complete forward then reverse topological sweep, accumulating exact popcounts into
+// total_count_fwd/total_count_rev, before the tile scratch buffer is reused for the next tile.
+// Each tile is its own submission (fenced, polled non-blockingly) so no single uninterrupted
+// submission covers more than one tile's worth of GPU work.
+static void crit_record_nppc_tile(Renderer *r, VkCommandBuffer command_buffer, uint32_t tile_offset, uint32_t tile_count, bool zero_accumulators_first)
+{
+	CritComputeContext *ctx = &r->crit;
+	if (zero_accumulators_first) {
+		vkCmdFillBuffer(command_buffer, ctx->total_count_fwd_buffer, 0, VK_WHOLE_SIZE, 0u);
+		vkCmdFillBuffer(command_buffer, ctx->total_count_rev_buffer, 0, VK_WHOLE_SIZE, 0u);
+		VkMemoryBarrier zero_barrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT};
+		vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &zero_barrier, 0, NULL, 0, NULL);
+	}
+	vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, r->pipelines.compute_criticality);
+	vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx->pipeline_layout, 0, 1, &r->descriptors.crit_set, 0, NULL);
+	for (int level = 0; level < ctx->num_levels; level++) {
+		crit_dispatch_tile(r, command_buffer, ctx->level_offsets[level], ctx->level_sizes[level], CRIT_STAGE_NPPC_ACCUMULATE_FWD, tile_offset, tile_count);
+		crit_compute_barrier(command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	}
+	for (int level = ctx->num_levels - 1; level >= 0; level--) {
+		crit_dispatch_tile(r, command_buffer, ctx->level_offsets[level], ctx->level_sizes[level], CRIT_STAGE_NPPC_ACCUMULATE_REV, tile_offset, tile_count);
+		crit_compute_barrier(command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	}
+}
+
+static void crit_submit_nppc_batch_tile(Renderer *r)
+{
+	CritComputeContext *ctx = &r->crit;
+	uint32_t total_words = (uint32_t)crit_reachability_word_count(ctx->node_count);
+	uint32_t tile_words = ctx->reachability_tile_word_count;
+	uint32_t offset = ctx->nppc_batch_tile * tile_words;
+	uint32_t count = offset + tile_words <= total_words ? tile_words : total_words - offset;
+
+	VK_CHECK(vkResetCommandBuffer(ctx->nppc_batch_command_buffer, 0), "Failed to reset NPPC batch command buffer");
+	VK_CHECK(vkBeginCommandBuffer(ctx->nppc_batch_command_buffer, &VK_CMD_BEGIN_INFO_ONETIME), "Failed to begin NPPC batch command buffer");
+	crit_record_nppc_tile(r, ctx->nppc_batch_command_buffer, offset, count, ctx->nppc_batch_tile == 0);
+	VK_CHECK(vkEndCommandBuffer(ctx->nppc_batch_command_buffer), "Failed to end NPPC batch command buffer");
+
+	VK_CHECK(vkResetFences(r->core.device, 1, &ctx->nppc_batch_fence), "Failed to reset NPPC batch fence");
+	VkSubmitInfo submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &ctx->nppc_batch_command_buffer};
+	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 1, &submit, ctx->nppc_batch_fence), "Failed to submit NPPC batch tile");
+	printf("[MainPath] NPPC batch: tile %u/%u submitted (words %u..%u)\n", ctx->nppc_batch_tile + 1, ctx->nppc_batch_tile_count, offset, offset + count);
+}
+
+// Kicks off tile 0; renderer_tick_nppc_batch drives the remaining tiles from the frame loop.
+static void crit_start_nppc_batch(Renderer *r)
+{
+	CritComputeContext *ctx = &r->crit;
+	uint32_t total_words = (uint32_t)crit_reachability_word_count(ctx->node_count);
+	uint32_t tile_words = ctx->reachability_tile_word_count;
+	if (total_words == 0 || tile_words == 0)
+		return;
+
+	VkCommandBufferAllocateInfo alloc_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandPool = r->commands.commandPool, .commandBufferCount = 1};
+	VK_CHECK(vkAllocateCommandBuffers(r->core.device, &alloc_info, &ctx->nppc_batch_command_buffer), "Failed to allocate NPPC batch command buffer");
+	VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+	VK_CHECK(vkCreateFence(r->core.device, &fence_info, NULL, &ctx->nppc_batch_fence), "Failed to create NPPC batch fence");
+
+	ctx->nppc_batch_tile_count = (total_words + tile_words - 1) / tile_words;
+	ctx->nppc_batch_tile = 0;
+	ctx->nppc_batch_pending = true;
+	crit_submit_nppc_batch_tile(r);
+}
+
+void renderer_tick_nppc_batch(Renderer *r)
+{
+	CritComputeContext *ctx = &r->crit;
+	if (!ctx->nppc_batch_pending)
+		return;
+	VkResult status = vkGetFenceStatus(r->core.device, ctx->nppc_batch_fence);
+	if (status == VK_NOT_READY)
+		return; // tile still running on the GPU; render this frame normally and re-check next frame
+	if (status != VK_SUCCESS) {
+		fprintf(stderr, "[Main Path] NPPC batch tile fence error (VkResult %d)\n", status);
+		ctx->nppc_batch_pending = false;
+		return;
+	}
+	ctx->nppc_batch_tile++;
+	if (ctx->nppc_batch_tile >= ctx->nppc_batch_tile_count) {
+		ctx->nppc_batch_pending = false;
+		ctx->last_level_time = r->anim.data.time - ctx->level_interval;
+		printf("[MainPath] NPPC batch: all %u tiles complete\n", ctx->nppc_batch_tile_count);
+		return;
+	}
+	crit_submit_nppc_batch_tile(r);
 }
 
 static void crit_record_postprocess(Renderer *r, VkCommandBuffer command_buffer)

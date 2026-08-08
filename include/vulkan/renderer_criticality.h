@@ -42,6 +42,14 @@ bool renderer_start_main_path_weighting(Renderer *r, const GraphData *graph, con
 /** Record the next forward or reverse level dispatch into a frame command buffer. */
 void renderer_dispatch_main_path_weight_level(Renderer *r, VkCommandBuffer cmd);
 
+/**
+ * Advance the NPPC reachability batch by at most one tile, non-blocking. Call once per frame
+ * while `r->crit.nppc_batch_pending` is true; submits the next tile only once the previous tile's
+ * fence has signaled, so the app keeps rendering and responding between tiles instead of stalling
+ * for the whole batch. No-op when no NPPC batch is pending.
+ */
+void renderer_tick_nppc_batch(Renderer *r);
+
 /** Persist the complete weighting, presentation, Basket, and Optimal Path result. */
 void renderer_readback_main_path_result(Renderer *r, GraphData *graph);
 

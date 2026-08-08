@@ -160,7 +160,35 @@ bool poll_main_path_weighting(ExecutionContext *ctx)
 {
 	if (!ctx || !ctx->app_state)
 		return true;
-	return !ctx->app_state->renderer.crit.active && !ctx->app_state->renderer.crit.readback_pending;
+	AppState *state = ctx->app_state;
+	CritComputeContext *crit = &state->renderer.crit;
+	if (!crit->active && !crit->readback_pending)
+		return true;
+
+	// GPU pipeline, in order: [NPPC reachability tiles] -> [forward/reverse level reveal] ->
+	// [postprocess + readback]. Only NPPC has the batch-tile phase; the reveal phase is one sweep
+	// (SPLC/UNIT) or two (SPC/SPE/NPPC, which also run a reverse sweep) — mirrors poll_bcgl_gpu's
+	// pattern of writing state->job_progress/job_status_message directly from GPU-side counters,
+	// since worker_thread_set_progress is only reachable while the CPU-side worker_func runs.
+	const float postprocess_weight = 0.05f;
+	const float batch_weight = crit->weight_mode == CRIT_WEIGHT_NPPC ? 0.35f : 0.0f;
+	const float reveal_weight = 1.0f - batch_weight - postprocess_weight;
+	bool has_reverse_sweep = crit->weight_mode == CRIT_WEIGHT_SPC || crit->weight_mode == CRIT_WEIGHT_SPE || crit->weight_mode == CRIT_WEIGHT_NPPC;
+	int reveal_total_steps = crit->num_levels > 0 ? (has_reverse_sweep ? crit->num_levels * 2 : crit->num_levels) : 1;
+
+	if (crit->readback_pending) {
+		state->job_progress = 1.0f;
+		snprintf(state->job_status_message, sizeof(state->job_status_message), "main path finishing");
+	} else if (crit->nppc_batch_pending) {
+		uint32_t tile_count = crit->nppc_batch_tile_count > 0 ? crit->nppc_batch_tile_count : 1;
+		state->job_progress = batch_weight * (float)crit->nppc_batch_tile / (float)tile_count;
+		snprintf(state->job_status_message, sizeof(state->job_status_message), "NPPC reachability tile %u/%u", crit->nppc_batch_tile + 1, crit->nppc_batch_tile_count);
+	} else {
+		int reveal_steps_done = crit->stage == CRIT_STAGE_LNW ? crit->current_level : crit->num_levels + (crit->num_levels - 1 - crit->current_level);
+		state->job_progress = batch_weight + reveal_weight * (float)reveal_steps_done / (float)reveal_total_steps;
+		snprintf(state->job_status_message, sizeof(state->job_status_message), "main path %s level %d/%d", crit->stage == CRIT_STAGE_LNW ? "forward" : "reverse", crit->current_level, crit->num_levels - 1);
+	}
+	return false;
 }
 
 static void *main_path_load_selection(ExecutionContext *ctx, const char *method, const char *selection)

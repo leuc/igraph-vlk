@@ -35,8 +35,10 @@ void renderer_create_compute_pipelines(Renderer *r)
 // Bindings 5-8: lnW, lnX, height, depth
 // Binding 9: shared live edge presentation state
 // Binding 10: packed analysis, predecessor, and selection result
-// Binding 11: NPPC reachability bitsets
-#define CRIT_BINDING_COUNT 12
+// Binding 11: NPPC reachability tile scratch (one word-range slice, not the full matrix)
+// Binding 12: NPPC exact ancestor popcount accumulator (forward sweep)
+// Binding 13: NPPC exact descendant popcount accumulator (reverse sweep)
+#define CRIT_BINDING_COUNT 14
 
 void renderer_create_criticality_compute_pipeline(Renderer *r)
 {
