@@ -225,35 +225,35 @@ void *compute_main_path_nppc_basket(ExecutionContext *ctx)
 	return main_path_load_selection(ctx, "nppc", "basket");
 }
 
-void *compute_main_path_splc_path(ExecutionContext *ctx)
+void *compute_main_path_splc_global(ExecutionContext *ctx)
 {
-	return main_path_load_selection(ctx, "splc", "path");
+	return main_path_load_selection(ctx, "splc", "global");
 }
 
-void *compute_main_path_spc_path(ExecutionContext *ctx)
+void *compute_main_path_spc_global(ExecutionContext *ctx)
 {
-	return main_path_load_selection(ctx, "spc", "path");
+	return main_path_load_selection(ctx, "spc", "global");
 }
 
-void *compute_main_path_spe_path(ExecutionContext *ctx)
+void *compute_main_path_spe_global(ExecutionContext *ctx)
 {
-	return main_path_load_selection(ctx, "spe", "path");
+	return main_path_load_selection(ctx, "spe", "global");
 }
 
-void *compute_main_path_unit_path(ExecutionContext *ctx)
+void *compute_main_path_unit_global(ExecutionContext *ctx)
 {
-	return main_path_load_selection(ctx, "unit", "path");
+	return main_path_load_selection(ctx, "unit", "global");
 }
 
-void *compute_main_path_nppc_path(ExecutionContext *ctx)
+void *compute_main_path_nppc_global(ExecutionContext *ctx)
 {
-	return main_path_load_selection(ctx, "nppc", "path");
+	return main_path_load_selection(ctx, "nppc", "global");
 }
 
 // Loaded inputs shared by every Local/Backward-Local/Multiple/Key-Route/Network selection below
 // (Liu & Lu 2012 variants not covered by the GPU-computed Global/Basket selections above): the
 // graph plus its already-cached main-path-weight-{method}/main-path-strength-{method} edges.
-// Unlike Basket/Optimal Path, these selections are recomputed fresh on every call rather than
+// Unlike Basket/Global Path, these selections are recomputed fresh on every call rather than
 // cached as attributes (see main_path_search.h).
 typedef struct
 {

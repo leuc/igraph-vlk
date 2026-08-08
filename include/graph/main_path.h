@@ -22,11 +22,11 @@ void *compute_main_path_spc_basket(ExecutionContext *ctx);
 void *compute_main_path_spe_basket(ExecutionContext *ctx);
 void *compute_main_path_unit_basket(ExecutionContext *ctx);
 void *compute_main_path_nppc_basket(ExecutionContext *ctx);
-void *compute_main_path_splc_path(ExecutionContext *ctx);
-void *compute_main_path_spc_path(ExecutionContext *ctx);
-void *compute_main_path_spe_path(ExecutionContext *ctx);
-void *compute_main_path_unit_path(ExecutionContext *ctx);
-void *compute_main_path_nppc_path(ExecutionContext *ctx);
+void *compute_main_path_splc_global(ExecutionContext *ctx);
+void *compute_main_path_spc_global(ExecutionContext *ctx);
+void *compute_main_path_spe_global(ExecutionContext *ctx);
+void *compute_main_path_unit_global(ExecutionContext *ctx);
+void *compute_main_path_nppc_global(ExecutionContext *ctx);
 
 // Local main path
 void *compute_main_path_splc_local(ExecutionContext *ctx);

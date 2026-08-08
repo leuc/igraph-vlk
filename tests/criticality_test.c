@@ -38,7 +38,7 @@ static const uint32_t paper_level_sizes[PAPER_LEVELS] = {1, 1, 1, 2, 1, 1};
 static const GraphSpec paper_graph = {PAPER_NODES, PAPER_EDGES, PAPER_LEVELS, paper_out_nodes, paper_out_edges, paper_in_nodes, paper_in_edges, paper_level_nodes, paper_level_offsets, paper_level_sizes};
 
 // Runs SPLC/UNIT/SPC/SPE on base_graph and checks lnW/lnX/height/depth/analysis/presentation/
-// predecessor/basket/path/header against hand-derived expected values — the full pipeline for
+// predecessor/basket/global/header against hand-derived expected values — the full pipeline for
 // every non-NPPC weight mode, sharing one small fixture.
 static int check_base_mode(Harness *h, uint32_t mode, const char *name)
 {
@@ -88,7 +88,7 @@ static int check_base_mode(Harness *h, uint32_t mode, const char *name)
 	}
 	static const uint32_t predecessors[BASE_NODES] = {UINT32_MAX, 0, 0, 1, 3, 3, 4, 0};
 	static const uint32_t basket[BASE_NODES] = {1, 1, 1, 1, 1, 1, 1, 0};
-	static const uint32_t path[BASE_NODES] = {1, 1, 0, 1, 1, 0, 1, 0};
+	static const uint32_t expected_global[BASE_NODES] = {1, 1, 0, 1, 1, 0, 1, 0};
 	int failures = 0;
 	failures += check_float_array("lnW", lnw, mode == CRIT_WEIGHT_SPLC ? splc_lnw : regular_lnw, BASE_NODES);
 	failures += check_float_array("lnX", lnx, mode == CRIT_WEIGHT_SPC || mode == CRIT_WEIGHT_SPE ? suffix : zero, BASE_NODES);
@@ -98,7 +98,7 @@ static int check_base_mode(Harness *h, uint32_t mode, const char *name)
 	failures += check_float_array("depth", depth, expected_depth, BASE_NODES);
 	failures += check_uint_array("predecessor", data + crit_result_predecessor_offset(BASE_EDGES), predecessors, BASE_NODES);
 	failures += check_uint_array("basket", data + crit_result_basket_offset(BASE_EDGES, BASE_NODES), basket, BASE_NODES);
-	failures += check_uint_array("path", data + crit_result_path_offset(BASE_EDGES, BASE_NODES), path, BASE_NODES);
+	failures += check_uint_array("global", data + crit_result_global_offset(BASE_EDGES, BASE_NODES), expected_global, BASE_NODES);
 	if (header->status != 0 || fabsf(bits_float(header->criticality_max_bits) - maximum) > TOLERANCE || fabsf(bits_float(header->sink_height_bits) - maximum) > TOLERANCE || header->sink_node != 6 || fabsf(bits_float(animation_header->strength_max_bits) - expected_strength_max) > TOLERANCE) {
 		fprintf(stderr, "%s header mismatch\n", name);
 		failures++;
@@ -129,7 +129,7 @@ static int check_nppc_paper_oracle(Harness *h)
 	static const char *arc_names[PAPER_EDGES] = {"3->5", "3->21", "5->12", "12->15", "12->20", "15->22", "20->21", "20->22", "21->22"};
 	static const uint32_t expected_predecessors[PAPER_NODES] = {UINT32_MAX, 0, 1, 2, 2, 4, 5};
 	static const uint32_t expected_basket[PAPER_NODES] = {1, 1, 1, 0, 1, 1, 1};
-	static const uint32_t expected_path[PAPER_NODES] = {1, 1, 1, 0, 1, 1, 1};
+	static const uint32_t expected_global[PAPER_NODES] = {1, 1, 1, 0, 1, 1, 1};
 
 	CritResultHeader *header = (CritResultHeader *)result_bytes;
 	uint32_t *data = result_data(result_bytes);
@@ -147,7 +147,7 @@ static int check_nppc_paper_oracle(Harness *h)
 	}
 	failures += check_uint_array("NPPC predecessor", data + crit_result_predecessor_offset(PAPER_EDGES), expected_predecessors, PAPER_NODES);
 	failures += check_uint_array("NPPC basket", data + crit_result_basket_offset(PAPER_EDGES, PAPER_NODES), expected_basket, PAPER_NODES);
-	failures += check_uint_array("NPPC path", data + crit_result_path_offset(PAPER_EDGES, PAPER_NODES), expected_path, PAPER_NODES);
+	failures += check_uint_array("NPPC global", data + crit_result_global_offset(PAPER_EDGES, PAPER_NODES), expected_global, PAPER_NODES);
 	if (header->status != 0 || fabsf(bits_float(header->criticality_max_bits) - 38.0f) > TOLERANCE || fabsf(bits_float(header->sink_height_bits) - 38.0f) > TOLERANCE || header->sink_node != 6) {
 		fprintf(stderr, "NPPC paper oracle header mismatch\n");
 		failures++;
@@ -270,8 +270,8 @@ static int check_zero_weight_tie(Harness *h)
 	CritResultHeader *header = (CritResultHeader *)bytes;
 	uint32_t *data = result_data(bytes);
 	uint32_t expected_predecessors[3] = {UINT32_MAX, UINT32_MAX, 1};
-	uint32_t expected_path[3] = {0, 1, 1};
-	int failures = check_uint_array("zero predecessor", data + crit_result_predecessor_offset(2), expected_predecessors, 3) + check_uint_array("zero path", data + crit_result_path_offset(2, 3), expected_path, 3);
+	uint32_t expected_global[3] = {0, 1, 1};
+	int failures = check_uint_array("zero predecessor", data + crit_result_predecessor_offset(2), expected_predecessors, 3) + check_uint_array("zero global", data + crit_result_global_offset(2, 3), expected_global, 3);
 	if (header->status != 0 || header->sink_node != 2)
 		failures++;
 	printf("zero-weight SPE tie: %s\n", failures == 0 ? "ok" : "failed");
@@ -293,8 +293,8 @@ static int check_empty_edges(Harness *h)
 	CritResultHeader *header = (CritResultHeader *)bytes;
 	uint32_t *data = result_data(bytes);
 	uint32_t expected_basket[2] = {1, 1};
-	uint32_t expected_path[2] = {1, 0};
-	int failures = check_uint_array("empty basket", data + crit_result_basket_offset(0, 2), expected_basket, 2) + check_uint_array("empty path", data + crit_result_path_offset(0, 2), expected_path, 2);
+	uint32_t expected_global[2] = {1, 0};
+	int failures = check_uint_array("empty basket", data + crit_result_basket_offset(0, 2), expected_basket, 2) + check_uint_array("empty global", data + crit_result_global_offset(0, 2), expected_global, 2);
 	if (header->status != 0 || header->sink_node != 0)
 		failures++;
 	printf("empty-edge sink tie: %s\n", failures == 0 ? "ok" : "failed");
@@ -303,7 +303,7 @@ static int check_empty_edges(Harness *h)
 	header = (CritResultHeader *)bytes;
 	data = result_data(bytes);
 	failures += check_uint_array("empty NPPC basket", data + crit_result_basket_offset(0, 2), expected_basket, 2);
-	failures += check_uint_array("empty NPPC path", data + crit_result_path_offset(0, 2), expected_path, 2);
+	failures += check_uint_array("empty NPPC global", data + crit_result_global_offset(0, 2), expected_global, 2);
 	if (header->status != 0 || header->sink_node != 0)
 		failures++;
 	printf("empty-edge NPPC tie: %s\n", failures == 0 ? "ok" : "failed");

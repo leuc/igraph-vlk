@@ -50,7 +50,7 @@ void renderer_dispatch_main_path_weight_level(Renderer *r, VkCommandBuffer cmd);
  */
 void renderer_tick_nppc_batch(Renderer *r);
 
-/** Persist the complete weighting, presentation, Basket, and Optimal Path result. */
+/** Persist the complete weighting, presentation, Basket, and Global Path result. */
 void renderer_readback_main_path_result(Renderer *r, GraphData *graph);
 
 /** Release all criticality GPU buffers and host-side level bookkeeping. */

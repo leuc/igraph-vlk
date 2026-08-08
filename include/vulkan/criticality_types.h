@@ -22,7 +22,7 @@ typedef struct
 	uint32_t pad;
 } CritEdge;
 
-typedef enum { CRIT_STAGE_LNW = 0, CRIT_STAGE_LNX = 1, CRIT_STAGE_MATERIALIZE = 2, CRIT_STAGE_HEIGHT = 3, CRIT_STAGE_DEPTH = 4, CRIT_STAGE_REDUCE = 5, CRIT_STAGE_FLAGS = 6, CRIT_STAGE_PATH_TRACE = 7, CRIT_STAGE_NPPC_ACCUMULATE_FWD = 8, CRIT_STAGE_NPPC_ACCUMULATE_REV = 9 } CritStage;
+typedef enum { CRIT_STAGE_LNW = 0, CRIT_STAGE_LNX = 1, CRIT_STAGE_MATERIALIZE = 2, CRIT_STAGE_HEIGHT = 3, CRIT_STAGE_DEPTH = 4, CRIT_STAGE_REDUCE = 5, CRIT_STAGE_FLAGS = 6, CRIT_STAGE_GLOBAL_TRACE = 7, CRIT_STAGE_NPPC_ACCUMULATE_FWD = 8, CRIT_STAGE_NPPC_ACCUMULATE_REV = 9 } CritStage;
 
 typedef enum { CRIT_WEIGHT_SPLC = 0, CRIT_WEIGHT_UNIT = 1, CRIT_WEIGHT_SPC = 2, CRIT_WEIGHT_SPE = 3, CRIT_WEIGHT_NPPC = 4 } CritWeightMode;
 
@@ -69,7 +69,7 @@ static inline size_t crit_result_basket_offset(uint32_t edge_count, uint32_t nod
 	return edge_count + node_count;
 }
 
-static inline size_t crit_result_path_offset(uint32_t edge_count, uint32_t node_count)
+static inline size_t crit_result_global_offset(uint32_t edge_count, uint32_t node_count)
 {
 	return edge_count + 2u * node_count;
 }

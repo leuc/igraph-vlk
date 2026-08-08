@@ -21,7 +21,7 @@ void main_path_cache_remove_method(igraph_t *graph, const char *method)
 	snprintf(name, sizeof(name), "main-path-basket-%s", method);
 	if (igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_VERTEX, name))
 		igraph_cattribute_remove_v(graph, name);
-	snprintf(name, sizeof(name), "main-path-path-%s", method);
+	snprintf(name, sizeof(name), "main-path-global-%s", method);
 	if (igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_VERTEX, name))
 		igraph_cattribute_remove_v(graph, name);
 }

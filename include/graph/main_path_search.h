@@ -12,7 +12,7 @@
 // The five main-path search/selection variants from Liu, J. S., & Lu, L. Y. Y. (2012),
 // "An integrated approach for main path analysis: Development of the Hirsch index as an
 // example," https://doi.org/10.1002/asi.21692, p. 531-532, not covered by the existing
-// GPU-computed Global main path ("Optimal Path") / Basket selections (renderer_criticality.c +
+// GPU-computed Global main path ("Global Path") / Basket selections (renderer_criticality.c +
 // main_path.comp). These run CPU-side on the already-cached
 // main-path-weight-{method}/main-path-strength-{method} edge attributes from Step 1 Weighting
 // (own engineering choice: single greedy/linear sweeps over an already-materialized O(V+E)

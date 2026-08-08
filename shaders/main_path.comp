@@ -9,7 +9,7 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 #define STAGE_DEPTH 4u
 #define STAGE_REDUCE 5u
 #define STAGE_FLAGS 6u
-#define STAGE_PATH_TRACE 7u
+#define STAGE_GLOBAL_TRACE 7u
 #define STAGE_NPPC_ACCUMULATE_FWD 8u
 #define STAGE_NPPC_ACCUMULATE_REV 9u
 
@@ -155,7 +155,7 @@ uint basket_offset()
 	return result.edge_count + result.node_count;
 }
 
-uint path_offset()
+uint global_offset()
 {
 	return result.edge_count + 2u * result.node_count;
 }
@@ -333,7 +333,7 @@ void write_flags(uint v)
 		atomicMin(result.sink_node, v);
 }
 
-void trace_path()
+void trace_global()
 {
 	if (result.status != 0u)
 		return;
@@ -345,7 +345,7 @@ void trace_path()
 			atomicOr(result.status, RESULT_INVALID);
 			return;
 		}
-		result.data[path_offset() + v] = 1u;
+		result.data[global_offset() + v] = 1u;
 		v = result.data[predecessor_offset() + v];
 	}
 	if (v != INVALID_NODE)
@@ -355,9 +355,9 @@ void trace_path()
 void main()
 {
 	uint idx = gl_GlobalInvocationID.x;
-	if (pc.stage == STAGE_PATH_TRACE) {
+	if (pc.stage == STAGE_GLOBAL_TRACE) {
 		if (idx == 0u)
-			trace_path();
+			trace_global();
 		return;
 	}
 	if (idx >= pc.num_nodes_in_level)

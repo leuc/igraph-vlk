@@ -336,7 +336,7 @@ int harness_run(Harness *h, const GraphSpec *graph, uint32_t mode)
 	compute_barrier(h);
 	dispatch(h, 0, graph->node_count, CRIT_STAGE_FLAGS, mode);
 	compute_barrier(h);
-	dispatch(h, 0, 1, CRIT_STAGE_PATH_TRACE, mode);
+	dispatch(h, 0, 1, CRIT_STAGE_GLOBAL_TRACE, mode);
 	VkMemoryBarrier host_barrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_HOST_READ_BIT};
 	vkCmdPipelineBarrier(h->command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &host_barrier, 0, NULL, 0, NULL);
 	VK_TRY(vkEndCommandBuffer(h->command_buffer), "vkEndCommandBuffer");

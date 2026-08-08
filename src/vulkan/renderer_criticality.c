@@ -543,7 +543,7 @@ static void crit_record_postprocess(Renderer *r, VkCommandBuffer command_buffer)
 	crit_compute_barrier(command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 	crit_dispatch(r, command_buffer, 0, ctx->node_count, CRIT_STAGE_FLAGS);
 	crit_compute_barrier(command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-	crit_dispatch(r, command_buffer, 0, 1, CRIT_STAGE_PATH_TRACE);
+	crit_dispatch(r, command_buffer, 0, 1, CRIT_STAGE_GLOBAL_TRACE);
 	VkMemoryBarrier host_barrier = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT, .dstAccessMask = VK_ACCESS_HOST_READ_BIT};
 	vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &host_barrier, 0, NULL, 0, NULL);
 	ctx->readback_pending = true;
@@ -622,19 +622,19 @@ static float crit_float_from_bits(uint32_t bits)
 static void crit_print_readback(const char *method, const CritResultHeader *header, const uint32_t *data, const float *lnw, const float *lnx, const float *height, const float *depth)
 {
 	uint32_t basket_count = 0;
-	uint32_t path_count = 0;
-	uint32_t path_outside_basket = 0;
+	uint32_t global_count = 0;
+	uint32_t global_outside_basket = 0;
 	size_t predecessor_offset = crit_result_predecessor_offset(header->edge_count);
 	size_t basket_offset = crit_result_basket_offset(header->edge_count, header->node_count);
-	size_t path_offset = crit_result_path_offset(header->edge_count, header->node_count);
+	size_t global_offset = crit_result_global_offset(header->edge_count, header->node_count);
 	for (uint32_t v = 0; v < header->node_count; v++) {
 		bool in_basket = data[basket_offset + v] != 0;
-		bool in_path = data[path_offset + v] != 0;
+		bool in_global = data[global_offset + v] != 0;
 		basket_count += in_basket;
-		path_count += in_path;
-		path_outside_basket += in_path && !in_basket;
+		global_count += in_global;
+		global_outside_basket += in_global && !in_basket;
 	}
-	printf("[MainPath] readback: method=%s status=0x%x maximum=%.9g sink=%u sink_height=%.9g basket=%u path=%u path_outside_basket=%u\n", method, header->status, crit_float_from_bits(header->criticality_max_bits), header->sink_node, crit_float_from_bits(header->sink_height_bits), basket_count, path_count, path_outside_basket);
+	printf("[MainPath] readback: method=%s status=0x%x maximum=%.9g sink=%u sink_height=%.9g basket=%u global=%u global_outside_basket=%u\n", method, header->status, crit_float_from_bits(header->criticality_max_bits), header->sink_node, crit_float_from_bits(header->sink_height_bits), basket_count, global_count, global_outside_basket);
 	printf("[MainPath] basket nodes:");
 	uint32_t printed = 0;
 	for (uint32_t v = 0; v < header->node_count; v++)
@@ -642,30 +642,30 @@ static void crit_print_readback(const char *method, const CritResultHeader *head
 			printf(" %u", v);
 	if (basket_count > 128)
 		printf(" ... (%u more)", basket_count - 128);
-	printf("\n[MainPath] optimal path nodes:");
+	printf("\n[MainPath] global path nodes:");
 	printed = 0;
 	for (uint32_t v = 0; v < header->node_count; v++)
-		if (data[path_offset + v] != 0 && printed++ < 128)
+		if (data[global_offset + v] != 0 && printed++ < 128)
 			printf(" %u", v);
-	if (path_count > 128)
-		printf(" ... (%u more)", path_count - 128);
+	if (global_count > 128)
+		printf(" ... (%u more)", global_count - 128);
 	printf("\n");
 	uint32_t detail_count = 0;
 	for (uint32_t v = 0; v < header->node_count && detail_count < 128; v++) {
-		if (data[basket_offset + v] == 0 && data[path_offset + v] == 0)
+		if (data[basket_offset + v] == 0 && data[global_offset + v] == 0)
 			continue;
 		uint32_t predecessor = data[predecessor_offset + v];
 		float slack = crit_float_from_bits(header->criticality_max_bits) - height[v] - depth[v];
 		if (predecessor == UINT32_MAX)
-			printf("[MainPath] node=%u lnW=%.9g lnX=%.9g height=%.9g depth=%.9g slack=%.9g predecessor=none basket=%u path=%u\n", v, lnw[v], lnx[v], height[v], depth[v], slack, data[basket_offset + v], data[path_offset + v]);
+			printf("[MainPath] node=%u lnW=%.9g lnX=%.9g height=%.9g depth=%.9g slack=%.9g predecessor=none basket=%u global=%u\n", v, lnw[v], lnx[v], height[v], depth[v], slack, data[basket_offset + v], data[global_offset + v]);
 		else
-			printf("[MainPath] node=%u lnW=%.9g lnX=%.9g height=%.9g depth=%.9g slack=%.9g predecessor=%u basket=%u path=%u\n", v, lnw[v], lnx[v], height[v], depth[v], slack, predecessor, data[basket_offset + v], data[path_offset + v]);
+			printf("[MainPath] node=%u lnW=%.9g lnX=%.9g height=%.9g depth=%.9g slack=%.9g predecessor=%u basket=%u global=%u\n", v, lnw[v], lnx[v], height[v], depth[v], slack, predecessor, data[basket_offset + v], data[global_offset + v]);
 		detail_count++;
 	}
-	if (basket_count + path_outside_basket > detail_count)
+	if (basket_count + global_outside_basket > detail_count)
 		printf("[MainPath] selected-node detail truncated: showing %u entries\n", detail_count);
-	if (path_outside_basket != 0)
-		fprintf(stderr, "[Main Path] %s invariant failure: Optimal Path is not a subset of Basket\n", method);
+	if (global_outside_basket != 0)
+		fprintf(stderr, "[Main Path] %s invariant failure: Global Path is not a subset of Basket\n", method);
 }
 
 void renderer_readback_main_path_result(Renderer *r, GraphData *graph)
@@ -710,20 +710,20 @@ void renderer_readback_main_path_result(Renderer *r, GraphData *graph)
 	igraph_vector_t weights;
 	igraph_vector_t strengths;
 	igraph_vector_int_t basket;
-	igraph_vector_int_t path;
+	igraph_vector_int_t global;
 	bool weights_ok = igraph_vector_init(&weights, ctx->graph_edge_count) == IGRAPH_SUCCESS;
 	bool strengths_ok = igraph_vector_init(&strengths, ctx->graph_edge_count) == IGRAPH_SUCCESS;
 	bool basket_ok = igraph_vector_int_init(&basket, ctx->node_count) == IGRAPH_SUCCESS;
-	bool path_ok = igraph_vector_int_init(&path, ctx->node_count) == IGRAPH_SUCCESS;
-	if (!weights_ok || !strengths_ok || !basket_ok || !path_ok) {
+	bool global_ok = igraph_vector_int_init(&global, ctx->node_count) == IGRAPH_SUCCESS;
+	if (!weights_ok || !strengths_ok || !basket_ok || !global_ok) {
 		if (weights_ok)
 			igraph_vector_destroy(&weights);
 		if (strengths_ok)
 			igraph_vector_destroy(&strengths);
 		if (basket_ok)
 			igraph_vector_int_destroy(&basket);
-		if (path_ok)
-			igraph_vector_int_destroy(&path);
+		if (global_ok)
+			igraph_vector_int_destroy(&global);
 		free(result_bytes);
 		free(animation_bytes);
 		free(lnw);
@@ -741,17 +741,17 @@ void renderer_readback_main_path_result(Renderer *r, GraphData *graph)
 	}
 	for (uint32_t v = 0; v < ctx->node_count; v++) {
 		VECTOR(basket)[v] = data[crit_result_basket_offset(ctx->graph_edge_count, ctx->node_count) + v];
-		VECTOR(path)[v] = data[crit_result_path_offset(ctx->graph_edge_count, ctx->node_count) + v];
+		VECTOR(global)[v] = data[crit_result_global_offset(ctx->graph_edge_count, ctx->node_count) + v];
 	}
 	char weight_attr[64];
 	char strength_attr[64];
 	char basket_attr[64];
-	char path_attr[64];
+	char global_attr[64];
 	const char *method = crit_method_name(ctx->weight_mode);
 	snprintf(weight_attr, sizeof(weight_attr), "main-path-weight-%s", method);
 	snprintf(strength_attr, sizeof(strength_attr), "main-path-strength-%s", method);
 	snprintf(basket_attr, sizeof(basket_attr), "main-path-basket-%s", method);
-	snprintf(path_attr, sizeof(path_attr), "main-path-path-%s", method);
+	snprintf(global_attr, sizeof(global_attr), "main-path-global-%s", method);
 	if ((header->status & CRIT_RESULT_INVALID) != 0) {
 		fprintf(stderr, "[Main Path] %s result was invalid; cache not published\n", method);
 	} else {
@@ -759,7 +759,7 @@ void renderer_readback_main_path_result(Renderer *r, GraphData *graph)
 		graph_cache_store_edge_attr(&graph->g, strength_attr, &strengths);
 		if ((header->status & CRIT_RESULT_OVERFLOW) == 0) {
 			graph_cache_store_vertex_attr_int(&graph->g, basket_attr, &basket);
-			graph_cache_store_vertex_attr_int(&graph->g, path_attr, &path);
+			graph_cache_store_vertex_attr_int(&graph->g, global_attr, &global);
 		} else {
 			fprintf(stderr, "[Main Path] %s overflowed; selection unavailable, use SPE\n", method);
 		}
@@ -767,7 +767,7 @@ void renderer_readback_main_path_result(Renderer *r, GraphData *graph)
 	igraph_vector_destroy(&weights);
 	igraph_vector_destroy(&strengths);
 	igraph_vector_int_destroy(&basket);
-	igraph_vector_int_destroy(&path);
+	igraph_vector_int_destroy(&global);
 	free(result_bytes);
 	free(animation_bytes);
 	free(lnw);
