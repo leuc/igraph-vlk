@@ -56,6 +56,10 @@ static int check_base_mode(Harness *h, uint32_t mode, const char *name)
 	static const float splc_lnw[BASE_NODES] = {0, LN2, LN2, LN5, 1.79175946923f, 1.79175946923f, 2.70805020110f, LN2};
 	static const float suffix[BASE_NODES] = {LN5, LN2, LN2, LN2, 0, 0, 0, 0};
 	static const float zero[BASE_NODES] = {0};
+	// SPNP lnW/lnX: Batagelj 2003 section 3.4 generating-function recursion L-(u)=1+sum(L-(pred)),
+	// L+ symmetric over successors -- same "+1" self term as SPLC's lnW, run in both directions.
+	static const float spnp_lnw[BASE_NODES] = {0, LN2, LN2, LN5, 1.79175946923f, 1.79175946923f, 2.70805020110f, LN2};
+	static const float spnp_lnx[BASE_NODES] = {2.70805020110f, 1.79175946923f, 1.79175946923f, LN5, LN2, LN2, 0, LN2};
 	static const float unit_height[BASE_NODES] = {0, 1, 1, 2, 3, 3, 4, 1};
 	static const float unit_depth[BASE_NODES] = {4, 3, 3, 2, 1, 1, 0, 1};
 	static const float splc_height[BASE_NODES] = {0, 1, 1, 3, 8, 8, 14, 1};
@@ -64,9 +68,11 @@ static int check_base_mode(Harness *h, uint32_t mode, const char *name)
 	static const float spc_depth[BASE_NODES] = {8, 6, 6, 4, 2, 2, 0, 1};
 	static const float spe_height[BASE_NODES] = {0, LN2, LN2, 2 * LN2, 3 * LN2, 3 * LN2, 4 * LN2, 0};
 	static const float spe_depth[BASE_NODES] = {4 * LN2, 3 * LN2, 3 * LN2, 2 * LN2, LN2, LN2, 0, 0};
-	const float *expected_height = mode == CRIT_WEIGHT_UNIT ? unit_height : (mode == CRIT_WEIGHT_SPLC ? splc_height : (mode == CRIT_WEIGHT_SPC ? spc_height : spe_height));
-	const float *expected_depth = mode == CRIT_WEIGHT_UNIT ? unit_depth : (mode == CRIT_WEIGHT_SPLC ? splc_depth : (mode == CRIT_WEIGHT_SPC ? spc_depth : spe_depth));
-	float maximum = mode == CRIT_WEIGHT_UNIT ? 4.0f : (mode == CRIT_WEIGHT_SPLC ? 14.0f : (mode == CRIT_WEIGHT_SPC ? 8.0f : 4 * LN2));
+	static const float spnp_height[BASE_NODES] = {0, 6, 6, 16, 26, 26, 32, 2};
+	static const float spnp_depth[BASE_NODES] = {32, 26, 26, 16, 6, 6, 0, 2};
+	const float *expected_height = mode == CRIT_WEIGHT_UNIT ? unit_height : (mode == CRIT_WEIGHT_SPLC ? splc_height : (mode == CRIT_WEIGHT_SPC ? spc_height : (mode == CRIT_WEIGHT_SPNP ? spnp_height : spe_height)));
+	const float *expected_depth = mode == CRIT_WEIGHT_UNIT ? unit_depth : (mode == CRIT_WEIGHT_SPLC ? splc_depth : (mode == CRIT_WEIGHT_SPC ? spc_depth : (mode == CRIT_WEIGHT_SPNP ? spnp_depth : spe_depth)));
+	float maximum = mode == CRIT_WEIGHT_UNIT ? 4.0f : (mode == CRIT_WEIGHT_SPLC ? 14.0f : (mode == CRIT_WEIGHT_SPC ? 8.0f : (mode == CRIT_WEIGHT_SPNP ? 32.0f : 4 * LN2)));
 	CritResultHeader *header = (CritResultHeader *)result_bytes;
 	uint32_t *data = result_data(result_bytes);
 	EdgeAnimHeader *animation_header = (EdgeAnimHeader *)animation_bytes;
@@ -79,7 +85,7 @@ static int check_base_mode(Harness *h, uint32_t mode, const char *name)
 	for (uint32_t e = 0; e < BASE_EDGES; e++) {
 		uint32_t source = e < 3 ? 0 : (e < 4 ? 1 : (e < 5 ? 2 : (e < 7 ? 3 : (e < 8 ? 4 : (e < 9 ? 5 : 7)))));
 		uint32_t target = base_out_edges[e].node;
-		float log_weight = mode == CRIT_WEIGHT_SPLC ? splc_lnw[source] : regular_lnw[source] + ((mode == CRIT_WEIGHT_SPC || mode == CRIT_WEIGHT_SPE) ? suffix[target] : 0.0f);
+		float log_weight = mode == CRIT_WEIGHT_SPLC ? splc_lnw[source] : (mode == CRIT_WEIGHT_SPNP ? spnp_lnw[source] + spnp_lnx[target] : regular_lnw[source] + ((mode == CRIT_WEIGHT_SPC || mode == CRIT_WEIGHT_SPE) ? suffix[target] : 0.0f));
 		expected_weights[e] = mode == CRIT_WEIGHT_UNIT ? 1.0f : (mode == CRIT_WEIGHT_SPE ? log_weight : expf(log_weight));
 		expected_strengths[e] = mode == CRIT_WEIGHT_UNIT ? 1.0f : (mode == CRIT_WEIGHT_SPE ? fmaxf(1.0f + log_weight, 0.0f) : (log_weight > 20.0f ? log_weight : logf(1.0f + expf(log_weight))));
 		got_weights[e] = bits_float(data[crit_result_weight_offset() + e]);
@@ -90,8 +96,8 @@ static int check_base_mode(Harness *h, uint32_t mode, const char *name)
 	static const uint32_t basket[BASE_NODES] = {1, 1, 1, 1, 1, 1, 1, 0};
 	static const uint32_t expected_global[BASE_NODES] = {1, 1, 0, 1, 1, 0, 1, 0};
 	int failures = 0;
-	failures += check_float_array("lnW", lnw, mode == CRIT_WEIGHT_SPLC ? splc_lnw : regular_lnw, BASE_NODES);
-	failures += check_float_array("lnX", lnx, mode == CRIT_WEIGHT_SPC || mode == CRIT_WEIGHT_SPE ? suffix : zero, BASE_NODES);
+	failures += check_float_array("lnW", lnw, mode == CRIT_WEIGHT_SPLC ? splc_lnw : (mode == CRIT_WEIGHT_SPNP ? spnp_lnw : regular_lnw), BASE_NODES);
+	failures += check_float_array("lnX", lnx, mode == CRIT_WEIGHT_SPNP ? spnp_lnx : (mode == CRIT_WEIGHT_SPC || mode == CRIT_WEIGHT_SPE ? suffix : zero), BASE_NODES);
 	failures += check_float_array("analysis", got_weights, expected_weights, BASE_EDGES);
 	failures += check_float_array("presentation", got_strengths, expected_strengths, BASE_EDGES);
 	failures += check_float_array("height", height, expected_height, BASE_NODES);
@@ -153,6 +159,68 @@ static int check_nppc_paper_oracle(Harness *h)
 		failures++;
 	}
 	printf("NPPC 1989 paper oracle: %s\n", failures == 0 ? "ok" : "failed");
+	return failures;
+}
+
+// SPNP on the same Hummon & Doreian (1989) 7-node DNA-citation DAG (Figure 3, pp. 49-51) used by
+// check_nppc_paper_oracle above. Deliberately does NOT assert against the paper's own published
+// SPNP column (13,2,20,6,15,4,8,4,6) -- Batagelj (2003, section 3.3) notes "there are some errors
+// in the table of SPNP weights" in the original paper, and this graph's SPNP weights computed
+// independently below via Batagelj's own closed-form recursion (section 3.4: w_p(u,v)=L-(u)*L+(v),
+// L-(u)=1+sum(L-(pred)), L+ symmetric) disagree with the published table on exactly 3 of 9 arcs
+// (3->5, 5->12, 12->20). This is the same situation the skill's own worked example handles by
+// deriving SPC independently rather than trusting the source paper: the values below are a
+// "derived illustration, not sourced" (matching that file's own phrasing), cross-checked two ways
+// before being hardcoded here: (a) direct enumeration of every path through a couple of sample
+// nodes (e.g. L+(12)=7 matches the 7 distinct paths starting at node 12: {12},{12,15},{12,15,22},
+// {12,20},{12,20,21},{12,20,21,22},{12,20,22}); (b) Kirchhoff's node law (Batagelj 2003 section
+// 4.3) holds exactly at every internal node once the added-source/sink arcs of the SPC-on-extended
+// -network reduction are included (e.g. at node 12: inflow 7+14=21 equals outflow 6+12+3=21).
+static int check_spnp_paper_oracle(Harness *h)
+{
+	if (harness_upload_graph(h, &paper_graph, CRIT_NPPC_TILE_BUDGET_BYTES) || harness_run(h, &paper_graph, CRIT_WEIGHT_SPNP))
+		return 1;
+	float lnw[PAPER_NODES];
+	float lnx[PAPER_NODES];
+	float height[PAPER_NODES];
+	float depth[PAPER_NODES];
+	unsigned char result_bytes[sizeof(CritResultHeader) + sizeof(uint32_t) * (PAPER_EDGES + 3 * PAPER_NODES)];
+	if (download(h, BUF_LNW, lnw, sizeof(lnw)) || download(h, BUF_LNX, lnx, sizeof(lnx)) || download(h, BUF_HEIGHT, height, sizeof(height)) || download(h, BUF_DEPTH, depth, sizeof(depth)) || download(h, BUF_RESULT, result_bytes, sizeof(result_bytes)))
+		return 1;
+
+	// Node order: 0=3, 1=5, 2=12, 3=15, 4=20, 5=21, 6=22 (same mapping as check_nppc_paper_oracle).
+	static const float expected_lnw[PAPER_NODES] = {0.0f, 0.69314718056f, 1.09861228867f, 1.38629436112f, 1.38629436112f, 1.79175946923f, 2.70805020110f};
+	static const float expected_lnx[PAPER_NODES] = {2.39789527280f, 2.07944154168f, 1.94591014906f, 0.69314718056f, 1.38629436112f, 0.69314718056f, 0.0f};
+	static const float expected_height[PAPER_NODES] = {0.0f, 8.0f, 22.0f, 28.0f, 34.0f, 42.0f, 48.0f};
+	static const float expected_depth[PAPER_NODES] = {48.0f, 40.0f, 26.0f, 4.0f, 14.0f, 6.0f, 0.0f};
+	static const float expected_weights[PAPER_EDGES] = {8.0f, 2.0f, 14.0f, 6.0f, 12.0f, 4.0f, 8.0f, 4.0f, 6.0f};
+	static const char *arc_names[PAPER_EDGES] = {"3->5", "3->21", "5->12", "12->15", "12->20", "15->22", "20->21", "20->22", "21->22"};
+	static const uint32_t expected_predecessors[PAPER_NODES] = {UINT32_MAX, 0, 1, 2, 2, 4, 5};
+	static const uint32_t expected_basket[PAPER_NODES] = {1, 1, 1, 0, 1, 1, 1};
+	static const uint32_t expected_global[PAPER_NODES] = {1, 1, 1, 0, 1, 1, 1};
+
+	CritResultHeader *header = (CritResultHeader *)result_bytes;
+	uint32_t *data = result_data(result_bytes);
+	int failures = 0;
+	failures += check_float_array("SPNP lnW", lnw, expected_lnw, PAPER_NODES);
+	failures += check_float_array("SPNP lnX", lnx, expected_lnx, PAPER_NODES);
+	failures += check_float_array("SPNP height", height, expected_height, PAPER_NODES);
+	failures += check_float_array("SPNP depth", depth, expected_depth, PAPER_NODES);
+	for (uint32_t e = 0; e < PAPER_EDGES; e++) {
+		float weight = bits_float(data[crit_result_weight_offset() + e]);
+		if (fabsf(weight - expected_weights[e]) > TOLERANCE) {
+			fprintf(stderr, "SPNP %s: got %.6f expected %.6f\n", arc_names[e], (double)weight, (double)expected_weights[e]);
+			failures++;
+		}
+	}
+	failures += check_uint_array("SPNP predecessor", data + crit_result_predecessor_offset(PAPER_EDGES), expected_predecessors, PAPER_NODES);
+	failures += check_uint_array("SPNP basket", data + crit_result_basket_offset(PAPER_EDGES, PAPER_NODES), expected_basket, PAPER_NODES);
+	failures += check_uint_array("SPNP global", data + crit_result_global_offset(PAPER_EDGES, PAPER_NODES), expected_global, PAPER_NODES);
+	if (header->status != 0 || fabsf(bits_float(header->criticality_max_bits) - 48.0f) > TOLERANCE || fabsf(bits_float(header->sink_height_bits) - 48.0f) > TOLERANCE || header->sink_node != 6) {
+		fprintf(stderr, "SPNP paper oracle header mismatch\n");
+		failures++;
+	}
+	printf("SPNP 1989 paper graph, derived oracle: %s\n", failures == 0 ? "ok" : "failed");
 	return failures;
 }
 
@@ -362,7 +430,9 @@ int main(void)
 	failures += check_base_mode(&harness, CRIT_WEIGHT_UNIT, "Unit");
 	failures += check_base_mode(&harness, CRIT_WEIGHT_SPC, "SPC");
 	failures += check_base_mode(&harness, CRIT_WEIGHT_SPE, "SPE");
+	failures += check_base_mode(&harness, CRIT_WEIGHT_SPNP, "SPNP");
 	failures += check_nppc_paper_oracle(&harness);
+	failures += check_spnp_paper_oracle(&harness);
 	failures += check_reachability_sizing();
 	failures += check_nppc_chain_parallel(&harness);
 	failures += check_nppc_multi_tile(&harness);
@@ -370,6 +440,7 @@ int main(void)
 	failures += check_empty_edges(&harness);
 	failures += check_overflow(&harness, CRIT_WEIGHT_SPLC, "SPLC");
 	failures += check_overflow(&harness, CRIT_WEIGHT_SPC, "SPC");
+	failures += check_overflow(&harness, CRIT_WEIGHT_SPNP, "SPNP");
 	harness_destroy(&harness);
 	if (failures != 0) {
 		fprintf(stderr, "criticality_test: %d failures\n", failures);

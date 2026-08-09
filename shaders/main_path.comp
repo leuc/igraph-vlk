@@ -18,6 +18,7 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 #define WEIGHT_SPC 2u
 #define WEIGHT_SPE 3u
 #define WEIGHT_NPPC 4u
+#define WEIGHT_SPNP 5u
 
 #define RESULT_OVERFLOW (1u << 0u)
 #define RESULT_INVALID (1u << 1u)
@@ -379,7 +380,7 @@ void main()
 		}
 		CritNode n = in_nodes[v];
 		float value = 0.0;
-		if (pc.weight_mode == WEIGHT_SPLC) {
+		if (pc.weight_mode == WEIGHT_SPLC || pc.weight_mode == WEIGHT_SPNP) {
 			float maximum = 0.0;
 			for (uint i = 0u; i < n.degree; i++)
 				maximum = max(maximum, lnW[in_edges[n.edge_offset + i].node]);
@@ -408,7 +409,15 @@ void main()
 		}
 		CritNode n = out_nodes[v];
 		float value = 0.0;
-		if (n.degree != 0u) {
+		if (pc.weight_mode == WEIGHT_SPNP) {
+			float maximum = 0.0;
+			for (uint i = 0u; i < n.degree; i++)
+				maximum = max(maximum, lnX[out_edges[n.edge_offset + i].node]);
+			float sum = exp(-maximum);
+			for (uint i = 0u; i < n.degree; i++)
+				sum += exp(lnX[out_edges[n.edge_offset + i].node] - maximum);
+			value = maximum + log(sum);
+		} else if (n.degree != 0u) {
 			float maximum = -1.0 / 0.0;
 			for (uint i = 0u; i < n.degree; i++)
 				maximum = max(maximum, lnX[out_edges[n.edge_offset + i].node]);
@@ -418,7 +427,7 @@ void main()
 			value = maximum + log(sum);
 		}
 		lnX[v] = value;
-		if (pc.weight_mode == WEIGHT_SPC || pc.weight_mode == WEIGHT_SPE)
+		if (pc.weight_mode == WEIGHT_SPC || pc.weight_mode == WEIGHT_SPE || pc.weight_mode == WEIGHT_SPNP)
 			record_projected_animation_edges(v, n);
 		return;
 	}

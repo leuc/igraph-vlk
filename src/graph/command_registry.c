@@ -132,6 +132,7 @@ const CommandDef g_command_registry[] = {
 	{"Follow/Main Path Analysis/Step 1: Weighting", "main_path_spc", "Search Path Count (SPC)", compute_main_path_spc, apply_main_path_weighting, free_main_path_prep, poll_main_path_weighting},
 	{"Follow/Main Path Analysis/Step 1: Weighting", "main_path_spe", "Search Path Entropy (SPE)", compute_main_path_spe, apply_main_path_weighting, free_main_path_prep, poll_main_path_weighting},
 	{"Follow/Main Path Analysis/Step 1: Weighting", "main_path_nppc", "Node Pair Projection Count (NPPC)", compute_main_path_nppc, apply_main_path_weighting, free_main_path_prep, poll_main_path_weighting},
+	{"Follow/Main Path Analysis/Step 1: Weighting", "main_path_spnp", "Search Path Node Pair (SPNP)", compute_main_path_spnp, apply_main_path_weighting, free_main_path_prep, poll_main_path_weighting},
 	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Link Count (SPLC)", "main_path_splc_basket", "Basket", compute_main_path_splc_basket, apply_main_path_selection, free_main_path_selection},
 	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Link Count (SPLC)", "main_path_splc_global", "Global Path", compute_main_path_splc_global, apply_main_path_selection, free_main_path_selection},
 	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Count (SPC)", "main_path_spc_basket", "Basket", compute_main_path_spc_basket, apply_main_path_selection, free_main_path_selection},
@@ -142,6 +143,8 @@ const CommandDef g_command_registry[] = {
 	{"Follow/Main Path Analysis/Step 2: Selection/Unit Weight", "main_path_unit_global", "Global Path", compute_main_path_unit_global, apply_main_path_selection, free_main_path_selection},
 	{"Follow/Main Path Analysis/Step 2: Selection/Node Pair Projection Count (NPPC)", "main_path_nppc_basket", "Basket", compute_main_path_nppc_basket, apply_main_path_selection, free_main_path_selection},
 	{"Follow/Main Path Analysis/Step 2: Selection/Node Pair Projection Count (NPPC)", "main_path_nppc_global", "Global Path", compute_main_path_nppc_global, apply_main_path_selection, free_main_path_selection},
+	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Node Pair (SPNP)", "main_path_spnp_basket", "Basket", compute_main_path_spnp_basket, apply_main_path_selection, free_main_path_selection},
+	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Node Pair (SPNP)", "main_path_spnp_global", "Global Path", compute_main_path_spnp_global, apply_main_path_selection, free_main_path_selection},
 
 	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Link Count (SPLC)", "main_path_splc_local", "Local", compute_main_path_splc_local, apply_main_path_selection, free_main_path_selection},
 	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Link Count (SPLC)", "main_path_splc_backward_local", "Backward Local", compute_main_path_splc_backward_local, apply_main_path_selection, free_main_path_selection},
@@ -168,6 +171,11 @@ const CommandDef g_command_registry[] = {
 	{"Follow/Main Path Analysis/Step 2: Selection/Node Pair Projection Count (NPPC)", "main_path_nppc_backward_local", "Backward Local", compute_main_path_nppc_backward_local, apply_main_path_selection, free_main_path_selection},
 	{"Follow/Main Path Analysis/Step 2: Selection/Node Pair Projection Count (NPPC)", "main_path_nppc_multiple", "Multiple (20%)", compute_main_path_nppc_multiple, apply_main_path_selection, free_main_path_selection},
 	{"Follow/Main Path Analysis/Step 2: Selection/Node Pair Projection Count (NPPC)", "main_path_nppc_key_route", "Key-Route (K=10)", compute_main_path_nppc_key_route, apply_main_path_selection, free_main_path_selection},
+
+	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Node Pair (SPNP)", "main_path_spnp_local", "Local", compute_main_path_spnp_local, apply_main_path_selection, free_main_path_selection},
+	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Node Pair (SPNP)", "main_path_spnp_backward_local", "Backward Local", compute_main_path_spnp_backward_local, apply_main_path_selection, free_main_path_selection},
+	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Node Pair (SPNP)", "main_path_spnp_multiple", "Multiple (20%)", compute_main_path_spnp_multiple, apply_main_path_selection, free_main_path_selection},
+	{"Follow/Main Path Analysis/Step 2: Selection/Search Path Node Pair (SPNP)", "main_path_spnp_key_route", "Key-Route (K=10)", compute_main_path_spnp_key_route, apply_main_path_selection, free_main_path_selection},
 
 	{"Follow", "maxflow_sampled", "Max Flow (Sampled Pairs)", compute_maxflow_sampling, apply_maxflow_sampling, free_maxflow_result},
 	{"Follow", "min_path_cover_trigger", "Minimum Path Cover", compute_min_path_cover_trigger, apply_path_cover_result, free_path_cover_result},

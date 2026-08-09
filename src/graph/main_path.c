@@ -128,6 +128,11 @@ void *compute_main_path_nppc(ExecutionContext *ctx)
 	return main_path_prepare_weighting(ctx, CRIT_WEIGHT_NPPC, "nppc");
 }
 
+void *compute_main_path_spnp(ExecutionContext *ctx)
+{
+	return main_path_prepare_weighting(ctx, CRIT_WEIGHT_SPNP, "spnp");
+}
+
 void free_main_path_prep(void *result_data)
 {
 	MainPathPrep *prep = result_data;
@@ -175,7 +180,7 @@ bool poll_main_path_weighting(ExecutionContext *ctx)
 	const float postprocess_weight = 0.05f;
 	const float batch_weight = crit->weight_mode == CRIT_WEIGHT_NPPC ? 0.35f : 0.0f;
 	const float reveal_weight = 1.0f - batch_weight - postprocess_weight;
-	bool has_reverse_sweep = crit->weight_mode == CRIT_WEIGHT_SPC || crit->weight_mode == CRIT_WEIGHT_SPE || crit->weight_mode == CRIT_WEIGHT_NPPC;
+	bool has_reverse_sweep = crit->weight_mode == CRIT_WEIGHT_SPC || crit->weight_mode == CRIT_WEIGHT_SPE || crit->weight_mode == CRIT_WEIGHT_NPPC || crit->weight_mode == CRIT_WEIGHT_SPNP;
 	int reveal_total_steps = crit->num_levels > 0 ? (has_reverse_sweep ? crit->num_levels * 2 : crit->num_levels) : 1;
 
 	if (crit->readback_pending) {
@@ -226,6 +231,11 @@ void *compute_main_path_nppc_basket(ExecutionContext *ctx)
 	return main_path_load_selection(ctx, "nppc", "basket");
 }
 
+void *compute_main_path_spnp_basket(ExecutionContext *ctx)
+{
+	return main_path_load_selection(ctx, "spnp", "basket");
+}
+
 void *compute_main_path_splc_global(ExecutionContext *ctx)
 {
 	return main_path_load_selection(ctx, "splc", "global");
@@ -249,6 +259,11 @@ void *compute_main_path_unit_global(ExecutionContext *ctx)
 void *compute_main_path_nppc_global(ExecutionContext *ctx)
 {
 	return main_path_load_selection(ctx, "nppc", "global");
+}
+
+void *compute_main_path_spnp_global(ExecutionContext *ctx)
+{
+	return main_path_load_selection(ctx, "spnp", "global");
 }
 
 // Loaded inputs shared by every Local/Backward-Local/Multiple/Key-Route/Network selection below
@@ -359,6 +374,16 @@ void *compute_main_path_nppc_local(ExecutionContext *ctx)
 	return main_path_search_tag(result, "nppc", "local");
 }
 
+void *compute_main_path_spnp_local(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "spnp", &in))
+		return NULL;
+	void *result = main_path_search_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return main_path_search_tag(result, "spnp", "local");
+}
+
 // Backward local main path
 
 void *compute_main_path_splc_backward_local(ExecutionContext *ctx)
@@ -409,6 +434,16 @@ void *compute_main_path_nppc_backward_local(ExecutionContext *ctx)
 	void *result = main_path_search_backward_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
 	main_path_search_free_inputs(&in);
 	return main_path_search_tag(result, "nppc", "backward_local");
+}
+
+void *compute_main_path_spnp_backward_local(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "spnp", &in))
+		return NULL;
+	void *result = main_path_search_backward_local(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
+	main_path_search_free_inputs(&in);
+	return main_path_search_tag(result, "spnp", "backward_local");
 }
 
 // Multiple main paths (20% tolerance -- Liu & Lu 2012's own case-study value, p.535)
@@ -465,6 +500,16 @@ void *compute_main_path_nppc_multiple(ExecutionContext *ctx)
 	return main_path_search_tag(result, "nppc", "multiple");
 }
 
+void *compute_main_path_spnp_multiple(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "spnp", &in))
+		return NULL;
+	void *result = main_path_search_multiple(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_MULTIPLE_TOLERANCE_PCT);
+	main_path_search_free_inputs(&in);
+	return main_path_search_tag(result, "spnp", "multiple");
+}
+
 // Key-route main path (K=10 -- matches Jiang & Liu 2023's applied use of key-route search,
 // https://doi.org/10.1002/asi.24748 S4.2.2)
 
@@ -518,6 +563,16 @@ void *compute_main_path_nppc_key_route(ExecutionContext *ctx)
 	void *result = main_path_search_key_route(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_KEY_ROUTE_SEEDS);
 	main_path_search_free_inputs(&in);
 	return main_path_search_tag(result, "nppc", "key_route");
+}
+
+void *compute_main_path_spnp_key_route(ExecutionContext *ctx)
+{
+	MainPathSearchInputs in;
+	if (!main_path_search_load_inputs(ctx, "spnp", &in))
+		return NULL;
+	void *result = main_path_search_key_route(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count, MAIN_PATH_KEY_ROUTE_SEEDS);
+	main_path_search_free_inputs(&in);
+	return main_path_search_tag(result, "spnp", "key_route");
 }
 
 // Valued network (Hummon & Carley 1993, https://doi.org/10.1016/0378-8733(93)90022-D, p.93 --

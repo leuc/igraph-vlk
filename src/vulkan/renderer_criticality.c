@@ -567,7 +567,7 @@ void renderer_dispatch_main_path_weight_level(Renderer *r, VkCommandBuffer comma
 	if (ctx->stage == CRIT_STAGE_LNW) {
 		ctx->current_level++;
 		if (ctx->current_level == ctx->num_levels) {
-			if (ctx->weight_mode == CRIT_WEIGHT_SPC || ctx->weight_mode == CRIT_WEIGHT_SPE || ctx->weight_mode == CRIT_WEIGHT_NPPC) {
+			if (ctx->weight_mode == CRIT_WEIGHT_SPC || ctx->weight_mode == CRIT_WEIGHT_SPE || ctx->weight_mode == CRIT_WEIGHT_NPPC || ctx->weight_mode == CRIT_WEIGHT_SPNP) {
 				ctx->stage = CRIT_STAGE_LNX;
 				ctx->current_level = ctx->num_levels - 1;
 			} else {
@@ -607,6 +607,8 @@ static const char *crit_method_name(uint32_t weight_mode)
 		return "spe";
 	case CRIT_WEIGHT_NPPC:
 		return "nppc";
+	case CRIT_WEIGHT_SPNP:
+		return "spnp";
 	default:
 		return "unknown";
 	}

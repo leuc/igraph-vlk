@@ -315,7 +315,7 @@ int harness_run(Harness *h, const GraphSpec *graph, uint32_t mode)
 		dispatch(h, graph->level_offsets[level], graph->level_sizes[level], CRIT_STAGE_LNW, mode);
 		compute_barrier(h);
 	}
-	if (mode == CRIT_WEIGHT_SPC || mode == CRIT_WEIGHT_SPE || mode == CRIT_WEIGHT_NPPC)
+	if (mode == CRIT_WEIGHT_SPC || mode == CRIT_WEIGHT_SPE || mode == CRIT_WEIGHT_NPPC || mode == CRIT_WEIGHT_SPNP)
 		for (uint32_t i = 0; i < graph->num_levels; i++) {
 			uint32_t level = graph->num_levels - 1 - i;
 			dispatch(h, graph->level_offsets[level], graph->level_sizes[level], CRIT_STAGE_LNX, mode);
