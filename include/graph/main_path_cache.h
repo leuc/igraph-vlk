@@ -14,6 +14,11 @@ typedef struct
 {
 	float *strengths;
 	int *flags;
+	// Per-node connected-component id among the surviving ties, or -1. NULL for every variant
+	// except main_path_search_valued_network (Hummon & Carley 1993) -- apply_main_path_selection
+	// colors flagged nodes by this id when present, leaving every other selection's plain-dim-only
+	// behavior unchanged.
+	int *component_id;
 	uint32_t node_count;
 	uint32_t edge_count;
 	// Identity of the weighting method/selection that produced this result, e.g. "splc"/"local".

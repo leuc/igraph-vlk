@@ -50,12 +50,6 @@ MainPathSelectionResult *main_path_search_multiple(const igraph_t *graph, const 
 // construction.
 MainPathSelectionResult *main_path_search_key_route(const igraph_t *graph, const igraph_vector_t *weights, const igraph_vector_t *strengths, uint32_t node_count, uint32_t edge_count, int num_seeds);
 
-// Network of main paths (p.531, "one path per source ... merged into a single subnetwork";
-// restated in Liu, Lu & Ho 2019, https://doi.org/10.1007/s11192-019-03034-x): the union of
-// independent Local main path searches, one seeded at each source node (in-degree 0) in the
-// graph, using that source's own best outgoing arc(s) rather than a single graph-wide winner.
-MainPathSelectionResult *main_path_search_network(const igraph_t *graph, const igraph_vector_t *weights, const igraph_vector_t *strengths, uint32_t node_count, uint32_t edge_count);
-
 // Hummon, N.P. & Carley, K. (1993), "Social networks as normal science," Social Networks 15(1),
 // 71-106, https://doi.org/10.1016/0378-8733(93)90022-D, pp. 82-84, 93-94. SPLC-only by design (see
 // compute_main_path_splc_valued_network in main_path.c) -- this method is intrinsically paired with
@@ -75,13 +69,16 @@ MainPathSelectionResult *main_path_search_network(const igraph_t *graph, const i
 // relative to the current step's own observed max. Their own case study's cutoff (>=25 of an
 // observed max of 80, i.e. ~31%) is stated as arbitrary, not a rule -- exposed as a caller parameter
 // here, matching this file's tolerance_pct/num_seeds parameters, and flags both endpoints of every
-// surviving tie. Own engineering choice: the source
-// additionally links surviving ties into separately-labeled connected components ("main path
-// structures") for interpretive grouping (p.93-94); MainPathSelectionResult's flags has no slot for
-// a component id, so that grouping is not representable here and is dropped -- the flagged node set
-// itself (the union of all structures) is unaffected. result->strengths is tie frequency, not a
-// pass-through of the input weights unlike the other search variants in this file -- tie frequency
-// is the paper's own key statistic ("the tie frequency measures the size of tributaries," p.83).
+// surviving tie -- the union of every surviving tie's endpoints, i.e. every "main path structure"
+// (p.93-94) together, since multiple simultaneously-valid structures are expected, not a bug (the
+// source's own theory: several structures can coexist, "distinguished from the others by its
+// terminal node(s)"). result->component_id labels which structure each flagged node belongs to
+// (connected components of the surviving-tie subgraph, linked wherever ties share a node, p.93),
+// -1 for unflagged nodes; consumed by apply_main_path_selection to color each structure distinctly
+// rather than rendering them as one undifferentiated blob. result->strengths is tie frequency, not
+// a pass-through of the input weights unlike the other search variants in this file -- tie
+// frequency is the paper's own key statistic ("the tie frequency measures the size of tributaries,"
+// p.83).
 // Endpoint frequency (p.83) is part of the paper's Stage 2 bookkeeping but is not computed here:
 // nothing in this function's output consumes it (own scoping choice, consistent with dropping
 // component-id labeling above).

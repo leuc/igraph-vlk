@@ -235,34 +235,69 @@ MainPathSelectionResult *main_path_search_key_route(const igraph_t *graph, const
 	return result;
 }
 
-MainPathSelectionResult *main_path_search_network(const igraph_t *graph, const igraph_vector_t *weights, const igraph_vector_t *strengths, uint32_t node_count, uint32_t edge_count)
+// Structure-linking (Hummon & Carley 1993, p.93): labels connected components of the
+// surviving-tie subgraph ("the cited article of one tie is the citing article of another tie" --
+// components are linked wherever ties share a node, in either direction) among nodes already
+// flagged by the threshold pass in main_path_search_valued_network. Does not change which nodes
+// are flagged -- labeling only, consumed by apply_main_path_selection to color each fragment
+// distinctly. Returns a malloc'd node_count-sized array (component id, or -1 for a node not in
+// flags) on success, NULL on allocation/init failure (component_id is best-effort/cosmetic, so
+// the caller should still return the selection with component_id left NULL rather than fail the
+// whole result).
+static int *main_path_search_label_components(const igraph_t *graph, const igraph_vector_t *tie_frequency, double threshold, const bool *flags, uint32_t node_count)
 {
-	bool *flags = calloc(node_count > 0 ? node_count : 1, sizeof(bool));
-	if (!flags)
+	int *component_id = malloc(sizeof(int) * (node_count > 0 ? node_count : 1));
+	if (!component_id)
 		return NULL;
-	igraph_vector_int_t in_degrees;
-	if (igraph_vector_int_init(&in_degrees, 0) != IGRAPH_SUCCESS) {
-		free(flags);
-		return NULL;
-	}
-	if (igraph_degree(graph, &in_degrees, igraph_vss_all(), IGRAPH_IN, IGRAPH_LOOPS) != IGRAPH_SUCCESS) {
-		igraph_vector_int_destroy(&in_degrees);
-		free(flags);
-		return NULL;
-	}
 	for (uint32_t v = 0; v < node_count; v++)
-		if (VECTOR(in_degrees)[v] == 0)
-			flags[v] = true;
-	igraph_vector_int_destroy(&in_degrees);
+		component_id[v] = -1;
 
-	// Reachability-from-a-set equals the union of reachability-from-each-element, so seeding
-	// every source at once and running a single propagation pass is equivalent to (and cheaper
-	// than) unioning one independent per-source Local search per source node.
-	main_path_search_propagate(graph, weights, IGRAPH_OUT, 0.0, node_count, flags);
+	igraph_dqueue_int_t queue;
+	if (igraph_dqueue_int_init(&queue, 0) != IGRAPH_SUCCESS) {
+		free(component_id);
+		return NULL;
+	}
+	igraph_vector_int_t incident;
+	if (igraph_vector_int_init(&incident, 0) != IGRAPH_SUCCESS) {
+		igraph_dqueue_int_destroy(&queue);
+		free(component_id);
+		return NULL;
+	}
 
-	MainPathSelectionResult *result = main_path_search_alloc_result(strengths, flags, node_count, edge_count);
-	free(flags);
-	return result;
+	int next_id = 0;
+	for (uint32_t start = 0; start < node_count; start++) {
+		if (!flags[start] || component_id[start] != -1)
+			continue;
+		component_id[start] = next_id;
+		if (igraph_dqueue_int_push(&queue, (igraph_integer_t)start) != IGRAPH_SUCCESS)
+			break;
+		while (!igraph_dqueue_int_empty(&queue)) {
+			igraph_integer_t u = igraph_dqueue_int_pop(&queue);
+			igraph_neimode_t modes[2] = {IGRAPH_OUT, IGRAPH_IN};
+			for (int m = 0; m < 2; m++) {
+				if (igraph_incident(graph, &incident, u, modes[m], IGRAPH_LOOPS) != IGRAPH_SUCCESS)
+					continue;
+				igraph_integer_t n = igraph_vector_int_size(&incident);
+				for (igraph_integer_t i = 0; i < n; i++) {
+					igraph_integer_t e = VECTOR(incident)[i];
+					double freq = VECTOR(*tie_frequency)[e];
+					if (freq <= 0.0 || freq < threshold)
+						continue;
+					igraph_integer_t other = modes[m] == IGRAPH_OUT ? IGRAPH_TO(graph, e) : IGRAPH_FROM(graph, e);
+					if (component_id[other] == -1 && flags[other]) {
+						component_id[other] = next_id;
+						if (igraph_dqueue_int_push(&queue, other) != IGRAPH_SUCCESS)
+							goto done;
+					}
+				}
+			}
+		}
+		next_id++;
+	}
+done:
+	igraph_vector_int_destroy(&incident);
+	igraph_dqueue_int_destroy(&queue);
+	return component_id;
 }
 
 MainPathSelectionResult *main_path_search_valued_network(const igraph_t *graph, const igraph_vector_t *weights, uint32_t node_count, uint32_t edge_count, double threshold_fraction)
@@ -342,6 +377,8 @@ MainPathSelectionResult *main_path_search_valued_network(const igraph_t *graph, 
 	}
 
 	MainPathSelectionResult *result = main_path_search_alloc_result(&tie_frequency, flags, node_count, edge_count);
+	if (result)
+		result->component_id = main_path_search_label_components(graph, &tie_frequency, threshold, flags, node_count);
 	free(flags);
 	igraph_vector_destroy(&tie_frequency);
 	return result;

@@ -14,6 +14,7 @@
 #include "graph/graph_core.h"
 #include "graph/main_path_cache.h"
 #include "graph/main_path_search.h"
+#include "graph/wrappers_community.h"
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_criticality.h"
@@ -519,58 +520,6 @@ void *compute_main_path_nppc_key_route(ExecutionContext *ctx)
 	return main_path_search_tag(result, "nppc", "key_route");
 }
 
-// Network of main paths
-
-void *compute_main_path_splc_network(ExecutionContext *ctx)
-{
-	MainPathSearchInputs in;
-	if (!main_path_search_load_inputs(ctx, "splc", &in))
-		return NULL;
-	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
-	main_path_search_free_inputs(&in);
-	return main_path_search_tag(result, "splc", "network");
-}
-
-void *compute_main_path_spc_network(ExecutionContext *ctx)
-{
-	MainPathSearchInputs in;
-	if (!main_path_search_load_inputs(ctx, "spc", &in))
-		return NULL;
-	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
-	main_path_search_free_inputs(&in);
-	return main_path_search_tag(result, "spc", "network");
-}
-
-void *compute_main_path_spe_network(ExecutionContext *ctx)
-{
-	MainPathSearchInputs in;
-	if (!main_path_search_load_inputs(ctx, "spe", &in))
-		return NULL;
-	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
-	main_path_search_free_inputs(&in);
-	return main_path_search_tag(result, "spe", "network");
-}
-
-void *compute_main_path_unit_network(ExecutionContext *ctx)
-{
-	MainPathSearchInputs in;
-	if (!main_path_search_load_inputs(ctx, "unit", &in))
-		return NULL;
-	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
-	main_path_search_free_inputs(&in);
-	return main_path_search_tag(result, "unit", "network");
-}
-
-void *compute_main_path_nppc_network(ExecutionContext *ctx)
-{
-	MainPathSearchInputs in;
-	if (!main_path_search_load_inputs(ctx, "nppc", &in))
-		return NULL;
-	void *result = main_path_search_network(in.graph, &in.weights, &in.strengths, in.node_count, in.edge_count);
-	main_path_search_free_inputs(&in);
-	return main_path_search_tag(result, "nppc", "network");
-}
-
 // Valued network (Hummon & Carley 1993, https://doi.org/10.1016/0378-8733(93)90022-D, p.93 --
 // their own case study used >=25 of an observed max of 80, i.e. ~31%, an explicitly arbitrary
 // cutoff, not a rule; relative to the observed max, not to node_count -- see
@@ -594,7 +543,25 @@ void *compute_main_path_splc_valued_network(ExecutionContext *ctx)
 		for (uint32_t e = 0; e < result->edge_count; e++)
 			if (result->strengths[e] > max_tie_frequency)
 				max_tie_frequency = result->strengths[e];
-		fprintf(stderr, "[Main Path] valued network (splc): %u/%u nodes flagged, max tie frequency %.0f, threshold %.1f (%.0f%% of max) over %u sampled paths\n", flagged, result->node_count, max_tie_frequency, MAIN_PATH_VALUED_NETWORK_THRESHOLD_FRACTION * max_tie_frequency, MAIN_PATH_VALUED_NETWORK_THRESHOLD_FRACTION * 100.0, result->node_count);
+		int component_count = 0;
+		int largest_component = 0;
+		if (result->component_id) {
+			int *component_sizes = calloc(result->node_count > 0 ? result->node_count : 1, sizeof(int));
+			if (component_sizes) {
+				for (uint32_t v = 0; v < result->node_count; v++) {
+					int comm = result->component_id[v];
+					if (comm < 0)
+						continue;
+					component_sizes[comm]++;
+					if (comm + 1 > component_count)
+						component_count = comm + 1;
+					if (component_sizes[comm] > largest_component)
+						largest_component = component_sizes[comm];
+				}
+				free(component_sizes);
+			}
+		}
+		fprintf(stderr, "[Main Path] valued network (splc): %u/%u nodes flagged across %d component(s) (largest %d), max tie frequency %.0f, threshold %.1f (%.0f%% of max) over %u sampled paths\n", flagged, result->node_count, component_count, largest_component, max_tie_frequency, MAIN_PATH_VALUED_NETWORK_THRESHOLD_FRACTION * max_tie_frequency, MAIN_PATH_VALUED_NETWORK_THRESHOLD_FRACTION * 100.0, result->node_count);
 	}
 	return main_path_search_tag(result, "splc", "valued_network");
 }
@@ -637,9 +604,16 @@ void apply_main_path_selection(ExecutionContext *ctx, void *result_data)
 	if (!played)
 		return;
 	graph_reset_emphasis(graph);
-	for (uint32_t v = 0; v < graph->node_count; v++)
+	// component_id is only ever non-NULL for main_path_search_valued_network's result (Hummon &
+	// Carley 1993) -- colors each flagged node by its "main path structure" (p.93) instead of
+	// rendering every surviving fragment as one undifferentiated blob; every other selection keeps
+	// today's plain-dim-only behavior.
+	for (uint32_t v = 0; v < graph->node_count; v++) {
 		if (!result->flags[v])
 			graph->nodes[v].emphasis = EMPHASIS_DIMMED;
+		else if (result->component_id)
+			community_id_to_rgb(result->component_id[v], graph->nodes[v].color);
+	}
 	renderer->needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(renderer, graph);
 	// Persist main-path-{selection}-{method} for every selection, not just the GPU-cached
@@ -656,6 +630,21 @@ void apply_main_path_selection(ExecutionContext *ctx, void *result_data)
 			snprintf(attr_name, sizeof(attr_name), "main-path-%s-%s", result->selection, result->method);
 			graph_cache_store_vertex_attr_int(&graph->g, attr_name, &flags);
 			igraph_vector_int_destroy(&flags);
+		}
+		// component_id (Hummon & Carley 1993 "main path structure" labels, p.93) persisted the same
+		// way as flags, under its own attribute name -- only ever populated for valued_network today,
+		// but keyed by selection/method rather than hardcoded so it generalizes if another selection
+		// variant adds component labeling later.
+		if (result->component_id) {
+			igraph_vector_int_t components;
+			if (igraph_vector_int_init(&components, result->node_count) == IGRAPH_SUCCESS) {
+				for (uint32_t v = 0; v < result->node_count; v++)
+					VECTOR(components)[v] = result->component_id[v];
+				char attr_name[64];
+				snprintf(attr_name, sizeof(attr_name), "main-path-%s-%s-component", result->selection, result->method);
+				graph_cache_store_vertex_attr_int(&graph->g, attr_name, &components);
+				igraph_vector_int_destroy(&components);
+			}
 		}
 	}
 }

@@ -183,6 +183,54 @@ static void test_valued_network_conservation(void)
 	igraph_destroy(&graph);
 }
 
+// Valued network (Hummon & Carley 1993) two-island regression test: two disjoint chains (no edges
+// between them) plus one fully isolated node, to exercise structure-linking/component labeling
+// (main_path_search_label_components) -- a chain graph alone can never produce more than one
+// component, so this is the only existing test that can catch a regression toward incorrectly
+// dropping non-dominant fragments (an earlier iteration of this fix wrongly did exactly that).
+// Island 1: S1=0 A1=1 B1=2 C1=3 T1=4 (chain 0->1->2->3->4). Island 2: S2=5 A2=6 T2=7 (chain
+// 5->6->7). Node 8 is fully isolated (no edges at all). Every node is a walk-origin (node_count=9
+// walks): tie_frequency is exactly hand-computable as in test_valued_network_chain_graph, per
+// chain -- island 1: 0-1=1, 1-2=2, 2-3=3, 3-4=4; island 2: 5-6=1, 6-7=2. Max tie frequency is 4
+// (edge 3-4), so threshold_fraction=0.0 keeps every edge in both islands (all freq > 0).
+static void test_valued_network_two_islands(void)
+{
+	igraph_t graph;
+	if (igraph_small(&graph, 9, IGRAPH_DIRECTED, 0, 1, 1, 2, 2, 3, 3, 4, 5, 6, 6, 7, -1) != IGRAPH_SUCCESS) {
+		g_failures++;
+		return;
+	}
+	igraph_vector_t weights;
+	if (igraph_vector_init(&weights, 6) != IGRAPH_SUCCESS) {
+		igraph_destroy(&graph);
+		g_failures++;
+		return;
+	}
+	for (int e = 0; e < 6; e++)
+		VECTOR(weights)[e] = 1.0;
+
+	MainPathSelectionResult *result = main_path_search_valued_network(&graph, &weights, 9, 6, 0.0);
+	const int expected[] = {0, 1, 2, 3, 4, 5, 6, 7};
+	check_flags(result, "valued network two islands: both islands flagged, isolated node is not", expected, 8, 9);
+	if (result && result->component_id) {
+		int island1_id = result->component_id[0];
+		int island2_id = result->component_id[5];
+		bool ok = island1_id >= 0 && island2_id >= 0 && island1_id != island2_id;
+		for (int v = 1; v <= 4 && ok; v++)
+			ok = result->component_id[v] == island1_id;
+		for (int v = 6; v <= 7 && ok; v++)
+			ok = result->component_id[v] == island2_id;
+		ok = ok && result->component_id[8] == -1;
+		check(ok, "valued network two islands: distinct component ids per island, -1 for the isolated node");
+	} else {
+		check(false, "valued network two islands: component_id must be populated");
+	}
+	main_path_cache_selection_free(result);
+
+	igraph_vector_destroy(&weights);
+	igraph_destroy(&graph);
+}
+
 // Baseline toy DAG (path-search-variants.md's own worked example):
 //   S->A 10   A->C 3   C->T 3
 //   S->B 6    B->D 9   D->T 9
@@ -230,13 +278,6 @@ static void test_baseline_graph(void)
 	const int key_route_expected[] = {0, 1, 3, 5};
 	check_flags(key_route, "baseline key-route K=1", key_route_expected, 4, 6);
 	main_path_cache_selection_free(key_route);
-
-	// Network of main paths: the graph has a single source (S), so the per-source union
-	// collapses to exactly the Local result -- a trivial but correct check of the union logic.
-	MainPathSelectionResult *network = main_path_search_network(&graph, &weights, &strengths, 6, 6);
-	const int network_expected[] = {0, 1, 3, 5};
-	check_flags(network, "baseline network", network_expected, 4, 6);
-	main_path_cache_selection_free(network);
 
 	igraph_vector_destroy(&strengths);
 	igraph_vector_destroy(&weights);
@@ -321,6 +362,7 @@ int main(void)
 	test_multiple_tolerance_graph();
 	test_valued_network_chain_graph();
 	test_valued_network_conservation();
+	test_valued_network_two_islands();
 
 	if (g_failures != 0) {
 		fprintf(stderr, "main_path_search_test: %d failures\n", g_failures);

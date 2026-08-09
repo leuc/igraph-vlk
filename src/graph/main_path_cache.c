@@ -122,5 +122,6 @@ void main_path_cache_selection_free(MainPathSelectionResult *result)
 		return;
 	free(result->strengths);
 	free(result->flags);
+	free(result->component_id);
 	free(result);
 }
