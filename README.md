@@ -3,11 +3,11 @@
 3D network viewer based on [igraph](https://igraph.org/) and Vulkan, written in C.
 
 Interactive graph visualization with
- - 35+ layout algorithms 2D & 3D
+ - 37 layout algorithms in 2D and 3D
  - 12 community detection methods
- - 10 centrality measures
+ - 15 node and edge ranking measures
  - Realtime layout progression
- - Animated main path SPLC
+ - Six main-path weighting methods and seven selection modes
  - Scales to very large graphs
  - Fast Barnes & Hut
  - VR support
@@ -30,10 +30,11 @@ Efforts are made to:
 - Cross-check implementations with reference code and papers
 - Test, compare and validate results
 
+## [Usage Guide](USAGE.md)
+
 ## Index
 
-- [Inatall](#install)
-- [Usage](#usage)
+- [Install](#install)
 - [Features](#features)
   - [Graph I/O & Generation](#graph-io--generation)
   - [Graph Analysis](#graph-analysis)
@@ -44,7 +45,7 @@ Efforts are made to:
   - [Background Worker Thread](#background-worker-thread)
 - [Build Source](#build-source)
 - [Architecture](#architecture)
-- [Selected Scientific References](#selected-scientific-references)
+- [Scientific references](#scientific-references)
 
 ## Install
 
@@ -52,125 +53,31 @@ Efforts are made to:
 - [Flatpak Bundle](https://github.com/leuc/io.github.leuc.igraph-vlk/releases)
 - Arch AUR soon™
 
-## Usage
-
-### Mouse
-
-| Action | Effect |
-|---|---|
-| Mouse move (locked) | Camera yaw/pitch look |
-| Left-click | Pick nearest node or edge (select) |
-| Left-click on menu item | Execute command or expand/collapse branch |
-
-### Keyboard Shortcuts
-
-| Key | Action |
-|---|---|
-| `W` / `A` / `S` / `D` | Camera movement (forward/left/back/right) |
-| `Shift` | 3x camera speed |
-| `Space` | Toggle 3D menu |
-| `Escape` / `Q` | Quit |
-| `N` | Toggle node visibility |
-| `E` | Toggle edge visibility |
-| `M` | Cycle edge routing mode (straight ↔ spherical PCB) |
-| `H` | Toggle HUD overlay |
-| `R` | Reset graph to original state |
-| `1`–`9` | Filter nodes by minimum degree |
-| `K` | Cycle k-core threshold filter |
-| `J` | Highlight infrastructure (articulation points + bridge endpoints) |
-| `+` / `=` | Increase layout scale (1.2x) |
-| `-` | Decrease layout scale (1.2x) |
-| `Alt`+`Enter` | Toggle fullscreen |
-| `Alt`+`Left` / `Alt`+`Right` | Switch monitors in fullscreen |
-
-### Gamepad
-
-| Control | Action |
-|---|---|
-| Left stick | Movement (forward/back/strafe) |
-| Right stick | Camera look |
-| Start | Toggle menu |
-| A | Activate crosshair-hovered menu item |
-| L2 / R2 | Layout Scale |
-
-### Graph Filtering
-
-| Shortcut | Action |
-|---|---|
-| `1`–`9` | Remove nodes with degree < N and re-layout |
-| `K` | Increment k-core threshold, remove nodes below it |
-| `J` | Color articulation points red, bridge endpoints orange |
-
-### Large Graphs
-
-Vulkan itself can easily render 500k+ nodes/edges at 60fps even on moderate hardware.
-However, not all graph methods and layouts scale to large graphs.
-
-A typical workflow for large graphs:
-
-1. Group with Leiden or Infomap
-2. Rank by Degree, PageRank or K-core
-2. Layout: try one of UMAP, Force Atlas 2, Yifan Hu, BCGL-t or t-SNE (in order of scale)
-
-FA2, YH and t-SNE use Barnes & Hut and can run in parallel on CPU with OpenMP.
-
-BCGL-t has a GPU only variant, but it can stall the GPU and lower FPS.
-
-For 500k+ nodes/edges the app remains usable when the CPU computes and the GPU renders.
-
-### Layered Spheres
-
-The experimental **layered spheres** layout can very quickly render very large graphs.
-It provides a quick **initial** data exploration with visual clustering and centered k-core order. It works best with graphs that have many communities. However, it is _not_ a general layout method that works with any graph.
-
-### Layout seed
-
-Most layout methods use a random initial placement of nodes.
-Some layouts can use a custom /seed/ (node positions) for the initial placement.
-`Menu/Layout/Seed/Use current node positions as seed` will enable the custom /seed/ for the following layouts.
-
-- Fruchterman-Reingold
-- Kamada-Kawai
-- Davidson-Harel
-- GEM
-- Graphopt
-- Yifan Hu
-- Barnes-Hut t-SNE
-- UMAP
-
-This allows the combination or refinement of resulting layout node positions.
-
-### Streaming Graphs (NCOL over stdin)
-
-If stdin is piped or redirected (not a terminal), igraph-vlk automatically detects this at startup, starts from an empty graph, and grows it live as [NCOL](https://igraph.org/c/doc/igraph-File-Formats.html)-format lines arrive on stdin — no CLI flag needed. Any file argument passed on the command line is ignored in this mode.
-
-Each line is `<name1> <name2> [<weight>]` (whitespace-separated, weight optional). Nodes are created on first mention; the resulting graph is always undirected. Malformed lines are logged to stderr and skipped rather than stopping the stream.
-
-```sh
-printf 'a b 1\nb c 2\nc a\n' | ./igraph-vlk
-```
-
-Ingest is automatically held while a worker job (layout, centrality, community detection, etc.) is running — new lines keep queuing up in the background and are applied once the job finishes, so nothing is dropped or interleaved with a job reading the graph.
-
-**Example: Bluesky Jetstream reply graph**
-
-[`scripts/bsky_reply_graph.jq`](scripts/bsky_reply_graph.jq) turns the [Bluesky Jetstream](https://github.com/bluesky-social/jetstream) firehose into a live reply/comment graph: every reply post becomes an edge to the post it replies to.
-
-```sh
-curl -sN "wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.bsky.feed.post" \
-  | ./scripts/bsky_reply_graph.jq \
-  | ./igraph-vlk
-```
-
 ## Features
+
+The tables below summarize the complete user-facing menu. See the [Usage Guide](USAGE.md#menu-reference) for purpose, prerequisites, and destructive-operation warnings. Author–year citations resolve in the bibliography at the end of this README.
+
+| Menu | Available features |
+|---|---|
+| `Data` | Patterns: Ring, Star, Tree, Lattice, Full Graph, Circle; 31 Famous graphs; Random: Erdős–Rényi, Barabási–Albert, Watts–Strogatz, Forest Fire, Random Tree, Degree Sequence; Random Bipartite, Bipartite Projection; Geometric Random, Gabriel; Netzschleuder Repository; stream Pause and Live Layered Sphere |
+| `Layout` | Seed: current, uniform, bounded, normal; Force-Directed: Fruchterman–Reingold 2D/3D, Kamada–Kawai 2D/3D, DrL 2D/3D, Davidson–Harel, GraphOpt, LGL, GEM, ForceAtlas2 3D, Yifan Hu 2D/3D; Hierarchical: Reingold–Tilford, Sugiyama, Radial Sugiyama; Geometric: Circle 2D/3D, Sphere, Star, Grid 2D/3D, Random 2D/3D; Bipartite: Sugiyama and Simple; Embedding: MDS 2D/3D, Spherical MDS, UMAP 2D/3D, Barnes–Hut t-SNE 2D/3D; BCGL-t 2D/3D/GPU; Layered Sphere |
+| `Rank` | Degree, Closeness, Betweenness, Eigenvector, PageRank, HITS Hub, HITS Authority, Harmonic, Strength, Constraint, Coreness, CD Index, Edge Betweenness, Convergence Degree, Edge Trussness |
+| `Group` | Louvain, Leiden, Walktrap, Edge Betweenness, Fast Greedy, Infomap, Label Propagation, Spinglass, Leading Eigenvector, Optimal Modularity, Voronoi, Fluid Communities |
+| `Follow` | BFS, DFS, Topological Sort, K-Core Tree; Main Path Analysis with SPLC, Unit, SPC, SPE, NPPC, or SPNP weighting and Basket, Global, Local, Backward Local, Multiple 20%, Key-Route K=10, or SPLC Valued Network selection; Sampled Max Flow; Minimum Path Cover; Maximum Antichain; Minimum Chain Cover |
+| `Structure` | Diameter, Radius, Average Path Length, Assortativity, Density, Transitivity |
+| `Filter` | Reversible node and edge visibility by string or Boolean attribute, plus Show All |
+| `Alter` | Remove feedback arc set, Simplify, remove empty-date nodes, convert to directed, convert to undirected by collapse or mutual edges |
+| Menu root | Properties, Save GraphML, Quit |
 
 ### Graph I/O & Generation
 
 | Feature | Details |
 |---|---|
-| **GraphML import** | Load graphs via CLI argument |
+| **GraphML and GML import** | Load plain or Zstandard-compressed files via a CLI argument |
+| **GraphML export** | Save a dated file with graph, vertex, and edge attributes to the desktop |
 | **Live NCOL streaming (stdin)** | Auto-detected when stdin is piped/redirected — grows the graph live from NCOL-format lines (`name1 name2 [weight]`) as they arrive; ingest pauses while a worker job is running |
 | **Graph generation** | 7 deterministic (Ring, Star, K-ary Tree, Lattice, Clique, Cycle, Famous/Notable), 6 stochastic (Erdos-Renyi, Barabasi-Albert, Watts-Strogatz, Forest Fire, Random Tree, Degree Sequence), 2 bipartite (Random Bipartite, Bipartite Projection), 2 spatial (Geometric Random, Gabriel) |
+| **Network repository** | Browse and cache tagged networks from Netzschleuder |
 
 ### Graph Analysis
 
@@ -181,13 +88,17 @@ curl -sN "wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.
 | Degree centrality | Freeman (1979) |
 | Closeness centrality | Bavelas (1950); Sabidussi (1966) |
 | Betweenness centrality | Brandes (2001) *A faster algorithm for betweenness centrality* |
-| Eigenvector centrality | Bonacich (1972, 1987) |
+| Eigenvector centrality | Bonacich (1972) |
 | PageRank | Brin & Page (1998) *The Anatomy of a Large-Scale Hypertextual Web Search Engine* |
 | HITS (Hub & Authority) | Kleinberg (1999) *Authoritative sources in a hyperlinked environment* |
-| Harmonic centrality | Marchiori & Latora (2000); Rochat (2009) |
+| Harmonic centrality | Marchiori & Latora (2000) |
 | Strength (weighted degree) | Barrat et al. (2004) |
 | Burt's constraint (structural holes) | Burt (2004) *Structural holes and good ideas* |
 | Coreness (k-core) | Batagelj & Zaversnik (2003) *An O(m) Algorithm for Cores Decomposition of Networks* |
+| CD Index (citation disruption) | Funk & Owen-Smith (2017) |
+| Edge betweenness | Brandes (2001) |
+| Convergence degree | Bányai, Négyessy & Bazsó (2011) |
+| Edge trussness | Wang & Cheng (2012) |
 
 **Global Properties** (displayed in info cards):
 
@@ -213,28 +124,26 @@ curl -sN "wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.
 | Spinglass | Reichardt & Bornholdt (2006) |
 | Leading Eigenvector | Newman (2006) *Finding community structure in networks using the eigenvectors of matrices* |
 | Optimal Modularity | Brandes et al. (2008) |
-| Voronoi Communities | Deritei et al. (2014); Molnar et al. (2024) |
+| Voronoi Communities | Lázár et al. (2017); Molnár et al. (2024) |
 | Fluid Communities | Pares et al. (2018) *Fluid Communities: A Competitive, Scalable and Diverse Community Detection Algorithm* |
 
-**Cycle Analysis:**
-- Remove feedback arc set — Eades, Lin & Smyth (1993); Baharev et al. (2021)
+**Main Path Analysis:**
+
+- Six GPU weighting modes: SPLC, Unit, SPC, SPE, NPPC, and SPNP. Foundational references: Hummon & Doreian (1989), Batagelj (2003), and Price & Evans (2025).
+- Selection modes: Basket, Global Path, Local, Backward Local, Multiple (20%), Key-Route (K=10), and SPLC Valued Network. Search variants follow Liu & Lu (2012) and Hummon & Carley (1993).
+- Requires a directed acyclic graph and a completed matching weighting step. See the [two-step usage workflow](USAGE.md#main-path-analysis).
 
 **Dynamic (Streaming) k-Core Maintenance:**
-- Maintains the exact coreness of every vertex as edges stream in over the live NCOL graph, *without* recomputing the full O(V+E) decomposition per change. It runs on the same background ingest path as the streaming reader (see [Streaming Graphs](#streaming-graphs-ncol-over-stdin)).
-- Only the subcore reachable from the inserted edge's lower-coreness endpoint (over same-coreness vertices) can change, and each vertex by at most +1 — so the update is computed by optimistically lifting that subcore one level and peeling back every vertex without enough supporters (a binary K-vs-K+1 fixpoint that needs only a plain queue).
-- Self-loops count twice and parallel edges keep multiplicity, matching `igraph_coreness(..., IGRAPH_ALL)` semantics exactly. Correctness is guarded by `tests/dyn_kcore_test.c`, which diffs the maintained values against a full `igraph_coreness` recompute (and igraph's own structural `validate_coreness` oracle) over the same graph families igraph's own `coreness.c` uses.
-- References: Sariyüce et al. (2013); Liu et al. (2021).
+- Maintains exact coreness as live NCOL edges arrive, updating only the affected subcore instead of decomposing the whole graph again.
+- Self-loops and parallel edges keep igraph's coreness semantics. See the [streaming workflow](USAGE.md#live-ncol-streaming).
+- Reference: Sarıyüce et al. (2013).
 
 **Dynamic (Streaming) Leiden Communities:**
-- Maintains the Leiden (CPM, density-scaled γ) community membership of every vertex as edges stream in over the live NCOL graph, *without* recomputing the full Leiden decomposition per change. It runs on the same background ingest path as the streaming reader (see [Streaming Graphs](#streaming-graphs-ncol-over-stdin)).
-- This is a single-threaded C port of the **Dynamic Frontier (DF) approach to Leiden** from Sahu's parallel GVE-Leiden implementation (the `leidenMoveW` / `leidenScanCommunitiesW` / `leidenChooseCommunity` / `leidenAffectedVerticesFrontierW` functions in `leiden.hxx`). Only the endpoints of cross-community edge insertions and intra-community deletions are enqueued as a frontier; on a successful move the vertex's neighbors are expanded into the frontier, so the work stays local to the affected region instead of scanning all vertices each call.
-- A refinement pass resets touched vertices that changed community back to a singleton and re-runs local-moving restricted to same-pre-refine (vcob) candidates, preserving the well-connected sub-communities the static Leiden refinement phase guarantees. Aggregation is scoped to the `cchg`-flagged communities (matched by representative-vertex-id labels), mirroring the static Leiden `continue_clustering` loop in igraph's `src/community/leiden.c`.
-- The initial partition is bootstrapped with the same CPM objective (via `igraph_community_leiden_simple`) that the maintainer then adjusts incrementally, so the bootstrap is already a local optimum under the maintained formula.
-- References: Sahu, S. *A Starting Point for Dynamic Community Detection with Leiden Algorithm*. arXiv:2405.11658; Sahu, S. (2024). *Heuristic-Based Dynamic Leiden Algorithm for Efficient Tracking of Communities on Evolving Graphs*. arXiv:2410.15451. https://doi.org/10.48550/arXiv.2410.15451. Source: https://github.com/puzzlef/leiden-communities-openmp-dynamic
-- The static Leiden objective itself: Traag, Waltman & van Eck (2019) (see [Community Detection](#community-detection-results-mapped-to-node-colors)).
+- Maintains CPM Leiden communities as live edges arrive. A dynamic frontier limits work to affected vertices and their neighbors.
+- Refinement and aggregation update changed communities while preserving Leiden's well-connected-community guarantee. See the [streaming workflow](USAGE.md#live-ncol-streaming).
+- References: Sahu (2024a, 2024b).
+- Static method: Traag, Waltman & van Eck (2019).
 
-**GPU-Accelerated Main Path Analysis (SPLC):**
-- Search Path Link Count traffic simulation on GPU compute shader with real-time animation
 
 ### Graph Layout Algorithms
 
@@ -246,7 +155,7 @@ Layouts run on a background thread with real-time snapshot polling for interacti
 |---|---|---|---|
 | Fruchterman-Reingold | ✓ | ✓ | Fruchterman & Reingold (1991) *Graph Drawing by Force-directed Placement* |
 | Kamada-Kawai | ✓ | ✓ | Kamada & Kawai (1989) *An Algorithm for Drawing General Undirected Graphs* |
-| DrL (Distributed Recursive Layout) | ✓ | ✓ | Graph layout |
+| DrL (Distributed Recursive Layout) | ✓ | ✓ | Martin et al. (2008) |
 | Davidson-Harel | ✓ | | Davidson & Harel (1996) *Drawing Graphs Nicely Using Simulated Annealing* |
 | Graphopt | ✓ | | Graphopt (Schmuhl) |
 | LGL (Large Graph Layout) | ✓ | | LGL |
@@ -263,8 +172,8 @@ Layouts run on a background thread with real-time snapshot polling for interacti
 - Circle (2D/3D), Star, Grid (2D/3D), Sphere, Random (2D/3D)
 
 **MDS (3):**
-- Torgerson MDS (2D) — Cox & Cox (1994)
-- Torgerson MDS (3D) — Cox & Cox (1994)
+- Torgerson MDS (2D) — Torgerson (1952)
+- Torgerson MDS (3D) — Torgerson (1952)
 - **Spherical MDS (3D)** — Miller, Huroyan & Kobourov (2023) *Spherical Graph Drawing by Multi-Dimensional Scaling*
 
 **Dimension Reduction (4):**
@@ -388,58 +297,88 @@ shaders/                    # GLSL → SPIR-V (auto-compiled)
 include/                    # Public headers
 ```
 
-## Selected Scientific References
-
-igraph-vlk is built on igraph, which implements a vast body of network science algorithms. Below are key references for the algorithms used in this application.
-
-igraph core:
-> Csardi, G., & Nepusz, T. (2006). The igraph software package for complex network research. *InterJournal*, Complex Systems, 1695.
-
-**Graph Repositories:**
-- Tiago P. Peixoto, "The Netzschleuder network catalogue and repository", https://networks.skewed.de/ (2020).
-
-**Layout:**
-- Fruchterman, T.M.J. & Reingold, E.M. (1991). Graph Drawing by Force-directed Placement. *Software — Practice and Experience*, 21/11, 1129–1164.
-- Kamada, T. & Kawai, S. (1989). An Algorithm for Drawing General Undirected Graphs. *Information Processing Letters*, 31/1, 7–15.
-- Sugiyama, K., Tagawa, S. & Toda, M. (1981). Methods for Visual Understanding of Hierarchical Systems. *IEEE Trans. Systems, Man and Cybernetics*, 11(2), 109–125.
-- Reingold, E. & Tilford, J. (1981). Tidier Drawing of Trees. *IEEE Trans. Software Engineering*, SE-7(2), 223–228.
-- Davidson, R. & Harel, D. (1996). Drawing Graphs Nicely Using Simulated Annealing. *ACM Trans. Graphics*, 15(4), 301–331.
-- McInnes, L., Healy, J. & Melville, J. (2018). UMAP: Uniform Manifold Approximation and Projection for Dimension Reduction. *arXiv:1802.03426*.
-- Bachmaier, C. (2007). A Radial Adaptation of the Sugiyama Framework for Visualizing Hierarchical Information. *IEEE Trans. Vis. Comp. Graphics*, 13(3), 583–594.
-
-**Centrality:**
-- Brandes, U. (2001). A faster algorithm for betweenness centrality. *J. Mathematical Sociology*, 25(2), 163–177.
-- Brin, S. & Page, L. (1998). The Anatomy of a Large-Scale Hypertextual Web Search Engine. *Proc. 7th WWW Conference*.
-- Kleinberg, J. (1999). Authoritative sources in a hyperlinked environment. *J. ACM*, 46(5), 604–632.
-- Burt, R.S. (2004). Structural holes and good ideas. *American J. Sociology*, 110, 349–399.
-
-**Community Detection:**
-- Blondel, V.D., Guillaume, J.-L., Lambiotte, R. & Lefebvre, E. (2008). Fast unfolding of communities in large networks. *J. Statistical Mechanics*, P10008.
-- Traag, V.A., Waltman, L. & van Eck, N.J. (2019). From Louvain to Leiden: guaranteeing well-connected communities. *Scientific Reports*, 9, 5233.
-- Girvan, M. & Newman, M.E.J. (2002). Community structure in social and biological networks. *PNAS*, 99, 7821–7826.
-- Raghavan, U.N., Albert, R. & Kumara, S. (2007). Near linear time algorithm to detect community structures in large-scale networks. *Phys. Rev. E*, 76, 036106.
-- Pares, F. et al. (2018). Fluid Communities: A Competitive, Scalable and Diverse Community Detection Algorithm. *Complex Networks & Their Applications VI*, Springer, 229.
-- Newman, M.E.J. (2006). Finding community structure in networks using the eigenvectors of matrices. *Phys. Rev. E*, 74, 036104.
-
-**Random Graph Models:**
-- Barabasi, A.-L. & Albert, R. (1999). Emergence of scaling in random networks. *Science*, 286, 509–512.
-- Watts, D.J. & Strogatz, S.H. (1998). Collective dynamics of "small-world" networks. *Nature*, 393, 440–442.
-- Erdos, P. & Renyi, A. (1959). On random graphs. *Publicationes Mathematicae*, 6, 290–297.
-
-**Dynamic (Streaming) k-Core:**
-- Saríyüce, A.E., Gedik, B., Jacques-Silva, G., Wu, K.-L. & Çatalyürek, Ü.V. (2013). Streaming Algorithms for K-Core Decomposition. *Proc. VLDB Endowment*, 6(6), 433–444. https://doi.org/10.14778/2536336.2536344
-- Liu, Q., Zhu, X., Huang, X. & Xu, J. (2021). Local Algorithms for Distance-Generalized Core Decomposition over Large Dynamic Graphs. *Proc. VLDB Endowment*, 14(9), 1531–1543. https://doi.org/10.14778/3461535.3461542
-
-**Dynamic (Streaming) Leiden Communities:**
-- Sahu, S. *A Starting Point for Dynamic Community Detection with Leiden Algorithm*. arXiv:2405.11658. https://arxiv.org/abs/2405.11658
-- Sahu, S. (2024). Heuristic-Based Dynamic Leiden Algorithm for Efficient Tracking of Communities on Evolving Graphs. *arXiv:2410.15451*. Preprint, arXiv. https://doi.org/10.48550/arXiv.2410.15451
-- Sahu, S. *leiden-communities-openmp-dynamic* (GVE-Leiden source, `leiden.hxx`). https://github.com/puzzlef/leiden-communities-openmp-dynamic
-
-**Transitivity:**
-- Watts, D.J. & Strogatz, S.H. (1998). Collective dynamics of small-world networks. *Nature*, 393, 440–442.
-
-**Assortativity:**
-- Newman, M.E.J. (2002). Assortative mixing in networks. *Phys. Rev. Lett.*, 89, 208701.
-- Newman, M.E.J. (2003). Mixing patterns in networks. *Phys. Rev. E*, 67, 026126.
-
 See [AGENTS.md](AGENTS.md) for build details, code style, and contribution guide.
+
+## Scientific references
+
+### Software, data, and graph generation
+
+- [Csárdi & Nepusz (2006), *The igraph software package for complex network research*](https://igraph.org/)
+- [Peixoto (2023), *The Netzschleuder network catalogue and repository*](https://doi.org/10.5281/zenodo.7839981)
+- [Erdős & Rényi (1959), *On random graphs I*](https://doi.org/10.2307/1999405)
+- [Barabási & Albert (1999), *Emergence of scaling in random networks*](https://doi.org/10.1126/science.286.5439.509)
+- [Watts & Strogatz (1998), *Collective dynamics of small-world networks*](https://doi.org/10.1038/30918)
+- [Leskovec, Kleinberg & Faloutsos (2005), *Graphs over time*](https://doi.org/10.1145/1081870.1081893)
+- [Bollobás (1980), *A probabilistic proof of an asymptotic formula for the number of labelled regular graphs*](https://doi.org/10.1016/0097-3165(80)90030-8)
+- [Borgatti & Everett (1997), *Network analysis of 2-mode data*](https://doi.org/10.1016/S0378-8733(96)00301-2)
+- [Gabriel & Sokal (1969), *A new statistical approach to geographic variation analysis*](https://doi.org/10.2307/2286010)
+
+### Layout and embedding
+
+- [Fruchterman & Reingold (1991), *Graph drawing by force-directed placement*](https://doi.org/10.1002/spe.4380211102)
+- [Kamada & Kawai (1989), *An algorithm for drawing general undirected graphs*](https://doi.org/10.1016/0020-0190(89)90102-6)
+- [Martin et al. (2008), *DrL: Distributed Recursive (Graph) Layout*](https://www.osti.gov/biblio/1145621)
+- [Davidson & Harel (1996), *Drawing graphs nicely using simulated annealing*](https://doi.org/10.1145/234535.234538)
+- [Adai et al. (2004), *LGL: creating a map of protein function with an algorithm for visualizing very large biological networks*](https://doi.org/10.1016/j.jmb.2004.04.047)
+- [Frick, Ludwig & Mehldau (1995), *A fast adaptive layout algorithm for undirected graphs*](https://doi.org/10.1007/3-540-58950-3_393)
+- [Jacomy et al. (2014), *ForceAtlas2, a continuous graph layout algorithm*](https://doi.org/10.1371/journal.pone.0098679)
+- [Hu (2005), *Efficient, high-quality force-directed graph drawing*](https://doi.org/10.1007/978-3-540-31843-9_25)
+- [Reingold & Tilford (1981), *Tidier drawings of trees*](https://doi.org/10.1109/TSE.1981.234519)
+- [Sugiyama, Tagawa & Toda (1981), *Methods for visual understanding of hierarchical system structures*](https://doi.org/10.1109/TSMC.1981.4308636)
+- [Bachmaier (2007), *A radial adaptation of the Sugiyama framework*](https://doi.org/10.1109/TVCG.2007.1009)
+- [Torgerson (1952), *Multidimensional scaling: I. Theory and method*](https://doi.org/10.1007/BF02288916)
+- [Miller, Huroyan & Kobourov (2023), *Spherical graph drawing by multi-dimensional scaling*](https://doi.org/10.1007/978-3-031-22203-0_7)
+- [McInnes et al. (2018), *UMAP: Uniform Manifold Approximation and Projection*](https://doi.org/10.21105/joss.00861)
+- [van der Maaten (2014), *Accelerating t-SNE using tree-based algorithms*](https://jmlr.org/papers/v15/vandermaaten14a.html)
+- [Onoue et al. (2022), *BCGL: a graph layout for bicluster visualization*](https://doi.org/10.1587/transinf.2021EDP7260)
+
+### Ranking and structure
+
+- [Freeman (1979), *Centrality in social networks: conceptual clarification*](https://doi.org/10.1016/0378-8733(78)90021-7)
+- [Bavelas (1950), *Communication patterns in task-oriented groups*](https://doi.org/10.1121/1.1906679)
+- [Brandes (2001), *A faster algorithm for betweenness centrality*](https://doi.org/10.1080/0022250X.2001.9990249)
+- [Bonacich (1972), *Factoring and weighting approaches to status scores*](https://doi.org/10.1080/0022250X.1972.9989806)
+- [Brin & Page (1998), *The anatomy of a large-scale hypertextual Web search engine*](https://doi.org/10.1016/S0169-7552(98)00110-X)
+- [Kleinberg (1999), *Authoritative sources in a hyperlinked environment*](https://doi.org/10.1145/324133.324140)
+- [Marchiori & Latora (2000), *Harmony in the small-world*](https://doi.org/10.1016/S0378-4371(00)00377-2)
+- [Barrat et al. (2004), *The architecture of complex weighted networks*](https://doi.org/10.1073/pnas.0400087101)
+- [Burt (2004), *Structural holes and good ideas*](https://doi.org/10.1086/421787)
+- [Batagelj & Zaveršnik (2003), *An O(m) algorithm for cores decomposition of networks*](https://arxiv.org/abs/cs/0310049)
+- [Funk & Owen-Smith (2017), *A dynamic network measure of technological change*](https://doi.org/10.1287/mnsc.2015.2366)
+- [Bányai, Négyessy & Bazsó (2011), *Organization of signal flow in directed networks*](https://doi.org/10.1088/1742-5468/2011/06/P06001)
+- [Wang & Cheng (2012), *Truss decomposition in massive networks*](https://doi.org/10.14778/2311906.2311909)
+- [Newman (2002), *Assortative mixing in networks*](https://doi.org/10.1103/PhysRevLett.89.208701)
+
+### Community detection
+
+- [Blondel et al. (2008), *Fast unfolding of communities in large networks*](https://doi.org/10.1088/1742-5468/2008/10/P10008)
+- [Traag, Waltman & van Eck (2019), *From Louvain to Leiden*](https://doi.org/10.1038/s41598-019-41695-z)
+- [Pons & Latapy (2005), *Computing communities in large networks using random walks*](https://doi.org/10.1007/11569596_31)
+- [Girvan & Newman (2002), *Community structure in social and biological networks*](https://doi.org/10.1073/pnas.122653799)
+- [Clauset, Newman & Moore (2004), *Finding community structure in very large networks*](https://doi.org/10.1103/PhysRevE.70.066111)
+- [Rosvall & Bergstrom (2008), *Maps of random walks on complex networks reveal community structure*](https://doi.org/10.1073/pnas.0706851105)
+- [Raghavan, Albert & Kumara (2007), *Near linear time algorithm to detect community structures*](https://doi.org/10.1103/PhysRevE.76.036106)
+- [Reichardt & Bornholdt (2006), *Statistical mechanics of community detection*](https://doi.org/10.1103/PhysRevE.74.016110)
+- [Newman (2006), *Finding community structure using the eigenvectors of matrices*](https://doi.org/10.1103/PhysRevE.74.036104)
+- [Brandes et al. (2008), *On modularity clustering*](https://doi.org/10.1109/TKDE.2007.190689)
+- [Lázár et al. (2017), *Community detection by graph Voronoi diagrams*](https://doi.org/10.1103/PhysRevE.95.022306)
+- [Molnár et al. (2024), *Generalized graph Voronoi communities for directed and weighted networks*](https://doi.org/10.1038/s41598-024-58624-4)
+- [Parés et al. (2018), *Fluid communities*](https://doi.org/10.1007/978-3-319-72150-7_19)
+
+### Traversal, paths, and graph alteration
+
+- [Kahn (1962), *Topological sorting of large networks*](https://doi.org/10.1145/368996.369025)
+- [Goldberg & Tarjan (1988), *A new approach to the maximum-flow problem*](https://doi.org/10.1145/48014.61051)
+- [Dilworth (1950), *A decomposition theorem for partially ordered sets*](https://doi.org/10.2307/2372249)
+- [Hummon & Doreian (1989), *Connectivity in a citation network*](https://doi.org/10.1016/0378-8733(89)90017-8)
+- [Batagelj (2003), *Efficient algorithms for citation network analysis*](https://arxiv.org/abs/cs/0309023)
+- [Price & Evans (2025), *Understanding Main Path Analysis*](https://arxiv.org/abs/2512.12355)
+- [Liu & Lu (2012), *An integrated approach for main path analysis*](https://doi.org/10.1002/asi.21692)
+- [Hummon & Carley (1993), *Social networks as normal science*](https://doi.org/10.1016/0378-8733(93)90022-D)
+- [Eades, Lin & Smyth (1993), *A fast and effective heuristic for the feedback arc set problem*](https://doi.org/10.1016/0020-0190(93)90079-O)
+
+### Streaming analysis
+
+- [Sarıyüce et al. (2013), *Streaming algorithms for k-core decomposition*](https://doi.org/10.14778/2536336.2536344)
+- [Sahu (2024a), *A starting point for dynamic community detection with Leiden algorithm*](https://arxiv.org/abs/2405.11658)
+- [Sahu (2024b), *Heuristic-based dynamic Leiden algorithm for efficient tracking of communities on evolving graphs*](https://doi.org/10.48550/arXiv.2410.15451)
