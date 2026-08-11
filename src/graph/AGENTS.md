@@ -1,99 +1,86 @@
 # Graph Code Documentation
 
-Per-directory guide for `src/graph/` and `include/graph/`. See root `AGENTS.md` for build/lint/testing/style. When editing: mimic neighbors; lint/format/build; no regressions.
+Per-directory guide for `src/graph/` and `include/graph/`. See root `AGENTS.md` for build, test, and style rules.
 
-## Graph Core & Data
+## Core, I/O, Visual State
 
-| File | Role |
+| Files | Role |
 |------|------|
-| `include/graph/graph_types.h` | `Node`, `Edge`, `GraphData`, `GraphProperties`, `FilterableAttr`, `FilterLookup` |
-| `src/graph/graph_core.c` | `graph_free_data`, `graph_build_visualization`, `graph_rebuild_edges` lifecycle |
-| `include/graph/graph_core.h` | Graph lifecycle API |
-| `src/graph/graph_io.c` | Graph file loading: `graph_load` (auto-detect .graphml/.gml), `graph_load_graphml`, `graph_load_gml` |
-| `include/graph/graph_io.h` | I/O API |
-| `src/graph/graph_actions.c` | High-level graph actions (filter, highlight) dispatched from AppState |
-| `include/graph/graph_actions.h` | Graph actions API |
+| `graph_types.h` | `Node`, `Edge`, `GraphData`, graph properties, and filter metadata |
+| `graph_core.c/.h` | Graph lifecycle, visualization construction, and edge rebuilding |
+| `graph_io.c/.h` | GraphML/GML loading, `.zst`/`.zstd` decompression, and dated GraphML saving |
+| `graph_actions.c/.h` | App-level filter, highlight, simplify, date cleanup, and directedness actions |
+| `graph_filter.c/.h` | Destructive degree/k-core pruning and articulation/bridge highlighting |
+| `graph_filter_visibility.c/.h` | Reversible node/edge visibility and filterable string/Boolean attribute discovery |
+| `graph_animation.c/.h` | Shared reveal and emphasis animation construction |
+| `graph_color.c/.h` | Score heatmaps, community colors, and shared color constants |
 
-## Graph Filtering
+## Commands and Worker Execution
 
-| File | Role |
+| Files | Role |
 |------|------|
-| `src/graph/graph_filter.c` | Node filtering by degree, coreness; infrastructure highlighting |
-| `include/graph/graph_filter.h` | Filter API |
-| `src/graph/graph_filter_visibility.c` | Attribute-based visibility filtering (show/hide by vertex attribute) |
-| `include/graph/graph_filter_visibility.h` | `FilterContext` type, visibility filter API |
+| `command_registry.c/.h` | Complete static command registry, dynamic-command anchors, parameters, GPU poll callbacks, and transition durations |
+| `worker_thread.c/.h` | Single pthread job queue, cancellation, progress/status callbacks, result polling, and GPU-job handoff |
+| `wrappers_filter.c/.h` | Dynamic Filter node/edge commands and Show All actions |
 
-## Command Registry & Worker Thread
+`CommandDef.worker_func` receives `ExecutionContext *`. Access the current graph through `ctx->app_state->current_graph.g`, command parameters through `ctx->params`, and cancellation through `ctx->running`. The worker owns its result until the main-thread apply callback consumes it; `free_func` must handle every completed or cancelled result.
 
-| File | Role |
+## Layouts
+
+| Files | Role |
 |------|------|
-| `src/graph/command_registry.c` | `g_command_registry[]` — all ~80 command definitions (`CommandDef` structs) |
-| `include/graph/command_registry.h` | `CommandDef`, `IgraphWorkerFunc`, `IgraphApplyFunc`, `IgraphFreeFunc`, `IgraphGpuPollFunc` types |
-| `src/graph/worker_thread.c` | Pthread job queue: submit, poll, cancel, progress/status/step handlers; igraph progress/status callbacks |
-| `include/graph/worker_thread.h` | `WorkerJob`, `WorkerJobStatus`, `WorkerThreadContext` types, queue API |
+| `wrappers_layout.h`, `layouts_apply.c` | Layout declarations, matrix application, center/autoscale, cleanup, and renderer transitions |
+| `layouts_seed.c` | Current-position seed toggle and uniform, bounded, and normal random seeds |
+| `layouts_force_fr.c` | Fruchterman–Reingold and Kamada–Kawai, 2D/3D |
+| `layouts_drl.c`, `layouts_davidson_harel.c`, `layouts_graphopt.c`, `layouts_gem.c` | DrL, Davidson–Harel, GraphOpt/LGL, and GEM |
+| `layouts_forceatlas2.c`, `layouts_yifan_hu.c` | ForceAtlas2 3D and Yifan Hu 2D/3D |
+| `layouts_tree.c` | Reingold–Tilford |
+| `layouts_sugiyama.c` | Sugiyama and Radial Sugiyama |
+| `layouts_basic.c`, `layouts_bipartite.c` | Geometric and bipartite placements |
+| `layouts_mds.c`, `layouts_umap.c`, `layouts_tsne.c` | Torgerson/Spherical MDS, UMAP, and Barnes–Hut t-SNE |
+| `layouts_bcgl.c`, `layouts_vk_bcgl.c` | BCGL-t CPU and GPU-compute variants |
+| `layered_sphere.c/.h` | Static Layered Sphere state machine |
+| `layered_sphere_common.c`, `layered_sphere_common.h` | Sphere grids, ordering, placement, movement, and cleanup shared by static/dynamic layouts |
 
-## Layout Wrappers
+The menu exposes 37 layout algorithms plus four seed controls. Add new layout callbacks to `wrappers_layout.h`, their implementation file, `CMakeLists.txt`, and `g_command_registry[]`.
 
-| File | Role |
+## Rank, Group, Structure, Alter
+
+| Files | Role |
 |------|------|
-| `src/graph/wrappers_layout.c` | Worker functions for all 30+ layout algorithms (force-directed, tree, geometric, bipartite, MDS, dimension reduction, BCGL) |
-| `include/graph/wrappers_layout.h` | Layout wrapper declarations, `apply_layout_matrix`, `free_layout_matrix`, `layout_center_and_autoscale` |
-| `src/graph/layouts_force_fr.c` | Fruchterman-Reingold, Kamada-Kawai implementations |
-| `src/graph/layouts_drl.c` | DrL (Distributed Recursive Layout) |
-| `src/graph/layouts_davidson_harel.c` | Davidson-Harel |
-| `src/graph/layouts_graphopt.c` | GraphOpt |
-| `src/graph/layouts_gem.c` | GEM |
-| `src/graph/layouts_forceatlas2.c` | ForceAtlas2 |
-| `src/graph/layouts_yifan_hu.c` | Yifan Hu |
-| `src/graph/layouts_bcgl.c` | BCGL (Binary Classification Graph Layout) CPU |
-| `src/graph/layouts_vk_bcgl.c` | BCGL GPU compute wrapper |
-| `src/graph/layouts_tree.c` | Reingold-Tilford, Sugiyama, Radial Sugiyama |
-| `src/graph/layouts_basic.c` | Circle, Star, Grid, Sphere, Random |
-| `src/graph/layouts_bipartite.c` | Bipartite layouts |
-| `src/graph/layouts_mds.c` | Multidimensional Scaling (Torgerson, Spherical) |
-| `src/graph/layouts_umap.c` | UMAP dimension reduction |
-| `src/graph/layouts_tsne.c` | t-SNE (Barnes-Hut) |
-| `src/graph/layouts_sugiyama.c` | Sugiyama layered layout |
-| `src/graph/layouts_apply.c` | Layout application utilities |
-| `src/graph/layered_sphere.c` | Layered Sphere custom layout |
+| `wrappers_centrality.c/.h` | Degree, Closeness, Betweenness, Eigenvector, PageRank, HITS Hub/Authority, Harmonic, Strength, Constraint, Coreness, CD Index, Edge Betweenness, Convergence Degree, Edge Trussness |
+| `wrappers_community.c/.h` | Louvain, Leiden, Walktrap, Edge Betweenness, Fast Greedy, Infomap, Label Propagation, Spinglass, Leading Eigenvector, Optimal Modularity, Voronoi, Fluid Communities |
+| `wrappers_structural.c/.h` | Graph properties, density, transitivity, and assortativity info cards |
+| `wrappers_paths.c/.h` | Diameter, radius, average path length, BFS/DFS/topological reveal, info-card allocation/application |
+| `wrappers_cycles.c/.h` | Feedback-arc removal, simplify, empty-date removal, and directed/undirected conversions |
 
-## Analysis Wrappers
+Rank and Group commands normally persist calculated attributes so GraphML saving and dynamic Filter menus can use them. Preserve igraph direction, loop, multiedge, and weight semantics unless the command explicitly documents a conversion.
 
-| File | Role |
+## Follow and Main Path
+
+| Files | Role |
 |------|------|
-| `src/graph/wrappers_centrality.c` | Centrality measures: degree, closeness, betweenness, eigenvector, PageRank, HITS, harmonic, strength, constraint, coreness |
-| `include/graph/wrappers_centrality.h` | Centrality wrapper declarations, `apply_centrality_scores`, `centrality_scores_free` |
-| `src/graph/wrappers_structural.c` | Global properties: density, transitivity, assortativity |
-| `include/graph/wrappers_structural.h` | Structural wrapper declarations |
-| `src/graph/wrappers_paths.c` | Path-based measures: diameter, radius, average path length |
-| `include/graph/wrappers_paths.h` | Path wrapper declarations, `apply_info_card`, `info_card_free` |
-| `src/graph/wrappers_community.c` | Community detection: Louvain, Leiden, Walktrap, Edge Betweenness, Fast Greedy, Infomap, Label Propagation, Spinglass, Leading Eigenvector, Optimal Modularity, Voronoi, Fluid Communities |
-| `include/graph/wrappers_community.h` | Community wrapper declarations, `apply_community_membership`, `free_community_membership` |
-| `src/graph/wrappers_cycles.c` | Cycle analysis: feedback arc set removal |
-| `include/graph/wrappers_cycles.h` | Cycles wrapper declarations, `free_noop` |
-| `src/graph/main_path.c` | Main Path preparation, criticality weighting, selection, and result application |
-| `include/graph/main_path.h` | Main Path command callbacks and selection APIs |
+| `wrappers_flow.c/.h` | Sampled reachable-pair maximum flow and reveal animation |
+| `wrappers_kcore_tree.c/.h` | Chunked k-core hierarchy construction and reveal ordering |
+| `wrappers_path_cover.c/.h` | Minimum path cover, maximum antichain, and minimum chain cover; cyclic directed inputs lose an approximate feedback arc set |
+| `main_path.c/.h` | DAG preparation, six GPU weighting modes, Basket/Global callbacks, and result application |
+| `main_path_cache.c/.h` | Weight, strength, and selection attribute cache validation/loading |
+| `main_path_search.c/.h` | CPU Local, Backward Local, Multiple, Key-Route, and SPLC Valued Network selections |
 
-## Graph Generation Wrappers
+Main Path is a two-step workflow: run weighting, then a selection under the same method. It requires a non-empty directed DAG. GPU weighting is advanced per frame through `poll_main_path_weighting`; CPU selections consume the persisted weight/strength attributes.
 
-| File | Role |
+## Graph Generation and Repository
+
+| Files | Role |
 |------|------|
-| `src/graph/wrappers_constructors.c` | Graph generation: deterministic (ring, star, tree, lattice, full, cycle, famous), stochastic (Erdos-Renyi, Barabasi, Watts-Strogatz, forest fire, random tree, degree sequence), bipartite, spatial |
-| `include/graph/wrappers_constructors.h` | Constructor wrapper declarations, `apply_new_graph`, `free_new_graph` |
+| `wrappers_constructors.c/.h` | Ring, Star, Tree, Lattice, Full, Circle, Famous, six random models, random bipartite, projection, geometric random, and Gabriel commands |
+| `repo.c/.h` | Cache directory and shared curl helpers |
+| `repo_netzschleuder.c/.h` | Netzschleuder catalogue access, download, cache, and graph replacement |
+| `netzschleuder_data.inc` | Generated static catalogue initializers |
 
-## Graph Repository
+Famous and Repository leaves are populated dynamically in `src/ui/menu.c`; their registry entries have parameters and no fixed display name.
 
-| File | Role |
-|------|------|
-| `src/graph/repo.c` | Shared repo utilities (cache dir, curl write callback) |
-| `include/graph/repo.h` | `repo_cache_dir`, `repo_curl_write_cb` |
-| `src/graph/repo_netzschleuder.c` | Static Netzschleuder catalog, download stub |
-| `include/graph/repo_netzschleuder.h` | `StaticNetEntry`, catalog accessor, download API |
-| `src/graph/netzschleuder_data.inc` | Auto-generated C initializers for 286 networks |
-
-### Regenerating the network catalog
-
-The static catalog in `netzschleuder_data.inc` is generated from the Netzschleuder API:
+To regenerate the catalogue:
 
 ```bash
 curl -s 'https://networks.skewed.de/api/nets?full=True' \
@@ -101,74 +88,41 @@ curl -s 'https://networks.skewed.de/api/nets?full=True' \
 > src/graph/netzschleuder_data.inc
 ```
 
-Requires `curl` and `jq`. Handles both single-version (flat `analyses`) and multi-version (keyed `analyses`) networks.
+## Live NCOL Streaming
 
-## Adding Menu Commands
+| Files | Role |
+|------|------|
+| `stream.c/.h` | Main-thread NCOL ingest, name index, incremental graph buffers, pause/live-layout toggles, and visual updates |
+| `ncol_parse.c/.h` | Strict in-place `name1 name2 [weight]` parsing |
+| `dyn_k-core.c/.h` | Exact insertion-only coreness maintenance |
+| `dyn_core_tree.c/.h` | Insertion-only nested k-core hierarchy maintenance |
+| `dyn_core_tree_order.c/.h` | Incremental barycentric ordering within core-tree nodes |
+| `dyn_leiden.c/.h` | Dynamic-frontier CPM Leiden maintenance |
+| `community_simhash.c/.h` | Stable order-independent community fingerprints and colors |
+| `dyn_layered_sphere.c/.h` | Incremental Layered Sphere placement from core-tree and Leiden changes |
+| `dyn_ls_sphere_rotation.c/.h` | Per-sphere rotation fitting |
 
-The menu is a 3D spherical UI built dynamically from `src/graph/command_registry.c:g_command_registry[]`.
+Only `src/os/stream.c` reads stdin on its thread. `graph_stream_poll()` is the single main-thread consumer and the only streaming path allowed to mutate igraph or `GraphData`.
 
-### CommandDef Struct
-```c
-typedef struct CommandDef {
-    const char *category_path;    // e.g. "Layout/Force-Directed"
-    const char *command_id;       // e.g. "lay_force_fr"
-    const char *display_name;     // e.g. "Fruchterman-Reingold"
-    IgraphWorkerFunc worker_func; // Pure compute: void* (*)(igraph_t*)
-    IgraphApplyFunc apply_func;   // Sync result to UI: void (*)(ExecutionContext*, void*)
-    IgraphFreeFunc free_func;     // Cleanup: void (*)(void*)
-    IgraphGpuPollFunc gpu_poll_func; // GPU poll: bool (*)(ExecutionContext*), NULL for CPU-only
-} CommandDef;
-```
+## Current Menu Shape
 
-### Menu Structure (root categories in order)
+| Root | Coverage |
+|------|----------|
+| `Data` | Patterns, Famous, Random, Bipartite, Spatial, Repository, Stream |
+| `Layout` | Seed, Force-Directed, Hierarchical, Geometric, Bipartite, Embedding, Binary Classification, Layered Sphere |
+| `Rank` | 15 node/edge measures |
+| `Group` | 12 community methods |
+| `Follow` | BFS, DFS, topological order, K-Core Tree, Main Path, sampled max flow, path/antichain/chain covers |
+| `Structure` | Diameter, radius, average path length, assortativity, density, transitivity |
+| `Filter` | Dynamic Node and Edge attribute filters plus Show All |
+| `Alter` | Feedback-arc removal, simplify, empty-date removal, directedness conversions |
+| Root leaves | Properties, Save, Quit |
 
-| Root | Sub-menus | Purpose |
-|------|-----------|---------|
-| `Data` | Patterns, Random, Bipartite, Spatial, Repository | Graph source (generate, import, browse) |
-| `Layout` | Force-Directed, Hierarchical, Geometric, Embedding, Bipartite, GPU | Node positioning |
-| `Rank` | *(flat)* | Per-node importance (degree, centrality, PageRank...) |
-| `Group` | *(flat)* | Community detection (Louvain, Leiden, Walktrap...) |
-| `Follow` | *(flat)* | Path/traversal exploration (shortest path, BFS, SPLC) |
-| `Structure` | *(flat)* | Global graph properties (density, diameter, transitivity...) |
-| `Show` | *(flat)* | Filter/highlight/visibility (by degree, by attribute, extract...) |
-| `Alter` | Clean Up | Graph transformation (feedback arc set, complement, MST...) |
+## Adding a Menu Command
 
-### Process
-1. **Define Worker Function** (in appropriate `src/graph/wrappers_*.c`):
-   - `void* compute_new_lay(igraph_t *graph)`: Offloaded CPU compute. Return `igraph_matrix_t*` for layouts, `igraph_vector_t*` for centrality, `igraph_vector_int_t*` for community membership, `igraph_t*` for new graphs, or other data. Check `igraph_error_t != IGRAPH_SUCCESS`, cleanup/free on fail, return NULL.
-   - Declare in corresponding `include/graph/wrappers_*.h`.
-   - Example: `igraph_layout_circle(graph, result, order);`
-
-2. **Define Apply/Free Functions**:
-   - Use existing `apply_layout_matrix` (updates `GraphData.nodes` positions from matrix, calls `renderer_update_graph`).
-   - Use `apply_centrality_scores` / `centrality_scores_free` for centrality measures.
-   - Use `apply_community_membership` / `free_community_membership` for community detection.
-   - Use `apply_new_graph` / `free_new_graph` for graph generation.
-   - Use `apply_info_card` / `info_card_free` for scalar results (diameter, density, etc.).
-   - `free_layout_matrix`: `igraph_matrix_destroy/free(ptr)`.
-
-3. **Register in `g_command_registry[]`** (`src/graph/command_registry.c`):
-   ```c
-   {"Category/Subcategory", "unique_id", "Display Name", compute_func, apply_func, free_func},
-   ```
-   - For GPU-accelerated commands, add `gpu_poll_func` as 7th arg (e.g., `poll_bcgl_gpu`, `poll_main_path_weighting`). Pass `NULL` for CPU-only.
-   - `category_path`: / separated folders (creates tree).
-   - `command_id`: Unique ID for lookup.
-   - Auto-sorted by registry order.
-
-4. **Execution Flow**:
-   - Select leaf -> `node->command->cmd_def` -> `worker_thread_submit_job` queues `worker_func` (compute).
-   - Complete -> `apply_func` updates state -> renderer refresh.
-   - For GPU jobs: `gpu_poll_func` is called per-frame until it returns `true`.
-   - Background thread prevents UI freeze.
-
-The menu tree auto-builds in `src/ui/menu.c`; menu interaction lives in `src/interaction/menu.c` — see those directories' AGENTS.md.
-
-### Examples
-- Layouts: `lay_force_fr` -> `compute_igraph_layout_fruchterman_reingold_3d` + `apply_layout_matrix`.
-- Rank: `igraph_degree` -> `compute_igraph_degree` + `apply_centrality_scores`.
-- Group: `igraph_community_leiden` -> `compute_igraph_community_leiden` + `apply_community_membership`.
-- Data: `igraph_ring` -> `compute_igraph_ring` + `apply_new_graph`.
-- GPU: `lay_bcgl` -> `compute_layout_bcgl` + `apply_layout_bcgl` + `poll_bcgl_gpu`.
-
-Rebuild & run to see menu update.
+1. Implement `void *compute_*(ExecutionContext *ctx)` and matching apply/free callbacks in the appropriate module. Check all igraph initialization and algorithm returns.
+2. Declare the callbacks in the matching header and add a new source file to `CMakeLists.txt` if needed.
+3. Register a unique ID and display name in `g_command_registry[]`. Set `param_defs`, `gpu_poll_func`, and `transition_duration` only when used.
+4. Reuse `apply_layout_matrix`, `apply_centrality_scores`, `apply_community_membership`, `apply_new_graph`, or `apply_info_card` where their ownership contract fits.
+5. For a new dynamic family, add population/clear logic to `src/ui/menu.c`; static leaves need no UI code.
+6. Build and run relevant automated tests. Do not launch the application; menu and interactive verification is left to the user.

@@ -17,9 +17,9 @@ cmake --build build/ --parallel
 ### Notes
 - Ensure igraph built thread-safe: `cmake .. -DCMAKE_INSTALL_PREFIX=... -DIGRAPH_ENABLE_TLS=ON`
 - Shaders auto-compile to SPIRV in `build/shaders/*.spv` using glslangValidator.
-- Run: `./build/igraph-vlk`
 - Debug: `cmake --build build/ --config Debug`
 - Vulkan validation layers recommended for debugging.
+- Do not launch `igraph-vlk`. Interactive, visual, VR, and performance testing is left to the user.
 
 ## Lint, Format, and Verify
 
@@ -31,7 +31,7 @@ Follows `.clang-format`: tabs (width 4), unlimited line length, bin-packed args,
 
 ### Linting
 ```bash
-cppcheck --enable=all --inconclusive --force --std=c99 --error-exitcode=2 -I include src/
+cppcheck --enable=all --inconclusive --force --std=c11 --error-exitcode=2 -I include src/
 ```
 Flags unused functions `[unusedFunction]`, style issues. Suppress with `// cppcheck-suppress unusedFunction`.
 
@@ -59,13 +59,12 @@ No typechecker (C). Check for igraph/Vulkan errors at runtime.
 Unit tests live in `tests/` and are wired into CMake/CTest.
 
 - **Run all tests**: `ctest --test-dir build --output-on-failure` (or `ctest -C Debug` from inside `build/`). Each test is a `RUN_TEST`-driven executable that asserts with `IGRAPH_ASSERT`; `add_test` registers them in `CMakeLists.txt`.
-- **Test layout**:
-  - `tests/dyn_kcore_test.c` — data-driven correctness for `src/graph/dyn_k-core.c` (dynamic streaming k-core maintenance). Mirrors igraph's own `tests/unit/coreness.c`: it runs the maintained coreness over the exact same graph list (empty, singleton, full/looped/directed, Zachary, Zachary+loops+multiedges, geometric) and validates against both `igraph_coreness` and the shared `validate_coreness` oracle.
-  - `tests/test_utilities.h` — generic harness: `RUN_TEST(func)` drives a test function and verifies the igraph FINALLY stack; `VERIFY_FINALLY_STACK()`.
-  - `tests/validate_coreness.h` — structural coreness oracle (ported from igraph's `coreness.c`): every k-core subgraph must have min degree ≥ k.
+- **Graph streaming tests**: `dyn_kcore_test`, `dyn_core_tree_test`, `dyn_core_tree_order_test`, `dyn_leiden_test`, `dyn_layered_sphere_test`, `community_simhash_test`, and `ncol_parse_test`.
+- **Main-path tests**: `criticality_test` exercises `main_path.comp` headlessly; `main_path_cache_test` and `main_path_search_test` cover cached results and CPU selection variants.
+- **Geometry and rendering tests**: `layered_sphere_common_test`, `spatial_test`, `picking_test`, and `renderer_anim_values_test`.
+- **Shared test support**: `test_utilities.h`, `validate_coreness.h`, `validate_core_tree.h`, and `criticality_test_harness.*`.
 - **Adding a test**: create `tests/<name>_test.c`, add a matching `add_executable`/`target_include_directories`/`target_link_libraries` + `add_test(NAME <name>_test COMMAND <name>_test)` block in `CMakeLists.txt` (link `igraph::igraph` and, on non-MSVC, `m`). Keep benchmarking/perf out of unit tests.
-- **Manual Testing**: Run `./build/igraph-vlk`, load graphs (GraphML), test layouts (OpenOrd, Layered Sphere), interactions (pan/zoom/select), menus.
-- **Visual/Perf**: FPS in HUD; stress large graphs (>10k nodes).
+- **Application testing**: Do not run the application. Leave interactive, visual, VR, streaming, and performance checks to the user.
 
 ## Code Style Guidelines
 
@@ -114,16 +113,16 @@ Per-directory code overviews and workflows live in the matching subdirectory:
 
 | Directory | Doc | Contents |
 |-----------|-----|----------|
-| `src/graph/` | `src/graph/AGENTS.md` | Graph core/data, filtering, command registry & worker thread, layout/analysis/generation wrappers, graph repository, adding menu commands |
-| `src/vulkan/` | `src/vulkan/AGENTS.md` | Vulkan renderer, pipelines, geometry/labels/UI/compute, shaders |
-| `src/interaction/` | `src/interaction/AGENTS.md` | Window, camera, input, picking, gamepad, menu interaction, app state machine |
-| `src/ui/` | `src/ui/AGENTS.md` | Menu tree/rendering, HUD overlay |
+| `src/graph/` | `src/graph/AGENTS.md` | Graph lifecycle/I/O, streaming maintainers, filtering, command execution, layouts, analysis, generation, Follow workflows, repository |
+| `src/vulkan/` | `src/vulkan/AGENTS.md` | Vulkan lifecycle, drawing, animation/transitions, geometry, labels, UI, GPU layouts, Main Path compute, shaders |
+| `src/interaction/` | `src/interaction/AGENTS.md` | Window/camera/input, picking, gamepad, menu activation, application state machine |
+| `src/ui/` | `src/ui/AGENTS.md` | Static and dynamic menu construction, transforms, cards, HUD overlay |
 | `src/xr/` | `src/xr/AGENTS.md` | OpenXR context, session, input, view, frame |
-| `src/os/` | `src/os/AGENTS.md` | Platform path resolution, streaming stdin reader |
+| `src/os/` | `src/os/AGENTS.md` | Platform paths, save/cache locations, threaded stdin line reader |
 
 ### Entry Point & App State
 
 | File | Role |
 |------|------|
-| `src/main.c` | GLFW loop, state machine, file loading, input dispatch |
+| `src/main.c` | CLI/VR setup, GLFW loop, file or NCOL-stream startup, worker polling, rendering, shutdown |
 | `include/app_state.h` | `AppState` struct (ties together Renderer, GraphData, Camera, WindowState, WorkerThreadContext, AppContext) |

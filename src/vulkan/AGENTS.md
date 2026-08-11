@@ -1,75 +1,80 @@
 # Vulkan Renderer Documentation
 
-Per-directory guide for `src/vulkan/` and `include/vulkan/`. See root `AGENTS.md` for build/lint/testing/style. When editing: mimic neighbors; lint/format/build; no regressions.
+Per-directory guide for `src/vulkan/`, `include/vulkan/`, and `shaders/`. See root `AGENTS.md` for build, test, and style rules.
 
-## Renderer Files
+## Renderer Lifecycle and Frames
 
-| File | Role |
+| Files | Role |
 |------|------|
-| `include/vulkan/renderer.h` | Public renderer API (`renderer_update_graph`, `renderer_render_ray`) |
-| `include/vulkan/vulkan_types.h` | `Renderer`, animation, criticality, BCGL, and edge-routing types; all Vulkan struct definitions |
-| `src/vulkan/renderer_lifecycle.c` | Renderer init, cleanup, window resize recreation |
-| `include/vulkan/renderer_lifecycle.h` | Lifecycle API |
-| `src/vulkan/renderer_draw.c` | Main draw loop, frame submission |
-| `include/vulkan/renderer_draw.h` | Draw API |
-| `src/vulkan/renderer_pipelines.c` | Pipeline creation for all render passes |
-| `include/vulkan/renderer_pipelines.h` | Pipeline creation API |
-| `src/vulkan/renderer_geometry.c` | Node/edge geometry buffer updates |
-| `include/vulkan/renderer_geometry.h` | Geometry update API |
-| `src/vulkan/renderer_labels.c` | Label rendering (atlas-based text) |
-| `include/vulkan/renderer_labels.h` | Label rendering API |
-| `src/vulkan/renderer_ui.c` | 2D HUD overlay rendering |
-| `include/vulkan/renderer_ui.h` | UI rendering API |
-| `src/vulkan/renderer_camera.c` | Camera uniform buffer updates |
-| `include/vulkan/renderer_camera.h` | Camera rendering API |
-| `src/vulkan/renderer_compute.c` | Spherical edge-routing compute dispatch |
-| `include/vulkan/renderer_compute.h` | Compute dispatch API |
-| `src/vulkan/renderer_update_node_labels.c` | Dynamic node label updates |
-| `include/vulkan/renderer_update_node_labels.h` | Label update API |
-| `src/vulkan/renderer_xr.c` | XR framebuffers, depth buffers per view |
-| `include/vulkan/renderer_xr.h` | XR rendering API |
-| `src/vulkan/renderer_bcgl.c` | BCGL GPU compute pipeline |
-| `include/vulkan/renderer_bcgl.h` | BCGL rendering API |
-| `src/vulkan/device.c` | Vulkan physical/logical device selection, queue families |
-| `include/vulkan/device.h` | Device API |
-| `src/vulkan/swapchain.c` | Swapchain creation, image acquisition |
-| `include/vulkan/swapchain.h` | Swapchain API |
-| `src/vulkan/buffers.c` | Buffer creation, memory allocation, staging |
-| `include/vulkan/buffers.h` | Buffer API |
-| `src/vulkan/images.c` | Image creation, view creation, format utilities |
-| `include/vulkan/images.h` | Image API |
-| `src/vulkan/commands.c` | Command pool/buffer allocation, one-shot commands |
-| `include/vulkan/commands.h` | Command API |
-| `src/vulkan/render_pass.c` | Render pass creation |
-| `include/vulkan/render_pass.h` | Render pass API |
-| `src/vulkan/pipeline_graphics.c` | Graphics pipeline creation helpers |
-| `include/vulkan/pipeline_graphics.h` | Graphics pipeline API |
-| `src/vulkan/pipeline_compute.c` | Compute pipeline creation |
-| `include/vulkan/pipeline_compute.h` | Compute pipeline API |
-| `src/vulkan/pipeline_ui.c` | UI overlay pipeline |
-| `include/vulkan/pipeline_ui.h` | UI pipeline API |
-| `src/vulkan/menu.c` | Menu GPU buffer management (instanced quads, text) |
-| `include/vulkan/menu.h` | Menu GPU API |
-| `src/vulkan/text.c` | Font atlas (Inconsolata), text rendering helpers |
-| `include/vulkan/text.h` | `TextRegion` type, text API |
-| `src/vulkan/utils.c` | Vulkan utility functions |
-| `include/vulkan/utils.h` | Utility API |
-| `src/vulkan/app_path.c` | Application path resolution (XDG, installed) |
-| `include/vulkan/app_path.h` | App path API |
+| `renderer.h`, `vulkan_types.h` | Public graph/ray update API and aggregate renderer/resource state |
+| `renderer_lifecycle.c/.h` | Renderer initialization, frame-idle waits, and resize recreation |
+| `renderer_cleanup.c/.h` | Central destruction of renderer, compute, menu, label, swapchain, and optional XR resources |
+| `renderer_draw.c/.h` | Desktop frame acquisition, command recording, pass submission, and presentation |
+| `renderer_camera.c/.h` | Per-view camera uniform updates |
+| `renderer_pipelines.c/.h` | Creation of graph, label, ray, menu, text, and compute pipelines/descriptors |
+| `renderer_xr.c/.h` | XR swapchain image framebuffers and depth resources |
+
+Keep resource creation and destruction paired. Before replacing buffers or pipelines used by in-flight frames, use the existing fence/frame-idle helpers.
+
+## Graph Geometry, Labels, UI
+
+| Files | Role |
+|------|------|
+| `renderer_geometry.c/.h` | Node/edge GPU geometry and attribute uploads, including routed edges |
+| `renderer_labels.c/.h` | Label atlas instances, Barnes–Hut visibility selection, and detail-card support |
+| `renderer_update_node_labels.c/.h` | Dynamic node/detail label refresh and positioning |
+| `renderer_ui.c/.h` | HUD background/text instance upload |
+| `menu.c/.h` | Menu card, row, label, and info-card GPU buffers |
+| `text.c/.h` | Inconsolata atlas creation, glyph caching, text measurement, and text regions |
+
+Menu tree structure and transforms live in `src/ui/menu.c`; picking lives in `src/interaction/menu.c`. This directory consumes their cached geometry but does not own menu behavior.
+
+## Animation, Transitions, GPU Analysis
+
+| Files | Role |
+|------|------|
+| `renderer_anim.c/.h` | Node/edge reveal clips, strengths, ownership, descriptor buffers, and per-frame animation state |
+| `renderer_anim_values.c/.h` | Pure strength and reveal-time conversions used by renderer code and tests |
+| `renderer_transition.c/.h` | Snapshot/retarget/advance of smooth node and edge layout morphs |
+| `renderer_compute.c/.h` | Spherical-PCB edge-routing compute context and dispatch |
+| `renderer_bcgl.c/.h` | BCGL-t GPU buffers, dispatch, poll, readback, and cleanup |
+| `renderer_criticality.c/.h` | Main Path GPU weighting pipeline, DAG level sweeps, tiled NPPC reachability, readback, cancellation |
+| `criticality_types.h` | CPU/shader-shared Main Path modes, stages, push constants, headers, flags, and buffer offsets |
+
+Main Path supports SPLC, Unit, SPC, SPE, NPPC, and SPNP. Weighting progresses non-blockingly through per-frame polls; NPPC may span multiple tiled submissions. Keep all C structs, offsets, workgroup assumptions, and enums synchronized with `shaders/main_path.comp` and `tests/criticality_test*`.
+
+## Vulkan Infrastructure
+
+| Files | Role |
+|------|------|
+| `device.c/.h` | Physical/logical device selection, features, queues, and extensions |
+| `swapchain.c/.h` | Swapchain images/views, extent/format choice, acquisition, and recreation |
+| `buffers.c/.h` | Host/device buffer allocation, staging, copy, map/update helpers |
+| `images.c/.h` | Image allocation, views, formats, and transitions |
+| `commands.c/.h` | Command pools/buffers and one-shot command helpers |
+| `render_pass.c/.h` | Desktop and XR-compatible render-pass creation |
+| `pipeline_graphics.c/.h` | Graphics shader/module/pipeline helpers |
+| `pipeline_compute.c/.h` | Compute shader/module/pipeline helpers |
+| `pipeline_ui.c/.h` | Vertex formats and pipelines for HUD/menu/text quads |
+| `utils.c/.h` | Vulkan result checks and shared macros/helpers |
+
+There is no `src/vulkan/app_path.c`; platform resource paths are owned by `src/os/path.c`.
 
 ## Shaders
 
-Shaders auto-compile to SPIRV in `build/shaders/*.spv` using glslangValidator.
+Shaders are compiled to `build/shaders/*.spv` by CMake.
 
-| File | Role |
+| Shaders | Role |
 |------|------|
-| `shaders/node.vert` / `node.frag` | Node billboard quad with SDF shape rendering |
-| `shaders/edge.vert` / `edge.frag` | Edge line/curve with animation strength and emphasis coloring |
-| `shaders/label.vert` / `label.frag` | Billboarded text labels |
-| `shaders/ui.vert` / `ui.frag` | 2D HUD overlay |
-| `shaders/menu.vert` / `menu.frag` | Menu card billboards with title bar + items |
-| `shaders/textquad.vert` / `textquad.frag` | Generic text-bearing quads |
-| `shaders/ray.vert` / `ray.frag` | Debug ray visualization |
-| `shaders/routing.comp` | Spherical PCB edge routing (GPU compute) |
-| `shaders/main_path.comp` | Main Path criticality and presentation-strength compute |
-| `shaders/bcgl.comp` | BCGL binary classification graph layout (GPU compute) |
+| `node.vert`, `node.frag` | Billboard nodes, visibility/reveal state, SDF shape and color |
+| `edge.vert`, `edge.frag` | Straight/routed edge geometry, animation strength, visibility, emphasis |
+| `label.vert`, `label.frag` | Billboarded atlas labels |
+| `ui.vert`, `ui.frag` | HUD overlay |
+| `menu.vert`, `menu.frag` | Menu and info-card backgrounds |
+| `textquad.vert`, `textquad.frag` | Menu/info-card atlas text |
+| `ray.vert`, `ray.frag` | VR/debug controller ray |
+| `routing.comp` | Spherical-PCB edge routing |
+| `bcgl.comp` | BCGL-t layout optimization |
+| `main_path.comp` | Six Main Path weighting modes, Basket/Global data, and presentation strength |
+
+When a shader interface changes, update the matching C layout, descriptor writes, pipeline setup, compile definition/path in `CMakeLists.txt`, and relevant headless tests. Do not launch the application for visual or performance testing; leave that to the user.

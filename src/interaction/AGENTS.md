@@ -1,53 +1,51 @@
 # Interaction Documentation
 
-Per-directory guide for `src/interaction/` and `include/interaction/`. See root `AGENTS.md` for build/lint/testing/style. When editing: mimic neighbors; lint/format/build; no regressions.
+Per-directory guide for `src/interaction/` and `include/interaction/`. See root `AGENTS.md` for build, test, and style rules.
 
-## Window, Camera, Input
+## Files
 
-| File | Role |
+| Files | Role |
 |------|------|
-| `src/interaction/window.c` | GLFW window lifecycle, fullscreen toggle, monitor cycling |
-| `include/interaction/window.h` | `WindowState` struct, window creation and management API |
-| `src/interaction/camera.c` | FPS camera (yaw/pitch, WASD, movement speed) |
-| `include/interaction/camera.h` | `Camera` struct + API |
-| `src/interaction/input.c` | Keyboard, mouse, gamepad input dispatch |
-| `include/interaction/input.h` | Key mapping, gamepad deadzone, button state |
-| `src/interaction/gamepad.c` | Gamepad axis/button handling |
-| `include/interaction/gamepad.h` | Gamepad API |
+| `window.c/.h` | GLFW lifecycle, focus handling, fullscreen, monitor cycling, and window state |
+| `camera.c/.h` | FPS camera movement, yaw/pitch vectors, and speed modifiers |
+| `input.c/.h` | GLFW callbacks, keyboard/mouse dispatch, controller mapping load, and continuous input |
+| `gamepad.c/.h` | Mapped and raw-controller polling, deadzones, movement/look, menu activation, and layout scaling |
+| `picking.c/.h` | Node sphere, edge segment, and menu quad ray intersections; object selection/detail cards |
+| `spatial.c/.h` | Camera-relative basis and world placement used when the menu opens |
+| `menu.c/.h` | Menu toggle, desktop crosshair ray, VR controller ray, and hover clearing |
+| `state.c/.h` | Command parameters, menu/info-card types, app state transitions, command submission/application, and Quit |
 
-## Picking
+There is no interaction-layer filter module. Dynamic filter construction is in `src/ui/menu.c`; filter execution is in `src/graph/wrappers_filter.c` and `graph_filter_visibility.c`.
 
-| File | Role |
-|------|------|
-| `src/interaction/picking.c` | Ray-picking (node sphere, edge segment intersection) |
-| `include/interaction/picking.h` | Pick result types, pick API |
+## Input Ownership
 
-## Spatial & Filter
+- Desktop and gamepad menu targeting use the center crosshair. Do not use `glfwGetCursorPos()` for menu activation.
+- VR targeting uses the controller ray.
+- Ray updates set `AppContext.menu.hovered_node`. Mouse, gamepad A, and VR select activate that existing target; activation must not cast a second ray.
+- Only `MenuNode.is_visible` rows are pickable. `src/ui/menu.c:update_menu_transforms()` recomputes visibility and geometry every frame.
+- Object picking is available only in graph view. Menu activation and parameter selection are routed through `handle_menu_selection()`.
 
-| File | Role |
-|------|------|
-| `src/interaction/spatial.c` | Spatial basis calculation for menu spawning |
-| `include/interaction/spatial.h` | `SpatialBasis` type, spatial API |
-| `src/interaction/filter.c` | Filter UI interaction (attribute filter dispatch) |
-| `include/interaction/filter.h` | Filter interaction API |
+## Current Controls
 
-## Menu Interaction
+| Input | Feature |
+|------|---------|
+| Mouse / WASD / Shift | Look, move, and accelerate |
+| Mouse wheel, `+`, `-` | Layout scale |
+| Space | Toggle menu |
+| Left click / gamepad A | Select object or activate hovered menu row |
+| Escape | Request worker cancellation |
+| Q | Quit |
+| N / E / M / H | Nodes, edges, routing mode, HUD toggles |
+| R | Reload the original file-backed graph |
+| 1–9 / K | Destructive degree and k-core pruning |
+| J | Highlight articulation points and bridge endpoints |
+| Alt+Enter / Alt+Left / Alt+Right | Fullscreen and monitor controls |
+| Gamepad sticks / Start / triggers | Move/look, menu toggle, and layout scale |
 
-| File | Role |
-|------|------|
-| `src/interaction/menu.c` | Menu toggle, mouse/crosshair picking, hover clear |
-| `include/interaction/menu.h` | `interaction_menu_toggle`, `interaction_pick_menu_node`, `raycast_menu_crosshair` |
+Keep this table synchronized with `input.c` and `gamepad.c`. Do not launch the application to test controls; interactive verification belongs to the user.
 
-- `interaction_menu_toggle(AppState *state)`: Opens/closes the spherical menu.
-- `raycast_menu_crosshair(AppState *state)`: Desktop/gamepad picking. The cursor is captured while the menu is open, so the crosshair is the pointer — never pick from `glfwGetCursorPos()`.
-- `raycast_menu_vr(AppState *state, ray_ori, ray_dir)`: VR controller picking.
-- Both resolve hover into `AppContext.menu.hovered_node`. Input sources (mouse press, gamepad A, VR select) **activate that node**; they must not cast rays of their own, or one press selects two different rows.
-- Only nodes with `MenuNode.is_visible` are pickable. It is recomputed every frame by `update_menu_transforms()` and marks the rows actually laid out and drawn, so collapsed subtrees and the root's non-existent row can never be hit.
-- All app-level menu state (`root`, `active_level`, `hovered_node`, `spawn_basis`, `info_card`, `is_open`) lives in `AppContext.menu` (`MenuState`, `include/interaction/state.h`). Per-node flags/geometry stay on `MenuNode`.
+## Menu and Application State
 
-## Application State Machine
+All app-level menu state lives in `AppContext.menu`: root, active branch, hovered row, captured spatial basis, info card, and open flag. Per-row geometry and expansion/visibility flags stay on `MenuNode`.
 
-| File | Role |
-|------|------|
-| `src/interaction/state.c` | State transitions (`update_app_state`), command execution dispatch, menu selection handling |
-| `include/interaction/state.h` | `AppContext`, `AppInteractionState`, `ExecutionContext`, `IgraphCommand`, `MenuNode`, `InfoCardData` types |
+The state machine covers graph view, open menu, parameter selection, command execution, background jobs, and displayed results. `update_app_state()` is the only normal path for polling job completion and applying/freeing results. Preserve the split between worker-thread computation and main-thread UI/renderer mutation.
