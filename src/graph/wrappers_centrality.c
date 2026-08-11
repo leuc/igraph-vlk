@@ -16,10 +16,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
 // Worker Functions
 // Each returns igraph_vector_t* (centrality scores) on success, NULL on failure
-// ============================================================================
 
 // Degree centrality
 void *compute_igraph_degree(ExecutionContext *ctx)
@@ -733,9 +731,6 @@ void *compute_igraph_trussness(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// Apply and Free Functions
-// ============================================================================
 
 void apply_centrality_scores(ExecutionContext *ctx, void *result_data)
 {
@@ -784,12 +779,10 @@ void apply_centrality_scores(ExecutionContext *ctx, void *result_data)
 	printf("[apply_centrality_scores] Centrality applied\n");
 }
 
-// ============================================================================
 // Apply: CD index writes new 'cd-index'/'cd-index-type' vertex attributes as
 // a side effect (unlike every other Rank command), so on top of the shared
 // sizing logic this refreshes GraphData.filterable_attrs and repopulates the
 // Filter > Node menu so 'cd-index-type' shows up there right away.
-// ============================================================================
 void apply_cd_index(ExecutionContext *ctx, void *result_data)
 {
 	apply_centrality_scores(ctx, result_data);
@@ -801,10 +794,8 @@ void apply_cd_index(ExecutionContext *ctx, void *result_data)
 	menu_populate_attribute_filters(state->app_ctx.menu.root, &state->current_graph);
 }
 
-// ============================================================================
 // Apply: edge-side twin of apply_centrality_scores — min/max-normalizes the
 // score vector onto Edge.weight, which drives edge alpha in the renderer.
-// ============================================================================
 void apply_edge_centrality_scores(ExecutionContext *ctx, void *result_data)
 {
 	if (!ctx || !ctx->app_state || !result_data) {
@@ -856,12 +847,10 @@ void apply_edge_centrality_scores(ExecutionContext *ctx, void *result_data)
 	printf("[apply_edge_centrality_scores] Edge centrality applied\n");
 }
 
-// ============================================================================
 // Apply: Convergence degree writes new 'convergence'/'convergence-degree' edge
 // attributes as a side effect, so on top of the shared sizing logic this
 // refreshes GraphData.filterable_edge_attrs and repopulates the Filter > Edge
 // menu so 'convergence' shows up there right away.
-// ============================================================================
 void apply_convergence_degree(ExecutionContext *ctx, void *result_data)
 {
 	apply_edge_centrality_scores(ctx, result_data);
@@ -881,11 +870,9 @@ void centrality_scores_free(void *result_data)
 	}
 }
 
-// ============================================================================
 // Every attribute name a Rank command may have cached, so an in-place graph
 // edit (Alter menu) can wipe them all and force the next Rank click to
 // recompute rather than reapply now-stale values.
-// ============================================================================
 static const struct
 {
 	const char *name;

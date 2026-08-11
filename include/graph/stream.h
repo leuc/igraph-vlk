@@ -10,7 +10,7 @@
 #include "interaction/state.h"
 #include <stdbool.h>
 
-/* ============================================================================
+/*
  * NCOL streaming from stdin.
  *
  * Reads "<name1> <name2> [<weight>]" lines from stdin (via os/stream.h) and
@@ -21,7 +21,7 @@
  * GraphData must only ever be called from one thread (the main/render
  * thread) via graph_stream_poll(). The stdin reader itself runs on its own
  * background thread and never touches igraph state directly.
- * ============================================================================ */
+ */
 
 typedef struct GraphStream GraphStream;
 

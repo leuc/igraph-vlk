@@ -13,11 +13,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
 // BCGL LAYOUT (2D) - Binary Classification-Based Graph Layout
 // Yan, Zhao & Yang (2022) — IEICE Trans. Inf. & Syst. E105.D(9), 1610-1619
 // https://doi.org/10.1587/transinf.2021EDP7260
-// ============================================================================
 void *compute_igraph_layout_bcgl(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -66,11 +64,9 @@ void *compute_igraph_layout_bcgl(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
 // BCGL LAYOUT (3D) - Binary Classification-Based Graph Layout
 // Yan, Zhao & Yang (2022) — IEICE Trans. Inf. & Syst. E105.D(9), 1610-1619
 // https://doi.org/10.1587/transinf.2021EDP7260
-// ============================================================================
 void *compute_igraph_layout_bcgl_3d(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;

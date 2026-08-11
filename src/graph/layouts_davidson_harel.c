@@ -13,9 +13,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
-// DAVIDSON-HAREL LAYOUT
-// ============================================================================
 // Reference: Davidson, R. and Harel, D.:
 // "Drawing Graphs Nicely Using Simulated Annealing."
 // ACM Transactions on Graphics 15(4), pp. 301-331, 1996.

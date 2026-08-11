@@ -13,10 +13,8 @@
 
 #include "graph/wrappers_layout.h"
 
-// ============================================================================
 // (Re)scan vertex attributes for low-cardinality string/boolean ones and
 // populate data->filterable_attrs (backs the Filter > Node menu).
-// ============================================================================
 void graph_detect_filterable_attrs(GraphData *data)
 {
 	if (data->filterable_attrs) {
@@ -141,10 +139,8 @@ void graph_detect_filterable_attrs(GraphData *data)
 	}
 }
 
-// ============================================================================
 // (Re)scan edge attributes for low-cardinality string/boolean ones and
 // populate data->filterable_edge_attrs (backs the Filter > Edge menu).
-// ============================================================================
 void graph_detect_filterable_edge_attrs(GraphData *data)
 {
 	if (data->filterable_edge_attrs) {
@@ -269,10 +265,7 @@ void graph_detect_filterable_edge_attrs(GraphData *data)
 	}
 }
 
-// ============================================================================
-// Build the entire visualization arrays for a new graph.
-// Caller intention: "I have a completely new graph — build everything."
-// ============================================================================
+// Rebuild all visualization arrays for a new graph.
 bool graph_build_visualization(GraphData *data)
 {
 	uint32_t old_node_count = data->node_count;
@@ -282,7 +275,6 @@ bool graph_build_visualization(GraphData *data)
 	data->props.node_count = (int)data->node_count;
 	data->props.edge_count = (int)data->edge_count;
 
-	// Free old arrays
 	if (data->nodes) {
 		for (uint32_t i = 0; i < old_node_count; i++)
 			if (data->nodes[i].label)
@@ -292,7 +284,6 @@ bool graph_build_visualization(GraphData *data)
 	if (data->edges)
 		free(data->edges);
 
-	// Build nodes
 	data->nodes = malloc(sizeof(Node) * data->node_count);
 	if (!data->nodes && data->node_count > 0)
 		return false;
@@ -340,7 +331,6 @@ bool graph_build_visualization(GraphData *data)
 	// Analyze filterable vertex attributes (low-cardinality string/boolean only)
 	graph_detect_filterable_attrs(data);
 
-	// Build edges
 	data->edges = malloc(sizeof(Edge) * data->edge_count);
 	if (!data->edges && data->edge_count > 0)
 		return false;
@@ -361,10 +351,8 @@ bool graph_build_visualization(GraphData *data)
 	return true;
 }
 
-// ============================================================================
 // Rebuild only the edge array and node degrees after in-place edge changes.
 // Caller intention: "Edges changed — update edges and degrees, leave nodes alone."
-// ============================================================================
 bool graph_rebuild_edges(GraphData *data)
 {
 	data->edge_count = igraph_ecount(&data->g);
@@ -399,9 +387,7 @@ bool graph_rebuild_edges(GraphData *data)
 	return true;
 }
 
-// ============================================================================
 // Free all graph data
-// ============================================================================
 void graph_free_data(GraphData *data)
 {
 	if (data->graph_initialized) {
@@ -452,10 +438,8 @@ void graph_free_data(GraphData *data)
 	}
 }
 
-// ============================================================================
 // Import node positions from _pos vertex attribute (GraphML/GML convention)
 // Returns true if _pos was found and current_layout was populated.
-// ============================================================================
 bool graph_import_layout_pos(GraphData *data)
 {
 	if (!igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, "_pos"))
@@ -479,9 +463,7 @@ bool graph_import_layout_pos(GraphData *data)
 	return true;
 }
 
-// ============================================================================
 // Build an edge-id-ordered weight vector from the igraph "weight" edge attribute
-// ============================================================================
 bool graph_build_edge_weights(const igraph_t *graph, igraph_vector_t *out_weights)
 {
 	if (!igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_EDGE, "weight"))
@@ -495,11 +477,9 @@ bool graph_build_edge_weights(const igraph_t *graph, igraph_vector_t *out_weight
 	return true;
 }
 
-// ============================================================================
 // General-purpose compute-cache: store/load a whole numeric vertex or edge
 // attribute in one call, so a worker function can skip recomputation when a
 // prior run already persisted its result under this attribute name.
-// ============================================================================
 bool graph_cache_load_vertex_attr(const igraph_t *graph, const char *name, igraph_vector_t *out)
 {
 	if (!igraph_cattribute_has_attr(graph, IGRAPH_ATTRIBUTE_VERTEX, name))

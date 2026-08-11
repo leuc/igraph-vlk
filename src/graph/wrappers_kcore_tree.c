@@ -14,17 +14,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// Edges are replayed into the hierarchy in fixed-size chunks so the worker
-// thread can report progress and observe cancellation between chunks,
-// instead of blocking for the whole graph in one call. The chunk size is
-// fixed, NOT adapted to wall-clock time: igraph_add_edges' per-call cost
-// scales with the CURRENT size of the graph (its internal indices are
-// rebuilt on mutation), so shrinking the batch size on a "slow" chunk makes
-// the per-edge overhead worse, not better — confirmed empirically (a
-// standalone harness with zero dyn_core_tree.c involvement reproduced the
-// exact same stall from small-batch igraph_add_edges calls alone; a fixed
-// ~4096-edge batch eliminated it, ~1000x). Matches dyn_core_tree_init's own
-// internal bootstrap chunk size.
+// Fixed chunks limit igraph index-rebuild overhead and provide cancellation
+// and progress checkpoints between batches.
 #define KCORE_TREE_BOOTSTRAP_CHUNK 4096
 
 typedef struct

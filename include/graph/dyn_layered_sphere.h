@@ -12,43 +12,26 @@
 #include <igraph/igraph.h>
 #include <stdbool.h>
 
-/* ============================================================================
- * Dynamic (streaming) Layered Sphere layout maintenance, insertion-only.
+/*
+ * Dynamic Layered Sphere maintenance for edge insertions.
  *
  * Sphere assignment is read directly from a DynCoreTree (graph/dyn_core_tree.h)
- * instead of being approximated per recompute: every currently-populated
- * coreness LEVEL in the tree gets exactly one sphere (strict 1:1, no capacity-
- * based packing of adjacent levels), ranked DESCENDING — the highest populated
+ * instead of being approximated per recompute. Every populated coreness level
+ * gets one sphere, ranked descending: the highest populated
  * level is sphere 0 (the nucleus), level 0 (the tree root: coreness-0/isolated
  * vertices) is always the outermost sphere. Multiple disjoint same-level tree
- * nodes (unconnected components with the same coreness) still share one
- * sphere, preserving "shell = degree of centrality" rather than switching to
- * a connectivity-based grouping. DynLeiden community membership is the
- * intra-shell grouping/ordering key (unchanged in spirit from before), not
- * the shell-assignment key.
+ * nodes with the same coreness share one sphere. DynLeiden membership controls
+ * intra-shell grouping and ordering, not sphere assignment.
  *
- * Change detection is exact, not approximated: dyn_core_tree_on_edges'
- * touched_levels output says precisely which spheres' populations moved
- * (radial change), and DynLeiden's own community_changed output says which
- * vertices' community label moved without necessarily changing coreness
- * (angular-only change) — both are unioned into a per-sphere dirty flag, and
- * only dirty spheres are cleared and re-seeded. A separate persistent
- * per-sphere level record detects the rarer case where the level-to-sphere-
- * index RANKING itself shifts (a previously-unpopulated level becomes
- * populated, or vice versa, changing every affected level's rank even when no
- * single level's own membership actually moved) and forces a full rebuild
- * when it does, since a sphere index can then represent a completely
- * different level's population than it did last time.
+ * touched_levels and community_changed mark dirty spheres for reseeding. A
+ * persistent level-to-sphere mapping detects rank shifts caused by levels
+ * becoming populated or empty; those shifts require a full rebuild.
  *
- * Community membership itself is still read live from DynLeiden
- * (graph/dyn_leiden.h) via O(1) per-vertex lookups; only coreness/hierarchy
- * information comes from the tree now.
+ * Community membership is read from DynLeiden. Coreness and hierarchy come
+ * from DynCoreTree. Edge and vertex deletion are not implemented.
  *
- * Edge/vertex deletion is out of scope (the stream is insertion-only,
- * matching dyn_core_tree.h and dyn_leiden.h).
- *
- * Threading: main thread only (reads the live igraph_t; never mutates it).
- * ============================================================================ */
+ * Main-thread only. Reads but does not mutate the graph.
+ */
 
 typedef struct DynLayeredSphere DynLayeredSphere;
 
@@ -72,8 +55,7 @@ DynLayeredSphere *dyn_layered_sphere_init(const igraph_t *g, const DynCoreTree *
  * Advance the layout after a batch of edge insertions. Call after
  * dyn_core_tree_on_edges/dyn_leiden_on_edges have been advanced for the same
  * batch, passing their touched_levels/community_changed output straight
- * through — that is what lets this call skip spheres that provably didn't
- * change instead of re-deriving everything from scratch.
+ * through so unchanged spheres can be skipped.
  * @param touched_levels  touched_levels output from this batch's
  *                        dyn_core_tree_on_edges call (may be NULL/empty if
  *                        nothing coreness-related changed).

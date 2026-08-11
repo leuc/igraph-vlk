@@ -8,9 +8,9 @@
 
 #include "graph_types.h"
 
-/* ============================================================================
+/*
  * Lifecycle Management
- * ============================================================================ */
+ */
 
 /**
  * Free all graph data including igraph structures, nodes, edges, and layouts.

@@ -23,7 +23,7 @@ void interaction_menu_toggle(AppState *state)
 		if (state->vr_enabled) {
 			// Get headset position and forward vector
 			vec3 head_pos, head_fwd, head_up = {0.0f, 1.0f, 0.0f};
-			// We use the first eye's pose as the headset reference, plus play offset
+			// Use the first eye pose and play-space offset as the headset reference.
 			XrVector3f pos = state->xr_ctx.views[0].pose.position;
 			head_pos[0] = pos.x + state->vr_play_offset[0];
 			head_pos[1] = pos.y + state->vr_play_offset[1];

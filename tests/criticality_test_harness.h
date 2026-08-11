@@ -14,7 +14,7 @@
 #include <vulkan/vulkan.h>
 
 // Minimal, dependency-light compute-only Vulkan harness for exercising shaders/main_path.comp
-// directly. Deliberately independent of src/vulkan/*.c (no window/swapchain/GLFW needed, any
+// directly. Independent of src/vulkan/*.c (no window, swapchain, or GLFW; any
 // Vulkan ICD will do including the lavapipe software rasterizer) — see CMakeLists.txt.
 
 #define BINDING_COUNT 14

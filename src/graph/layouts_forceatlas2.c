@@ -17,9 +17,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
-// FORCEATLAS2 LAYOUT (3D)
-// ============================================================================
 // Reference: Jacomy, M., Venturini, T., Heymann, S., and Bastian, M. (2014):
 // "ForceAtlas2, a Continuous Graph Layout Algorithm for Handy Network Visualization"
 void *compute_igraph_layout_forceatlas2_3d(ExecutionContext *ctx)
@@ -49,17 +46,17 @@ void *compute_igraph_layout_forceatlas2_3d(ExecutionContext *ctx)
 	 * igraph_layout_forceatlas2_3d() parameters:
 	 * @param graph                   The graph to layout
 	 * @param res                     Output matrix (will be resized to vcount x 3)
-	 * @param iterations             Number of iterations (we use 50+2*sqrt(vcount), max 1500)
+	 * @param iterations             50 + 2*sqrt(vcount), capped at 1500
 	 * @param outbound_attraction_distribution  Distribute attraction along edges (default: true)
 	 * @param edge_weight_influence    How edge weights affect attraction (1.0 = linear)
 	 * @param jitter_tolerance        Random jitter to break ties (default: 1.0)
 	 * @param barnes_hut_optimize       Use Barnes-Hut approximation (default: true)
 	 * @param barnes_hut_theta        BH theta parameter (default: 1.2)
 	 *                               Lower = more accurate but slower
-	 * @param scaling_ratio           Scaling ratio (we use 1 + log(1+ecount)/10)
+	 * @param scaling_ratio           1 + log(1+ecount)/10
 	 *                               Higher = more spread out
 	 * @param strong_gravity_mode     Use strong gravity (default: false)
-	 * @param gravity                 Gravity strength (we use 1 + sqrt(vcount)/100)
+	 * @param gravity                 1 + sqrt(vcount)/100
 	 *                               Higher = more central attraction
 	 * @param weights                Edge weights (NULL = unit weight)
 	 *
@@ -68,9 +65,7 @@ void *compute_igraph_layout_forceatlas2_3d(ExecutionContext *ctx)
 	 */
 
 	igraph_integer_t iterations = (igraph_integer_t)(50 + sqrt((double)vcount) * 2);
-	// if (iterations > 1500) {
 	//	iterations = 1500;
-	// }
 
 	igraph_real_t scaling_ratio = (igraph_real_t)(1.0 + log1p((double)ecount) / 10.0);
 	igraph_real_t gravity = (igraph_real_t)(1.0 + sqrt((double)vcount) / 100.0);

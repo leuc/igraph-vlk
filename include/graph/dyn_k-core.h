@@ -9,13 +9,12 @@
 #include <igraph/igraph.h>
 #include <stdbool.h>
 
-/* ============================================================================
- * Dynamic (streaming) k-core maintenance, insertion-only.
+/* Dynamic k-core maintenance for edge insertions.
  *
  * Maintains the exact coreness of every vertex as edges are inserted,
  * without recomputing the full O(V+E) decomposition per change.
  *
- * Per inserted edge, only the endpoint with the smaller coreness (the root)
+ * Per non-loop edge insertion, only the endpoint with the smaller coreness
  * and vertices with the same coreness reachable from it through same-coreness
  * paths (the "subcore") can change, each by at most +1 [Sariyuce et al.,
  * "Streaming Algorithms for K-Core Decomposition", PVLDB 6(6), 2013,
@@ -23,17 +22,16 @@
  * whole subcore and peeling back unsupported vertices — the n-order H-index
  * fixpoint of [Liu et al., "Local Algorithms for Distance-Generalized Core
  * Decomposition over Large Dynamic Graphs", PVLDB 14(9), 2021, Theorems 3.2/3.5]
- * restricted to the subcore, where it needs no bucket sort because values
- * are binary (K vs K+1).
+ * restricted to the subcore. Values are binary (K or K+1), so no bucket sort
+ * is required.
  *
- * Semantics match igraph_coreness(..., IGRAPH_ALL): self-loops count twice,
- * parallel edges count with multiplicity. Directed graphs are treated as
- * undirected. Edge deletion and distance-generalized (k,h)-cores are out of
- * scope (the stream is insertion-only); see the support-counting helper in
- * dyn_k-core.c for the extension seam.
+ * Semantics match igraph_coreness(..., IGRAPH_ALL): self-loops count twice and
+ * are processed as two support increments, so one loop may raise coreness by
+ * two. Parallel edges count with multiplicity. Directed graphs are treated as
+ * undirected. Edge deletion and distance-generalized (k,h)-cores are not
+ * implemented.
  *
- * Threading: main thread only (reads the live igraph_t; never mutates it).
- * ============================================================================ */
+ * Main-thread only. Reads but does not mutate the graph. */
 
 typedef struct DynKCore DynKCore;
 
@@ -66,10 +64,7 @@ bool dyn_kcore_on_edges(DynKCore *kc, const igraph_t *g, const igraph_vector_int
 int dyn_kcore_max(const DynKCore *kc);
 
 /**
- * Largest single-edge subcore BFS ever visited (vertices touched, not just
- * lifted), lifetime. The honest worst-case per-edge cost bound: should stay
- * small and not trend upward as the graph grows, if the maintenance is
- * actually local.
+ * Largest single-edge subcore BFS visited during this instance's lifetime.
  */
 int dyn_kcore_max_subcore_size(const DynKCore *kc);
 

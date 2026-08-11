@@ -209,7 +209,6 @@ static int test_two_cliques_bridge(void)
 	// Two disjoint K6 cliques (15 edges each) joined by a single bridge edge
 	// added last — exercises cross-community frontier marking and
 	// refinement on a graph with real community structure.
-	//
 	// Under CPM this is actually a dense/degenerate-regime guard rather than
 	// a community-formation case: with V=12, gamma = max(3*2E/(12*11), 0.001)
 	// grows quickly with the stream and reaches 1.41 at the full E=31

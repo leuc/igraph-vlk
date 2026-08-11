@@ -67,9 +67,7 @@ int text_generate_atlas(const char *fontPath, FontAtlas *atlas)
 	return 0;
 }
 
-// ============================================================================
 // Text Atlas — composites glyph bitmaps into a single texture
-// ============================================================================
 
 bool text_atlas_init(TextAtlas *ta, int width, int height)
 {

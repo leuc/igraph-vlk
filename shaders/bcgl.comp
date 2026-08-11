@@ -48,8 +48,7 @@ void main() {
     vec3 grad = vec3(0.0);
 
 
-    // Phase 1: N-Body Repulsion
-    // Scale global repulsion to balance against local edge attraction
+    // Scale global repulsion against local edge attraction.
     float rep_scale = 10.0 / max(1.0, float(pcs.vertexCount));
 
     for (uint v = 0; v < pcs.vertexCount; v++) {
@@ -68,14 +67,12 @@ void main() {
         float dist_sq = dist * dist;
         float p_val = 1.0 / (1.0 + dist_sq / pcs.b);
 
-        // derivative for repulsion (-p / dist)
+        // Repulsive derivative: -p / distance.
         float rep_force = -p_val / dist;
 
-        // Apply a consistent repulsion scale
         grad += (pcs.lambda_bc * rep_scale * rep_force) * (delta / dist);
     }
 
-    // Phase 2: Edge Correction
     TopoNode t_node = topo_nodes[u];
     for (uint i = 0; i < t_node.out_degree; i++) {
         uint v = topo_edges[t_node.edge_offset + i].target_node;
@@ -88,27 +85,25 @@ void main() {
         float dist_sq = dist * dist;
         float p_val = 1.0 / (1.0 + dist_sq / pcs.b);
 
-        // 2a. Subtract Phase 1's repulsion (Ensure exact same scale is used)
+        // Remove the global repulsion already applied to this adjacent pair.
         float rep_force = -p_val / dist;
         grad -= (pcs.lambda_bc * rep_scale * rep_force) * (delta / dist);
 
-        // 2b. Add the correct attractive force (derivative of -log p)
+        // Attractive derivative of -log(p).
         float attr_force = p_val * dist;
 
-        // 2c. Length regularization penalty
+        // Edge-length regularization.
         attr_force += pcs.lambda_length * (dist - 1.0);
 
         grad += pcs.lambda_bc * attr_force * (delta / dist);
     }
 
-    // Phase 3: Compactness & SGD Momentum
-    // Pull slightly toward origin
+    // Compactness pulls positions toward the origin.
     grad += pcs.lambda_compact * pos_u / float(pcs.vertexCount);
 
 	vec3 vel = nodes[u].velocity;
 	vel = pcs.momentum * vel - pcs.learning_rate * grad;
 
-	// Write back
 	nodes[u].velocity = vel;
 	nodes[u].pos = pos_u + vel;
 }

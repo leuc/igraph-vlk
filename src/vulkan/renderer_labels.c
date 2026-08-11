@@ -19,9 +19,6 @@
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
 
-// ============================================================================
-// LOD Label Helpers — Barnes-Hut nearest-K
-// ============================================================================
 
 // Max-heap entry for nearest-K selection
 typedef struct
@@ -273,9 +270,6 @@ static uint32_t label_build_lod_instances(Renderer *r, GraphData *graph, uint32_
 	return inst_idx;
 }
 
-// ============================================================================
-// Public API
-// ============================================================================
 
 void renderer_update_node_labels(Renderer *r, GraphData *graph, vec3 camera_pos, int selected_node)
 {

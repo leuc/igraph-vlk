@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 igraph-vlk team
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 #include "vulkan/renderer_bcgl.h"
 
 #include <stdio.h>
@@ -7,9 +12,7 @@
 #include "vulkan/buffers.h"
 #include "vulkan/utils.h"
 
-// ============================================================================
 // BCGL default hyperparameters
-// ============================================================================
 static const BCGLPushConstants BCGL_DEFAULTS = {
 	.lambda_bc = 1.0f,
 	.lambda_compact = 0.01f,
@@ -19,9 +22,7 @@ static const BCGLPushConstants BCGL_DEFAULTS = {
 	.b = 1.0f,
 };
 
-// ============================================================================
 // Build CSR topology from igraph
-// ============================================================================
 static void bcgl_build_topology(const igraph_t *g, igraph_integer_t n, BCGLTopoNode **out_nodes, BCGLTopoEdge **out_edges, uint32_t *out_total_edges)
 {
 	BCGLTopoNode *topo_nodes = calloc(n, sizeof(BCGLTopoNode));
@@ -61,9 +62,7 @@ static void bcgl_build_topology(const igraph_t *g, igraph_integer_t n, BCGLTopoN
 	*out_total_edges = edge_offset;
 }
 
-// ============================================================================
 // Destroy old buffers if they exist
-// ============================================================================
 static void bcgl_destroy_old_buffers(Renderer *r)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
@@ -81,9 +80,7 @@ static void bcgl_destroy_old_buffers(Renderer *r)
 	ctx->active = false;
 }
 
-// ============================================================================
 // Create or resize GPU buffers
-// ============================================================================
 static void bcgl_create_gpu_buffers(Renderer *r, igraph_integer_t n, uint32_t total_edges)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
@@ -106,9 +103,7 @@ static void bcgl_create_gpu_buffers(Renderer *r, igraph_integer_t n, uint32_t to
 	}
 }
 
-// ============================================================================
 // Write topology to GPU (one-time after graph load)
-// ============================================================================
 static void bcgl_upload_topology(Renderer *r, igraph_integer_t n, uint32_t total_edges, BCGLTopoNode *topo_nodes, BCGLTopoEdge *topo_edges)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
@@ -118,9 +113,7 @@ static void bcgl_upload_topology(Renderer *r, igraph_integer_t n, uint32_t total
 		update_buffer(r->core.device, ctx->topo_edges_mem, sizeof(BCGLTopoEdge) * total_edges, topo_edges);
 }
 
-// ============================================================================
 // Seed node positions from current graph data
-// ============================================================================
 static void bcgl_seed_positions(Renderer *r, GraphData *graph)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
@@ -139,9 +132,7 @@ static void bcgl_seed_positions(Renderer *r, GraphData *graph)
 	free(nodes);
 }
 
-// ============================================================================
 // Update descriptor set with storage buffers
-// ============================================================================
 static void bcgl_write_descriptors(Renderer *r)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
@@ -159,9 +150,7 @@ static void bcgl_write_descriptors(Renderer *r)
 	vkUpdateDescriptorSets(r->core.device, 3, writes, 0, NULL);
 }
 
-// ============================================================================
 // PUBLIC: Create BCGL compute pipeline
-// ============================================================================
 void renderer_create_bcgl_compute_pipeline(Renderer *r)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
@@ -244,9 +233,7 @@ void renderer_create_bcgl_compute_pipeline(Renderer *r)
 	VK_CHECK(vkCreateFence(r->core.device, &VK_SIGNALED_FENCE_INFO, NULL, &ctx->fence), "Failed to create BCGL fence");
 }
 
-// ============================================================================
 // PUBLIC: Initialize BCGL buffers from graph
-// ============================================================================
 bool renderer_init_bcgl_buffers(Renderer *r, GraphData *graph)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
@@ -285,9 +272,7 @@ bool renderer_init_bcgl_buffers(Renderer *r, GraphData *graph)
 	return true;
 }
 
-// ============================================================================
 // PUBLIC: Dispatch a chunk of BCGL iterations (non-blocking)
-// ============================================================================
 void renderer_dispatch_bcgl_chunk(Renderer *r, GraphData *graph, uint32_t iterations)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
@@ -350,9 +335,7 @@ void renderer_dispatch_bcgl_chunk(Renderer *r, GraphData *graph, uint32_t iterat
 	VK_CHECK(vkQueueSubmit(r->core.computeQueue, 1, &submitInfo, ctx->fence), "Failed to submit BCGL command buffer");
 }
 
-// ============================================================================
 // PUBLIC: Check if the most recent BCGL dispatch has completed (non-blocking)
-// ============================================================================
 VkResult renderer_bcgl_fence_status(Renderer *r)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
@@ -361,9 +344,7 @@ VkResult renderer_bcgl_fence_status(Renderer *r)
 	return vkGetFenceStatus(r->core.device, ctx->fence);
 }
 
-// ============================================================================
 // PUBLIC: Read back positions from GPU to graph
-// ============================================================================
 void renderer_readback_bcgl_positions(Renderer *r, GraphData *graph)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
@@ -400,9 +381,7 @@ void renderer_readback_bcgl_positions(Renderer *r, GraphData *graph)
 	vkUnmapMemory(r->core.device, ctx->node_mem);
 }
 
-// ============================================================================
 // PUBLIC: Cleanup BCGL resources
-// ============================================================================
 void renderer_cleanup_bcgl(Renderer *r)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;

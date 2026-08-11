@@ -187,7 +187,7 @@ static void test_valued_network_conservation(void)
 // between them) plus one fully isolated node, to exercise structure-linking/component labeling
 // (main_path_search_label_components) -- a chain graph alone can never produce more than one
 // component, so this is the only existing test that can catch a regression toward incorrectly
-// dropping non-dominant fragments (an earlier iteration of this fix wrongly did exactly that).
+// dropping non-dominant fragments.
 // Island 1: S1=0 A1=1 B1=2 C1=3 T1=4 (chain 0->1->2->3->4). Island 2: S2=5 A2=6 T2=7 (chain
 // 5->6->7). Node 8 is fully isolated (no edges at all). Every node is a walk-origin (node_count=9
 // walks): tie_frequency is exactly hand-computable as in test_valued_network_chain_graph, per

@@ -16,9 +16,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// ============================================================================
-// USE CURRENT POSITIONS AS SEED (TOGGLE)
-// ============================================================================
 void *compute_use_current_positions_as_seed(ExecutionContext *ctx)
 {
 	(void)ctx;
@@ -45,9 +42,6 @@ void apply_use_current_positions_as_seed(ExecutionContext *ctx, void *result_dat
 	}
 }
 
-// ============================================================================
-// SEED FILL HELPER
-// ============================================================================
 // Copies current layout positions into result matrix when use_as_seed is set.
 // Returns the igraph_bool_t value to pass as the use_seed parameter.
 igraph_bool_t layout_fill_seed(ExecutionContext *ctx, igraph_matrix_t *result, igraph_integer_t vcount)
@@ -69,10 +63,8 @@ igraph_bool_t layout_fill_seed(ExecutionContext *ctx, igraph_matrix_t *result, i
 	return true;
 }
 
-// ============================================================================
 // RANDOM UNIFORM SEED: RNG_UNIF(-1, 1)
 // Replicates igraph_layout_random() initialization used by Graphopt, UMAP.
-// ============================================================================
 void *compute_seed_random_uniform(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -98,10 +90,8 @@ void *compute_seed_random_uniform(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
 // RANDOM BOUNDED SEED: RNG_UNIF(-sqrt(n)/2, sqrt(n)/2)
 // Replicates igraph_i_layout_random_bounded() used by FR, KK, Yifan Hu 2D.
-// ============================================================================
 void *compute_seed_random_bounded(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -128,10 +118,8 @@ void *compute_seed_random_bounded(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
 // NORMAL SEED: N(0, 0.01)
 // Replicates igraph_rng_get_normal(rng, 0.0, 0.01) used by Barnes-Hut t-SNE.
-// ============================================================================
 void *compute_seed_random_normal(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;

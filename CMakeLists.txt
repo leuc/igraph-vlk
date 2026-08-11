@@ -211,8 +211,7 @@ if(NOT MSVC)
 endif()
 add_test(NAME dyn_kcore_test COMMAND dyn_kcore_test)
 
-# Standalone test for dynamic k-core HIERARCHY maintenance (not installed;
-# not yet wired into any layout — see include/graph/dyn_core_tree.h)
+# Dynamic k-core hierarchy tests.
 add_executable(dyn_core_tree_test tests/dyn_core_tree_test.c src/graph/dyn_core_tree.c src/graph/dyn_k-core.c)
 target_include_directories(dyn_core_tree_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${IGRAPH_INCLUDE_DIRS})
 target_link_libraries(dyn_core_tree_test PRIVATE igraph::igraph)

@@ -24,10 +24,8 @@
 #include <sys/stat.h>
 #include <zstd.h>
 
-// ---------------------------------------------------------------------------
 // Static catalog entries (auto-generated from netzschleuder.json, see
 //   the curl+jq command at the top of netzschleuder_data.inc)
-// ---------------------------------------------------------------------------
 
 static const StaticNetEntry g_static_nets[] = {
 #include "netzschleuder_data.inc"
@@ -42,9 +40,7 @@ const StaticNetEntry *netzschleuder_static_entries(int *count)
 	return g_static_nets;
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 static void ensure_dir(const char *path)
 {
@@ -176,9 +172,7 @@ static igraph_t *load_graphml_from_zst(const char *path)
 	return graph;
 }
 
-// ---------------------------------------------------------------------------
 // Network download + load
-// ---------------------------------------------------------------------------
 
 void *run_netzschleuder_download(ExecutionContext *ctx)
 {
@@ -252,9 +246,7 @@ void *run_netzschleuder_download(ExecutionContext *ctx)
 	return load_graphml_from_zst(file_path);
 }
 
-// ---------------------------------------------------------------------------
 // Apply — swap graph on main thread
-// ---------------------------------------------------------------------------
 
 void apply_netzschleuder_download(ExecutionContext *ctx, void *result_data)
 {

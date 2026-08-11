@@ -13,9 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 
-// ============================================================================
 // Internal types
-// ============================================================================
 
 typedef struct StreamLineNode
 {
@@ -34,18 +32,14 @@ struct OsStreamReader
 	_Atomic bool eof_reached;
 };
 
-// ============================================================================
 // stdin detection
-// ============================================================================
 
 bool os_stream_stdin_is_piped(void)
 {
 	return !isatty(fileno(stdin));
 }
 
-// ============================================================================
 // Reader thread
-// ============================================================================
 
 static void *reader_thread_func(void *arg)
 {
@@ -116,9 +110,7 @@ OsStreamReader *os_stream_reader_start(void)
 	return r;
 }
 
-// ============================================================================
 // Polling / lifecycle
-// ============================================================================
 
 int os_stream_reader_poll(OsStreamReader *reader, char **out_lines, int max_lines)
 {

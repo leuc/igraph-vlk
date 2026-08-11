@@ -17,9 +17,7 @@
 #include "os/path.h"
 #include <zstd.h>
 
-// ============================================================================
 // Internal: common post-read initialization shared by all loaders.
-// ============================================================================
 static bool graph_finish_load(GraphData *data, const char *node_attr, const char *edge_attr)
 {
 	(void)edge_attr;
@@ -45,10 +43,8 @@ static bool graph_finish_load(GraphData *data, const char *node_attr, const char
 	return true;
 }
 
-// ============================================================================
 // Internal: detect file format by extension.
 // Returns "graphml", "gml", "graphml.zst", "gml.zst", or NULL.
-// ============================================================================
 static const char *graph_detect_format(const char *filename)
 {
 	size_t len = strlen(filename);
@@ -72,11 +68,9 @@ static const char *graph_detect_format(const char *filename)
 	return NULL;
 }
 
-// ============================================================================
 // Internal: decompress a .zst / .zstd file into a malloc'd buffer.
 // Returns the buffer (caller must free) and sets *out_size.
 // On failure returns NULL.
-// ============================================================================
 static void *graph_decompress_file(const char *filename, size_t *out_size)
 {
 	FILE *fp = fopen(filename, "rb");
@@ -154,9 +148,7 @@ static void *graph_decompress_file(const char *filename, size_t *out_size)
 	return dst;
 }
 
-// ============================================================================
 // Load a GraphML file.
-// ============================================================================
 bool graph_load_graphml(const char *filename, GraphData *data, const char *node_attr, const char *edge_attr)
 {
 	igraph_set_attribute_table(&igraph_cattribute_table);
@@ -171,9 +163,7 @@ bool graph_load_graphml(const char *filename, GraphData *data, const char *node_
 	return graph_finish_load(data, node_attr, edge_attr);
 }
 
-// ============================================================================
 // Load a GML file.
-// ============================================================================
 bool graph_load_gml(const char *filename, GraphData *data, const char *node_attr, const char *edge_attr)
 {
 	igraph_set_attribute_table(&igraph_cattribute_table);
@@ -188,17 +178,13 @@ bool graph_load_gml(const char *filename, GraphData *data, const char *node_attr
 	return graph_finish_load(data, node_attr, edge_attr);
 }
 
-// ============================================================================
 // Read GML from an open FILE stream into a raw igraph_t.
-// ============================================================================
 bool graph_read_gml(igraph_t *graph, FILE *fp)
 {
 	return igraph_read_graph_gml(graph, fp) == IGRAPH_SUCCESS;
 }
 
-// ============================================================================
 // Auto-detect format by extension and load (supports .zst/.zstd).
-// ============================================================================
 bool graph_load(const char *filename, GraphData *data, const char *node_attr, const char *edge_attr)
 {
 	const char *fmt = graph_detect_format(filename);
@@ -242,9 +228,7 @@ bool graph_load(const char *filename, GraphData *data, const char *node_attr, co
 	return graph_finish_load(data, node_attr, edge_attr);
 }
 
-// ============================================================================
 // Write the graph (with all vertex/edge attributes) as GraphML.
-// ============================================================================
 bool graph_save_graphml(const char *filename, GraphData *data)
 {
 	if (!data->graph_initialized)
@@ -259,9 +243,7 @@ bool graph_save_graphml(const char *filename, GraphData *data)
 	return err == IGRAPH_SUCCESS;
 }
 
-// ============================================================================
 // Worker: save the current graph to a dated GraphML file on the Desktop.
-// ============================================================================
 void *compute_save_graphml(ExecutionContext *ctx)
 {
 	if (!ctx->app_state->current_graph.graph_initialized) {

@@ -9,53 +9,37 @@
 #include <igraph/igraph.h>
 #include <stdbool.h>
 
-/* ============================================================================
- * Dynamic (streaming) k-core HIERARCHY maintenance, insertion-only.
+/* Dynamic k-core hierarchy maintenance for edge insertions.
  *
  * dyn_k-core.h maintains only core(v) per vertex. This maintains the k-core
- * HIERARCHY TREE itself — which k-cores nest inside which — incrementally
- * against the same edge stream, per [Lin, Zhang, Lin, Zhang, Tian,
+ * hierarchy itself, including nesting among k-cores, per [Lin et al.,
  * "Hierarchical Core Maintenance on Large Dynamic Graphs", PVLDB 14(5), 2021].
- * That paper's whole premise is that per-vertex coreness maintenance (the
- * dyn_k-core.c approach) does not track the connections AMONG k-cores, which
- * their Theorems 1-6 show can be recovered cheaply from the same touched-
- * vertex set the per-vertex maintenance already computes.
+ * Theorems 1-6].
  *
  * Tree shape (their Def. 6): for every integer k, (i) each k-core is
  * contained by exactly one (k-1)-core, (ii) k-cores at the same k are
- * disjoint. Node n at layer k holds exactly the vertices of one connected
+ * disjoint. A node at layer k holds the vertices of one connected
  * k-core with coreness == k; a tree edge from a k1-layer node to a k2-layer
- * node (k1 < k2) means the k2-core is nested inside the k1-core, and MAY skip
- * layers if no k'-core (k1 < k' < k2) sits between them — e.g. a self-loop
- * lifting a vertex's coreness by 2 in one call produces exactly such a
- * skip-layer edge, with no vertex ever passing through the skipped layer.
+ * node (k1 < k2) means the k2-core is nested inside the k1-core. It may skip
+ * empty intermediate layers.
  * A single persistent root node (level 0) anchors every connected component's
  * first real layer, and also directly holds every currently-isolated
  * (coreness-0) vertex.
  *
- * Maintenance reuses dyn_k-core.h's own touched-vertex output (V* in the
- * paper) as the trigger for tree updates — no separate graph traversal is
- * needed to find it, since dyn_k-core.c's subcore BFS already computes
- * exactly that set for its own peel/lift logic. Per inserted edge: the
+ * Maintenance reuses dyn-k-core's touched set V*. Per inserted edge, the
  * ancestors of the two endpoints' tree nodes are merged bottom-up until they
  * coincide (Algorithm 1 lines 1-13); V* is grouped by final coreness
- * (ascending, generalizing the paper's fixed "K+1" to handle a multi-layer
- * jump from a self-loop as a chain of skip-layer creations); each group gets
+ * ascending; each group gets
  * a freshly created child node; existing neighbor subtrees are merged into or
  * reparented under the topmost new node (Theorem 4/5's NC set); and the
  * source node is removed (its own children reparented to its former parent)
  * if it ends up with no direct members left (Algorithm 1 lines 14-25).
  *
- * Only insertion (Algorithms 1/2 of the paper) is implemented, matching
- * dyn_k-core.h's own insertion-only scope; deletion (their Algorithms 3-5,
- * node splitting) is out of scope.
+ * Only insertion (Algorithms 1-2) is implemented. Deletion and node splitting
+ * (Algorithms 3-5) are not implemented.
  *
- * This module is standalone: it owns its own DynKCore instance (dyn_k-core.c
- * is used unmodified, through its public API only) and does not touch
- * anything in graph/dyn_layered_sphere.c or graph/layered_sphere_common.c.
- *
- * Threading: main thread only (reads the live igraph_t; never mutates it).
- * ============================================================================ */
+ * The module owns its DynKCore instance. Main-thread only; reads but does not
+ * mutate the graph. */
 
 typedef struct DynCoreTree DynCoreTree;
 
@@ -145,8 +129,7 @@ igraph_integer_t dyn_core_tree_first_member(const DynCoreTree *ct, int node);
 igraph_integer_t dyn_core_tree_next_member(const DynCoreTree *ct, igraph_integer_t v);
 
 /**
- * Total number of currently-alive nodes (including the root). Diagnostic/test
- * use; not needed for normal traversal.
+ * Total number of live nodes, including the root.
  */
 int dyn_core_tree_node_count(const DynCoreTree *ct);
 

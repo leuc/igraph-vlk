@@ -9,43 +9,32 @@
 #include <igraph/igraph.h>
 #include <stdbool.h>
 
-/* ============================================================================
- * Dynamic (streaming) Leiden community maintenance, insertion-only.
+/*
+ * Dynamic Leiden community maintenance for edge insertions.
  *
  * Maintains an approximate Leiden CPM (Constant Potts Model) partition as
  * edges are inserted, without recomputing the full O(V+E) decomposition per
  * batch.
- * Ported from the Dynamic Frontier (DF) heuristic [Sahu 2024, "Heuristic-based
- * Dynamic Leiden"; Sahu, "A Starting Point for Dynamic Community Detection
- * with Leiden Algorithm"], the best-performing/cheapest of the ND/DS/DF
- * marking strategies compared there, with reference to the serial local-move
- * formulas in leiden-communities-openmp-dynamic's inc/leiden.hxx. The
- * reference's frontier-marking heuristic is objective-agnostic (it was
- * derived for modularity); only the delta-quality formula used to accept or
- * reject a move (dyn_leiden_choose in the .c file) is CPM's.
+ * Uses Sahu's Dynamic Frontier heuristic ["Heuristic-based Dynamic Leiden";
+ * "A Starting Point for Dynamic Community Detection with Leiden Algorithm"].
+ * Frontier marking is objective-independent; dyn_leiden_choose uses the CPM
+ * delta-quality formula.
  *
- * Only a source edge endpoint crossing a community boundary (or an
- * intra-community edge, which just flags its community for refinement)
- * enters the frontier; local-moving then expands the frontier to a mover's
- * graph-neighbors, exactly as in the reference. Refinement and aggregation
- * are scoped to the communities actually touched this call (never a full
- * graph rescan), so cost stays proportional to the affected region rather
- * than the whole graph.
+ * Cross-community source endpoints enter the frontier; intra-community edges
+ * mark their community for refinement. Local moves expand the frontier to a
+ * moved vertex's neighbors. Refinement and aggregation cover touched
+ * communities only.
  *
  * Semantics match igraph_community_leiden_simple(..., IGRAPH_LEIDEN_OBJECTIVE_CPM,
  * resolution=max(3*density, 0.001), beta=0.01, n_iterations=1) — the same
  * objective and density-scaled resolution heuristic as the static Leiden menu
  * command (wrappers_community.c) and layered_sphere.c, with density =
  * 2*ecount/(vcount*(vcount-1)). The resolution is recomputed from the live
- * graph on every dyn_leiden_init/dyn_leiden_on_edges call, so a region left
- * untouched since the resolution last shifted keeps a partition that was
- * optimal under an older resolution — an accepted approximation, in the same
- * spirit as the frontier heuristic itself never rescanning the whole graph.
- * Unweighted (edge weight 1.0), undirected. Edge deletion is out of scope
- * (the stream is insertion-only, matching dyn_k-core.h).
+ * graph on every call. Untouched regions may retain a partition produced under
+ * an earlier resolution. Unweighted and undirected. Deletion is not implemented.
  *
- * Threading: main thread only (reads the live igraph_t; never mutates it).
- * ============================================================================ */
+ * Main-thread only. Reads but does not mutate the graph.
+ */
 
 typedef struct DynLeiden DynLeiden;
 
@@ -102,18 +91,12 @@ double dyn_leiden_resolution(const DynLeiden *dl);
 int dyn_leiden_community_count(const DynLeiden *dl);
 
 /**
- * Largest single on_edges() frontier ever processed (vertices dequeued from
- * the local-move worklist across local-moving + refinement + aggregation),
- * lifetime. The honest worst-case per-batch cost bound: should stay small
- * and not trend upward as the graph grows, if the maintenance is actually
- * local.
+ * Largest on_edges() frontier processed during this instance's lifetime.
  */
 int dyn_leiden_max_frontier_size(const DynLeiden *dl);
 
 /**
- * Vertices touched by the most recent on_edges() call — the per-poll
- * coverage numerator for the debug report (compare against vertex count for
- * a coverage ratio).
+ * Vertices touched by the most recent on_edges() call.
  */
 int dyn_leiden_last_frontier_size(const DynLeiden *dl);
 

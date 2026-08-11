@@ -10,14 +10,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-// ============================================================================
-// State
-//
 // All per-vertex arrays are flat and grown by doubling; the scratch arrays
 // (visit_stamp/evict_stamp/support) are epoch-stamped: an entry is valid only
 // when its stamp equals the current epoch, so "clearing" them per traversal
 // is a single counter increment instead of an O(V) memset.
-// ============================================================================
 
 struct DynKCore
 {
@@ -37,9 +33,6 @@ struct DynKCore
 	igraph_integer_t live_eid; // edge ids >= this belong to later insertions not yet processed
 };
 
-// ============================================================================
-// Capacity / vertex-count sync
-// ============================================================================
 
 static bool dyn_kcore_sync_vcount(DynKCore *kc, const igraph_t *g)
 {
@@ -85,18 +78,15 @@ static bool dyn_kcore_sync_vcount(DynKCore *kc, const igraph_t *g)
 	return true;
 }
 
-// ============================================================================
 // Support counting (the one place that defines core semantics; also the
 // extension seam for (k,h)-cores, where 1-hop neighbors would become h-hop).
 // Matches igraph_coreness: IGRAPH_ALL, self-loops twice, multiplicity kept.
-//
 // We enumerate incident *edge ids* and keep only those with id < live_eid.
 // live_eid is the edge id of the NEXT not-yet-processed insertion, so this
 // reproduces igraph_neighbors semantics while excluding edges that arrive
 // later in the current batch (Sariyuce's single-edge maintenance must see
 // the graph exactly as it stood at each insertion). Self-loops appear twice
 // in the incident list (counted twice) and parallel edges keep multiplicity.
-// ============================================================================
 
 static bool fetch_neighbors(DynKCore *kc, const igraph_t *g, igraph_integer_t w)
 {
@@ -123,9 +113,7 @@ static bool fetch_neighbors(DynKCore *kc, const igraph_t *g, igraph_integer_t w)
 	return true;
 }
 
-// ============================================================================
-// Single-edge insertion maintenance.
-//
+// Non-loop edge-insertion maintenance.
 // Only the root's subcore (same-coreness region reachable through
 // same-coreness vertices) can change, each vertex by at most +1
 // [Sariyuce et al., "Streaming Algorithms for K-Core Decomposition", PVLDB
@@ -133,8 +121,8 @@ static bool fetch_neighbors(DynKCore *kc, const igraph_t *g, igraph_integer_t w)
 // and peel back every vertex without K+1 supporters — the binary-valued
 // H-index fixpoint [Liu et al., "Local Algorithms for Distance-Generalized
 // Core Decomposition over Large Dynamic Graphs", PVLDB 14(9), 2021, Thms 3.2/3.5],
-// needing only a plain queue.
-// ============================================================================
+// needing only a plain queue. Self-loops call this once per igraph support
+// contribution and may therefore lift by two.
 
 static bool process_insert(DynKCore *kc, const igraph_t *g, igraph_integer_t u, igraph_integer_t v, igraph_vector_int_t *changed)
 {
@@ -216,10 +204,6 @@ static bool process_insert(DynKCore *kc, const igraph_t *g, igraph_integer_t u, 
 	}
 	return true;
 }
-
-// ============================================================================
-// Public API
-// ============================================================================
 
 DynKCore *dyn_kcore_init(const igraph_t *g)
 {

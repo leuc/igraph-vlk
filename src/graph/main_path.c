@@ -308,10 +308,7 @@ static void main_path_search_free_inputs(MainPathSearchInputs *inputs)
 	igraph_vector_destroy(&inputs->weights);
 }
 
-// Tags a freshly computed MainPathSelectionResult with the method/selection identity that
-// produced it, so apply_main_path_selection can persist main-path-{selection}-{method}
-// consistently for every selection (not just the GPU-cached Basket/Global Path, which are
-// already tagged inside main_path_cache_load_selection).
+// Tag a selection for its persisted main-path-{selection}-{method} attribute.
 static void *main_path_search_tag(void *result_data, const char *method, const char *selection)
 {
 	MainPathSelectionResult *result = result_data;
@@ -659,10 +656,8 @@ void apply_main_path_selection(ExecutionContext *ctx, void *result_data)
 	if (!played)
 		return;
 	graph_reset_emphasis(graph);
-	// component_id is only ever non-NULL for main_path_search_valued_network's result (Hummon &
-	// Carley 1993) -- colors each flagged node by its "main path structure" (p.93) instead of
-	// rendering every surviving fragment as one undifferentiated blob; every other selection keeps
-	// today's plain-dim-only behavior.
+	// Hummon and Carley (1993), p. 93: color valued-network components as
+	// distinct main-path structures.
 	for (uint32_t v = 0; v < graph->node_count; v++) {
 		if (!result->flags[v])
 			graph->nodes[v].emphasis = EMPHASIS_DIMMED;
@@ -671,11 +666,7 @@ void apply_main_path_selection(ExecutionContext *ctx, void *result_data)
 	}
 	renderer->needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(renderer, graph);
-	// Persist main-path-{selection}-{method} for every selection, not just the GPU-cached
-	// Basket/Global Path -- runs on the main thread (apply_ functions, unlike compute_ functions,
-	// never run on the worker thread), so mutating graph->g's cattributes here is safe; doing
-	// this from a compute_ function would race the main thread the way main_path_prepare()'s
-	// worker-thread edge deletion already does (see TODO.md).
+	// Persist selection attributes on the main thread to avoid graph mutation races.
 	if (result->method && result->selection) {
 		igraph_vector_int_t flags;
 		if (igraph_vector_int_init(&flags, result->node_count) == IGRAPH_SUCCESS) {
@@ -686,10 +677,7 @@ void apply_main_path_selection(ExecutionContext *ctx, void *result_data)
 			graph_cache_store_vertex_attr_int(&graph->g, attr_name, &flags);
 			igraph_vector_int_destroy(&flags);
 		}
-		// component_id (Hummon & Carley 1993 "main path structure" labels, p.93) persisted the same
-		// way as flags, under its own attribute name -- only ever populated for valued_network today,
-		// but keyed by selection/method rather than hardcoded so it generalizes if another selection
-		// variant adds component labeling later.
+		// Persist Hummon and Carley (1993), p. 93 main-path structure labels.
 		if (result->component_id) {
 			igraph_vector_int_t components;
 			if (igraph_vector_int_init(&components, result->node_count) == IGRAPH_SUCCESS) {

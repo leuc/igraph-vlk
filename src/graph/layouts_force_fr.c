@@ -39,14 +39,10 @@
  * ============================================================================
  */
 
-// ============================================================================
-// FRUCHTERMAN-REINGOLD LAYOUT (2D)
-// ============================================================================
 // Reference: Fruchterman, T.M.J. and Reingold, E.M.:
 // "Graph Drawing by Force-directed Placement."
 // Software -- Practice and Experience, 21/11, 1129--1164, 1991.
 // https://doi.org/10.1002/spe.4380211102
-//
 // Force-directed layout using attractive forces between connected vertices
 // and repulsive forces between all vertex pairs.
 void *compute_igraph_layout_fruchterman_reingold(ExecutionContext *ctx)
@@ -73,7 +69,7 @@ void *compute_igraph_layout_fruchterman_reingold(ExecutionContext *ctx)
 	 * @param use_seed        Whether to use initial positions (0 = random start)
 	 * @param niter           Number of iterations (default: 500) - we scale with sqrt(vcount)
 	 * @param start_temp      Initial temperature - max displacement per iteration (default: vcount)
-	 *                       We use 10 + sqrt(vcount) to allow exploration for larger graphs
+	 *                       Set to 10 + sqrt(vcount)
 	 * @param grid            Grid optimization: IGRAPH_LAYOUT_AUTOGRID uses grid for >1000 vertices
 	 *                       Recommended by igraph docs for large graphs
 	 * @param weights         Edge weights (NULL = unit weight, edges with higher weight
@@ -111,9 +107,6 @@ void *compute_igraph_layout_fruchterman_reingold(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// FRUCHTERMAN-REINGOLD LAYOUT (3D)
-// ============================================================================
 void *compute_igraph_layout_fruchterman_reingold_3d(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -166,9 +159,6 @@ void *compute_igraph_layout_fruchterman_reingold_3d(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// KAMADA-KAWAI LAYOUT (2D)
-// ============================================================================
 // Reference: Kamada, T. and Kawai, S.:
 // "An Algorithm for Drawing General Undirected Graphs."
 // Information Processing Letters, 31/1, 7--15, 1989.
@@ -196,7 +186,7 @@ void *compute_igraph_layout_kamada_kawai(ExecutionContext *ctx)
 	 * @param res             Output matrix (will be resized to vcount x 2)
 	 * @param use_seed        Whether to use initial positions (0 = circle layout start)
 	 * @param maxiter        Maximum iterations (at least 10*vcount recommended)
-	 *                       We use vcount*10 as recommended in igraph docs
+	 *                       Set to 10 * vcount, following igraph guidance
 	 * @param epsilon        Convergence threshold (0.0 = run all iterations)
 	 * @param kkconst        Kamada-Kawai spring constant K (typical: vcount)
 	 *                       Higher = stronger springs between all vertex pairs
@@ -234,9 +224,6 @@ void *compute_igraph_layout_kamada_kawai(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// KAMADA-KAWAI LAYOUT (3D)
-// ============================================================================
 void *compute_igraph_layout_kamada_kawai_3d(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;

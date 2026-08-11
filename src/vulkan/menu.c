@@ -274,12 +274,12 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 					glm_vec3_add(title_pos, right_shift, title_pos);
 
 					// The title text is positioned at text_anchor, not at quad center.
-					// We need to figure out the offset from the title bar's quad center.
+					// Offset text from the title-bar quad center.
 					// Title bar quad center is at title_bg_pos. Text anchor is at title_pos.
 					// In quad-local coords: offset = (text_pos - quad_center) / scale
 
 					TextQuadInstance *tq = &tq_instances[tq_count];
-					// We use the title bar quad center, but the text region accounts for the offset
+					// The text region includes the title-bar offset.
 					glm_vec3_copy(title_bg_pos, tq->worldPos);
 					tq->bgColor[0] = 0.18f;
 					tq->bgColor[1] = 0.22f;
@@ -318,7 +318,6 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 
 	free(stack);
 
-	// --- Info Card ---
 	if (ctx->menu.info_card.is_visible && ctx->menu.active_level) {
 		float card_w = calculate_text_width(ctx->menu.info_card.title);
 		for (int pi = 0; pi < ctx->menu.info_card.num_pairs; pi++) {
@@ -485,7 +484,6 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 		}
 	}
 
-	// --- Ensure text atlas is uploaded to GPU ---
 	text_atlas_ensure_uploaded(&r->menu.text_atlas, r->core.device, r->core.physicalDevice, r->commands.commandPool, r->core.graphicsQueue);
 
 	// Update text quad descriptor sets to point to the text atlas
@@ -499,7 +497,6 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 		vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
 	}
 
-	// --- Upload MenuInstance buffer (background-only quads) ---
 	// Wait for all in-flight frames before destroying — a command buffer from
 	// the other slot may still reference the old buffer as a vertex buffer.
 	if (instance_count > 0 || tq_count > 0) {
@@ -514,7 +511,6 @@ void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
 		r->menu.node_count = instance_count;
 	}
 
-	// --- Upload TextQuadInstance buffer (text-bearing quads) ---
 	if (tq_count > 0) {
 		VkDeviceSize tqBufferSize = sizeof(TextQuadInstance) * tq_count;
 		VK_DESTROY_BUFFER(r->core.device, r->menu.text_quad_instance, r->menu.text_quad_instance_memory);

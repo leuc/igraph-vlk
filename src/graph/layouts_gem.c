@@ -13,9 +13,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
-// GEM LAYOUT
-// ============================================================================
 // Reference: Frick, A., Ludwig, A., and Mehldau, H. (1994):
 // "A Fast Adaptive Layout Algorithm for Undirected Graphs."
 void *compute_igraph_layout_gem(ExecutionContext *ctx)

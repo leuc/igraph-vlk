@@ -86,7 +86,7 @@ static bool process_axes_and_buttons(AppState *state, float lx, float ly, float 
 		}
 	}
 
-	// Debug: log any button press
+	// Log button-press transitions.
 	for (int i = 0; i < max_btn && i <= GLFW_GAMEPAD_BUTTON_LAST; i++) {
 		int prev = is_gamepad ? prev_state.buttons[i] : raw_prev_buttons[i];
 		if (buttons[i] == GLFW_PRESS && prev == GLFW_RELEASE) {
@@ -161,7 +161,6 @@ bool process_gamepad_input(int joystick_id, void *app_state_ptr, float delta_tim
 		last_joystick_id = joystick_id;
 	}
 
-	// ===== GAMEPAD API path (mapped controller) =====
 	GLFWgamepadstate gp_state;
 	if (glfwJoystickIsGamepad(joystick_id) && glfwGetGamepadState(joystick_id, &gp_state)) {
 		if (first_frame) {
@@ -177,7 +176,6 @@ bool process_gamepad_input(int joystick_id, void *app_state_ptr, float delta_tim
 		return true;
 	}
 
-	// ===== RAW joystick path (no mapping) =====
 	int axis_count, button_count;
 	const float *axes = glfwGetJoystickAxes(joystick_id, &axis_count);
 	const unsigned char *buttons = glfwGetJoystickButtons(joystick_id, &button_count);

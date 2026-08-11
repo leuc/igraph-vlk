@@ -12,9 +12,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
-// GRAPHOPT LAYOUT
-// ============================================================================
 void *compute_igraph_layout_graphopt(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -66,9 +63,7 @@ void *compute_igraph_layout_graphopt(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
 // LGL LAYOUT (Large Graph Layout)
-// ============================================================================
 void *compute_igraph_layout_lgl(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;

@@ -15,7 +15,6 @@
 // Forward declaration to avoid circular dependency with command_registry.h
 struct CommandDef;
 
-// --- Parameter Types required by igraph functions ---
 typedef enum {
 	PARAM_TYPE_INT,
 	PARAM_TYPE_FLOAT,
@@ -27,7 +26,6 @@ typedef enum {
 	PARAM_TYPE_STRING		   // String parameter (e.g., network ID)
 } ParameterType;
 
-// --- Definition of a single input parameter ---
 typedef struct
 {
 	const char *name;
@@ -44,7 +42,6 @@ typedef struct
 	igraph_real_t max_val;
 } CommandParameter;
 
-// --- Generic Command Execution Context ---
 typedef struct
 {
 	CommandParameter *params;
@@ -59,7 +56,6 @@ typedef struct
 	float transition_duration;
 } ExecutionContext;
 
-// --- The Action Node (Leaf in the menu) ---
 typedef struct
 {
 	const char *id_name;
@@ -69,7 +65,6 @@ typedef struct
 	const struct CommandDef *cmd_def; // Pointer to command definition in registry
 } IgraphCommand;
 
-// --- 3D Spherical Menu Tree Structure ---
 typedef enum {
 	NODE_BRANCH,	   // Opens a submenu card
 	NODE_LEAF_COMMAND, // Standard clickable action button
@@ -112,7 +107,6 @@ typedef struct MenuNode
 	TextRegion cachedTextRegion; // UV + pixel dimensions for this node's label in text atlas
 } MenuNode;
 
-// --- Generic Info Card Data ---
 typedef struct
 {
 	char key[32];
@@ -136,7 +130,6 @@ typedef struct
 	InfoKeyValuePair pairs[8];
 } InfoCardState;
 
-// --- Application State Machine ---
 typedef enum {
 	STATE_GRAPH_VIEW,		  // Freely navigating the graph
 	STATE_MENU_OPEN,		  // Sphere menu is active, dimming the graph

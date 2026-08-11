@@ -19,9 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
 // CENTER LAYOUT + AUTO-SCALE (no rotation)
-// ============================================================================
 void layout_center_and_autoscale(igraph_matrix_t *mat)
 {
 	igraph_integer_t n = igraph_matrix_nrow(mat);
@@ -70,9 +68,6 @@ void layout_center_and_autoscale(igraph_matrix_t *mat)
 	}
 }
 
-// ============================================================================
-// FREE LAYOUT DATA
-// ============================================================================
 void apply_bfs_trigger(ExecutionContext *ctx, void *result_data)
 {
 	(void)result_data;
@@ -117,9 +112,6 @@ void free_layout_matrix(void *result_data)
 	}
 }
 
-// ============================================================================
-// APPLY LAYOUT TO GRAPH STATE
-// ============================================================================
 void apply_layout_matrix(ExecutionContext *ctx, void *result_data)
 {
 	if (!ctx || !ctx->app_state || !result_data) {
@@ -174,7 +166,6 @@ void apply_layout_matrix(ExecutionContext *ctx, void *result_data)
 			if (z > max_z)
 				max_z = z;
 		}
-		// printf("[Layout Bounds] X: [%.3f, %.3f] Y: [%.3f, %.3f] Z: [%.3f, %.3f]\n", min_x, max_x, min_y, max_y, min_z, max_z);
 	}
 
 	renderer_transition_request(renderer, TRANSITION_SOURCE_LAYOUT, ctx->transition_duration, data);

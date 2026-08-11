@@ -11,9 +11,7 @@
 #include "interaction/spatial.h"
 #include "interaction/state.h" // For MenuNode, MenuNodeType, IgraphCommand, etc.
 
-// ============================================================================
 // Menu Definition Data Structures (Data-Driven Initialization)
-// ============================================================================
 
 /**
  * @brief Static menu item definition for data-driven initialization
@@ -37,9 +35,6 @@ void update_menu_transforms(MenuNode *node, const SpatialBasis *basis);
 MenuNode *raycast_menu_vr(struct AppState *state, vec3 ray_ori, vec3 ray_dir);
 MenuNode *menu_find_node_by_command_id(MenuNode *node, const char *command_id);
 
-// ============================================================================
-// Dynamic Attribute Filter Menu
-// ============================================================================
 
 /**
  * Populate the "Filter > Node" submenu with entries from the graph's
@@ -69,9 +64,7 @@ void menu_populate_attribute_edge_filters(MenuNode *root, GraphData *data);
  */
 void menu_clear_attribute_edge_filters(MenuNode *root, GraphData *data);
 
-// ============================================================================
 // Netzschleuder Catalog Menu
-// ============================================================================
 
 /**
  * Populate the "Data/Repository" submenu with static entries.
@@ -79,9 +72,6 @@ void menu_clear_attribute_edge_filters(MenuNode *root, GraphData *data);
  */
 void menu_populate_netzschleuder_static(MenuNode *root);
 
-// ============================================================================
-// Famous Graphs Menu
-// ============================================================================
 
 /**
  * Populate the "Data/Patterns" submenu with individual famous graph entries

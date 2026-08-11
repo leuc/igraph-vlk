@@ -162,20 +162,10 @@ static int check_nppc_paper_oracle(Harness *h)
 	return failures;
 }
 
-// SPNP on the same Hummon & Doreian (1989) 7-node DNA-citation DAG (Figure 3, pp. 49-51) used by
-// check_nppc_paper_oracle above. Deliberately does NOT assert against the paper's own published
-// SPNP column (13,2,20,6,15,4,8,4,6) -- Batagelj (2003, section 3.3) notes "there are some errors
-// in the table of SPNP weights" in the original paper, and this graph's SPNP weights computed
-// independently below via Batagelj's own closed-form recursion (section 3.4: w_p(u,v)=L-(u)*L+(v),
-// L-(u)=1+sum(L-(pred)), L+ symmetric) disagree with the published table on exactly 3 of 9 arcs
-// (3->5, 5->12, 12->20). This is the same situation the skill's own worked example handles by
-// deriving SPC independently rather than trusting the source paper: the values below are a
-// "derived illustration, not sourced" (matching that file's own phrasing), cross-checked two ways
-// before being hardcoded here: (a) direct enumeration of every path through a couple of sample
-// nodes (e.g. L+(12)=7 matches the 7 distinct paths starting at node 12: {12},{12,15},{12,15,22},
-// {12,20},{12,20,21},{12,20,21,22},{12,20,22}); (b) Kirchhoff's node law (Batagelj 2003 section
-// 4.3) holds exactly at every internal node once the added-source/sink arcs of the SPC-on-extended
-// -network reduction are included (e.g. at node 12: inflow 7+14=21 equals outflow 6+12+3=21).
+// SPNP on Hummon and Doreian's (1989) Figure 3 DAG. Batagelj (2003), sections
+// 3.3-3.4, identifies errors in the published SPNP table and defines
+// w_p(u,v)=L-(u)*L+(v), L-(u)=1+sum(L-(pred)), with symmetric L+. These expected
+// values use that recurrence and satisfy Batagelj's section 4.3 node law.
 static int check_spnp_paper_oracle(Harness *h)
 {
 	if (harness_upload_graph(h, &paper_graph, CRIT_NPPC_TILE_BUDGET_BYTES) || harness_run(h, &paper_graph, CRIT_WEIGHT_SPNP))

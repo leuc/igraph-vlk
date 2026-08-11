@@ -175,10 +175,6 @@ bool picking_ray_quad_intersection(vec3 ray_ori, vec3 ray_dir, vec3 quad_center,
 	// Quad bounds are [-width/2, width/2] and [-height/2, height/2]
 	// BUT our menu boxes are centered around the TEXT ANCHOR, which has an offset in renderer
 	// In renderer:
-	//   if (current->label) {
-	//     glm_vec3_scale(right, box_width * 0.5f, offset);
-	//     glm_vec3_add(instances[instance_count].worldPos, offset, instances[instance_count].worldPos);
-	//   }
 	// This means world_pos passed here IS already the center of the box.
 
 	if (fabsf(u) <= width * 0.5f && fabsf(v) <= height * 0.5f) {

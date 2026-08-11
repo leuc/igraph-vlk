@@ -16,10 +16,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-// ============================================================================
 // Worker Functions
 // Each returns igraph_vector_int_t* (membership) on success, NULL on failure
-// ============================================================================
 
 // Multilevel (Louvain)
 void *compute_igraph_community_multilevel(ExecutionContext *ctx)
@@ -617,9 +615,6 @@ void *compute_igraph_community_fluid_communities(ExecutionContext *ctx)
 	return membership;
 }
 
-// ============================================================================
-// Apply and Free Functions
-// ============================================================================
 
 void community_id_to_rgb(igraph_integer_t comm_id, float out_rgb[3])
 {
@@ -704,11 +699,9 @@ void free_community_membership(void *result_data)
 	}
 }
 
-// ============================================================================
 // Every attribute name a Group command may have cached, so an in-place graph
 // edit (Alter menu) can wipe them all and force the next Group click to
 // recompute rather than reapply now-stale membership.
-// ============================================================================
 static const char *const GROUP_CACHED_ATTRS[] = {
 	"community-louvain", "community-leiden", "community-walktrap", "community-edge-betweenness", "community-fastgreedy", "community-infomap", "community-label-propagation", "community-spinglass", "community-leading-eigenvector", "community-optimal-modularity", "community-voronoi", "community-fluid",
 };

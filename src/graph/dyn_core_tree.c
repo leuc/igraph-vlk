@@ -9,9 +9,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
-// State
-//
 // Nodes live in a flat, freelist-managed pool (grown by doubling, like
 // dyn_k-core.c's per-vertex arrays). A dead node's `next_sibling` field is
 // repurposed as the freelist link (it has no other use once removed from its
@@ -19,7 +16,6 @@
 // and is never freed. Vertex membership is an intrusive singly-linked list
 // per node, threaded through `next_in_node[vcount]`; `node_of[vcount]` maps a
 // vertex to its current node.
-// ============================================================================
 
 typedef struct
 {
@@ -46,10 +42,6 @@ struct DynCoreTree
 	igraph_integer_t vcount;
 	igraph_integer_t vertex_capacity;
 };
-
-// ============================================================================
-// Node pool
-// ============================================================================
 
 static bool ensure_node_capacity(DynCoreTree *ct, int needed)
 {
@@ -175,13 +167,8 @@ static void merge_nodes(DynCoreTree *ct, int a, int b, igraph_vector_int_t *touc
 		igraph_vector_int_push_back(touched, b_level);
 }
 
-// Walks from `node` up through parent pointers until reaching `ancestor`,
-// returning the last node visited before ancestor itself (i.e. the child of
-// `ancestor` that is `node`'s, or `node` itself if it already equals
-// ancestor). Mirrors the paper's FindSubroot/cn(n0,v0), without the
-// jump-pointer cache (a single call's walk is bounded by the touched
-// subtree's depth, which stays small in practice — see dyn_k-core.c's own
-// max_subcore_touched metric for the equivalent bound on subcore BFS size).
+// Lin et al. FindSubroot/cn(n0,v0), without a jump-pointer cache. Returns the
+// child of ancestor on node's path, or ancestor when node == ancestor.
 static int child_of_ancestor(const DynCoreTree *ct, int node, int ancestor)
 {
 	if (node == ancestor)
@@ -196,10 +183,6 @@ static int child_of_ancestor(const DynCoreTree *ct, int node, int ancestor)
 	}
 	return child;
 }
-
-// ============================================================================
-// Vertex capacity
-// ============================================================================
 
 static bool ensure_vertex_capacity(DynCoreTree *ct, igraph_integer_t n)
 {
@@ -232,10 +215,6 @@ static bool ensure_vertex_capacity(DynCoreTree *ct, igraph_integer_t n)
 	return true;
 }
 
-// ============================================================================
-// Ancestor merge (Algorithm 1, lines 1-13 of Lin et al.)
-// ============================================================================
-
 // Merges the ancestor chains of node1 and node2 bottom-up until they
 // coincide, returning the merge point. Purely structural: independent of how
 // many layers this insertion will ultimately lift V* by.
@@ -263,11 +242,6 @@ static int merge_ancestors(DynCoreTree *ct, int node1, int node2, igraph_vector_
 	return n1;
 }
 
-// ============================================================================
-// Single-edge insertion (Algorithm 1, lines 14-25 of Lin et al., generalized
-// to a possibly multi-layer V* — see dyn_core_tree.h's file header)
-// ============================================================================
-
 // Runs Lines 14-25 of Algorithm 1 (create bucket(s), split n_prime's member
 // list, NC reparenting, remove n_prime if emptied) for ONE group of V*
 // vertices that all currently reside in the same node n_prime. See
@@ -277,13 +251,9 @@ static bool apply_group(DynCoreTree *ct, const igraph_t *g, int n_prime, const i
 {
 	igraph_integer_t n = igraph_vector_int_size(gstar);
 
-	// 2a. Create one empty bucket node per distinct final level present in
-	// this group, ascending, chained onto each other (a multi-layer jump —
-	// only possible from a self-loop's double lift — becomes a chain of
-	// skip-layer tree edges, which Def. 6 explicitly allows). No member is
-	// placed yet: that happens in a single pass below, together with
-	// splitting n_prime's own list, so next_in_node is never overwritten out
-	// from under an in-progress walk of it.
+	// Create ascending buckets for distinct final levels. Def. 6 permits the
+	// skip-layer chain produced by a self-loop's two lifts. Place members after
+	// the buckets exist to avoid modifying a list during traversal.
 	igraph_vector_int_t bucket_level, bucket_node;
 	if (igraph_vector_int_init(&bucket_level, 0) != IGRAPH_SUCCESS)
 		return false;
@@ -367,24 +337,9 @@ static bool apply_group(DynCoreTree *ct, const igraph_t *g, int n_prime, const i
 		ct->nodes[n_prime].member_count = survivors_count;
 	}
 
-	// 3. NC: neighbor subtrees of this group get merged into or reparented
-	// under whichever new bucket node they actually nest under.
-	//
-	// In the paper's single-layer restriction, every child of n' trivially
-	// has level >= K+1 (the tree invariant alone guarantees it, since n'
-	// itself is level K), so "reparent everything under n+" is always valid.
-	// That guarantee breaks once a group can span multiple levels (a
-	// self-loop's double lift): n' can have OTHER pre-existing children
-	// sitting at levels below our topmost new bucket — e.g. a level-3 child
-	// of a level-2 n' when this call's only new bucket lands at level 4,
-	// skipping level 3 entirely. Blindly reparenting such a node under the
-	// level-4 bucket would put a lower-level node under a higher-level
-	// parent, corrupting the tree. So each nc is routed by an exact level
-	// match (merge into that bucket), left alone if it's shallower than
-	// every bucket we created (it simply isn't part of this group's lift),
-	// and only reparented under the topmost bucket if it's deeper than all
-	// of them (mirroring the single-layer case's "push existing deeper
-	// structure one level further down").
+	// Route each NC subtree by level. Merge exact matches, retain subtrees
+	// shallower than every new bucket, and reparent deeper subtrees below the
+	// top bucket. This preserves increasing levels during multi-level lifts.
 	igraph_vector_int_t nc_seen;
 	if (igraph_vector_int_init(&nc_seen, 0) != IGRAPH_SUCCESS) {
 		igraph_vector_int_destroy(&bucket_node);
@@ -447,9 +402,7 @@ static bool apply_group(DynCoreTree *ct, const igraph_t *g, int n_prime, const i
 				if (touched)
 					igraph_vector_int_push_back(touched, nc_level);
 			}
-			// else: nc sits below every bucket this call created (it isn't
-			// part of this group's lift at all) — leave it exactly where it
-			// already validly was, as a child of n_prime.
+			// Shallower NC subtrees remain children of n_prime.
 		}
 	}
 	igraph_vector_int_destroy(&neis);
@@ -547,26 +500,8 @@ static bool insert_edge(DynCoreTree *ct, const igraph_t *g, igraph_integer_t x1,
 	// starting node to begin with.
 	merge_ancestors(ct, node1, node2, touched);
 
-	// Partition V* by the node each vertex CURRENTLY sits in, re-read FRESH
-	// right before each group is formed — NOT from a single snapshot taken
-	// before any group is processed. A self-loop's multi-layer V* can span
-	// more than one group, each requiring its own independent application of
-	// lines 14-25 against its own n' (the paper's own single-layer V* always
-	// forms exactly one such group, Theorem 3). Snapshotting every vertex's
-	// node once up front is unsound once more than one group exists: an
-	// earlier group's apply_group call can relocate members via its own NC/
-	// merge step (merge_nodes/reparent_node) — including members that belong
-	// to a LATER, not-yet-processed group — and apply_group only picks up
-	// members it finds by walking its n_prime's CURRENT list, so a group
-	// processed against a stale n_prime silently loses whichever of its
-	// members got moved out from under it by an earlier group in the same
-	// insert_edge call (observed directly: a vertex snapshotted as residing
-	// in node 223 already showed a different, moved-to node_of by the time
-	// that group's turn came up, and was never lifted to its true final
-	// coreness as a result). Re-reading node_of fresh for both the group's
-	// representative vertex and the membership scan, right before forming
-	// each group, keeps every group's view of "who is currently here"
-	// accurate regardless of what earlier groups in this same call did.
+	// Partition V* using current node assignments. Earlier groups may reparent
+	// vertices needed by later groups, so a pre-update snapshot would be stale.
 	bool *processed = calloc((size_t)vstar_n, sizeof(bool));
 	if (!processed) {
 		igraph_vector_int_destroy(&vstar);
@@ -615,10 +550,6 @@ static bool insert_edge(DynCoreTree *ct, const igraph_t *g, igraph_integer_t x1,
 	return ok2;
 }
 
-// ============================================================================
-// Public API
-// ============================================================================
-
 DynCoreTree *dyn_core_tree_init(const igraph_t *g)
 {
 	DynCoreTree *ct = calloc(1, sizeof(DynCoreTree));
@@ -666,20 +597,8 @@ DynCoreTree *dyn_core_tree_init(const igraph_t *g)
 	if (ecount == 0)
 		return ct;
 
-	// Replay g's own edges into a scratch graph grown in batches, driving the
-	// exact same incremental path dyn_core_tree_on_edges uses (see the header
-	// comment for why there is no dedicated static-construction algorithm
-	// here). Edges are added BOOTSTRAP_CHUNK at a time, not one at a time:
-	// igraph_add_edges' per-call cost scales with the CURRENT size of the
-	// graph (its internal indices are rebuilt on mutation), so a single-edge
-	// igraph_add_edges call repeated m times costs O(m^2) overall, not O(m) —
-	// confirmed empirically (a standalone harness with zero dyn_core_tree.c
-	// involvement reproduced the exact same stall from single-edge
-	// igraph_add_edges calls alone; batching into chunks of a few thousand
-	// eliminated it, ~1000x). dyn_core_tree_on_edges already requires its
-	// caller to have added the batch to `g` first — batching here is just
-	// reusing that existing, already-tested contract instead of the private
-	// single-edge insert_edge() path.
+	// Replay edges through the incremental path. Batches limit igraph's index-
+	// rebuild overhead while preserving the on_edges pre-insertion contract.
 	igraph_t scratch;
 	if (igraph_empty(&scratch, 0, IGRAPH_UNDIRECTED) != IGRAPH_SUCCESS) {
 		dyn_core_tree_destroy(ct);

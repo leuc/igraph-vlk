@@ -346,9 +346,6 @@ void update_menu_transforms(MenuNode *node, const SpatialBasis *basis)
 	update_nextstep_layout_recursive(node, root_top_left);
 }
 
-// ============================================================================
-// Dynamic Attribute Filter Menu
-// ============================================================================
 
 // Find a branch by label in a parent's children (searches all children)
 static MenuNode *find_child_branch(MenuNode *parent, const char *label)
@@ -619,9 +616,6 @@ void menu_clear_attribute_edge_filters(MenuNode *root, GraphData *data)
 	menu_clear_children(edge_branch);
 }
 
-// ============================================================================
-// Netzschleuder Catalog Menu Population
-// ============================================================================
 
 extern const CommandDef g_command_registry[];
 extern const int g_command_registry_size;
@@ -703,7 +697,6 @@ void menu_populate_netzschleuder_static(MenuNode *root)
 	if (!netz_branch)
 		return;
 
-	// --- Phase 1: count how many entries each tag has ---
 	int tag_max = count < 100 ? 200 : count * 2;
 	char **tag_names = malloc(sizeof(char *) * (size_t)tag_max);
 	int *tag_counts = calloc((size_t)tag_max, sizeof(int));
@@ -741,7 +734,6 @@ void menu_populate_netzschleuder_static(MenuNode *root)
 		}
 	}
 
-	// --- Phase 2: add entry under each of its qualifying tags (>1 count) ---
 	// Non-qualifying entries are collected for Phase 3.
 	int *other_indices = malloc(sizeof(int) * (size_t)count);
 	int num_other = 0;
@@ -788,7 +780,6 @@ void menu_populate_netzschleuder_static(MenuNode *root)
 			other_indices[num_other++] = i;
 	}
 
-	// --- Phase 3: unassigned entries go to "Other" (last) ---
 	if (num_other > 0) {
 		MenuNode *other_branch = find_or_create_branch(netz_branch, "Other");
 		for (int k = 0; k < num_other; k++) {
@@ -807,9 +798,6 @@ void menu_populate_netzschleuder_static(MenuNode *root)
 	free(tag_counts);
 }
 
-// ============================================================================
-// Famous Graphs Menu
-// ============================================================================
 
 static const char *famous_graph_names[] = {
 	"Bull", "Chvatal", "Coxeter", "Cubical", "Diamond", "Dodecahedral", "Folkman", "Franklin", "Frucht", "Grotzsch", "Heawood", "Herschel", "House", "HouseX", "Icosahedral", "Krackhardt_Kite", "Levi", "McGee", "Meredith", "Noperfectmatching", "Nonline", "Octahedral", "Petersen", "Robertson", "Smallestcyclicgroup", "Tetrahedral", "Thomassen", "Tutte", "Uniquely3colorable", "Walther", "Zachary",

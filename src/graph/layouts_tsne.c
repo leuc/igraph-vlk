@@ -16,9 +16,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
-// T-SNE LAYOUT (2D)
-// ============================================================================
 void *compute_igraph_layout_bhtsne(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -65,9 +62,6 @@ void *compute_igraph_layout_bhtsne(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// T-SNE LAYOUT (3D)
-// ============================================================================
 void *compute_igraph_layout_bhtsne_3d(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;

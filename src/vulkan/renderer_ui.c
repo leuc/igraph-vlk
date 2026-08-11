@@ -24,7 +24,6 @@ void renderer_update_ui(Renderer *r, const char *text)
 	float xoff = -0.995f;
 	float scale = 1.6f;
 
-	// Start with main HUD text
 	int len = strlen(text);
 	if (len > max_text_len)
 		len = max_text_len;
@@ -49,7 +48,6 @@ void renderer_update_ui(Renderer *r, const char *text)
 		total_len++;
 	}
 
-	// Add crosshair at the center
 	unsigned char crossChar = '+';
 	CharInfo *ci_cross = &globalAtlas.chars[crossChar];
 	instances[total_len].screenPos[0] = 0.0f;

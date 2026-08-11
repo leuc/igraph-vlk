@@ -8,11 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// Weights for blending a vertex's intra-tree-node (same-sphere) neighbor
-// barycenter against its parent-tree-node (adjacent, outer-sphere) neighbor
-// barycenter. Which should dominate is an open visual-tuning question, not
-// an algorithmic one; kept as named constants rather than a hardcoded 0.5/0.5
-// so they're easy to find and retune independently.
+// Blend weights for same-node and parent-node neighbor barycenters.
 #define DYN_CT_ORDER_INTRA_WEIGHT 0.5
 #define DYN_CT_ORDER_INTER_WEIGHT 0.5
 
@@ -76,7 +72,7 @@ static bool assign_ranks(DynCoreTreeOrder *dto, const igraph_t *g, const DynCore
 					continue;
 				igraph_integer_t u = (from == v) ? to : from;
 				if (u >= v)
-					continue; // not yet ranked this batch (or self via a loop igraph_incident let through)
+					continue; // Unranked in this batch, or a self-loop.
 
 				int nu = dyn_core_tree_node_of(ct, u);
 				if (nu == t) {

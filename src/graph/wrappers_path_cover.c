@@ -26,9 +26,7 @@ typedef struct
 	bool is_antichain;
 } PathCoverResult;
 
-// Directed/cycle check mirrors Main Path preparation's block exactly:
-// deletes any feedback-arc-set edges in place on the live graph to force a
-// DAG, since igraph_minimum_path_cover requires one.
+// Remove an approximate feedback arc set because minimum path cover requires a DAG.
 static bool path_cover_ensure_dag(igraph_t *graph, const char *label)
 {
 	if (!igraph_is_directed(graph)) {

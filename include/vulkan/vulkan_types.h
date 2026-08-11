@@ -91,7 +91,6 @@ typedef struct
 	int computeFamily;
 } VkQueueFamilyInfo;
 
-// --- GEOMETRY TYPES ---
 
 typedef struct
 {
@@ -184,7 +183,6 @@ typedef struct
 	uint32_t idx;
 } DistIdxPair;
 
-// --- CONTEXT TYPES ---
 
 typedef struct
 {

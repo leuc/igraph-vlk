@@ -14,10 +14,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-// ============================================================================
 // Worker Functions
 // Each returns igraph_t* (new graph) on success, NULL on failure
-// ============================================================================
 
 // Ring graph
 void *compute_igraph_ring(ExecutionContext *ctx)
@@ -300,7 +298,7 @@ void *compute_igraph_bipartite_game_gnm(ExecutionContext *ctx)
 		return NULL;
 
 	// Parameters: n1=8 (type 0), n2=6 (type 1), m=15 edges, undirected
-	// We can optionally get types vector, but we'll pass NULL for simplicity
+	// Vertex types are not needed by this constructor.
 	igraph_error_t code = igraph_bipartite_game_gnm(new_graph, NULL, 8, 6, 15, 0, IGRAPH_OUT, IGRAPH_SIMPLE_SW, 0);
 
 	if (code != IGRAPH_SUCCESS) {
@@ -368,7 +366,7 @@ void *compute_igraph_bipartite_projection(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	// For now, return the first projection (vertices of type FALSE)
+	// Return the projection induced by vertices of type FALSE.
 	igraph_destroy(proj2);
 	IGRAPH_FREE(proj2);
 
@@ -441,9 +439,6 @@ void *compute_igraph_gabriel_graph(ExecutionContext *ctx)
 	return new_graph;
 }
 
-// ============================================================================
-// Apply and Free Functions
-// ============================================================================
 
 void apply_new_graph(ExecutionContext *ctx, void *result_data)
 {

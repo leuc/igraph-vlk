@@ -12,7 +12,7 @@
 #define DYN_LS_ROTATION_DAMP_HORIZON 20.0		// sphere_rotation_steps[s] reaching this many applied-rotation events is treated as fully warmed up, saturating the damping factor at 1.0
 #define DYN_LS_ROTATION_MAX_STEP_RAD 0.15		// angular-step budget at DYN_LS_ROTATION_REFERENCE_RADIUS; a streaming recompute gets one shot rather than an iterative convergence loop
 #define DYN_LS_ROTATION_REFERENCE_RADIUS 5.0	// sphere_radius_for()'s floor, i.e. the innermost/smallest sphere's radius
-#define DYN_LS_ROTATION_SETTLED_DELTA_RAD 0.001 // tick-to-tick CHANGE in torque (want vector) below this means the torque has converged to a steady value; observed in practice: some spheres' torque plateaus at a stable NONZERO value (e.g. structurally asymmetric edge layout with no exact zero-torque orientation) rather than shrinking to 0, so magnitude alone can't detect convergence — only whether it has stopped moving can
+#define DYN_LS_ROTATION_SETTLED_DELTA_RAD 0.001 // Maximum tick-to-tick torque-vector change at convergence.
 #define DYN_LS_ROTATION_SETTLED_STREAK 8		// consecutive below-delta ticks required before a sphere is treated as settled, so one lucky small-delta sample mid-correction doesn't false-trigger
 
 // out = a * b (Hamilton product); a is the rotation applied SECOND to a
@@ -181,7 +181,7 @@ bool dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ct
 	double dot = want_x * prev[0] + want_y * prev[1] + want_z * prev[2];
 
 	double apply_x = want_x, apply_y = want_y, apply_z = want_z;
-	double damp = 1.0; // reported as-is in the diagnostic below; 1.0 means "not oscillating, undamped"
+	double damp = 1.0;
 	if (dot < 0.0) {
 		// Reversed direction since the last step — oscillating around a good
 		// orientation (GEM-style detection). Damp harder the earlier this
@@ -197,16 +197,13 @@ bool dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ct
 		apply_z *= damp;
 	}
 
-	// Cap by arc length (angle * radius) rather than angle alone, so every sphere sweeps
-	// roughly the same surface distance per step: the small inner sphere gets a large
-	// angular budget (rotates fast/far), the large outer ones get a small one (barely
-	// creep), which is what actually reads as "settled" vs. "spinning" on screen.
+	// Scale the angle by radius to bound surface travel per step.
 	double max_step_rad = DYN_LS_ROTATION_MAX_STEP_RAD * (DYN_LS_ROTATION_REFERENCE_RADIUS / grid->radius);
 	if (max_step_rad > DYN_LS_ROTATION_MAX_STEP_RAD)
 		max_step_rad = DYN_LS_ROTATION_MAX_STEP_RAD; // never exceed the reference sphere's own budget
 
 	double apply_angle = sqrt(apply_x * apply_x + apply_y * apply_y + apply_z * apply_z);
-	bool clamped = apply_angle > max_step_rad; // pre-clamp vs. post-clamp applied_angle in the log below shows whether the cap (vs. the torque itself) is what's keeping this sphere in motion
+	bool clamped = apply_angle > max_step_rad;
 	if (clamped) {
 		double clamp_scale = max_step_rad / apply_angle;
 		apply_x *= clamp_scale;
@@ -223,15 +220,9 @@ bool dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ct
 	prev[2] = want_z;
 
 	if (apply_angle < 1e-9)
-		return false; // negligible — leave the quaternion and step counter untouched; a sphere that reliably lands here has actually converged and drops out of the log below
+		return false; // Preserve state for negligible increments.
 
-	// Identifies which sphere(s) never settle: only real (non-negligible) rotation reaches this
-	// line, so a slot that keeps appearing here call after call genuinely never satisfies the
-	// settled_delta<threshold streak above, rather than just being caught mid-convergence. Watch
-	// want_angle/settle_delta together: a slot with roughly constant want_angle but tiny
-	// settle_delta is the "plateaued at a stable nonzero torque" case the streak above exists to
-	// catch; still increasing settle_delta means it's genuinely still moving toward something.
-	// Throttled globally (not per-slot) so it can't get stuck re-logging a slot that's actually done.
+	// Throttle rotation diagnostics globally.
 	{
 		static int log_ctr = 0;
 		if (++log_ctr % 512 == 1)

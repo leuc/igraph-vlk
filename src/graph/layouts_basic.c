@@ -13,9 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
 // CIRCLE LAYOUT (3D with Z=0)
-// ============================================================================
 void *compute_igraph_layout_circle(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -58,9 +56,7 @@ void *compute_igraph_layout_circle(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
 // CIRCLE LAYOUT (2D only)
-// ============================================================================
 void *compute_igraph_layout_circle_2d(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -90,9 +86,6 @@ void *compute_igraph_layout_circle_2d(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// STAR LAYOUT
-// ============================================================================
 void *compute_igraph_layout_star(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -154,9 +147,6 @@ void *compute_igraph_layout_star(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// GRID LAYOUT (3D)
-// ============================================================================
 void *compute_igraph_layout_grid_3d(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -176,8 +166,8 @@ void *compute_igraph_layout_grid_3d(ExecutionContext *ctx)
 	 * igraph_layout_grid_3d() parameters:
 	 * @param graph           The graph to layout
 	 * @param res             Output matrix (will be resized to vcount x 3)
-	 * @param width           Number of vertices along x-axis (we use cube root)
-	 * @param height          Number of vertices along y-axis (we use same as width)
+	 * @param width           Vertices along the x axis; derived from cube root
+	 * @param height          Vertices along the y axis; equal to width
 	 *
 	 * Calculates side = ceil(vcount^(1/3)) for cubic arrangement
 	 */
@@ -196,9 +186,6 @@ void *compute_igraph_layout_grid_3d(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// GRID LAYOUT (2D)
-// ============================================================================
 void *compute_igraph_layout_grid(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -218,7 +205,7 @@ void *compute_igraph_layout_grid(ExecutionContext *ctx)
 	 * igraph_layout_grid() parameters:
 	 * @param graph           The graph to layout
 	 * @param res             Output matrix (will be resized to vcount x 2)
-	 * @param width           Number of columns (we use sqrt(vcount))
+	 * @param width           Columns; derived from sqrt(vcount)
 	 *
 	 * Places vertices in a grid, filling row by row
 	 */
@@ -236,9 +223,7 @@ void *compute_igraph_layout_grid(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
 // SPHERE LAYOUT (Fibonacci Sphere)
-// ============================================================================
 // Reference: Saff, E.B. and Kuijlaars, A.B.J. (1997):
 // "Distributing many points on a sphere."
 // Mathematical Intelligencer 19(1):5-11.
@@ -275,9 +260,6 @@ void *compute_igraph_layout_sphere(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// RANDOM LAYOUT (3D)
-// ============================================================================
 void *compute_igraph_layout_random_3d(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -311,9 +293,6 @@ void *compute_igraph_layout_random_3d(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// RANDOM LAYOUT (2D)
-// ============================================================================
 void *compute_igraph_layout_random(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;

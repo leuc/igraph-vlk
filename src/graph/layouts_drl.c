@@ -11,9 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
-// DRL LAYOUT (2D)
-// ============================================================================
 void *compute_igraph_layout_drl(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -65,9 +62,6 @@ void *compute_igraph_layout_drl(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// DRL LAYOUT (3D)
-// ============================================================================
 void *compute_igraph_layout_drl_3d(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;

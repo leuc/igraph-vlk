@@ -13,11 +13,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-// ============================================================================
 // Worker: Compute and remove feedback arc set to make graph acyclic.
 // Modifies graph in-place before Main Path preparation.
 // Returns graph pointer on success, NULL on failure.
-// ============================================================================
 void *compute_remove_feedback_arc_set(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -66,10 +64,8 @@ void *compute_remove_feedback_arc_set(ExecutionContext *ctx)
 	return graph;
 }
 
-// ============================================================================
 // Apply: Refresh visualization after in-place graph modification.
 // Does NOT free/copy the graph or compute a new layout.
-// ============================================================================
 void apply_remove_feedback_arc_set(ExecutionContext *ctx, void *result_data)
 {
 	if (!ctx || !ctx->app_state)
@@ -92,11 +88,9 @@ void apply_remove_feedback_arc_set(ExecutionContext *ctx, void *result_data)
 	printf("[apply] Feedback arc set processed - %d vertices, %d edges\n", data->node_count, data->edge_count);
 }
 
-// ============================================================================
 // Worker: Simplify graph by removing multi-edges and loops.
 // Modifies graph in-place.
 // Returns graph pointer on success, NULL on failure.
-// ============================================================================
 void *compute_igraph_simplify(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -122,10 +116,8 @@ void *compute_igraph_simplify(ExecutionContext *ctx)
 	return graph;
 }
 
-// ============================================================================
 // Worker: Convert undirected graph to directed.
 // Modifies graph in-place.
-// ============================================================================
 void *compute_to_directed(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -151,10 +143,8 @@ void *compute_to_directed(ExecutionContext *ctx)
 	return graph;
 }
 
-// ============================================================================
 // Worker: Convert directed graph to undirected (collapse mode).
 // One undirected edge per connected pair, no multi-edges.
-// ============================================================================
 void *compute_to_undirected_collapse(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -180,10 +170,8 @@ void *compute_to_undirected_collapse(ExecutionContext *ctx)
 	return graph;
 }
 
-// ============================================================================
 // Worker: Convert directed graph to undirected (mutual mode).
 // Only edges existing in both directions survive. No multi-edges.
-// ============================================================================
 void *compute_to_undirected_mutual(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -212,7 +200,6 @@ void *compute_to_undirected_mutual(ExecutionContext *ctx)
 	return graph;
 }
 
-// ============================================================================
 // Worker: Remove vertices whose 'date' attribute is missing or an empty
 // string. Requires the graph to have a 'date' vertex attribute at all.
 // Modifies graph in-place. Unlike Simplify/to_directed/to_undirected_*, this
@@ -221,7 +208,6 @@ void *compute_to_undirected_mutual(ExecutionContext *ctx)
 // still pending) — otherwise apply_inplace_graph_update_full's rebuild would
 // hand surviving vertices stale/mismatched positions from the old, larger
 // layout matrix. Returns graph pointer on success, NULL on failure.
-// ============================================================================
 void *compute_remove_empty_date_nodes(ExecutionContext *ctx)
 {
 	GraphData *data = &ctx->app_state->current_graph;
@@ -295,10 +281,8 @@ void *compute_remove_empty_date_nodes(ExecutionContext *ctx)
 	return graph;
 }
 
-// ============================================================================
 // Shared apply: Refresh visualization after any in-place graph modification
 // that leaves vertex count unchanged (edges/attributes only).
-// ============================================================================
 void apply_inplace_graph_update(ExecutionContext *ctx, void *result_data)
 {
 	if (!ctx || !ctx->app_state)
@@ -321,19 +305,15 @@ void apply_inplace_graph_update(ExecutionContext *ctx, void *result_data)
 	printf("[apply] Graph updated - %d vertices, %d edges\n", data->node_count, data->edge_count);
 }
 
-// ============================================================================
 // Free: No-op — graph is owned by GraphData, not the result
-// ============================================================================
 void free_noop(void *result_data)
 {
 	(void)result_data;
 }
 
-// ============================================================================
 // Shared apply: Refresh visualization after an in-place modification that
 // changed vertex count (full rebuild, not just edges — see
 // graph_build_visualization vs. graph_rebuild_edges in graph_core.c).
-// ============================================================================
 void apply_inplace_graph_update_full(ExecutionContext *ctx, void *result_data)
 {
 	if (!ctx || !ctx->app_state)

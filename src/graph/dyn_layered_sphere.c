@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 igraph-vlk team
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 #include "graph/dyn_layered_sphere.h"
 #include "graph/dyn_ls_sphere_rotation.h"
 #include "graph/layered_sphere_common.h"
@@ -20,7 +25,6 @@ static inline double dyn_ls_timer_us(const struct timespec *start, const struct 
 	return (double)(end->tv_sec - start->tv_sec) * 1000000.0 + (double)(end->tv_nsec - start->tv_nsec) / 1000.0;
 }
 
-/* Every reactive branch in this file corresponds to exactly one of these; each has a single dyn_ls_handle_<event> handler. */
 typedef enum {
 	DYN_LS_EVENT_NODE_PAIR_CONNECTED,	/* new vertex arrived already wired to the graph (degree > 0) */
 	DYN_LS_EVENT_NODE_DISJOINT_ADDED,	/* new vertex arrived isolated (degree == 0) */
@@ -64,7 +68,7 @@ static DynLsEventType dyn_ls_classify_node_arrival(const igraph_t *g, igraph_int
 	return deg > 0 ? DYN_LS_EVENT_NODE_PAIR_CONNECTED : DYN_LS_EVENT_NODE_DISJOINT_ADDED;
 }
 
-/* Per-recompute-call tally, one bucket per DynLsEventType, reported as a single consolidated line instead of scattering a print per occurrence. */
+/* Per-recompute event counts for throttled diagnostics. */
 typedef struct
 {
 	int level_touched;
@@ -92,7 +96,7 @@ struct DynLayeredSphere
 	igraph_integer_t last_seen_vcount;
 	int *level_to_grid_slot;
 	int level_to_grid_slot_cap;
-	int *node_to_sphere; // persisted (unlike dyn_ls_recompute's other scratch arrays) so dyn_ls_tick_rotation can run every call, not just when dyn_ls_recompute runs
+	int *node_to_sphere; // Persisted for rotation ticks between recomputes.
 	int node_to_sphere_cap;
 	double *sphere_rotation;
 	double *sphere_prev_omega;
@@ -388,7 +392,7 @@ static void dyn_ls_handle_community_reassigned(DynLayeredSphere *dls, const DynC
 	}
 }
 
-/* DYN_LS_EVENT_SPHERE_RESEEDED: the union outcome of DYN_LS_EVENT_SPHERE_GEOMETRY_DIRTY / LEVEL_TOUCHED / COMMUNITY_REASSIGNED having marked sphere_changed[slot]. Seeding places raw, unrotated positions, so they're aligned to the sphere's current accumulated orientation once here; further rotation is dyn_ls_tick_rotation's job, not this event's — see its comment for why that's decoupled from graph-topology events entirely. */
+/* Seed raw positions, then apply the sphere's persistent rotation once. */
 static bool dyn_ls_reseed_sphere(const igraph_t *g, LayeredSphereContext *ctx, const DynCoreTree *ct, const DynCoreTreeOrder *order, DynLayeredSphere *dls, int slot, int l, int occ, const igraph_integer_t *community, bool has_timestamp)
 {
 	bool ok;
@@ -630,12 +634,7 @@ cleanup:
 	return result;
 }
 
-/* Rotation is decoupled from every DynLsEventType above: it advances each populated sphere's
- * orientation by one damped step on every dyn_layered_sphere_on_update call, whether or not any
- * graph-topology event fired this batch, so the animation keeps moving between data arrivals
- * instead of freezing until the next dirty batch. Relies on dls->node_to_sphere, which — unlike
- * dyn_ls_recompute's other scratch arrays — is persisted precisely so this can run standalone.
- */
+/* Advance populated spheres between graph updates using persisted assignments. */
 static bool dyn_ls_tick_rotation(DynLayeredSphere *dls, const igraph_t *g, igraph_matrix_t *layout, igraph_integer_t vcount)
 {
 	if (!dls->sphere_rotation || !dls->node_to_sphere)

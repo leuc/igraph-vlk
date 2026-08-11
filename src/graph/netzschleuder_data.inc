@@ -2,7 +2,6 @@
 //   curl -s 'https://networks.skewed.de/api/nets?full=True' \
 //   | jq -r 'to_entries[]|(.key|@json)as$eid|(.value.title//.key|@json)as$title|(.value.nets[0]//.key|@json)as$ver|(.value.tags|join(",")|@json)as$tags|(if.value.analyses|type=="object"then if.value.analyses|has("num_vertices")then[.value.analyses.num_vertices,.value.analyses.num_edges]elif.value.nets[0]and.value.analyses[.value.nets[0]]then[.value.analyses[.value.nets[0]].num_vertices,.value.analyses[.value.nets[0]].num_edges]else[null,null]end else[null,null]end)as$stats|"\t{\($eid), \($title), \($ver), \($tags), \($stats[0]//0), \($stats[1]//0)},"' \
 //   > src/graph/netzschleuder_data.inc
-//
 	{"7th_graders", "Vickers 7th Graders (1981)", "7th_graders", "Social,Offline,Multilayer,Unweighted,Metadata", 29, 740},
 	{"academia_edu", "Academica.edu (2011)", "academia_edu", "Social,Online,Unweighted", 200169, 1398063},
 	{"add_health", "Adolescent health (ADD HEALTH) (1994)", "comm1", "Social,Offline,Weighted", 71, 305},

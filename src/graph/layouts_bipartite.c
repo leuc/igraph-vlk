@@ -12,9 +12,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
-// BIPARTITE LAYOUT (3D)
-// ============================================================================
 void *compute_igraph_layout_bipartite(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -39,7 +36,7 @@ void *compute_igraph_layout_bipartite(ExecutionContext *ctx)
 	 * @param vgap            Vertical gap between rows
 	 * @param maxiter        Maximum iterations (default: 100)
 	 *
-	 * We use alternating pattern as fallback when no type attribute available
+	 * Alternates types when the graph has no type attribute.
 	 */
 	igraph_vector_bool_t types;
 	if (igraph_vector_bool_init(&types, vcount) != IGRAPH_SUCCESS) {
@@ -74,9 +71,6 @@ void *compute_igraph_layout_bipartite(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// BIPARTITE LAYOUT (2D)
-// ============================================================================
 void *compute_igraph_layout_bipartite_simple(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;

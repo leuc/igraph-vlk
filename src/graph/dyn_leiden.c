@@ -27,12 +27,7 @@
 #define DYN_LEIDEN_MAX_ITERATIONS 20 // local-move wave cap, matches GVE-Leiden's default (Sahu 2024, §5.1.2)
 #define DYN_LEIDEN_MAX_PASSES 10	 // aggregation (community-merge) pass cap, matches GVE-Leiden's default (Sahu 2024, §5.1.2)
 
-// Density-scaled CPM resolution, matching the static Leiden menu command
-// (wrappers_community.c:compute_igraph_community_leiden) and
-// layered_sphere.c: gamma = max(3 * graph density, 0.001), recomputed from
-// the live graph on every dyn_leiden_init/dyn_leiden_on_edges call. The
-// heuristic is deliberately duplicated here rather than shared, since it is
-// small and consolidating it is a separate, unrelated concern.
+// Match the static Leiden resolution: gamma = max(3 * density, 0.001).
 static double dyn_leiden_cpm_resolution(const igraph_t *g)
 {
 	igraph_integer_t vcount = igraph_vcount(g);
@@ -41,22 +36,17 @@ static double dyn_leiden_cpm_resolution(const igraph_t *g)
 	return fmax(graph_density * 3.0, 0.001);
 }
 
-// ============================================================================
-// State
-//
 // Community ids are always a representative original vertex id (never a
 // compacted 0..C-1 index): vertices start as their own singleton (vcom[v]=v)
 // and community labels persist across merges even if their namesake vertex
 // later moves elsewhere. Membership per community is a doubly-linked list
 // (comm_head/comm_next/comm_prev) so aggregation can enumerate a touched
 // community's exact members in O(members), not O(V).
-//
 // All per-vertex/per-community arrays share one capacity, grown by doubling
 // like dyn_k-core.c. The frontier worklist is an explicit FIFO (queue/
 // in_queue), not GVE-Leiden's O(V)-per-wave dense scan — a live stream
 // calls dyn_leiden_on_edges every poll, so an O(V) scan per call would
 // defeat the point of incremental maintenance.
-// ============================================================================
 
 struct DynLeiden
 {
@@ -107,9 +97,6 @@ struct DynLeiden
 	int last_frontier_size;
 };
 
-// ============================================================================
-// Capacity / vertex-count sync
-// ============================================================================
 
 static bool dyn_leiden_sync_vcount(DynLeiden *dl, const igraph_t *g)
 {
@@ -190,9 +177,6 @@ static bool dyn_leiden_sync_vcount(DynLeiden *dl, const igraph_t *g)
 	return true;
 }
 
-// ============================================================================
-// Neighbor fetch (mirrors dyn_k-core.c's fetch_neighbors)
-// ============================================================================
 
 static bool dyn_leiden_fetch_neighbors(DynLeiden *dl, const igraph_t *g, igraph_integer_t w)
 {
@@ -217,9 +201,6 @@ static bool dyn_leiden_fetch_neighbors(DynLeiden *dl, const igraph_t *g, igraph_
 	return true;
 }
 
-// ============================================================================
-// Community membership list (doubly-linked, O(1) insert/remove)
-// ============================================================================
 
 static void dyn_leiden_list_remove(DynLeiden *dl, igraph_integer_t v)
 {
@@ -269,9 +250,6 @@ static igraph_integer_t dyn_leiden_vcob_of(const DynLeiden *dl, igraph_integer_t
 	return dl->touched_flag[v] ? dl->vcob[v] : dl->vcom[v];
 }
 
-// ============================================================================
-// Community-change bookkeeping (append-only list, cleared in O(touched))
-// ============================================================================
 
 static void dyn_leiden_flag_cchg(DynLeiden *dl, igraph_integer_t c)
 {
@@ -281,9 +259,6 @@ static void dyn_leiden_flag_cchg(DynLeiden *dl, igraph_integer_t c)
 	}
 }
 
-// ============================================================================
-// Frontier worklist
-// ============================================================================
 
 static bool dyn_leiden_enqueue(DynLeiden *dl, igraph_integer_t v)
 {
@@ -327,15 +302,12 @@ static void dyn_leiden_queue_drain(DynLeiden *dl)
 	dl->queue_head = 0;
 }
 
-// ============================================================================
 // Neighbor-community weight scan (port of GVE-Leiden leidenScanCommunitiesW,
 // leiden.hxx)
-//
 // igraph has no sparse accumulator, so this is a "touched-list + dense
 // array" pair: vcs/vcout are capacity-sized (at most one entry per distinct
 // community label), cleared by walking vcs after each scan rather than
 // memset over the whole array.
-// ============================================================================
 
 static void dyn_leiden_scan_clear(DynLeiden *dl)
 {
@@ -399,10 +371,8 @@ static bool dyn_leiden_scan_community(DynLeiden *dl, const igraph_t *g, igraph_i
 	return true;
 }
 
-// ============================================================================
 // Delta-CPM argmax (port of GVE-Leiden leidenChooseCommunity, leiden.hxx,
 // adapted from modularity to CPM)
-//
 // igraph's CPM convention (node weight n_i=1): Q*2m = sum_c (2*w_int_c -
 // gamma*N_c^2). The 1/2m factor and partition-independent constants drop out
 // of the argmax/sign, so a vertex move u: d->c gives
@@ -413,7 +383,6 @@ static bool dyn_leiden_scan_community(DynLeiden *dl, const igraph_t *g, igraph_i
 // are parameterized: own_size=1, d=vcom[u] for a vertex move; own_size=csiz[c],
 // d=c for a merge (there vcout[d]=0 and csiz[c]-csiz[d]=0, recovering
 // e_ct - gamma*N_c*N_t exactly).
-// ============================================================================
 
 static void dyn_leiden_choose(const DynLeiden *dl, igraph_integer_t own_size, igraph_integer_t d, igraph_integer_t *out_c, double *out_gain)
 {
@@ -434,20 +403,10 @@ static void dyn_leiden_choose(const DynLeiden *dl, igraph_integer_t own_size, ig
 	*out_gain = emax;
 }
 
-// ============================================================================
 // Frontier marking (port of GVE-Leiden leidenAffectedVerticesFrontierW,
 // leiden.hxx)
-//
-// A cross-community edge flags BOTH endpoints' communities for aggregation,
-// not just the vertex-move frontier: local-moving only ever considers a
-// single vertex switching communities wholesale, and correctly rejects that
-// when the vertex has more to lose (its existing same-community edges) than
-// to gain (the one new cross edge) — but the two communities AS WHOLES may
-// still be worth merging (their full mutual connectivity, not just this one
-// vertex's share of it). Without flagging both here, that merge would never
-// even be considered when no individual vertex move happens to accept it,
-// defeating the point of running aggregation at all.
-// ============================================================================
+// Flag both endpoint communities because aggregation may accept a community
+// merge even when neither endpoint accepts an individual move.
 
 static bool dyn_leiden_mark_frontier(DynLeiden *dl, const igraph_vector_int_t *new_edges)
 {
@@ -467,10 +426,8 @@ static bool dyn_leiden_mark_frontier(DynLeiden *dl, const igraph_vector_int_t *n
 	return true;
 }
 
-// ============================================================================
 // Local-moving (wave-based port of GVE-Leiden leidenMoveW, leiden.hxx;
 // queue-driven, not a dense scan)
-// ============================================================================
 
 static bool dyn_leiden_local_move(DynLeiden *dl, const igraph_t *g, bool refine, igraph_vector_int_t *changed)
 {
@@ -511,17 +468,8 @@ static bool dyn_leiden_local_move(DynLeiden *dl, const igraph_t *g, bool refine,
 	return true;
 }
 
-// ============================================================================
-// Refinement
-//
-// Reset touched vertices whose pre-move community changed back to a
-// singleton, then re-run local-moving restricted to same-vcob candidates
-// (dyn_leiden_scan_vertex's REFINE gate) that are still singletons
-// (the csiz[d]>1 check in dyn_leiden_local_move) — finds
-// well-connected sub-communities without the reference's CSR-based
-// ID-renaming machinery (unneeded here: labels are already stable
-// representative vertex ids, not compacted integers).
-// ============================================================================
+// Reset touched vertices from changed communities to singletons, then move
+// among candidates with the same pre-refinement community.
 
 static bool dyn_leiden_refine(DynLeiden *dl, const igraph_t *g, igraph_vector_int_t *changed)
 {
@@ -534,14 +482,7 @@ static bool dyn_leiden_refine(DynLeiden *dl, const igraph_t *g, igraph_vector_in
 		igraph_integer_t d = dl->vcob[u];
 		if (!dl->cchg[d])
 			continue;
-		// A community label is only safe to reclaim as u's fresh singleton
-		// if nobody else currently holds it — rare id-collision guard: an
-		// earlier aggregation merge could have left an unrelated vertex
-		// sitting under label u (community labels persist independently of
-		// their namesake vertex, see the file header). Skip refining u this
-		// round rather than silently merging it with that unrelated
-		// community; this only forgoes a splitting opportunity, it never
-		// produces an incorrect merge.
+		// Reclaim u as a singleton label only when no unrelated vertex uses it.
 		bool label_free = dl->comm_head[u] < 0 || (dl->comm_head[u] == u && dl->comm_next[u] < 0);
 		if (!label_free)
 			continue;
@@ -552,26 +493,9 @@ static bool dyn_leiden_refine(DynLeiden *dl, const igraph_t *g, igraph_vector_in
 	return dyn_leiden_local_move(dl, g, /*refine=*/true, changed);
 }
 
-// ============================================================================
-// Aggregation — scoped to the affected region (see dyn_leiden.h header and
-// the design plan for why this differs from GVE-Leiden's full-graph
-// coarsen-and-recurse loop: rebuilding a supergraph from the entire current
-// community structure every call would cost O(current graph size) per poll
-// regardless of batch size, reintroducing the O(V)-per-frame cost this
-// maintainer exists to avoid).
-//
-// Communities flagged cchg during local-moving/refinement are the seed
-// worklist; merging one community into a neighbor is mathematically the
-// same delta-CPM argmax as a vertex move, with the "vertex" being
-// the whole community (own_size=csiz[c], d=c — see dyn_leiden_choose).
-// A merge folds every member of the losing community into the winner via
-// the same dyn_leiden_move mutator, and flags the winner for another round,
-// bounded by DYN_LEIDEN_MAX_PASSES (mirrors the static Leiden
-// continue_clustering loop in igraph's src/community/leiden.c, but applied
-// only to the cchg-flagged candidate set instead of the whole graph — i.e.
-// the scoped aggregation of Sahu's DF-Leiden rather than a full
-// coarsen-and-recurse pass).
-// ============================================================================
+// Aggregate affected communities only. A community merge uses the vertex-move
+// delta-CPM formula with own_size=csiz[c] and d=c. Merged members enter through
+// dyn_leiden_move, and the target is reconsidered for at most MAX_PASSES.
 
 static void dyn_leiden_merge_community(DynLeiden *dl, igraph_integer_t c, igraph_integer_t target, igraph_vector_int_t *changed)
 {
@@ -618,9 +542,6 @@ static bool dyn_leiden_aggregate(DynLeiden *dl, const igraph_t *g, igraph_vector
 	return true;
 }
 
-// ============================================================================
-// Public API
-// ============================================================================
 
 DynLeiden *dyn_leiden_init(const igraph_t *g)
 {

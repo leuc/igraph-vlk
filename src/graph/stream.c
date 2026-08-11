@@ -30,10 +30,8 @@
 #define GRAPH_STREAM_GRID_SPACING 2.0
 #define GRAPH_STREAM_DEBUG_REPORT_INTERVAL_SEC 2.0
 
-// ============================================================================
 // Name -> vertex-id map (open addressing, linear probing, FNV-1a).
 // No deletions: streaming only ever adds vertices.
-// ============================================================================
 
 typedef struct
 {
@@ -144,18 +142,14 @@ static void name_map_destroy(NameMap *m)
 	m->count = 0;
 }
 
-// ============================================================================
-// GraphStream state
-// ============================================================================
-
 struct GraphStream
 {
 	OsStreamReader *reader;
 	NameMap names;
 	DynKCore *kcore;				   // live coreness maintenance; NULL if init failed (non-fatal)
 	int last_max_core;				   // max coreness at the last node-size mapping
-	DynCoreTree *core_tree;			   // live k-core hierarchy maintenance (consumed by layered_sphere for sphere assignment); NULL if init failed (non-fatal). Independent of kcore above — see graph/dyn_core_tree.h's own DynKCore instance; the redundant coreness computation is an accepted tradeoff (dyn_core_tree.h's file header explains why it can't share kcore's).
-	DynCoreTreeOrder *core_tree_order; // live heuristic crossing-reduction rank per vertex, derived from core_tree (consumed by layered_sphere as its intra-sphere ordering key in place of arrival timestamp); NULL if init failed (non-fatal) or core_tree itself is NULL.
+	DynCoreTree *core_tree;			   // Independent hierarchy maintainer used for sphere assignment.
+	DynCoreTreeOrder *core_tree_order; // Intra-sphere ordering derived from core_tree.
 	DynLeiden *leiden;				   // live community maintenance; NULL if init failed (non-fatal)
 	DynLayeredSphere *layered_sphere;  // live Layered Sphere layout maintenance; NULL if init failed (non-fatal)
 	bool layered_sphere_enabled;	   // user-toggled, on by default (see "Data/Stream > [x] Live Layered Sphere")
@@ -181,9 +175,7 @@ struct GraphStream
 	bool pend_has_weight[GRAPH_STREAM_MAX_LINES_PER_FRAME];
 };
 
-// ============================================================================
 // GraphData array capacity growth (doubling, matches std container amortization)
-// ============================================================================
 
 static bool ensure_node_capacity(GraphStream *gs, GraphData *data, uint32_t needed)
 {
@@ -219,15 +211,11 @@ static bool ensure_edge_capacity(GraphStream *gs, GraphData *data, uint32_t need
 	return true;
 }
 
-// ============================================================================
 // NCOL line parsing: "<name1> <name2> [<weight>]"
 // Malformed lines are logged and skipped, per this codebase's error convention.
-// ============================================================================
 
-// ============================================================================
 // Vertex registration: cheap, called per new name, immediate (not batched —
 // igraph_add_vertices() is O(1)-ish per call, unlike igraph_add_edges()).
-// ============================================================================
 
 static bool ensure_vertex(GraphStream *gs, GraphData *data, const char *name, igraph_integer_t *out_vid)
 {
@@ -287,9 +275,6 @@ static bool ensure_vertex(GraphStream *gs, GraphData *data, const char *name, ig
 	return true;
 }
 
-// ============================================================================
-// Public API
-// ============================================================================
 
 GraphStream *graph_stream_init(GraphData *data)
 {
@@ -400,12 +385,10 @@ GraphStream *graph_stream_init(GraphData *data)
 	return gs;
 }
 
-// ============================================================================
 // Mirror maintained coreness into node sizes (NODE_SIZE_MIN..NODE_SIZE_MAX,
 // the same mapping as apply_centrality_scores). Touches only vertices whose
 // coreness changed this poll; rescales everything only when the max coreness
 // rises, which happens at most max-coreness times over a whole stream.
-// ============================================================================
 
 static void stream_apply_coreness_sizes(GraphStream *gs, GraphData *data, const igraph_vector_int_t *changed)
 {
@@ -429,12 +412,10 @@ static void stream_apply_coreness_sizes(GraphStream *gs, GraphData *data, const 
 	}
 }
 
-// ============================================================================
 // Mirror maintained community membership into node colors. Unlike coreness
 // sizes, a community's color depends only on its own id (golden-ratio hue
 // stepping, see community_id_to_rgb()), never on a global maximum, so there
 // is no "rescale everything" case to handle here.
-// ============================================================================
 
 static void stream_apply_community_colors(GraphStream *gs, GraphData *data, const igraph_vector_int_t *changed)
 {
@@ -456,14 +437,8 @@ static void stream_apply_community_colors(GraphStream *gs, GraphData *data, cons
 	}
 }
 
-// ============================================================================
-// Mirror maintained Layered Sphere positions into node positions. Copies all
-// of data->nodes[] rather than tracking a touched-vertex subset: cheap
-// relative to the layout work itself, and simpler than threading a moved-
-// vertex list out of dyn_layered_sphere_on_update (which — see
-// graph/dyn_layered_sphere.h — now only repositions the spheres
-// touched_levels/community_changed actually flag, not every vertex).
-// ============================================================================
+// Copy all maintained Layered Sphere positions; the maintainer exposes no
+// moved-vertex list.
 
 static void stream_mirror_layered_sphere_positions(GraphData *data)
 {
@@ -474,20 +449,8 @@ static void stream_mirror_layered_sphere_positions(GraphData *data)
 	}
 }
 
-// ============================================================================
-// Debug report: running V/E streamed totals vs. dyn k-core update volume,
-// throttled to stderr so a fast firehose doesn't spam once per frame.
-//
-// The lifetime totals alone are misleading — they naturally track close to
-// V+E because nearly every vertex gets lifted exactly once over the graph's
-// life (locality is a per-operation property, not a cumulative one). The
-// interval deltas (since the last report) and their ratio are the actual
-// locality signal: Δupdates/ΔE close to 1-2 means each new edge is only
-// lifting its own endpoints, not the whole graph. max_subcore is the honest
-// worst case — the most vertices any single edge insertion ever had to
-// visit (see dyn_kcore_max_subcore_size()) — and should stay small and flat
-// as V grows, not trend upward, if the maintenance is genuinely local.
-// ============================================================================
+// Throttled stream and dynamic-maintenance diagnostics. Interval deltas show
+// per-update locality; max_subcore reports the largest single-edge traversal.
 
 static void stream_debug_report(GraphStream *gs, const GraphData *data)
 {
@@ -754,9 +717,7 @@ const igraph_integer_t *graph_stream_community(const GraphStream *gs)
 	return (gs && gs->leiden) ? dyn_leiden_membership(gs->leiden) : NULL;
 }
 
-// ============================================================================
 // "Data/Stream > [ ] Pause" menu toggle
-// ============================================================================
 
 void *compute_toggle_stream_pause(ExecutionContext *ctx)
 {
@@ -782,9 +743,7 @@ void apply_toggle_stream_pause(ExecutionContext *ctx, void *result_data)
 	}
 }
 
-// ============================================================================
 // "Data/Stream > [ ] Live Layered Sphere" menu toggle
-// ============================================================================
 
 void *compute_toggle_stream_layered_sphere(ExecutionContext *ctx)
 {

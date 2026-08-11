@@ -11,16 +11,11 @@
 #include <igraph/igraph.h>
 #include <stdbool.h>
 
-/* ============================================================================
- * Heuristic crossing-reduction ORDER maintenance for the dynamic k-core tree.
+/* Heuristic crossing-reduction order for the dynamic k-core tree.
  *
  * Maintains one igraph_real_t "rank" per vertex — a barycenter-style relative
  * order value meaningful only WITHIN the vertex's current DynCoreTree node
- * (never globally comparable across tree nodes). This is the incremental,
- * heuristic alternative to porting Sugiyama-style k-level crossing reduction
- * wholesale (rejected: that model is flat and dummy-vertex-based, neither of
- * which fits DynCoreTree's actual shape). Instead this exploits two
- * structural facts about DynCoreTree (dyn_core_tree.h):
+ * and is not comparable across tree nodes. It uses two DynCoreTree properties:
  *
  * 1. Disjoint same-level tree nodes never share an edge — if two same-
  *    coreness vertices were connected, core maintenance would already have
@@ -29,39 +24,23 @@
  * 2. Every tree node has a unique parent whose induced subgraph provably
  *    contains all of the node's members' neighbors at the parent's coreness
  *    level (that is what hierarchical-core nesting means). Parent<->child is
- *    exactly the layered-sphere's adjacent-rank sphere pair (dense rank is
- *    assigned only over POPULATED levels, so a tree parent/child edge —
- *    even one that skips unpopulated levels — always lands on adjacent
- *    sphere ranks), so a node's own parent-edge scan is a cheap, already-
- *    bounded source of inter-sphere neighbor positions; no whole-sphere
- *    adjacency structure or graph-wide edge scan is needed.
+ *    the layered-sphere's adjacent populated-rank pair. A node's parent-edge
+ *    scan therefore supplies inter-sphere neighbor positions.
  *
  * A vertex's rank is therefore a weighted barycenter of (a) the ranks of its
  * already-ranked neighbors in its OWN tree node (intra-sphere pull) and (b)
  * the ranks of its already-ranked neighbors in its tree node's PARENT
- * (inter-sphere pull) — pure order arithmetic, no physical coordinates, no
- * knowledge of spheres/Hilbert curves. graph/dyn_layered_sphere.c consumes
- * this rank as its NodePlacement.density ordering key in place of arrival
- * timestamp; that is the entire integration surface on the layout side.
+ * (inter-sphere pull). dyn_layered_sphere.c uses the result as its
+ * NodePlacement.density ordering key.
  *
- * Scope (v1): a vertex's rank is computed ONCE, when it first appears
- * (mirroring dyn_layered_sphere.c's own DYN_LS_TIMESTAMP_ATTR key, which is
- * likewise fixed at arrival and never revisited) — DynCoreTree's public API
- * only reports touched LEVELS (dyn_core_tree_on_edges' touched_levels), not
- * which individual vertices moved between tree nodes, so there is no cheaper
- * way to detect "this existing vertex's ideal rank changed" without an O(V)
- * rescan; re-deriving ranks for movers is left as a documented limitation,
- * consistent with dyn_layered_sphere.c's own accepted heuristic tradeoffs
- * elsewhere (e.g. its fast local-append path skipping touched_levels
- * entirely).
+ * A vertex's rank is assigned only when it first appears. Existing ranks are
+ * not recomputed after vertices move between tree nodes.
  *
  * Edges more than one tree level apart (a vertex's neighbor living in a
  * grandparent-or-higher tree node, possible via DynCoreTree's own skip-layer
- * edges) are not part of the barycenter input — documented simplification,
- * not a silent gap.
+ * edges) are excluded from the barycenter input.
  *
- * Threading: main thread only, same as dyn_core_tree.h.
- * ============================================================================ */
+ * Main-thread only. */
 
 typedef struct DynCoreTreeOrder DynCoreTreeOrder;
 

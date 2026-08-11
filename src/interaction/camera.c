@@ -35,8 +35,7 @@ void camera_process_keyboard(Camera *cam, int direction, float delta_time)
 	vec3 temp;
 
 	// Direction is one of: CAMERA_DIR_FORWARD, BACKWARD, LEFT, RIGHT, UP, DOWN
-	// For simplicity, we handle forward/back and left/right via the front vector,
-	// and up/down via the world up vector.
+	// Forward and lateral movement follow the view; vertical movement follows world up.
 
 	if (direction == CAMERA_DIR_FORWARD) {
 		glm_vec3_scale(cam->front, speed, temp);

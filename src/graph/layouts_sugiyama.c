@@ -12,9 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
 // SUGIYAMA LAYOUT (Hierarchical DAG Layout)
-// ============================================================================
 // Reference: Sugiyama, K., Tagawa, S., and Toda, M.:
 // "Methods for Visual Understanding of Hierarchical Systems."
 // IEEE Transactions on Systems, Man and Cybernetics 11(2):109-125, 1981.
@@ -140,9 +138,6 @@ void *compute_igraph_layout_sugiyama(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// SUGIYAMA RADIAL LAYOUT
-// ============================================================================
 // Reference: Bachmaier, C. (2007):
 // "A Radial Adaptation of the Sugiyama Framework for Visualizing Hierarchical Information."
 // IEEE Transactions on Visualization and Computer Graphics 13(3):583-594.

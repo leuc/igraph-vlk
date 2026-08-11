@@ -38,23 +38,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-/**
- * igraph-vlk: Vulkan-based 3D graph visualization
- *
- * A modular refactoring of main.c that uses the AppState pattern
- * to cleanly separate concerns between modules.
- */
-
 int main(int argc, char **argv)
 {
 	os_path_init();
 
 	AppState app = {0};
 
-	// Register igraph C attribute handler before any graph operations
+	// Attribute operations require the C attribute handler before graph creation.
 	igraph_set_attribute_table(&igraph_cattribute_table);
 
-	// Set defaults
 	app.last_picked_node = -1;
 	app.last_picked_edge = -1;
 
@@ -213,7 +205,6 @@ int main(int argc, char **argv)
 	int consecutive_missed_frames = 0;
 #endif
 
-	// Main loop
 	while (!glfwWindowShouldClose(app.win.handle)) {
 		float currentFrame = (float)glfwGetTime();
 		app.delta_time = currentFrame - app.time;
@@ -232,10 +223,8 @@ int main(int argc, char **argv)
 			app.fps_timer = 0.0f;
 		}
 
-		// Process input (WASD movement)
 		interaction_process_continuous_input(&app, app.delta_time);
 
-		// Update HUD text
 		ui_hud_update(&app, app.current_fps);
 
 		// Update App FSM and Menu transforms
@@ -302,12 +291,10 @@ int main(int argc, char **argv)
 		glfwPollEvents();
 	}
 
-	// Cleanup
 #else
 		glfwPollEvents();
 	}
 
-	// Cleanup
 #endif
 	worker_thread_cleanup(&app.worker_ctx);
 	app_context_destroy(&app.app_ctx);

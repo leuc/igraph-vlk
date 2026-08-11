@@ -13,9 +13,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
-// YIFAN HU LAYOUT (2D)
-// ============================================================================
 void *compute_igraph_layout_yifan_hu(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -90,9 +87,6 @@ void *compute_igraph_layout_yifan_hu(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// YIFAN HU LAYOUT (3D)
-// ============================================================================
 void *compute_igraph_layout_yifan_hu_3d(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;

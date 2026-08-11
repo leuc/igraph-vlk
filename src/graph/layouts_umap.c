@@ -12,9 +12,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
-// UMAP LAYOUT (2D)
-// ============================================================================
 void *compute_igraph_layout_umap(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -74,9 +71,6 @@ void *compute_igraph_layout_umap(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// UMAP LAYOUT (3D)
-// ============================================================================
 void *compute_igraph_layout_umap_3d(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;

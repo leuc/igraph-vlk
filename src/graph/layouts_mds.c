@@ -12,9 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
 // MDS LAYOUT (Multidimensional Scaling)
-// ============================================================================
 void *compute_igraph_layout_mds(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -147,9 +145,6 @@ void *compute_igraph_layout_mds_3d(ExecutionContext *ctx)
 		return NULL;
 	}
 
-	// for (igraph_integer_t i = 0; i < vcount; i++) {
-	//	igraph_matrix_set(result, i, 2, 0.0);
-	// }
 	return result;
 }
 

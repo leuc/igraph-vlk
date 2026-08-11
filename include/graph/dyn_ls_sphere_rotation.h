@@ -11,70 +11,34 @@
 #include <igraph/igraph.h>
 #include <stdbool.h>
 
-/* ============================================================================
- * Per-sphere rigid rotation for the dynamic Layered Sphere layout, adapted
+/*
+ * Per-sphere rigid rotation for dynamic Layered Sphere, adapted
  * from TopoLayout's torque-based crossing reduction (Archambault, Munzner,
  * Auber, "TopoLayout: Multi-Level Graph Layout by Topological Features",
  * IEEE TVCG 13(2), 2007, Section III-B.5) to 3D and to a streaming setting.
  *
- * TopoLayout rotates a 2D meta-node about the single axis perpendicular to
- * its embedding plane, driven by a bounded (+-pi/2) signed torque quantity
- * `t = (pi/2) * sign(r x f) * (r . f)` averaged over every edge connecting
- * that meta-node to its neighbors. Here a "meta-node" is a whole sphere
- * (a concentric shell centered at the origin), so rotation is a full 3D
- * axis-angle rotation rather than a single scalar angle: per inter-sphere
+ * TopoLayout rotates a 2D meta-node about its perpendicular axis using
+ * `t = (pi/2) * sign(r x f) * (r . f)`, averaged over incident edges. Here a
+ * meta-node is a sphere, so rotation uses a 3D axis-angle. For each inter-sphere
  * edge (u in sphere s, neighbor n outside s), r_hat = normalize(position of
  * u), f_hat = normalize(position of n - position of u), and the edge's
  * contribution is `axis * angle` where `axis = normalize(r_hat x f_hat)` and
- * `angle = asin(|r_hat x f_hat|)` — using the angle itself (not the raw cross
- * product, whose magnitude is sin(angle)) is what makes this a faithful 3D
- * generalization of TopoLayout's already-angular `t`. Contributions are
- * averaged over sphere s's inter-sphere edges (discovered via
- * igraph_incident + LayeredSphereContext.node_to_sphere_id, no precomputed
- * inter-sphere adjacency structure exists or is needed) into a rotation
- * vector Omega_want; a streaming recompute gets exactly one step per call
- * (no multi-iteration convergence loop the way TopoLayout's own iterative
- * meta-node relaxation or this codebase's batch layered_sphere.c's dropped
- * PHASE_INTER_SPHERE do), damped GEM-style (if Omega_want has reversed
- * direction from the previous step, its applied magnitude is scaled down,
- * growing back toward full strength as the sphere's own rotation step count
- * grows) and clamped to a fixed max step angle, then composed as an
- * incremental quaternion onto the sphere's persistent rotation state,
- * renormalized every time to correct for floating-point drift.
+ * `angle = asin(|r_hat x f_hat|)`. Averaged contributions form Omega_want.
+ * Each call applies one GEM-damped, clamped quaternion increment and
+ * renormalizes the persistent quaternion.
  *
- * Rotation state lives on the caller (DynLayeredSphere, dyn_layered_sphere.c)
- * as three flat arrays indexed by sphere rank, grown via
- * dyn_ls_rotation_ensure_capacity mirroring dyn_layered_sphere.c's own
- * doubling-realloc arrays. Applying a sphere's rotation to its members'
- * layout positions never touches SphereGrid slot/occupancy geometry — it is
- * purely a coordinate transform composed in at write_slot_position time via
- * LayeredSphereContext.sphere_rotation (layered_sphere_common.h), so
- * rotating a sphere never triggers a reseed, grid rebuild, or Hilbert
- * reordering.
+ * DynLayeredSphere owns the rotation arrays. Rotation changes coordinates only;
+ * it does not alter SphereGrid occupancy or Hilbert ordering.
  *
- * Threading: main thread only, same as the rest of graph/dyn_layered_sphere.c.
- * ============================================================================ */
+ * Main-thread only.
+ */
 
-// Quaternion layout throughout: 4 doubles per sphere, (w, x, y, z), identity
-// = {1,0,0,0}. sphere_rotation/sphere_prev_omega/sphere_rotation_steps/
-// sphere_settled_streak are all indexed by dyn_layered_sphere.c's stable
-// per-level grid slot id (not rank — a sphere's rank can shift without its
-// rotation state moving) and must have at least `needed` spheres' worth of
-// capacity; grows (or allocates, if *sphere_rotation is NULL) via the same
-// doubling pattern as dyn_layered_sphere.c's own arrays.
+// Quaternions use (w, x, y, z). Arrays are indexed by stable grid slot, not
+// sphere rank, and grow to at least needed entries.
 bool dyn_ls_rotation_ensure_capacity(double **sphere_rotation, double **sphere_prev_omega, int **sphere_rotation_steps, int **sphere_settled_streak, int *capacity, int needed);
 
-// Resets sphere (grid slot) s's rotation state to identity/zero (including
-// its settled streak) — call only when dyn_layered_sphere.c (re)builds that
-// slot's grid because its level is populated for the very first time, where
-// no prior rotation exists to preserve. Deliberately NOT called for a grid
-// rebuilt due to overflow (more members than capacity) or rescaled in place
-// (radius change from a rank shift): both are the same conceptual sphere
-// growing/shrinking, not a new one, and resetting rotation there produced a
-// visible "snap back to unrotated" every batch-triggered rebuild even though
-// member placement barely changed — keeping the already-converged
-// quaternion/prev_omega/settled state across those lets freshly (re)seeded
-// occupants get placed and then immediately rotated to match instead.
+// Reset a newly populated grid slot. Preserve state across overflow rebuilds
+// and rank-shift rescaling because the slot still represents the same sphere.
 void dyn_ls_rotation_reset(double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps, int *sphere_settled_streak, int s);
 
 // Computes and applies one damped rotation increment to sphere s's
@@ -88,16 +52,8 @@ void dyn_ls_rotation_reset(double *sphere_rotation, double *sphere_prev_omega, i
 // layout position — call dyn_ls_apply_sphere_rotation afterward to make the
 // updated quaternion visible. Returns true iff the quaternion was actually
 // changed (i.e. sphere_rotation_steps[s] was incremented) this call.
-//
-// Convergence: this is a live per-tick feedback loop, not integration toward
-// a fixed target, so its residual torque can settle into a small nonzero
-// steady state instead of exactly zero (observed in practice — see
-// DYN_LS_ROTATION_SETTLED_ANGLE_RAD in the .c file). sphere_settled_streak[s]
-// counts consecutive ticks whose torque stays below that threshold; once it
-// reaches DYN_LS_ROTATION_SETTLED_STREAK, this function stops touching the
-// quaternion (and sphere_rotation_steps[s]) entirely until a fresh disturbance
-// (new members, a moved neighbor) pushes the torque back above threshold,
-// which resets the streak and resumes rotation.
+// sphere_settled_streak counts consecutive ticks with stable torque. At the
+// configured limit, rotation pauses until a disturbance resets the streak.
 bool dyn_ls_rotate_sphere_step(const igraph_t *g, const LayeredSphereContext *ctx, int s, double *sphere_rotation, double *sphere_prev_omega, int *sphere_rotation_steps, int *sphere_settled_streak);
 
 // Re-walks sphere s's occupied slots and re-writes each occupant's layout

@@ -12,9 +12,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ============================================================================
-// REINGOLD-TILFORD TREE LAYOUT
-// ============================================================================
 // Reference: Reingold, E. and Tilford, J.:
 // "Tidier drawing of trees."
 // IEEE Trans. Softw. Eng., SE-7(2):223-228, 1981.

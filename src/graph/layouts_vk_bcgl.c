@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 igraph-vlk team
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 #include "graph/wrappers_layout.h"
 
 #include <math.h>
@@ -12,9 +17,7 @@
 #define BCGL_TOTAL_ITERATIONS 500
 #define BCGL_CHUNK_SIZE 5
 
-// ============================================================================
 // Worker: Seed random 3D layout for BCGL starting positions
-// ============================================================================
 void *compute_layout_bcgl(ExecutionContext *ctx)
 {
 	igraph_t *graph = &ctx->app_state->current_graph.g;
@@ -36,9 +39,7 @@ void *compute_layout_bcgl(ExecutionContext *ctx)
 	return result;
 }
 
-// ============================================================================
-// Debug: Read mapped GPU memory for avg/max velocity and bounding box
-// ============================================================================
+// Read mapped positions and velocity diagnostics.
 static void debug_print_bcgl_stats(Renderer *r, uint32_t current_iter, uint32_t total_iters)
 {
 	BCGLComputeContext *ctx = &r->bcgl_ctx;
@@ -84,9 +85,7 @@ static void debug_print_bcgl_stats(Renderer *r, uint32_t current_iter, uint32_t 
 	printf("[BCGL Progress] Iter %3u/%3u | Avg Vel: %6.3f | Max Vel: %6.3f | Spread: %.1f x %.1f\n", current_iter, total_iters, avg_velocity, max_velocity, spread_x, spread_y);
 }
 
-// ============================================================================
 // Apply: One-shot fast setup — seed positions + init GPU buffers
-// ============================================================================
 void apply_layout_bcgl(ExecutionContext *ctx, void *result_data)
 {
 	if (!ctx || !ctx->app_state || !result_data)
@@ -123,9 +122,7 @@ void apply_layout_bcgl(ExecutionContext *ctx, void *result_data)
 	printf("--- Starting BCGL GPU Optimization (%u iterations) ---\n", BCGL_TOTAL_ITERATIONS);
 }
 
-// ============================================================================
 // GPU Poll: Per-frame chunked dispatch — returns true when complete
-// ============================================================================
 bool poll_bcgl_gpu(ExecutionContext *ctx)
 {
 	if (!ctx || !ctx->app_state)
@@ -172,9 +169,7 @@ bool poll_bcgl_gpu(ExecutionContext *ctx)
 	return false;
 }
 
-// ============================================================================
 // Free: Reuse the standard layout matrix free
-// ============================================================================
 void free_layout_bcgl(void *result_data)
 {
 	free_layout_matrix(result_data);
