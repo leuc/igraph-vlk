@@ -225,11 +225,36 @@ igraph-vlk builds against a patched `igraph` testing branch that includes experi
 
 Build has been tested on Ubuntu, Arch and macOS
 
+### Dependencies
+
+| Dependency | Role |
+|---|---|
+| Vulkan SDK | Rendering API |
+| GLFW | Window, input, OpenXR platform |
+| igraph | Graph algorithms |
+| cglm | 3D math |
+| stb_truetype.h | Font render |
+| curl | Graph Repository Download |
+| zstd | Compressed Graphs |
+| OpenMP (optional) | Parallelization |
+| OpenXR (optional) | VR support |
+| glslangValidator / glslc | SPIR-V shader compilation |
+| gamecontrollerdb.txt | Gamepad Mapping |
+
+```sh
+sudo apt-get install -y \
+ build-essential cmake ninja-build \
+ libvulkan-dev libglfw3-dev libcglm-dev libomp-dev \
+ glslang-tools fonts-inconsolata \
+ libcurl4-openssl-dev libzstd-dev libstb-dev libopenxr-dev
+```
+
 ### Build igraph testing branch
 ```sh
 git clone https://github.com/leuc/igraph
 cd igraph
 git checkout testing
+echo "1.0.1-leuc-testing" > igraph-src/IGRAPH_VERSION
 cmake -S . -B build -DCMAKE_INSTALL_PREFIX=local_install -DIGRAPH_ENABLE_TLS=ON -DCMAKE_C_FLAGS="-O3 -march=native" -DCMAKE_CXX_FLAGS="-O3 -march=native"
 cmake --build build/ --parallel --target install
 cd ..
@@ -253,51 +278,6 @@ cpack -G DEB -R ${VERSION}
 ```sh
 OMP_NUM_THREADS=$(nproc) igraph-vlk /path/to/example.graphml
 ```
-
-### Dependencies
-
-| Dependency | Role |
-|---|---|
-| Vulkan SDK | Rendering API |
-| GLFW | Window, input, OpenXR platform |
-| igraph | Graph algorithms |
-| cglm | 3D math |
-| stb_truetype.h | Font render |
-| curl | Graph Repository Download |
-| zstd | Compressed Graphs |
-| OpenMP (optional) | Parallelization |
-| OpenXR (optional) | VR support |
-| glslangValidator / glslc | SPIR-V shader compilation |
-| gamecontrollerdb.txt | Gamepad Mapping |
-
-## Architecture
-
-```
-src/
-├── main.c                  # Entry point, GLFW loop, state machine
-├── app_state.h             # Central app state (AppState)
-├── graph/
-│   ├── graph_data.c/h      # GraphData (nodes, edges, layout matrix)
-│   ├── command_registry.c  # ~80 CommandDef entries
-│   ├── wrappers_layout.c   # Layout wrapper functions
-│   ├── wrappers_analysis.c # Centrality + global property wrappers
-│   └── wrappers_generate.c # Graph generation wrappers
-├── renderer/
-│   ├── renderer_*.c/h      # Vulkan pipelines, buffers, swapchain
-│   └── renderer_xr.c       # VR renderer setup
-├── ui/
-│   ├── menu.c/h            # 3D spherical menu tree + rendering
-│   ├── camera.c/h          # FPS-style camera
-│   ├── input.c/h           # Keyboard, mouse, gamepad
-│   ├── pick.c/h            # Ray-picking
-│   └── queue.c/h           # Background worker thread
-└── xr/
-    ├── openxr_*.c/h        # OpenXR context, session, input, frame
-shaders/                    # GLSL → SPIR-V (auto-compiled)
-include/                    # Public headers
-```
-
-See [AGENTS.md](AGENTS.md) for build details, code style, and contribution guide.
 
 ## Scientific references
 
