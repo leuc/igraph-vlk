@@ -98,7 +98,7 @@ typedef enum {
 	GRAPH_ANIMATION_TOPOLOGICAL,
 } GraphAnimationOrder;
 
-static void graph_animation_play_order(Renderer *renderer, const GraphData *graph, GraphAnimationOrder kind)
+static void graph_animation_play_order(Renderer *renderer, const GraphData *graph, GraphAnimationOrder kind, float duration)
 {
 	if (!renderer || !graph || graph->node_count == 0)
 		return;
@@ -135,22 +135,22 @@ static void graph_animation_play_order(Renderer *renderer, const GraphData *grap
 		steps[VECTOR(order)[i]] = (int)i;
 	igraph_vector_int_destroy(&order);
 
-	GraphAnimationRequest request = {.node_steps = steps, .duration = 3.0f};
+	GraphAnimationRequest request = {.node_steps = steps, .duration = duration};
 	graph_animation_submit(renderer, graph, &request);
 	free(steps);
 }
 
-void graph_animation_play_bfs(Renderer *renderer, const GraphData *graph)
+void graph_animation_play_bfs(Renderer *renderer, const GraphData *graph, float duration)
 {
-	graph_animation_play_order(renderer, graph, GRAPH_ANIMATION_BFS);
+	graph_animation_play_order(renderer, graph, GRAPH_ANIMATION_BFS, duration);
 }
 
-void graph_animation_play_dfs(Renderer *renderer, const GraphData *graph)
+void graph_animation_play_dfs(Renderer *renderer, const GraphData *graph, float duration)
 {
-	graph_animation_play_order(renderer, graph, GRAPH_ANIMATION_DFS);
+	graph_animation_play_order(renderer, graph, GRAPH_ANIMATION_DFS, duration);
 }
 
-void graph_animation_play_topological(Renderer *renderer, const GraphData *graph)
+void graph_animation_play_topological(Renderer *renderer, const GraphData *graph, float duration)
 {
-	graph_animation_play_order(renderer, graph, GRAPH_ANIMATION_TOPOLOGICAL);
+	graph_animation_play_order(renderer, graph, GRAPH_ANIMATION_TOPOLOGICAL, duration);
 }

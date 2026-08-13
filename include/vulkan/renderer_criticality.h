@@ -41,7 +41,7 @@
 bool renderer_init_criticality_buffers(Renderer *r, GraphData *graph, const igraph_vector_int_t *levels, int num_levels, uint32_t weight_mode);
 
 /** Start one live, level-ticked main-path weighting run. */
-bool renderer_start_main_path_weighting(Renderer *r, const GraphData *graph, const igraph_vector_int_t *levels);
+bool renderer_start_main_path_weighting(Renderer *r, const GraphData *graph, const igraph_vector_int_t *levels, float reveal_duration);
 
 /** Record the next forward or reverse level dispatch into a frame command buffer. */
 void renderer_dispatch_main_path_weight_level(Renderer *r, VkCommandBuffer cmd);

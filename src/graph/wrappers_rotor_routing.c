@@ -46,7 +46,7 @@ void apply_rotor_routing_trigger(ExecutionContext *ctx, void *result_data)
 	GraphAnimationRequest request = {
 		.node_steps = result->node_steps,
 		.edge_steps = result->edge_steps,
-		.duration = 3.0f,
+		.duration = state->follow_reveal_duration,
 		.keep_unrevealed_dim = true,
 	};
 	graph_animation_play(&state->renderer, graph, &request);

@@ -389,7 +389,7 @@ static bool crit_start_animation(Renderer *r, const GraphData *graph, const igra
 	return played;
 }
 
-bool renderer_start_main_path_weighting(Renderer *r, const GraphData *graph, const igraph_vector_int_t *levels)
+bool renderer_start_main_path_weighting(Renderer *r, const GraphData *graph, const igraph_vector_int_t *levels, float reveal_duration)
 {
 	if (!r || !graph || !levels)
 		return false;
@@ -400,7 +400,7 @@ bool renderer_start_main_path_weighting(Renderer *r, const GraphData *graph, con
 	ctx->readback_pending = false;
 	ctx->stage = CRIT_STAGE_LNW;
 	ctx->current_level = 0;
-	ctx->level_interval = 5.0 / (double)ctx->num_levels;
+	ctx->level_interval = reveal_duration / (double)ctx->num_levels;
 	if (ctx->level_interval < 0.016)
 		ctx->level_interval = 0.016;
 	if (!crit_start_animation(r, graph, levels))

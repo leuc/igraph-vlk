@@ -61,6 +61,7 @@ typedef struct AppState
 	float fps_timer;
 	int frame_count;
 	float current_fps;
+	float follow_reveal_duration;
 
 	/* FSM Menu System */
 	AppContext app_ctx;

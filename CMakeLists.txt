@@ -164,6 +164,7 @@ add_executable(
 	src/graph/wrappers_cycles.c
 	src/graph/wrappers_filter.c
 	src/graph/wrappers_flow.c
+	src/graph/wrappers_follow_speed.c
 	src/graph/wrappers_kcore_tree.c
 	src/graph/wrappers_path_cover.c
 	src/graph/wrappers_paths.c
@@ -345,6 +346,14 @@ if(NOT MSVC)
 	target_link_libraries(rotor_routing_test PRIVATE m)
 endif()
 add_test(NAME rotor_routing_test COMMAND rotor_routing_test)
+
+add_executable(follow_speed_test tests/follow_speed_test.c src/graph/wrappers_follow_speed.c)
+target_include_directories(follow_speed_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${Vulkan_INCLUDE_DIRS} ${CGLM_INCLUDE_DIR} ${IGRAPH_INCLUDE_DIRS})
+target_link_libraries(follow_speed_test PRIVATE igraph::igraph)
+if(NOT MSVC)
+	target_link_libraries(follow_speed_test PRIVATE m)
+endif()
+add_test(NAME follow_speed_test COMMAND follow_speed_test)
 
 add_executable(menu_scene_test tests/menu_scene_test.c src/vulkan/menu_scene.c src/interaction/menu_state.c src/ui/menu_metrics.c)
 target_include_directories(menu_scene_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CGLM_INCLUDE_DIR} ${IGRAPH_INCLUDE_DIRS} ${Vulkan_INCLUDE_DIRS})
