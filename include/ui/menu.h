@@ -6,79 +6,19 @@
 #ifndef UI_MENU_H
 #define UI_MENU_H
 
-#include "graph/graph_types.h" // For GraphData
-#include "interaction/camera.h"
-#include "interaction/spatial.h"
-#include "interaction/state.h" // For MenuNode, MenuNodeType, IgraphCommand, etc.
+#include "graph/graph_types.h"
+#include "interaction/state.h"
 
-// Menu Definition Data Structures (Data-Driven Initialization)
-
-/**
- * @brief Static menu item definition for data-driven initialization
- * This struct allows defining the entire menu hierarchy in a single array,
- * avoiding hardcoded pointer assignments in init_menu_tree.
- */
-typedef struct
-{
-	const char *label;		// Menu item label (e.g., "Layout", "Analyze")
-	MenuNodeType type;		// NODE_BRANCH, NODE_LEAF_COMMAND, NODE_INFO_DISPLAY
-	const int *child_ids;	// Array of child node IDs (NULL/empty for leaves). Terminated by -1.
-	const char *command_id; // ID ("shortest_path") to lookup command for NODE_LEAF_COMMAND (NULL for branches)
-	const char *info_value; // For NODE_INFO_DISPLAY: the read-only value to show
-	int radius_level;		// Which spherical level (0=root children, 1=grandchildren, etc.)
-} MenuDefinition;
-
-// Function declarations
 void init_menu_tree(MenuNode *root);
 void menu_tree_destroy(MenuNode *node);
-void update_menu_transforms(MenuNode *node, const SpatialBasis *basis);
-MenuNode *raycast_menu_vr(struct AppState *state, vec3 ray_ori, vec3 ray_dir);
+bool menu_update_layout(MenuState *menu);
 MenuNode *menu_find_node_by_command_id(MenuNode *node, const char *command_id);
 
-
-/**
- * Populate the "Filter > Node" submenu with entries from the graph's
- * filterable attributes (low-cardinality string/boolean attributes).
- * @param root Root menu node
- * @param data GraphData with filterable_attrs populated
- */
-void menu_populate_attribute_filters(MenuNode *root, GraphData *data);
-
-/**
- * Clear all dynamically added filter entries from the "Filter > Node" submenu.
- * @param root Root menu node
- */
-void menu_clear_attribute_filters(MenuNode *root, GraphData *data);
-
-/**
- * Populate the "Filter > Edge" submenu with entries from the graph's
- * filterable edge attributes (low-cardinality string/boolean attributes).
- * @param root Root menu node
- * @param data GraphData with filterable_edge_attrs populated
- */
-void menu_populate_attribute_edge_filters(MenuNode *root, GraphData *data);
-
-/**
- * Clear all dynamically added filter entries from the "Filter > Edge" submenu.
- * @param root Root menu node
- */
-void menu_clear_attribute_edge_filters(MenuNode *root, GraphData *data);
-
-// Netzschleuder Catalog Menu
-
-/**
- * Populate the "Data/Repository" submenu with static entries.
- * @param root Root menu node
- */
-void menu_populate_netzschleuder_static(MenuNode *root);
-
-
-/**
- * Populate the "Data/Patterns" submenu with individual famous graph entries
- * (Bull, Chvatal, Coxeter, Petersen, Zachary, etc.).
- * Each entry sets params[0] to the graph name for compute_igraph_famous.
- * @param root Root menu node
- */
-void menu_populate_famous_graphs(MenuNode *root);
+void menu_populate_attribute_filters(MenuState *menu, GraphData *data);
+void menu_clear_attribute_filters(MenuState *menu, GraphData *data);
+void menu_populate_attribute_edge_filters(MenuState *menu, GraphData *data);
+void menu_clear_attribute_edge_filters(MenuState *menu, GraphData *data);
+void menu_populate_netzschleuder_static(MenuState *menu);
+void menu_populate_famous_graphs(MenuState *menu);
 
 #endif // UI_MENU_H

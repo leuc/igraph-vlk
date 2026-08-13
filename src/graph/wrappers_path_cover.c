@@ -371,7 +371,7 @@ void apply_path_cover_result(ExecutionContext *ctx, void *result_data)
 		// The worker just wrote the 'antichain' vertex attribute; refresh
 		// Filter > Node so it shows up right away (mirrors apply_cd_index).
 		graph_detect_filterable_attrs(graph);
-		menu_populate_attribute_filters(state->app_ctx.menu.root, graph);
+		menu_populate_attribute_filters(&state->app_ctx.menu, graph);
 	}
 
 	renderer_update_graph(&state->renderer, graph);

@@ -119,15 +119,7 @@ void apply_info_card(ExecutionContext *ctx, void *result_data)
 	if (!ctx || !result_data || !ctx->app_state)
 		return;
 	InfoCardData *data = (InfoCardData *)result_data;
-	AppContext *app_ctx = &ctx->app_state->app_ctx;
-
-	app_ctx->menu.info_card.is_visible = true;
-	strncpy(app_ctx->menu.info_card.title, data->title, 63);
-	app_ctx->menu.info_card.num_pairs = data->num_pairs;
-	for (int i = 0; i < data->num_pairs; i++) {
-		strncpy(app_ctx->menu.info_card.pairs[i].key, data->pairs[i].key, 31);
-		strncpy(app_ctx->menu.info_card.pairs[i].value, data->pairs[i].value, 63);
-	}
+	menu_set_info_card(&ctx->app_state->app_ctx.menu, data);
 }
 
 void info_card_free(void *result_data)

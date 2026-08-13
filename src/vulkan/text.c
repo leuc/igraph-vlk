@@ -84,6 +84,7 @@ bool text_atlas_init(TextAtlas *ta, int width, int height)
 	ta->image = VK_NULL_HANDLE;
 	ta->memory = VK_NULL_HANDLE;
 	ta->view = VK_NULL_HANDLE;
+	ta->image_revision = 0;
 	return true;
 }
 
@@ -124,12 +125,12 @@ void text_atlas_clear(TextAtlas *ta)
 	ta->dirty = true;
 }
 
-void text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, TextRegion *out)
+bool text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, TextRegion *out)
 {
 	if (!text || !text[0]) {
 		out->u0 = out->v0 = out->u1 = out->v1 = 0;
 		out->width_px = out->height_px = 0;
-		return;
+		return true;
 	}
 
 	int len = (int)strlen(text);
@@ -180,7 +181,7 @@ void text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, T
 		if (!text_atlas_grow(ta, ta->cursor_y + total_h)) {
 			out->u0 = out->v0 = out->u1 = out->v1 = 0;
 			out->width_px = out->height_px = 0;
-			return;
+			return false;
 		}
 	}
 
@@ -234,6 +235,7 @@ void text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, T
 	if (total_h > ta->row_height)
 		ta->row_height = total_h;
 	ta->dirty = true;
+	return true;
 }
 
 void text_atlas_ensure_uploaded(TextAtlas *ta, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue)
@@ -248,6 +250,7 @@ void text_atlas_ensure_uploaded(TextAtlas *ta, VkDevice device, VkPhysicalDevice
 		create_image(device, physicalDevice, ta->width, ta->height, VK_FORMAT_R8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &ta->image, &ta->memory);
 
 		vkCreateImageView(device, &VK_IMAGE_VIEW_2D(ta->image, VK_FORMAT_R8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT), NULL, &ta->view);
+		ta->image_revision++;
 
 		transition_image_layout(device, commandPool, queue, ta->image, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	} else {

@@ -115,48 +115,18 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 			xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);
 			return;
 		}
-		VK_CHECK(vkResetFences(app->renderer.core.device, 1, &app->renderer.commands.inFlightFences[app->renderer.commands.currentFrame]), "XR: Failed to reset fences");
-
 		if (!xr_context_locate_views(&app->xr_ctx, frameState.predictedDisplayTime)) {
 			fprintf(stderr, "XR: xrLocateViews failed\n");
 			xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);
 			return;
 		}
 
-		uint32_t imageIndices[2];
-		for (uint32_t i = 0; i < app->xr_ctx.view_count; i++) {
-			XrSwapchainImageAcquireInfo acquireInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
-			XrResult xrRes = xrAcquireSwapchainImage(app->xr_ctx.swapchains[i].handle, &acquireInfo, &imageIndices[i]);
-			if (XR_FAILED(xrRes)) {
-				fprintf(stderr, "XR: xrAcquireSwapchainImage failed for view %u: %d\n", i, xrRes);
-				xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);
-				return;
-			}
-
-			XrSwapchainImageWaitInfo waitInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO, .timeout = XR_INFINITE_DURATION};
-			xrRes = xrWaitSwapchainImage(app->xr_ctx.swapchains[i].handle, &waitInfo);
-			if (XR_FAILED(xrRes)) {
-				fprintf(stderr, "XR: xrWaitSwapchainImage failed for view %u: %d\n", i, xrRes);
-				xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);
-				return;
-			}
-		}
-
-		VK_CHECK(vkResetCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], 0), "XR: Failed to reset command buffer");
-		VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-		vkRes = vkBeginCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], &bi);
-		if (vkRes != VK_SUCCESS) {
-			fprintf(stderr, "XR: vkBeginCommandBuffer failed: %d\n", vkRes);
-			xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);
-			return;
-		}
-
 		XrPosef head_pose = app->xr_ctx.views[0].pose;
 		vec3 head_pos = {head_pose.position.x, head_pose.position.y, head_pose.position.z};
-
 		XrPosef hand_pose;
 		bool has_ray = xr_context_get_hand_pose(&app->xr_ctx, 1, frameState.predictedDisplayTime, &hand_pose);
-		vec3 ray_origin = {0}, ray_dir = {0};
+		vec3 ray_origin = {0};
+		vec3 ray_dir = {0};
 
 		if (has_ray) {
 			vec3 raw_pos;
@@ -186,6 +156,45 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 			ray_origin[2] = pos4[2] + head_pos[2] + app->vr_play_offset[2];
 		}
 
+		if (app->app_ctx.current_state == STATE_MENU_OPEN && has_ray) {
+			MenuNode *hit = raycast_menu_vr(app, ray_origin, ray_dir);
+			if (hit && xr_context_is_action_pressed(&app->xr_ctx, app->xr_ctx.select_action, 1))
+				handle_menu_selection(&app->app_ctx, hit);
+		} else {
+			menu_set_hovered(&app->app_ctx.menu, NULL);
+		}
+		menu_update_layout(&app->app_ctx.menu);
+		bool menu_visible = app->app_ctx.current_state == STATE_MENU_OPEN || app->app_ctx.current_state == STATE_JOB_IN_PROGRESS || app->app_ctx.current_state == STATE_EXECUTING;
+		renderer_menu_update(&app->renderer, &app->app_ctx.menu, menu_visible);
+
+		uint32_t imageIndices[2];
+		for (uint32_t i = 0; i < app->xr_ctx.view_count; i++) {
+			XrSwapchainImageAcquireInfo acquireInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+			XrResult xrRes = xrAcquireSwapchainImage(app->xr_ctx.swapchains[i].handle, &acquireInfo, &imageIndices[i]);
+			if (XR_FAILED(xrRes)) {
+				fprintf(stderr, "XR: xrAcquireSwapchainImage failed for view %u: %d\n", i, xrRes);
+				xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);
+				return;
+			}
+
+			XrSwapchainImageWaitInfo waitInfo = {.type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO, .timeout = XR_INFINITE_DURATION};
+			xrRes = xrWaitSwapchainImage(app->xr_ctx.swapchains[i].handle, &waitInfo);
+			if (XR_FAILED(xrRes)) {
+				fprintf(stderr, "XR: xrWaitSwapchainImage failed for view %u: %d\n", i, xrRes);
+				xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);
+				return;
+			}
+		}
+
+		VK_CHECK(vkResetCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], 0), "XR: Failed to reset command buffer");
+		VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+		vkRes = vkBeginCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], &bi);
+		if (vkRes != VK_SUCCESS) {
+			fprintf(stderr, "XR: vkBeginCommandBuffer failed: %d\n", vkRes);
+			xr_context_end_frame(&app->xr_ctx, &frameState, NULL, 0);
+			return;
+		}
+
 		XrCompositionLayerProjectionView projectionViews[2];
 
 		for (uint32_t i = 0; i < app->xr_ctx.view_count; i++) {
@@ -195,17 +204,6 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 			eye_proj[1][1] *= -1.0f;
 
 			VkRenderPass xrRP = app->renderer.renderPassXR != VK_NULL_HANDLE ? app->renderer.renderPassXR : app->renderer.renderPass.renderPass;
-
-			if (has_ray && i == 0) {
-				// Publish the controller hover so every input source shares one hovered node.
-				MenuNode *hit = raycast_menu_vr(app, ray_origin, ray_dir);
-				app->app_ctx.menu.hovered_node = hit;
-				if (hit && xr_context_is_action_pressed(&app->xr_ctx, app->xr_ctx.select_action, 1)) {
-					handle_menu_selection(&app->app_ctx, hit);
-				}
-			}
-
-			generate_vulkan_menu_buffers(&app->app_ctx, &app->renderer);
 
 			renderer_render_scene(&app->renderer, app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], xrRP, app->renderer.xrFramebuffers[i][imageIndices[i]], (VkExtent2D){app->xr_ctx.swapchains[i].width, app->xr_ctx.swapchains[i].height}, eye_view, eye_proj, i, has_ray, ray_origin, ray_dir);
 
@@ -222,6 +220,7 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 		VK_CHECK(vkEndCommandBuffer(app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame]), "XR: Failed to end command buffer");
 
 		VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame]};
+		VK_CHECK(vkResetFences(app->renderer.core.device, 1, &app->renderer.commands.inFlightFences[app->renderer.commands.currentFrame]), "XR: Failed to reset fences");
 		vkRes = vkQueueSubmit(app->renderer.core.graphicsQueue, 1, &si, app->renderer.commands.inFlightFences[app->renderer.commands.currentFrame]);
 		if (vkRes != VK_SUCCESS) {
 			fprintf(stderr, "XR: vkQueueSubmit failed: %d\n", vkRes);

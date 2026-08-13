@@ -731,7 +731,6 @@ void *compute_igraph_trussness(ExecutionContext *ctx)
 	return result;
 }
 
-
 void apply_centrality_scores(ExecutionContext *ctx, void *result_data)
 {
 	if (!ctx || !ctx->app_state || !result_data) {
@@ -791,7 +790,7 @@ void apply_cd_index(ExecutionContext *ctx, void *result_data)
 
 	AppState *state = ctx->app_state;
 	graph_detect_filterable_attrs(&state->current_graph);
-	menu_populate_attribute_filters(state->app_ctx.menu.root, &state->current_graph);
+	menu_populate_attribute_filters(&state->app_ctx.menu, &state->current_graph);
 }
 
 // Apply: edge-side twin of apply_centrality_scores — min/max-normalizes the
@@ -859,7 +858,7 @@ void apply_convergence_degree(ExecutionContext *ctx, void *result_data)
 
 	AppState *state = ctx->app_state;
 	graph_detect_filterable_edge_attrs(&state->current_graph);
-	menu_populate_attribute_edge_filters(state->app_ctx.menu.root, &state->current_graph);
+	menu_populate_attribute_edge_filters(&state->app_ctx.menu, &state->current_graph);
 }
 
 void centrality_scores_free(void *result_data)

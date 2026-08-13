@@ -21,6 +21,8 @@ OpenXR is optional. CMake adds these sources and `USE_OPENXR=1` only when `USE_O
 - `src/vulkan/renderer_xr.c` owns Vulkan framebuffers and depth images created for OpenXR swapchain images.
 - `openxr_frame.c` bridges both sides and uses the same menu hover/activation contract as desktop input.
 - Controller selection updates the shared hovered menu row before activation; do not add a second activation raycast.
+- Menu layout and GPU data are updated once after controller interaction and before command recording. Both eye passes consume the same retained menu buffers.
+- Reset the current frame fence only immediately before submission; menu uploads may wait for every in-flight fence.
 - Destroy per-session resources before instance cleanup and keep partial-initialization cleanup safe.
 
 Do not launch the application or an XR runtime for testing. Build checks are allowed; interactive headset verification is left to the user.

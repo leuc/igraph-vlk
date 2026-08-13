@@ -9,6 +9,8 @@
 #include "interaction/state.h"
 #include "vulkan/renderer.h"
 
-void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r);
+bool renderer_menu_init(Renderer *renderer);
+bool renderer_menu_update(Renderer *renderer, const MenuState *state, bool visible);
+void renderer_menu_destroy(Renderer *renderer);
 
 #endif // VULKAN_MENU_H

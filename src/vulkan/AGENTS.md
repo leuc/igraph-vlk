@@ -24,10 +24,11 @@ Keep resource creation and destruction paired. Before replacing buffers or pipel
 | `renderer_labels.c/.h` | Label atlas instances, Barnes–Hut visibility selection, and detail-card support |
 | `renderer_update_node_labels.c/.h` | Dynamic node/detail label refresh and positioning |
 | `renderer_ui.c/.h` | HUD background/text instance upload |
-| `menu.c/.h` | Menu card, row, label, and info-card GPU buffers |
+| `menu.c/.h` | Menu text cache, dirty-scene upload, persistent GPU buffers, descriptors, and lifecycle |
+| `menu_scene.c/.h` | CPU menu traversal and card, row, arrow, text, and info-card instance construction |
 | `text.c/.h` | Inconsolata atlas creation, glyph caching, text measurement, and text regions |
 
-Menu tree structure and transforms live in `src/ui/menu.c`; picking lives in `src/interaction/menu.c`. This directory consumes their cached geometry but does not own menu behavior.
+Menu tree structure and transforms live in `src/ui/menu.c`; picking and dirty revisions live in interaction state. Build the CPU scene before replacing GPU data. Menu buffers grow geometrically, remain allocated while hidden, and may be changed only after in-flight frames are idle. Refresh text descriptors only when the atlas image revision changes.
 
 ## Animation, Transitions, GPU Analysis
 

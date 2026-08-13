@@ -12,6 +12,7 @@
 #include "os/path.h"
 #include "vulkan/buffers.h"
 #include "vulkan/images.h"
+#include "vulkan/menu.h"
 #include "vulkan/pipeline_compute.h"
 #include "vulkan/pipeline_graphics.h"
 #include "vulkan/pipeline_ui.h"
@@ -120,14 +121,13 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(lvs), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->labelVertexBuffer, &r->labelVertexBufferMemory);
 	update_buffer(r->core.device, r->labelVertexBufferMemory, sizeof(lvs), lvs);
 
-	// Shared quad vertex/index buffers for menus, text quads, and node labels
 	QuadVertex qv[] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}, {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}}, {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}};
 	uint32_t qi[] = {0, 1, 2, 2, 3, 0};
-	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(qv), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->menu.quad_vertex, &r->menu.quad_vertex_memory);
-	update_buffer(r->core.device, r->menu.quad_vertex_memory, sizeof(qv), qv);
-	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(qi), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, &r->menu.quad_index, &r->menu.quad_index_memory);
-	update_buffer(r->core.device, r->menu.quad_index_memory, sizeof(qi), qi);
-	r->menu.quad_index_count = 6;
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(qv), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->quad.vertex, &r->quad.vertex_memory);
+	update_buffer(r->core.device, r->quad.vertex_memory, sizeof(qv), qv);
+	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(qi), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, &r->quad.index, &r->quad.index_memory);
+	update_buffer(r->core.device, r->quad.index_memory, sizeof(qi), qi);
+	r->quad.index_count = 6;
 
 	UIVertex uiBg[] = {{{0, 0, 0}, {0, 0}}, {{1, 0, 0}, {1, 0}}, {{0, 1, 0}, {0, 1}}, {{1, 1, 0}, {1, 1}}};
 	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(uiBg), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->uiBgVertexBuffer, &r->uiBgVertexBufferMemory);
@@ -137,11 +137,6 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	UIInstance bgInst = {.color = {0, 0, 0, -1.0f}};
 	VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, sizeof(UIInstance), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->uiBgInstanceBuffer, &r->uiBgInstanceBufferMemory);
 	update_buffer(r->core.device, r->uiBgInstanceBufferMemory, sizeof(UIInstance), &bgInst);
-
-	r->menu.instance = VK_NULL_HANDLE;
-	r->menu.text_quad_instance = VK_NULL_HANDLE;
-	r->menu.node_count = 0;
-	r->menu.text_quad_instance_count = 0;
 
 	r->node.position = VK_NULL_HANDLE;
 	r->node.attribute = VK_NULL_HANDLE;
@@ -245,9 +240,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	renderer_anim_init(r);
 	renderer_anim_clear(r, graph);
 
-	// Initialize menu text atlas (will be populated on first menu buffer generation)
-	if (!text_atlas_init(&r->menu.text_atlas, 2048, 512)) {
-		fprintf(stderr, "Failed to initialize menu text atlas\n");
+	if (!renderer_menu_init(r)) {
 		return false;
 	}
 

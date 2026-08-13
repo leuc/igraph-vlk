@@ -275,7 +275,6 @@ static bool ensure_vertex(GraphStream *gs, GraphData *data, const char *name, ig
 	return true;
 }
 
-
 GraphStream *graph_stream_init(GraphData *data)
 {
 	igraph_set_attribute_table(&igraph_cattribute_table);
@@ -740,6 +739,7 @@ void apply_toggle_stream_pause(ExecutionContext *ctx, void *result_data)
 			free((void *)node->command->display_name);
 			node->command->display_name = strdup(node->label);
 		}
+		menu_invalidate(&ctx->app_state->app_ctx.menu, MENU_INVALIDATE_LAYOUT | MENU_INVALIDATE_TEXT);
 	}
 }
 
@@ -767,5 +767,6 @@ void apply_toggle_stream_layered_sphere(ExecutionContext *ctx, void *result_data
 			free((void *)node->command->display_name);
 			node->command->display_name = strdup(node->label);
 		}
+		menu_invalidate(&ctx->app_state->app_ctx.menu, MENU_INVALIDATE_LAYOUT | MENU_INVALIDATE_TEXT);
 	}
 }

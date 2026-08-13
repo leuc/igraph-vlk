@@ -10,9 +10,8 @@
 #include <cglm/cglm.h>
 #include <igraph.h>
 #include <stdbool.h>
-#include <vulkan/text.h>
+#include <stdint.h>
 
-// Forward declaration to avoid circular dependency with command_registry.h
 struct CommandDef;
 
 typedef enum {
@@ -75,36 +74,24 @@ typedef struct MenuNode
 	MenuNodeType type;
 	const char *label;
 
-	// Cached spatial data (computed once during layout, reused for rendering/picking)
-	vec3 text_anchor_pos; // The 3D position where left-aligned text starts
-	vec3 quad_center_pos; // The 3D position of the background quad's exact center
-	vec3 world_pos;		  // Cached world position (same as quad_center_pos)
-	versor rotation;	  // Cached rotation quaternion for the quad
-	vec3 right_vec;		  // Orthonormal right vector for the billboard
-	vec3 up_vec;		  // Orthonormal up vector for the billboard
-	float box_width;	  // The unscaled width of the menu node (at 100%)
-	float box_height;	  // The unscaled height of the menu node (at 100%)
+	vec3 quad_center_pos;
+	versor rotation;
+	vec3 right_vec;
+	vec3 up_vec;
+	float box_width;
+	float box_height;
 
-	// NeXTSTEP Card Dimensions
-	float card_width;  // Width of the entire card background
-	float card_height; // Height of the entire card background
-	vec3 card_bg_pos;  // Position of the card background quad center
+	float card_width;
+	float card_height;
+	vec3 card_bg_pos;
 
-	// For Branches
 	int num_children;
 	struct MenuNode **children;
 
-	// For Leaves
 	IgraphCommand *command;
 
-	bool hovered;	  // For visual feedback
-	bool is_expanded; // Whether submenu is unfolded
-	bool is_visible;  // Whether this node's row was laid out and drawn this frame (i.e. every
-					  // ancestor is expanded). Recomputed by update_menu_transforms(); rendering
-					  // and picking both gate on it, so stale/off-screen quads are never hit.
-
-	// Cached text atlas data (populated once at menu init)
-	TextRegion cachedTextRegion; // UV + pixel dimensions for this node's label in text atlas
+	bool is_expanded;
+	bool is_visible;
 } MenuNode;
 
 typedef struct
@@ -113,7 +100,6 @@ typedef struct
 	char value[64];
 } InfoKeyValuePair;
 
-// Data passed from the worker thread back to main thread
 typedef struct
 {
 	char title[64];
@@ -121,7 +107,6 @@ typedef struct
 	InfoKeyValuePair pairs[8];
 } InfoCardData;
 
-// State held by the UI
 typedef struct
 {
 	bool is_visible;
@@ -139,17 +124,25 @@ typedef enum {
 	STATE_DISPLAY_RESULTS	  // Showing execution results (overlays, histograms, etc.)
 } AppInteractionState;
 
-// All app-level menu state. Per-node state (hovered/is_expanded/is_visible, layout geometry)
-// stays on MenuNode; this is the state that describes the menu as a whole.
+typedef enum {
+	MENU_INVALIDATE_NONE = 0,
+	MENU_INVALIDATE_SCENE = 1 << 0,
+	MENU_INVALIDATE_TEXT = 1 << 1,
+	MENU_INVALIDATE_LAYOUT = 1 << 2,
+} MenuInvalidation;
+
 typedef struct
 {
-	MenuNode *root;			  // Menu tree root (allocated and freed by main.c)
-	MenuNode *active_level;	  // Last branch opened; the info card anchors to its card
-	MenuNode *hovered_node;	  // Row under the active pointer (crosshair or VR ray).
-							  // The single activation target for every input source.
-	SpatialBasis spawn_basis; // World anchor captured when the menu opens
-	InfoCardState info_card;  // Inspector panel state
-	bool is_open;			  // Menu is showing
+	MenuNode *root;
+	MenuNode *active_level;
+	MenuNode *hovered_node;
+	SpatialBasis spawn_basis;
+	InfoCardState info_card;
+	bool is_open;
+	uint64_t layout_revision;
+	uint64_t applied_layout_revision;
+	uint64_t text_revision;
+	uint64_t scene_revision;
 } MenuState;
 
 typedef struct AppContext
@@ -160,20 +153,20 @@ typedef struct AppContext
 	IgraphCommand *pending_command;
 	int selection_step; // How many nodes have we picked so far?
 
-	// Results display state
 	bool has_visual_results;
 	void *results_data; // Optional: pointer to results for overlay rendering
 } AppContext;
 
-// Function declarations
 typedef struct AppState AppState;
 void update_app_state(AppState *state);
 void app_context_init(AppContext *ctx, MenuNode *root_menu);
 void app_context_destroy(AppContext *ctx);
 void handle_menu_selection(AppContext *app, MenuNode *selected_node);
 void check_pending_command_requirements(AppContext *app);
+void menu_invalidate(MenuState *menu, MenuInvalidation flags);
+bool menu_set_hovered(MenuState *menu, MenuNode *node);
+void menu_set_info_card(MenuState *menu, const InfoCardData *data);
 
-// Apply/free for commands defined in state.c
 void apply_quit(ExecutionContext *ctx, void *result_data);
 
 #endif // INTERACTION_STATE_H

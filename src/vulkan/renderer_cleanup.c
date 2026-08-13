@@ -10,6 +10,7 @@
 #include "vulkan/buffers.h"
 #include "vulkan/commands.h"
 #include "vulkan/device.h"
+#include "vulkan/menu.h"
 #include "vulkan/render_pass.h"
 #include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_bcgl.h"
@@ -46,6 +47,8 @@ static void cleanup_compute_context(Renderer *r)
 
 static void cleanup_geometry_buffers(Renderer *r)
 {
+	VK_DESTROY_BUFFER(r->core.device, r->quad.vertex, r->quad.vertex_memory);
+	VK_DESTROY_BUFFER(r->core.device, r->quad.index, r->quad.index_memory);
 	VK_DESTROY_BUFFER(r->core.device, r->labelVertexBuffer, r->labelVertexBufferMemory);
 	VK_DESTROY_BUFFER(r->core.device, r->edge.position, r->edge.position_memory);
 	VK_DESTROY_BUFFER(r->core.device, r->edge.attribute, r->edge.attribute_memory);
@@ -62,11 +65,7 @@ static void cleanup_geometry_buffers(Renderer *r)
 
 static void cleanup_menu_label_atlases(Renderer *r)
 {
-	VK_DESTROY_BUFFER(r->core.device, r->menu.quad_vertex, r->menu.quad_vertex_memory);
-	VK_DESTROY_BUFFER(r->core.device, r->menu.quad_index, r->menu.quad_index_memory);
-	VK_DESTROY_BUFFER(r->core.device, r->menu.instance, r->menu.instance_memory);
-	VK_DESTROY_BUFFER(r->core.device, r->menu.text_quad_instance, r->menu.text_quad_instance_memory);
-	text_atlas_destroy(&r->menu.text_atlas, r->core.device);
+	renderer_menu_destroy(r);
 	text_atlas_destroy(&r->label.atlas, r->core.device);
 	text_atlas_destroy(&r->detail.atlas, r->core.device);
 	igraph_bh_tree_destroy(&r->label.tree);

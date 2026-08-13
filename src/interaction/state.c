@@ -17,20 +17,17 @@
 
 void app_context_init(AppContext *ctx, MenuNode *root_menu)
 {
+	memset(ctx, 0, sizeof(*ctx));
 	ctx->current_state = STATE_GRAPH_VIEW;
 	ctx->menu.root = root_menu;
 	ctx->menu.active_level = root_menu;
-	ctx->menu.hovered_node = NULL;
-	ctx->menu.is_open = false;
-	ctx->pending_command = NULL;
-	ctx->selection_step = 0;
+	ctx->menu.layout_revision = 1;
+	ctx->menu.text_revision = 1;
+	ctx->menu.scene_revision = 1;
 }
 
 void app_context_destroy(AppContext *ctx)
 {
-	// Stub: AppContext owns no dynamically-allocated resources directly.
-	// The menu tree, graph data, renderer, and worker thread are
-	// cleaned up by their own dedicated functions in main.c shutdown.
 	(void)ctx;
 }
 
@@ -38,32 +35,24 @@ void update_app_state(AppState *state)
 {
 	AppContext *app = &state->app_ctx;
 
-	// Refresh menu hover once per frame from the active pointing device. This is the only place
-	// the desktop/gamepad hover is computed; input sources activate app->menu.hovered_node
-	// rather than casting rays of their own, so they cannot select different rows on one press.
 	if (app->current_state == STATE_MENU_OPEN || app->current_state == STATE_AWAITING_SELECTION) {
 #ifdef USE_OPENXR
-		// In VR the controller ray owns the hover (set from the XR frame loop) — leave it alone.
 		if (!state->vr_enabled)
 #endif
-			app->menu.hovered_node = raycast_menu_crosshair(state);
+			raycast_menu_crosshair(state);
 	} else {
-		app->menu.hovered_node = NULL;
+		menu_set_hovered(&app->menu, NULL);
 	}
 
 	switch (app->current_state) {
 	case STATE_GRAPH_VIEW:
-		// Normal navigation, handle "Menu Open" trigger (e.g., Space key)
 		break;
 
 	case STATE_MENU_OPEN:
-		// Menu is visible, handle interactions with it
 		break;
 
 	case STATE_AWAITING_SELECTION:
-		// Highlight nodes/edges for picking
 		if (app->pending_command) {
-			// Check if all parameters of type PARAM_TYPE_NODE_SELECTION or EDGE_SELECTION are filled
 			bool all_filled = true;
 			for (int i = 0; i < app->pending_command->num_params; i++) {
 				if ((app->pending_command->params[i].type == PARAM_TYPE_NODE_SELECTION || app->pending_command->params[i].type == PARAM_TYPE_EDGE_SELECTION) && app->pending_command->params[i].value.selection_id == -1) {
@@ -80,11 +69,9 @@ void update_app_state(AppState *state)
 
 	case STATE_EXECUTING:
 		if (app->pending_command) {
-			// Check if this is a data-driven command with cmd_def (background worker)
 			if (app->pending_command->cmd_def) {
 				printf("[State] Executing data-driven command: %s\n", app->pending_command->display_name);
 
-				// Create execution context
 				ExecutionContext exec_ctx;
 				exec_ctx.params = app->pending_command->params;
 				exec_ctx.num_params = app->pending_command->num_params;
@@ -92,7 +79,6 @@ void update_app_state(AppState *state)
 				exec_ctx.app_state = state;
 				exec_ctx.running = true;
 
-				// Submit job to worker thread
 				if (state->worker_ctx.thread_running) {
 					state->current_worker_job = worker_thread_submit_job(&state->worker_ctx, (CommandDef *)app->pending_command->cmd_def, &exec_ctx);
 
@@ -124,13 +110,11 @@ void update_app_state(AppState *state)
 
 	case STATE_JOB_IN_PROGRESS:
 		if (state->current_worker_job) {
-			// GPU polling phase: worker already completed, drive gpu_poll_func per frame
 			if (state->gpu_polling) {
 				WorkerJob *job = state->current_worker_job;
 				ExecutionContext ec = {0};
 				ec.app_state = state;
 
-				// Check for cancellation during GPU polling
 				if (job->ctx && !job->ctx->running) {
 					if (job->free_func && job->result_data) {
 						job->free_func(job->result_data);
@@ -147,7 +131,6 @@ void update_app_state(AppState *state)
 				bool done = job->gpu_poll_func(&ec);
 
 				if (done) {
-					// GPU work complete — finalize
 					if (job->free_func && job->result_data) {
 						job->free_func(job->result_data);
 					}
@@ -161,7 +144,6 @@ void update_app_state(AppState *state)
 				break;
 			}
 
-			// CPU polling phase: wait for worker thread to complete
 			WorkerJobStatus status = worker_thread_get_job_status(state->current_worker_job, &state->job_progress);
 
 			const char *job_msg = worker_thread_get_job_status_message(state->current_worker_job);
@@ -172,14 +154,11 @@ void update_app_state(AppState *state)
 			if (status == JOB_STATUS_COMPLETED) {
 				WorkerJob *job = state->current_worker_job;
 				if (job->gpu_poll_func) {
-					// GPU job: apply_func does one-shot setup, then enter GPU polling phase
 					if (job->apply_func && job->result_data) {
 						job->apply_func(job->ctx, job->result_data);
 					}
 					state->gpu_polling = true;
-					// State stays STATE_JOB_IN_PROGRESS — gpu_poll_func drives completion
 				} else {
-					// CPU-only job: apply + free immediately
 					if (job->apply_func && job->result_data) {
 						job->apply_func(job->ctx, job->result_data);
 						state->renderer.label.tree_needs_rebuild = true;
@@ -209,7 +188,6 @@ void update_app_state(AppState *state)
 		break;
 
 	case STATE_DISPLAY_RESULTS: {
-		// Dismiss on left click or Escape key
 		if (glfwGetMouseButton(state->win.handle, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS || glfwGetKey(state->win.handle, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
 			app->has_visual_results = false;
 			app->pending_command = NULL;
@@ -254,12 +232,12 @@ void handle_menu_selection(AppContext *app, MenuNode *selected_node)
 	if (!selected_node)
 		return;
 
-	// Every input source funnels through here, so a single line covers mouse, gamepad and VR.
 	printf("[MENU] Activated: %s (%s)\n", selected_node->label, selected_node->type == NODE_BRANCH ? "branch" : "command");
 
-	app->menu.info_card.is_visible = false;
+	menu_set_info_card(&app->menu, NULL);
 
 	enforce_single_open_branch(app->menu.root, selected_node);
+	menu_invalidate(&app->menu, MENU_INVALIDATE_LAYOUT);
 
 	if (selected_node->type == NODE_BRANCH) {
 		selected_node->is_expanded = !selected_node->is_expanded;
@@ -303,7 +281,6 @@ void check_pending_command_requirements(AppContext *app)
 	if (needs_selection) {
 		app->current_state = STATE_AWAITING_SELECTION;
 	} else {
-		// No selection needed, can execute directly
 		app->current_state = STATE_EXECUTING;
 	}
 }

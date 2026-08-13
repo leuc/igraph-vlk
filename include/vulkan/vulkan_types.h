@@ -19,6 +19,7 @@
 #include "graph/graph_types.h"
 
 #include "vulkan/criticality_types.h"
+#include "vulkan/menu_instance_types.h"
 #include "vulkan/text.h"
 
 #define MAX_FRAMES_IN_FLIGHT 2
@@ -91,7 +92,6 @@ typedef struct
 	int computeFamily;
 } VkQueueFamilyInfo;
 
-
 typedef struct
 {
 	vec3 pos;
@@ -159,30 +159,9 @@ typedef struct
 
 typedef struct
 {
-	vec3 worldPos;
-	vec2 texCoord;
-	float texId;
-	vec3 scale;
-	vec4 rotation;
-	float hovered;
-} MenuInstance;
-
-typedef struct
-{
-	vec3 worldPos;	 // Quad center position
-	vec4 bgColor;	 // Background color (RGBA). a==0 means text-only (no background)
-	vec3 scale;		 // (width, height, 1.0)
-	vec4 rotation;	 // Quaternion
-	vec4 textUV;	 // (u0, v0, u1, v1) in text atlas. (0,0,0,0) = no text
-	vec4 textRegion; // (left, top, right, bottom) text area in quad-local [0..1]
-} TextQuadInstance;
-
-typedef struct
-{
 	float dist;
 	uint32_t idx;
 } DistIdxPair;
-
 
 typedef struct
 {
@@ -466,18 +445,29 @@ typedef struct
 
 typedef struct
 {
-	VkBuffer quad_vertex;
-	VkDeviceMemory quad_vertex_memory;
-	VkBuffer quad_index;
-	VkDeviceMemory quad_index_memory;
+	VkBuffer vertex;
+	VkDeviceMemory vertex_memory;
+	VkBuffer index;
+	VkDeviceMemory index_memory;
+	uint32_t index_count;
+} QuadBuffers;
+
+typedef struct
+{
 	VkBuffer instance;
 	VkDeviceMemory instance_memory;
 	uint32_t node_count;
-	uint32_t quad_index_count;
+	uint32_t instance_capacity;
 	VkBuffer text_quad_instance;
 	VkDeviceMemory text_quad_instance_memory;
 	uint32_t text_quad_instance_count;
+	uint32_t text_quad_instance_capacity;
 	TextAtlas text_atlas;
+	void *text_cache;
+	uint64_t consumed_scene_revision;
+	uint64_t consumed_text_revision;
+	uint64_t descriptor_image_revision;
+	bool visible;
 } MenuBuffers;
 
 typedef struct
@@ -565,6 +555,8 @@ typedef struct Renderer
 	VkBuffer uiTextInstanceBuffer;
 	VkDeviceMemory uiTextInstanceBufferMemory;
 	uint32_t uiTextCharCount;
+
+	QuadBuffers quad;
 
 	MenuBuffers menu;
 

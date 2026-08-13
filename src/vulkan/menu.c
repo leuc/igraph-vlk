@@ -4,521 +4,261 @@
  */
 
 #include "vulkan/menu.h"
+
+#include "ui/menu_metrics.h"
 #include "vulkan/buffers.h"
-#include "vulkan/renderer.h"
-#include "vulkan/renderer_geometry.h"
+#include "vulkan/menu_scene.h"
+#include "vulkan/renderer_lifecycle.h"
 #include "vulkan/text.h"
 #include "vulkan/utils.h"
-#include <math.h>
+
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 extern FontAtlas globalAtlas;
 
-static float calculate_text_width(const char *text)
+typedef struct
 {
+	char *text;
+	TextRegion region;
+} MenuTextCacheEntry;
+
+typedef struct
+{
+	MenuTextCacheEntry *entries;
+	size_t count;
+	size_t capacity;
+	TextAtlas *atlas;
+	bool atlas_dimensions_changed;
+} MenuTextCache;
+
+static MenuTextCache *menu_text_cache_get(MenuBuffers *menu)
+{
+	if (menu->text_cache)
+		return menu->text_cache;
+	MenuTextCache *cache = calloc(1, sizeof(*cache));
+	if (!cache)
+		return NULL;
+	cache->atlas = &menu->text_atlas;
+	menu->text_cache = cache;
+	return cache;
+}
+
+static void menu_text_cache_clear(MenuTextCache *cache)
+{
+	if (!cache)
+		return;
+	for (size_t i = 0; i < cache->count; i++)
+		free(cache->entries[i].text);
+	cache->count = 0;
+}
+
+static void menu_text_cache_destroy(MenuTextCache *cache)
+{
+	if (!cache)
+		return;
+	menu_text_cache_clear(cache);
+	free(cache->entries);
+	free(cache);
+}
+
+static bool menu_text_resolve(void *context, const char *text, TextRegion *region)
+{
+	MenuTextCache *cache = context;
+	for (size_t i = 0; i < cache->count; i++) {
+		if (strcmp(cache->entries[i].text, text) == 0) {
+			*region = cache->entries[i].region;
+			return true;
+		}
+	}
+
+	char *copy = strdup(text);
+	if (!copy)
+		return false;
+	if (cache->count == cache->capacity) {
+		size_t capacity = cache->capacity ? cache->capacity * 2 : 128;
+		MenuTextCacheEntry *entries = realloc(cache->entries, sizeof(*entries) * capacity);
+		if (!entries) {
+			free(copy);
+			return false;
+		}
+		cache->entries = entries;
+		cache->capacity = capacity;
+	}
+	MenuTextCacheEntry *entry = &cache->entries[cache->count];
+	entry->text = copy;
+	int atlas_height = cache->atlas->height;
+	if (!text_atlas_render(cache->atlas, &globalAtlas, text, &entry->region)) {
+		free(copy);
+		return false;
+	}
+	cache->atlas_dimensions_changed |= cache->atlas->height != atlas_height;
+	*region = entry->region;
+	cache->count++;
+	return true;
+}
+
+static float menu_text_measure_width(void *context, const char *text)
+{
+	(void)context;
 	if (!text)
 		return 0.0f;
+	float width = 0.0f;
+	for (size_t i = 0; text[i]; i++) {
+		unsigned char c = (unsigned char)text[i];
+		width += globalAtlas.chars[c < 128 ? c : 32].xadvance;
+	}
+	return width * MENU_METRICS.text_scale;
+}
 
-	int len = strlen(text);
-	float x_cursor = 0.0f;
-
-	for (int i = 0; i < len; i++) {
-		unsigned char c = text[i];
-		CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
-		x_cursor += ci->xadvance;
+static bool build_scene(MenuBuffers *menu, const MenuState *state, MenuScene *scene)
+{
+	MenuTextCache *cache = menu_text_cache_get(menu);
+	if (!cache)
+		return false;
+	if (menu->consumed_text_revision != state->text_revision) {
+		menu_text_cache_clear(cache);
+		text_atlas_clear(&menu->text_atlas);
 	}
 
-	float world_text_scale = 0.003f;
-	return x_cursor * world_text_scale;
+	MenuTextProvider provider = {
+		.context = cache,
+		.resolve = menu_text_resolve,
+		.measure_width = menu_text_measure_width,
+	};
+	for (;;) {
+		cache->atlas_dimensions_changed = false;
+		if (!menu_scene_build(state, &provider, scene))
+			return false;
+		if (!cache->atlas_dimensions_changed)
+			return true;
+		menu_text_cache_clear(cache);
+		text_atlas_clear(&menu->text_atlas);
+	}
 }
 
-static int count_menu_nodes(MenuNode *node)
+static uint32_t grow_capacity(uint32_t capacity, size_t needed)
 {
-	if (!node)
-		return 1;
-	int count = 1;
-	for (int i = 0; i < node->num_children; i++)
-		count += count_menu_nodes(node->children[i]);
-	return count;
+	uint32_t result = capacity ? capacity : 128;
+	while ((size_t)result < needed)
+		result *= 2;
+	return result;
 }
 
-void generate_vulkan_menu_buffers(AppContext *ctx, Renderer *r)
+static bool create_menu_buffer(Renderer *renderer, VkDeviceSize element_size, uint32_t capacity, VkBuffer *buffer, VkDeviceMemory *memory)
 {
-	MenuNode *node = ctx->menu.root;
-	if (node == NULL)
+	VkResult result = try_create_buffer(renderer->core.device, renderer->core.physicalDevice, element_size * capacity, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, buffer, memory);
+	if (result == VK_SUCCESS)
+		return true;
+	fprintf(stderr, "Failed to grow menu buffer: %d\n", result);
+	return false;
+}
+
+static bool upload_scene(Renderer *renderer, const MenuScene *scene)
+{
+	MenuBuffers *menu = &renderer->menu;
+	VkBuffer new_instance = VK_NULL_HANDLE;
+	VkDeviceMemory new_instance_memory = VK_NULL_HANDLE;
+	VkBuffer new_text = VK_NULL_HANDLE;
+	VkDeviceMemory new_text_memory = VK_NULL_HANDLE;
+	uint32_t instance_capacity = menu->instance_capacity;
+	uint32_t text_capacity = menu->text_quad_instance_capacity;
+
+	if (scene->instance_count > instance_capacity) {
+		instance_capacity = grow_capacity(instance_capacity, scene->instance_count);
+		if (!create_menu_buffer(renderer, sizeof(MenuInstance), instance_capacity, &new_instance, &new_instance_memory))
+			return false;
+	}
+	if (scene->text_instance_count > text_capacity) {
+		text_capacity = grow_capacity(text_capacity, scene->text_instance_count);
+		if (!create_menu_buffer(renderer, sizeof(TextQuadInstance), text_capacity, &new_text, &new_text_memory)) {
+			VK_DESTROY_BUFFER(renderer->core.device, new_instance, new_instance_memory);
+			return false;
+		}
+	}
+
+	if (new_instance != VK_NULL_HANDLE) {
+		VK_DESTROY_BUFFER(renderer->core.device, menu->instance, menu->instance_memory);
+		menu->instance = new_instance;
+		menu->instance_memory = new_instance_memory;
+		menu->instance_capacity = instance_capacity;
+	}
+	if (new_text != VK_NULL_HANDLE) {
+		VK_DESTROY_BUFFER(renderer->core.device, menu->text_quad_instance, menu->text_quad_instance_memory);
+		menu->text_quad_instance = new_text;
+		menu->text_quad_instance_memory = new_text_memory;
+		menu->text_quad_instance_capacity = text_capacity;
+	}
+
+	if (scene->instance_count > 0)
+		update_buffer(renderer->core.device, menu->instance_memory, sizeof(MenuInstance) * scene->instance_count, scene->instances);
+	if (scene->text_instance_count > 0)
+		update_buffer(renderer->core.device, menu->text_quad_instance_memory, sizeof(TextQuadInstance) * scene->text_instance_count, scene->text_instances);
+	menu->node_count = (uint32_t)scene->instance_count;
+	menu->text_quad_instance_count = (uint32_t)scene->text_instance_count;
+	return true;
+}
+
+static void update_text_descriptors(Renderer *renderer)
+{
+	MenuBuffers *menu = &renderer->menu;
+	if (menu->descriptor_image_revision == menu->text_atlas.image_revision)
 		return;
-
-	int total_nodes = count_menu_nodes(node);
-
-	int capacity = 128;
-	MenuInstance *instances = (MenuInstance *)malloc(sizeof(MenuInstance) * capacity);
-	int instance_count = 0;
-
-	int tq_capacity = 256;
-	TextQuadInstance *tq_instances = (TextQuadInstance *)malloc(sizeof(TextQuadInstance) * tq_capacity);
-	int tq_count = 0;
-
-	float world_text_scale = 0.003f;
-
-	// Clear text atlas and rebuild
-	text_atlas_clear(&r->menu.text_atlas);
-
-	// Reset cached text regions so they get re-rendered into the fresh atlas
-	{
-		MenuNode **reset_stack = (MenuNode **)malloc(sizeof(MenuNode *) * total_nodes);
-		int reset_top = 0;
-		reset_stack[reset_top++] = node;
-		while (reset_top > 0) {
-			MenuNode *n = reset_stack[--reset_top];
-			if (n == NULL)
-				continue;
-			n->cachedTextRegion.u0 = n->cachedTextRegion.v0 = n->cachedTextRegion.u1 = n->cachedTextRegion.v1 = 0;
-			n->cachedTextRegion.width_px = 0;
-			n->cachedTextRegion.height_px = 0;
-			if (n->type == NODE_BRANCH) {
-				for (int i = 0; i < n->num_children; i++)
-					reset_stack[reset_top++] = n->children[i];
-			}
-		}
-		free(reset_stack);
-	}
-
-	MenuNode **stack = (MenuNode **)malloc(sizeof(MenuNode *) * total_nodes);
-	int stack_top = 0;
-	stack[stack_top++] = node;
-
-	while (stack_top > 0) {
-		MenuNode *current = stack[--stack_top];
-		if (current == NULL)
-			continue;
-
-		// 1. Draw as a list item if it's visible (the root owns a card, not a row)
-		if (current != node && current->is_visible) {
-			// Ensure capacity
-			if (tq_count >= tq_capacity) {
-				tq_capacity *= 2;
-				tq_instances = (TextQuadInstance *)realloc(tq_instances, sizeof(TextQuadInstance) * tq_capacity);
-			}
-
-			// Background + merged text quad for this list item
-			TextQuadInstance *tq = &tq_instances[tq_count];
-			glm_vec3_copy(current->quad_center_pos, tq->worldPos);
-
-			// Background color: transparent by default, hover highlight
-			if (current->hovered) {
-				tq->bgColor[0] = 0.3f;
-				tq->bgColor[1] = 0.4f;
-				tq->bgColor[2] = 0.5f;
-				tq->bgColor[3] = 0.8f;
-			} else {
-				tq->bgColor[0] = 0.0f;
-				tq->bgColor[1] = 0.0f;
-				tq->bgColor[2] = 0.0f;
-				tq->bgColor[3] = 0.0f;
-			}
-
-			tq->scale[0] = current->box_width;
-			tq->scale[1] = current->box_height;
-			tq->scale[2] = 1.0f;
-			memcpy(tq->rotation, current->rotation, sizeof(versor));
-
-			// Render label text into atlas
-			if (current->label && current->label[0]) {
-				if (current->cachedTextRegion.width_px < 0.5f) {
-					text_atlas_render(&r->menu.text_atlas, &globalAtlas, current->label, &current->cachedTextRegion);
-				}
-				tq->textUV[0] = current->cachedTextRegion.u0;
-				tq->textUV[1] = current->cachedTextRegion.v0;
-				tq->textUV[2] = current->cachedTextRegion.u1;
-				tq->textUV[3] = current->cachedTextRegion.v1;
-
-				// Text region in quad-local [0..1]: left-padded, vertically centered
-				float text_w_norm = current->cachedTextRegion.width_px * world_text_scale / current->box_width;
-				float text_h_norm = current->cachedTextRegion.height_px * world_text_scale / current->box_height;
-				float pad_x = 0.05f / current->box_width;
-				float pad_y = (1.0f - text_h_norm) * 0.5f;
-				tq->textRegion[0] = pad_x;
-				tq->textRegion[1] = pad_y;
-				tq->textRegion[2] = pad_x + text_w_norm;
-				tq->textRegion[3] = pad_y + text_h_norm;
-			} else {
-				tq->textUV[0] = 0;
-				tq->textUV[1] = 0;
-				tq->textUV[2] = 0;
-				tq->textUV[3] = 0;
-				tq->textRegion[0] = 0;
-				tq->textRegion[1] = 0;
-				tq->textRegion[2] = 0;
-				tq->textRegion[3] = 0;
-			}
-
-			tq_count++;
-
-			// ">" arrow for branches (text-only quad at right edge)
-			if (current->type == NODE_BRANCH) {
-				if (tq_count >= tq_capacity) {
-					tq_capacity *= 2;
-					tq_instances = (TextQuadInstance *)realloc(tq_instances, sizeof(TextQuadInstance) * tq_capacity);
-				}
-
-				TextRegion arrowRegion;
-				text_atlas_render(&r->menu.text_atlas, &globalAtlas, ">", &arrowRegion);
-
-				// Position arrow at right edge of the item
-				vec3 arrow_pos;
-				glm_vec3_copy(current->quad_center_pos, arrow_pos);
-				vec3 right_shift;
-				glm_vec3_scale(current->right_vec, current->box_width * 0.5f - 0.07f, right_shift);
-				glm_vec3_add(arrow_pos, right_shift, arrow_pos);
-
-				TextQuadInstance *arrow = &tq_instances[tq_count];
-				glm_vec3_copy(arrow_pos, arrow->worldPos);
-				arrow->bgColor[0] = 0.0f;
-				arrow->bgColor[1] = 0.0f;
-				arrow->bgColor[2] = 0.0f;
-				arrow->bgColor[3] = 0.0f;
-				float arrow_w = arrowRegion.width_px * world_text_scale;
-				float arrow_h = arrowRegion.height_px * world_text_scale;
-				arrow->scale[0] = arrow_w;
-				arrow->scale[1] = arrow_h;
-				arrow->scale[2] = 1.0f;
-				memcpy(arrow->rotation, current->rotation, sizeof(versor));
-				arrow->textUV[0] = arrowRegion.u0;
-				arrow->textUV[1] = arrowRegion.v0;
-				arrow->textUV[2] = arrowRegion.u1;
-				arrow->textUV[3] = arrowRegion.v1;
-				arrow->textRegion[0] = 0.0f;
-				arrow->textRegion[1] = 0.0f;
-				arrow->textRegion[2] = 1.0f;
-				arrow->textRegion[3] = 1.0f;
-				tq_count++;
-			}
-
-			// Add a background-only MenuInstance for this item (for depth testing)
-			if (instance_count >= capacity) {
-				capacity *= 2;
-				instances = (MenuInstance *)realloc(instances, sizeof(MenuInstance) * capacity);
-			}
-			glm_vec3_copy(current->quad_center_pos, instances[instance_count].worldPos);
-			instances[instance_count].texCoord[0] = 0.0f;
-			instances[instance_count].texCoord[1] = 0.0f;
-			instances[instance_count].texId = -1.0f;
-			instances[instance_count].scale[0] = current->box_width;
-			instances[instance_count].scale[1] = current->box_height;
-			instances[instance_count].scale[2] = 1.0f;
-			instances[instance_count].hovered = current->hovered ? 1.0f : 0.0f;
-			memcpy(instances[instance_count].rotation, current->rotation, sizeof(versor));
-			instance_count++;
-		}
-
-		// 2. Draw Submenu Card Background and Title ONLY if expanded
-		if (current->type == NODE_BRANCH && current->num_children > 0) {
-			if (current->is_expanded) {
-				// Card background (MenuInstance, drawn by menuPipeline)
-				if (instance_count >= capacity) {
-					capacity *= 2;
-					instances = (MenuInstance *)realloc(instances, sizeof(MenuInstance) * capacity);
-				}
-
-				glm_vec3_copy(current->card_bg_pos, instances[instance_count].worldPos);
-				instances[instance_count].texCoord[0] = 0.0f;
-				instances[instance_count].texCoord[1] = 0.0f;
-				instances[instance_count].texId = -1.0f;
-				instances[instance_count].scale[0] = current->card_width;
-				instances[instance_count].scale[1] = current->card_height;
-				instances[instance_count].scale[2] = 1.0f;
-				instances[instance_count].hovered = 0.0f;
-				memcpy(instances[instance_count].rotation, current->rotation, sizeof(versor));
-				instance_count++;
-
-				// Title bar background (MenuInstance, drawn by menuPipeline)
-				if (instance_count >= capacity) {
-					capacity *= 2;
-					instances = (MenuInstance *)realloc(instances, sizeof(MenuInstance) * capacity);
-				}
-				vec3 title_bg_pos;
-				glm_vec3_copy(current->card_bg_pos, title_bg_pos);
-				vec3 title_up_shift;
-				glm_vec3_scale(current->up_vec, (current->card_height * 0.5f) - 0.05f, title_up_shift);
-				glm_vec3_add(title_bg_pos, title_up_shift, title_bg_pos);
-
-				glm_vec3_copy(title_bg_pos, instances[instance_count].worldPos);
-				instances[instance_count].texCoord[0] = 0.0f;
-				instances[instance_count].texCoord[1] = 0.0f;
-				instances[instance_count].texId = -2.0f;
-				instances[instance_count].scale[0] = current->card_width;
-				instances[instance_count].scale[1] = 0.10f;
-				instances[instance_count].scale[2] = 1.0f;
-				instances[instance_count].hovered = 0.0f;
-				memcpy(instances[instance_count].rotation, current->rotation, sizeof(versor));
-				instance_count++;
-
-				// Title text (TextQuadInstance, drawn by textQuadPipeline)
-				if (current->label) {
-					if (tq_count >= tq_capacity) {
-						tq_capacity *= 2;
-						tq_instances = (TextQuadInstance *)realloc(tq_instances, sizeof(TextQuadInstance) * tq_capacity);
-					}
-
-					TextRegion titleRegion;
-					text_atlas_render(&r->menu.text_atlas, &globalAtlas, current->label, &titleRegion);
-
-					// Position title at the same spot as before
-					vec3 title_pos;
-					glm_vec3_copy(current->card_bg_pos, title_pos);
-					vec3 up_shift, right_shift;
-					glm_vec3_scale(current->up_vec, current->card_height * 0.5f - 0.05f, up_shift);
-					glm_vec3_scale(current->right_vec, -current->card_width * 0.5f + 0.05f, right_shift);
-					glm_vec3_add(title_pos, up_shift, title_pos);
-					glm_vec3_add(title_pos, right_shift, title_pos);
-
-					// The title text is positioned at text_anchor, not at quad center.
-					// Offset text from the title-bar quad center.
-					// Title bar quad center is at title_bg_pos. Text anchor is at title_pos.
-					// In quad-local coords: offset = (text_pos - quad_center) / scale
-
-					TextQuadInstance *tq = &tq_instances[tq_count];
-					// The text region includes the title-bar offset.
-					glm_vec3_copy(title_bg_pos, tq->worldPos);
-					tq->bgColor[0] = 0.18f;
-					tq->bgColor[1] = 0.22f;
-					tq->bgColor[2] = 0.28f;
-					tq->bgColor[3] = 1.0f;
-					tq->scale[0] = current->card_width;
-					tq->scale[1] = 0.10f;
-					tq->scale[2] = 1.0f;
-					memcpy(tq->rotation, current->rotation, sizeof(versor));
-
-					tq->textUV[0] = titleRegion.u0;
-					tq->textUV[1] = titleRegion.v0;
-					tq->textUV[2] = titleRegion.u1;
-					tq->textUV[3] = titleRegion.v1;
-
-					// Text region: use left padding, center vertically
-					float text_w_norm = titleRegion.width_px * world_text_scale / current->card_width;
-					float text_h_norm = titleRegion.height_px * world_text_scale / 0.10f;
-					float left = 0.05f / current->card_width;
-					float top = (1.0f - text_h_norm) * 0.5f;
-					tq->textRegion[0] = left;
-					tq->textRegion[1] = top;
-					tq->textRegion[2] = left + text_w_norm;
-					tq->textRegion[3] = top + text_h_norm;
-
-					tq_count++;
-				}
-
-				// Traverse into submenus
-				for (int i = 0; i < current->num_children; i++) {
-					stack[stack_top++] = current->children[i];
-				}
-			}
-		}
-	}
-
-	free(stack);
-
-	if (ctx->menu.info_card.is_visible && ctx->menu.active_level) {
-		float card_w = calculate_text_width(ctx->menu.info_card.title);
-		for (int pi = 0; pi < ctx->menu.info_card.num_pairs; pi++) {
-			char row_buf[128];
-			snprintf(row_buf, sizeof(row_buf), "%s: %s", ctx->menu.info_card.pairs[pi].key, ctx->menu.info_card.pairs[pi].value);
-			float row_w = calculate_text_width(row_buf);
-			if (row_w > card_w)
-				card_w = row_w;
-		}
-		card_w += 0.10f;
-		float card_h = 0.10f + (ctx->menu.info_card.num_pairs * 0.09f);
-
-		// Info card background (MenuInstance)
-		if (instance_count + 2 >= capacity) {
-			capacity *= 2;
-			instances = (MenuInstance *)realloc(instances, sizeof(MenuInstance) * capacity);
-		}
-
-		vec3 card_pos;
-		glm_vec3_copy(ctx->menu.active_level->card_bg_pos, card_pos);
-		vec3 right_shift, up_shift;
-		glm_vec3_scale(node->right_vec, (ctx->menu.active_level->card_width * 0.5f) + (card_w * 0.5f), right_shift);
-		float align_y = (ctx->menu.active_level->card_height * 0.5f) - (card_h * 0.5f);
-		glm_vec3_scale(node->up_vec, align_y, up_shift);
-		glm_vec3_add(card_pos, right_shift, card_pos);
-		glm_vec3_add(card_pos, up_shift, card_pos);
-
-		// Info card background
-		glm_vec3_copy(card_pos, instances[instance_count].worldPos);
-		instances[instance_count].texCoord[0] = 0.0f;
-		instances[instance_count].texCoord[1] = 0.0f;
-		instances[instance_count].texId = -3.0f;
-		instances[instance_count].scale[0] = card_w;
-		instances[instance_count].scale[1] = card_h;
-		instances[instance_count].scale[2] = 1.0f;
-		instances[instance_count].hovered = 0.0f;
-		memcpy(instances[instance_count].rotation, node->rotation, sizeof(versor));
-		instance_count++;
-
-		// Info card title bar background
-		vec3 info_title_bg;
-		glm_vec3_copy(card_pos, info_title_bg);
-		vec3 info_title_up;
-		glm_vec3_scale(node->up_vec, (card_h * 0.5f) - 0.05f, info_title_up);
-		glm_vec3_add(info_title_bg, info_title_up, info_title_bg);
-
-		glm_vec3_copy(info_title_bg, instances[instance_count].worldPos);
-		instances[instance_count].texCoord[0] = 0.0f;
-		instances[instance_count].texCoord[1] = 0.0f;
-		instances[instance_count].texId = -2.0f;
-		instances[instance_count].scale[0] = card_w;
-		instances[instance_count].scale[1] = 0.10f;
-		instances[instance_count].scale[2] = 1.0f;
-		instances[instance_count].hovered = 0.0f;
-		memcpy(instances[instance_count].rotation, node->rotation, sizeof(versor));
-		instance_count++;
-
-		// Info card title text (TextQuadInstance on title bar)
-		{
-			TextRegion titleRegion;
-			text_atlas_render(&r->menu.text_atlas, &globalAtlas, ctx->menu.info_card.title, &titleRegion);
-
-			vec3 title_pos;
-			glm_vec3_copy(card_pos, title_pos);
-			vec3 title_up_shift, left_shift;
-			glm_vec3_scale(node->up_vec, card_h * 0.5f - 0.05f, title_up_shift);
-			glm_vec3_scale(node->right_vec, -card_w * 0.5f + 0.05f, left_shift);
-			glm_vec3_add(title_pos, title_up_shift, title_pos);
-			glm_vec3_add(title_pos, left_shift, title_pos);
-
-			if (tq_count >= tq_capacity) {
-				tq_capacity *= 2;
-				tq_instances = (TextQuadInstance *)realloc(tq_instances, sizeof(TextQuadInstance) * tq_capacity);
-			}
-
-			TextQuadInstance *tq = &tq_instances[tq_count];
-			glm_vec3_copy(info_title_bg, tq->worldPos);
-			tq->bgColor[0] = 0.18f;
-			tq->bgColor[1] = 0.22f;
-			tq->bgColor[2] = 0.28f;
-			tq->bgColor[3] = 1.0f;
-			tq->scale[0] = card_w;
-			tq->scale[1] = 0.10f;
-			tq->scale[2] = 1.0f;
-			memcpy(tq->rotation, node->rotation, sizeof(versor));
-			tq->textUV[0] = titleRegion.u0;
-			tq->textUV[1] = titleRegion.v0;
-			tq->textUV[2] = titleRegion.u1;
-			tq->textUV[3] = titleRegion.v1;
-
-			float text_w_norm = titleRegion.width_px * world_text_scale / card_w;
-			float text_h_norm = titleRegion.height_px * world_text_scale / 0.10f;
-			float left = 0.05f / card_w;
-			float top = (1.0f - text_h_norm) * 0.5f;
-			tq->textRegion[0] = left;
-			tq->textRegion[1] = top;
-			tq->textRegion[2] = left + text_w_norm;
-			tq->textRegion[3] = top + text_h_norm;
-			tq_count++;
-		}
-
-		// Info card key-value rows
-		vec3 row_base;
-		glm_vec3_copy(card_pos, row_base);
-		vec3 row_base_up, row_base_left;
-		glm_vec3_scale(node->up_vec, card_h * 0.5f - 0.05f, row_base_up);
-		glm_vec3_scale(node->right_vec, -card_w * 0.5f + 0.05f, row_base_left);
-		glm_vec3_add(row_base, row_base_up, row_base);
-		glm_vec3_add(row_base, row_base_left, row_base);
-
-		for (int i = 0; i < ctx->menu.info_card.num_pairs; i++) {
-			vec3 row_pos;
-			glm_vec3_copy(row_base, row_pos);
-			vec3 row_down;
-			glm_vec3_scale(node->up_vec, -(0.10f + i * 0.09f), row_down);
-			glm_vec3_add(row_pos, row_down, row_pos);
-
-			// Render "key   value" as one string for this row
-			char combined[128];
-			snprintf(combined, sizeof(combined), "%s: %s", ctx->menu.info_card.pairs[i].key, ctx->menu.info_card.pairs[i].value);
-
-			TextRegion rowRegion;
-			text_atlas_render(&r->menu.text_atlas, &globalAtlas, combined, &rowRegion);
-
-			if (tq_count >= tq_capacity) {
-				tq_capacity *= 2;
-				tq_instances = (TextQuadInstance *)realloc(tq_instances, sizeof(TextQuadInstance) * tq_capacity);
-			}
-
-			TextQuadInstance *tq = &tq_instances[tq_count];
-			// Position at the row center (halfway between left edge and card right)
-			vec3 row_center;
-			glm_vec3_copy(card_pos, row_center);
-			vec3 rc_up, rc_right;
-			glm_vec3_scale(node->up_vec, card_h * 0.5f - 0.10f - i * 0.09f - 0.045f, rc_up);
-			glm_vec3_scale(node->right_vec, 0, rc_right);
-			glm_vec3_add(row_center, rc_up, row_center);
-			glm_vec3_add(row_center, rc_right, row_center);
-
-			glm_vec3_copy(row_center, tq->worldPos);
-			tq->bgColor[0] = 0.0f;
-			tq->bgColor[1] = 0.0f;
-			tq->bgColor[2] = 0.0f;
-			tq->bgColor[3] = 0.0f;
-			tq->scale[0] = card_w;
-			tq->scale[1] = 0.09f;
-			tq->scale[2] = 1.0f;
-			memcpy(tq->rotation, node->rotation, sizeof(versor));
-			tq->textUV[0] = rowRegion.u0;
-			tq->textUV[1] = rowRegion.v0;
-			tq->textUV[2] = rowRegion.u1;
-			tq->textUV[3] = rowRegion.v1;
-
-			// Text region: centered in the row
-			float text_w_norm = rowRegion.width_px * world_text_scale / card_w;
-			float text_h_norm = rowRegion.height_px * world_text_scale / 0.09f;
-			float left = 0.05f / card_w;
-			float top = (1.0f - text_h_norm) * 0.5f;
-			tq->textRegion[0] = left;
-			tq->textRegion[1] = top;
-			tq->textRegion[2] = left + text_w_norm;
-			tq->textRegion[3] = top + text_h_norm;
-			tq_count++;
-		}
-	}
-
-	text_atlas_ensure_uploaded(&r->menu.text_atlas, r->core.device, r->core.physicalDevice, r->commands.commandPool, r->core.graphicsQueue);
-
-	// Update text quad descriptor sets to point to the text atlas
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT * MAX_VIEWS; i++) {
-		VkDescriptorBufferInfo bufferInfo = {r->ubo.buffers[i], 0, sizeof(UniformBufferObject)};
-		VkDescriptorImageInfo imageInfo = {r->texture.sampler, r->menu.text_atlas.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+		VkDescriptorBufferInfo buffer_info = {renderer->ubo.buffers[i], 0, sizeof(UniformBufferObject)};
+		VkDescriptorImageInfo image_info = {renderer->texture.sampler, menu->text_atlas.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 		VkWriteDescriptorSet writes[] = {
-			VK_WRITE_DESC_BUFFER(r->descriptors.text_quad_sets[i], 0, &bufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER),
-			VK_WRITE_DESC_IMAGE(r->descriptors.text_quad_sets[i], 1, &imageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER),
+			VK_WRITE_DESC_BUFFER(renderer->descriptors.text_quad_sets[i], 0, &buffer_info, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER),
+			VK_WRITE_DESC_IMAGE(renderer->descriptors.text_quad_sets[i], 1, &image_info, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER),
 		};
-		vkUpdateDescriptorSets(r->core.device, 2, writes, 0, NULL);
+		vkUpdateDescriptorSets(renderer->core.device, 2, writes, 0, NULL);
 	}
+	menu->descriptor_image_revision = menu->text_atlas.image_revision;
+}
 
-	// Wait for all in-flight frames before destroying — a command buffer from
-	// the other slot may still reference the old buffer as a vertex buffer.
-	if (instance_count > 0 || tq_count > 0) {
-		vkWaitForFences(r->core.device, MAX_FRAMES_IN_FLIGHT, r->commands.inFlightFences, VK_TRUE, UINT64_MAX);
+bool renderer_menu_init(Renderer *renderer)
+{
+	memset(&renderer->menu, 0, sizeof(renderer->menu));
+	if (!text_atlas_init(&renderer->menu.text_atlas, 2048, 512)) {
+		fprintf(stderr, "Failed to initialize menu text atlas\n");
+		return false;
 	}
+	return true;
+}
 
-	if (instance_count > 0) {
-		VkDeviceSize bufferSize = sizeof(MenuInstance) * instance_count;
-		VK_DESTROY_BUFFER(r->core.device, r->menu.instance, r->menu.instance_memory);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->menu.instance, &r->menu.instance_memory);
-		update_buffer(r->core.device, r->menu.instance_memory, bufferSize, instances);
-		r->menu.node_count = instance_count;
+bool renderer_menu_update(Renderer *renderer, const MenuState *state, bool visible)
+{
+	if (!renderer || !state)
+		return false;
+	renderer->menu.visible = visible;
+	if (!visible)
+		return true;
+	if (renderer->menu.consumed_scene_revision == state->scene_revision && renderer->menu.consumed_text_revision == state->text_revision)
+		return true;
+
+	renderer_wait_frames_idle(renderer);
+	MenuScene scene = {0};
+	bool built = build_scene(&renderer->menu, state, &scene);
+	if (!built || !upload_scene(renderer, &scene)) {
+		menu_scene_destroy(&scene);
+		return false;
 	}
+	text_atlas_ensure_uploaded(&renderer->menu.text_atlas, renderer->core.device, renderer->core.physicalDevice, renderer->commands.commandPool, renderer->core.graphicsQueue);
+	update_text_descriptors(renderer);
+	renderer->menu.consumed_scene_revision = state->scene_revision;
+	renderer->menu.consumed_text_revision = state->text_revision;
+	menu_scene_destroy(&scene);
+	return true;
+}
 
-	if (tq_count > 0) {
-		VkDeviceSize tqBufferSize = sizeof(TextQuadInstance) * tq_count;
-		VK_DESTROY_BUFFER(r->core.device, r->menu.text_quad_instance, r->menu.text_quad_instance_memory);
-		VK_CREATE_HOST_BUFFER(r->core.device, r->core.physicalDevice, tqBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->menu.text_quad_instance, &r->menu.text_quad_instance_memory);
-		update_buffer(r->core.device, r->menu.text_quad_instance_memory, tqBufferSize, tq_instances);
-		r->menu.text_quad_instance_count = tq_count;
-	}
-
-	free(instances);
-	free(tq_instances);
+void renderer_menu_destroy(Renderer *renderer)
+{
+	if (!renderer)
+		return;
+	VK_DESTROY_BUFFER(renderer->core.device, renderer->menu.instance, renderer->menu.instance_memory);
+	VK_DESTROY_BUFFER(renderer->core.device, renderer->menu.text_quad_instance, renderer->menu.text_quad_instance_memory);
+	menu_text_cache_destroy(renderer->menu.text_cache);
+	renderer->menu.text_cache = NULL;
+	text_atlas_destroy(&renderer->menu.text_atlas, renderer->core.device);
 }

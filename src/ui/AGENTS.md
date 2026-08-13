@@ -6,7 +6,8 @@ Per-directory guide for `src/ui/` and `include/ui/`. See root `AGENTS.md` for bu
 
 | Files | Role |
 |------|------|
-| `menu.c/.h` | Registry-to-tree construction, dynamic leaves, card sizing, spherical transforms, row visibility, labels, lookup, and cleanup |
+| `menu.c/.h` | Registry-to-tree construction, dynamic leaves, dirty layout, card sizing, spherical transforms, row visibility, lookup, and cleanup |
+| `menu_metrics.c/.h` | Shared row, title, padding, text-scale, card, and arrow dimensions |
 | `hud.c/.h` | FPS, graph/stream state, worker status/progress, and menu-state overlay text |
 
 `init_menu_tree()` converts `g_command_registry[]` category paths into branches and static command leaves. Registry order controls menu order.
@@ -21,10 +22,11 @@ Call the corresponding clear functions before rebuilding attribute menus after g
 
 ## Layout and Rendering Boundary
 
-- `update_menu_transforms()` lays out only the expanded path, sets `is_visible`, and caches row/card geometry used by both drawing and picking.
-- Menu width derives from cached label text. Keep card dimensions and constants consistent with `src/vulkan/menu.c`.
+- `menu_update_layout()` runs only when `MenuState.layout_revision` changes. It lays out the expanded path and caches row/card geometry used by drawing and picking.
+- Menu width derives from label text. Keep shared dimensions in `MenuMetrics`; do not duplicate them in the renderer.
 - Interaction code owns raycasts and activation. UI code owns tree structure and geometry.
-- Vulkan buffer allocation, instanced card/text upload, and info-card drawing live in `src/vulkan/menu.c`.
-- App-level open/hover/active-card state lives in `AppContext.menu`; `MenuNode` owns only tree and per-row state.
+- CPU render-scene construction and Vulkan upload live in `src/vulkan/menu_scene.c` and `src/vulkan/menu.c`.
+- Dynamic population functions receive `MenuState` and invalidate layout and text after tree changes.
+- App-level open, hover, active-card, revision, and info-card state lives in `AppContext.menu`; `MenuNode` owns tree, expansion, visibility, and shared row geometry.
 
 Do not launch the application for visual verification; leave menu and HUD checks to the user.

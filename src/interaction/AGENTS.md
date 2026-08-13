@@ -13,7 +13,7 @@ Per-directory guide for `src/interaction/` and `include/interaction/`. See root 
 | `picking.c/.h` | Node sphere, edge segment, and menu quad ray intersections; object selection/detail cards |
 | `spatial.c/.h` | Camera-relative basis and world placement used when the menu opens |
 | `menu.c/.h` | Menu toggle, desktop crosshair ray, VR controller ray, and hover clearing |
-| `state.c/.h` | Command parameters, menu/info-card types, app state transitions, command submission/application, and Quit |
+| `state.c/.h`, `menu_state.c` | Command parameters, menu/info-card types, dirty revisions, app state transitions, command submission/application, and Quit |
 
 There is no interaction-layer filter module. Dynamic filter construction is in `src/ui/menu.c`; filter execution is in `src/graph/wrappers_filter.c` and `graph_filter_visibility.c`.
 
@@ -21,8 +21,8 @@ There is no interaction-layer filter module. Dynamic filter construction is in `
 
 - Desktop and gamepad menu targeting use the center crosshair. Do not use `glfwGetCursorPos()` for menu activation.
 - VR targeting uses the controller ray.
-- Ray updates set `AppContext.menu.hovered_node`. Mouse, gamepad A, and VR select activate that existing target; activation must not cast a second ray.
-- Only `MenuNode.is_visible` rows are pickable. `src/ui/menu.c:update_menu_transforms()` recomputes visibility and geometry every frame.
+- Ray updates use `menu_set_hovered()` so the scene revision changes only when the target changes. Mouse, gamepad A, and VR select activate that existing target; activation must not cast a second ray.
+- Only `MenuNode.is_visible` rows are pickable. `src/ui/menu.c:menu_update_layout()` refreshes visibility and geometry after layout invalidation.
 - Object picking is available only in graph view. Menu activation and parameter selection are routed through `handle_menu_selection()`.
 
 ## Current Controls
@@ -46,6 +46,6 @@ Keep this table synchronized with `input.c` and `gamepad.c`. Do not launch the a
 
 ## Menu and Application State
 
-All app-level menu state lives in `AppContext.menu`: root, active branch, hovered row, captured spatial basis, info card, and open flag. Per-row geometry and expansion/visibility flags stay on `MenuNode`.
+All app-level menu state lives in `AppContext.menu`: root, active branch, hovered row, captured spatial basis, info card, open flag, and layout/text/scene revisions. Per-row geometry and expansion/visibility flags stay on `MenuNode`. Use `menu_invalidate()`, `menu_set_hovered()`, and `menu_set_info_card()` for mutations that affect rendering.
 
 The state machine covers graph view, open menu, parameter selection, command execution, background jobs, and displayed results. `update_app_state()` is the only normal path for polling job completion and applying/freeing results. Preserve the split between worker-thread computation and main-thread UI/renderer mutation.

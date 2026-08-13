@@ -167,11 +167,11 @@ int main(int argc, char **argv)
 	// Initialize FSM menu system
 	MenuNode *root_menu = (MenuNode *)malloc(sizeof(MenuNode));
 	init_menu_tree(root_menu);
-	menu_populate_attribute_filters(root_menu, &app.current_graph);
-	menu_populate_attribute_edge_filters(root_menu, &app.current_graph);
-	menu_populate_netzschleuder_static(root_menu);
-	menu_populate_famous_graphs(root_menu);
 	app_context_init(&app.app_ctx, root_menu);
+	menu_populate_attribute_filters(&app.app_ctx.menu, &app.current_graph);
+	menu_populate_attribute_edge_filters(&app.app_ctx.menu, &app.current_graph);
+	menu_populate_netzschleuder_static(&app.app_ctx.menu);
+	menu_populate_famous_graphs(&app.app_ctx.menu);
 
 	// Initialize worker thread for long-running operations
 	if (!worker_thread_init(&app.worker_ctx, 10)) {
@@ -227,9 +227,9 @@ int main(int argc, char **argv)
 
 		ui_hud_update(&app, app.current_fps);
 
-		// Update App FSM and Menu transforms
+		menu_update_layout(&app.app_ctx.menu);
 		update_app_state(&app);
-		update_menu_transforms(app.app_ctx.menu.root, &app.app_ctx.menu.spawn_basis);
+		menu_update_layout(&app.app_ctx.menu);
 
 		// Poll real-time layout snapshots from worker thread
 		if (app.current_worker_job && app.current_graph.graph_initialized) {
@@ -259,14 +259,6 @@ int main(int argc, char **argv)
 			}
 		}
 
-		// Generate menu buffers if menu is open or processing
-		if (app.app_ctx.current_state == STATE_MENU_OPEN || app.app_ctx.current_state == STATE_JOB_IN_PROGRESS || app.app_ctx.current_state == STATE_EXECUTING) {
-			generate_vulkan_menu_buffers(&app.app_ctx, &app.renderer);
-		} else {
-			app.renderer.menu.node_count = 0;
-			app.renderer.menu.text_quad_instance_count = 0;
-		}
-
 #ifdef USE_OPENXR
 		if (app.vr_enabled) {
 			xr_process_input(&app, app.delta_time);
@@ -277,6 +269,9 @@ int main(int argc, char **argv)
 		} else {
 #endif
 			{
+				bool menu_visible = app.app_ctx.current_state == STATE_MENU_OPEN || app.app_ctx.current_state == STATE_JOB_IN_PROGRESS || app.app_ctx.current_state == STATE_EXECUTING;
+				renderer_menu_update(&app.renderer, &app.app_ctx.menu, menu_visible);
+
 				// Update base view matrix from camera
 				renderer_update_view(&app.renderer, app.camera.pos, app.camera.front, app.camera.up);
 

@@ -78,7 +78,7 @@ Main Path is a two-step workflow: run weighting, then a selection under the same
 | `repo_netzschleuder.c/.h` | Netzschleuder catalogue access, download, cache, and graph replacement |
 | `netzschleuder_data.inc` | Generated static catalogue initializers |
 
-Famous and Repository leaves are populated dynamically in `src/ui/menu.c`; their registry entries have parameters and no fixed display name.
+Famous and Repository leaves are populated dynamically in `src/ui/menu.c`; their registry entries have parameters and no fixed display name. Dynamic population receives `MenuState` so tree changes invalidate menu layout and text.
 
 To regenerate the catalogue:
 

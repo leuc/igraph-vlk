@@ -18,7 +18,7 @@ void ui_hud_update(AppState *state, float fps)
 	char buf[1024];
 	char menu_state[512] = "";
 	if (state->app_ctx.current_state == STATE_MENU_OPEN) {
-		snprintf(menu_state, 512, " [MENU:%d]", state->renderer.menu.node_count);
+		snprintf(menu_state, 512, " [MENU:%d]", state->renderer.menu.visible ? state->renderer.menu.node_count : 0);
 	} else if (state->app_ctx.current_state == STATE_AWAITING_SELECTION)
 		strcpy(menu_state, " [PICKING]");
 	else if (state->app_ctx.current_state == STATE_EXECUTING)

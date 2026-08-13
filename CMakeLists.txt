@@ -102,6 +102,7 @@ add_executable(
 	src/vulkan/commands.c
 	src/vulkan/render_pass.c
 	src/vulkan/menu.c
+	src/vulkan/menu_scene.c
 	# Utilities and helpers
 	src/vulkan/buffers.c
 	src/vulkan/images.c
@@ -174,6 +175,7 @@ add_executable(
 	src/interaction/camera.c
 	src/interaction/input.c
 	src/interaction/menu.c
+	src/interaction/menu_state.c
 	src/interaction/picking.c
 	src/interaction/spatial.c
 	src/interaction/state.c
@@ -182,6 +184,7 @@ add_executable(
 	# UI modules
 	src/ui/hud.c
 	src/ui/menu.c
+	src/ui/menu_metrics.c
 	${SPIRV_SHADERS})
 
 target_include_directories(igraph-vlk PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include/graph ${Vulkan_INCLUDE_DIRS} ${CGLM_INCLUDE_DIR} ${IGRAPH_INCLUDE_DIRS} ${CMAKE_BINARY_DIR})
@@ -331,6 +334,14 @@ if(NOT MSVC)
 	target_link_libraries(renderer_anim_values_test PRIVATE m)
 endif()
 add_test(NAME renderer_anim_values_test COMMAND renderer_anim_values_test)
+
+add_executable(menu_scene_test tests/menu_scene_test.c src/vulkan/menu_scene.c src/interaction/menu_state.c src/ui/menu_metrics.c)
+target_include_directories(menu_scene_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CGLM_INCLUDE_DIR} ${IGRAPH_INCLUDE_DIRS} ${Vulkan_INCLUDE_DIRS})
+target_link_libraries(menu_scene_test PRIVATE igraph::igraph)
+if(NOT MSVC)
+	target_link_libraries(menu_scene_test PRIVATE m)
+endif()
+add_test(NAME menu_scene_test COMMAND menu_scene_test)
 
 install(TARGETS igraph-vlk DESTINATION bin)
 install(DIRECTORY ${CMAKE_BINARY_DIR}/shaders/ DESTINATION share/igraph-vlk/shaders FILES_MATCHING PATTERN "*.spv")

@@ -39,6 +39,7 @@ void apply_use_current_positions_as_seed(ExecutionContext *ctx, void *result_dat
 			free((void *)node->command->display_name);
 			node->command->display_name = strdup(node->label);
 		}
+		menu_invalidate(&ctx->app_state->app_ctx.menu, MENU_INVALIDATE_LAYOUT | MENU_INVALIDATE_TEXT);
 	}
 }
 

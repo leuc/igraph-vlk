@@ -9,6 +9,7 @@
 #include "graph/graph_types.h"
 #include "graph/repo_netzschleuder.h"
 #include "graph/wrappers_constructors.h"
+#include "ui/menu_metrics.h"
 #include "vulkan/text.h"
 #include <igraph.h>
 #include <math.h>
@@ -22,14 +23,8 @@
 
 extern FontAtlas globalAtlas;
 
-const float MENU_ITEM_HEIGHT = 0.09f;
-const float TITLE_BAR_HEIGHT = 0.10f;
-const float TEXT_PADDING = 0.05f;
-
 static MenuNode *create_menu_node(const char *label, MenuNodeType type)
 {
-	// calloc: the cached spatial data (quad_center_pos, box_width/height, ...) stays zeroed
-	// until the node is first laid out, so an unlaid node can never present a garbage quad.
 	MenuNode *node = (MenuNode *)calloc(1, sizeof(MenuNode));
 	if (!node)
 		return NULL;
@@ -40,7 +35,6 @@ static MenuNode *create_menu_node(const char *label, MenuNodeType type)
 	node->command = NULL;
 	node->is_expanded = false;
 	node->is_visible = false;
-	node->hovered = false;
 	node->card_width = 0.0f;
 	node->card_height = 0.0f;
 	return node;
@@ -59,8 +53,6 @@ static IgraphCommand *create_command(const char *id_name, const char *display_na
 
 void init_menu_tree(MenuNode *root)
 {
-	// The caller allocates the root with malloc, so clear it before use: the root is never laid
-	// out as a row (it only owns a card), and picking must not see uninitialized quad data.
 	memset(root, 0, sizeof(MenuNode));
 	root->label = strdup("Main");
 	root->type = NODE_BRANCH;
@@ -69,14 +61,12 @@ void init_menu_tree(MenuNode *root)
 	root->command = NULL;
 	root->is_expanded = true;
 	root->is_visible = false;
-	root->hovered = false;
 	root->card_width = 0.0f;
 	root->card_height = 0.0f;
 
 	for (int i = 0; i < g_command_registry_size; i++) {
 		const CommandDef *cmd_def = &g_command_registry[i];
 
-		// Skip entries with NULL display_name — they are populated dynamically
 		if (cmd_def->display_name == NULL)
 			continue;
 
@@ -118,7 +108,6 @@ void init_menu_tree(MenuNode *root)
 		}
 
 		if (cmd_def->worker_func == NULL) {
-			// Branch anchor: find or create a branch node (no command attached)
 			MenuNode *branch = NULL;
 			for (int c = 0; c < current_parent->num_children; c++) {
 				if (current_parent->children[c]->type == NODE_BRANCH && strcmp(current_parent->children[c]->label, cmd_def->display_name) == 0) {
@@ -139,7 +128,6 @@ void init_menu_tree(MenuNode *root)
 				current_parent->children[current_parent->num_children++] = branch;
 			}
 		} else {
-			// Leaf: create an actionable command leaf
 			MenuNode *leaf = create_menu_node(cmd_def->display_name, NODE_LEAF_COMMAND);
 			if (!leaf)
 				return;
@@ -201,7 +189,6 @@ static float measure_text_width(const char *text)
 {
 	if (!text)
 		return 0.0f;
-	float world_text_scale = 0.003f;
 	float total_w = 0.0f;
 	int len = strlen(text);
 	for (int i = 0; i < len; i++) {
@@ -209,7 +196,7 @@ static float measure_text_width(const char *text)
 		CharInfo *ci = (c < 128) ? &globalAtlas.chars[c] : &globalAtlas.chars[32];
 		total_w += ci->xadvance;
 	}
-	return (total_w * world_text_scale);
+	return total_w * MENU_METRICS.text_scale;
 }
 
 static void calculate_card_dimensions(MenuNode *node)
@@ -225,7 +212,7 @@ static void calculate_card_dimensions(MenuNode *node)
 			float child_w = measure_text_width(child->label);
 
 			if (child->type == NODE_BRANCH) {
-				child_w += 0.15f;
+				child_w += MENU_METRICS.branch_label_extra_width;
 			}
 
 			if (child_w > max_width) {
@@ -235,11 +222,11 @@ static void calculate_card_dimensions(MenuNode *node)
 			calculate_card_dimensions(child);
 		}
 
-		node->card_width = max_width + 0.2f;
-		node->card_height = TITLE_BAR_HEIGHT + (node->num_children * MENU_ITEM_HEIGHT);
+		node->card_width = max_width + MENU_METRICS.card_horizontal_padding;
+		node->card_height = MENU_METRICS.title_height + node->num_children * MENU_METRICS.item_height;
 	} else {
-		node->card_width = measure_text_width(node->label) + 0.2f;
-		node->card_height = MENU_ITEM_HEIGHT;
+		node->card_width = measure_text_width(node->label) + MENU_METRICS.card_horizontal_padding;
+		node->card_height = MENU_METRICS.item_height;
 	}
 }
 
@@ -261,38 +248,25 @@ static void update_nextstep_layout_recursive(MenuNode *node, vec3 top_left_ancho
 			MenuNode *child = node->children[i];
 
 			if (node->is_expanded) {
-				// Reached only when every ancestor is expanded, so this row is on screen:
-				// its quad data below is fresh and it is a legal picking target this frame.
 				child->is_visible = true;
 
 				child->box_width = node->card_width;
-				child->box_height = MENU_ITEM_HEIGHT;
+				child->box_height = MENU_METRICS.item_height;
 
 				vec3 child_top_left;
 				glm_vec3_copy(top_left_anchor, child_top_left);
 				vec3 down_offset;
-				glm_vec3_scale(node->up_vec, TITLE_BAR_HEIGHT + i * MENU_ITEM_HEIGHT, down_offset);
+				glm_vec3_scale(node->up_vec, MENU_METRICS.title_height + i * MENU_METRICS.item_height, down_offset);
 				glm_vec3_sub(child_top_left, down_offset, child_top_left);
 
 				vec3 quad_center;
 				glm_vec3_copy(child_top_left, quad_center);
 				vec3 center_right, center_down;
 				glm_vec3_scale(node->right_vec, node->card_width * 0.5f, center_right);
-				glm_vec3_scale(node->up_vec, MENU_ITEM_HEIGHT * 0.5f, center_down);
+				glm_vec3_scale(node->up_vec, MENU_METRICS.item_height * 0.5f, center_down);
 				glm_vec3_add(quad_center, center_right, quad_center);
 				glm_vec3_sub(quad_center, center_down, quad_center);
 				glm_vec3_copy(quad_center, child->quad_center_pos);
-
-				vec3 text_anchor;
-				glm_vec3_copy(child_top_left, text_anchor);
-				vec3 text_right, text_down;
-				glm_vec3_scale(node->right_vec, TEXT_PADDING, text_right);
-				glm_vec3_scale(node->up_vec, MENU_ITEM_HEIGHT * 0.5f, text_down);
-				glm_vec3_add(text_anchor, text_right, text_anchor);
-				glm_vec3_sub(text_anchor, text_down, text_anchor);
-				glm_vec3_copy(text_anchor, child->text_anchor_pos);
-
-				glm_vec3_copy(quad_center, child->world_pos);
 
 				vec3 submenu_top_left;
 				glm_vec3_copy(top_left_anchor, submenu_top_left);
@@ -306,9 +280,6 @@ static void update_nextstep_layout_recursive(MenuNode *node, vec3 top_left_ancho
 	}
 }
 
-// Hide the whole tree before laying it out; update_nextstep_layout_recursive re-marks the rows
-// it actually places. Anything it does not reach (collapsed subtree, hidden branch, the root
-// itself) therefore stays invisible and keeps its stale quad out of the picker.
 static void clear_visibility_recursive(MenuNode *node)
 {
 	if (!node)
@@ -331,23 +302,24 @@ static void copy_basis_recursive(MenuNode *node, const SpatialBasis *basis)
 	}
 }
 
-void update_menu_transforms(MenuNode *node, const SpatialBasis *basis)
+bool menu_update_layout(MenuState *menu)
 {
-	if (node == NULL)
-		return;
+	if (!menu || !menu->root || menu->applied_layout_revision == menu->layout_revision)
+		return false;
+	MenuNode *node = menu->root;
 
 	calculate_card_dimensions(node);
-	copy_basis_recursive(node, basis);
+	copy_basis_recursive(node, &menu->spawn_basis);
 	clear_visibility_recursive(node);
 
 	vec3 root_top_left;
-	spatial_resolve_position(basis, -0.6f, 0.4f, 2.5f, root_top_left);
+	spatial_resolve_position(&menu->spawn_basis, -0.6f, 0.4f, 2.5f, root_top_left);
 
 	update_nextstep_layout_recursive(node, root_top_left);
+	menu->applied_layout_revision = menu->layout_revision;
+	return true;
 }
 
-
-// Find a branch by label in a parent's children (searches all children)
 static MenuNode *find_child_branch(MenuNode *parent, const char *label)
 {
 	if (!parent)
@@ -359,7 +331,6 @@ static MenuNode *find_child_branch(MenuNode *parent, const char *label)
 	return NULL;
 }
 
-// Look up a CommandDef by command_id from g_command_registry
 static const CommandDef *find_command_def(const char *command_id)
 {
 	for (int i = 0; i < g_command_registry_size; i++) {
@@ -383,20 +354,18 @@ MenuNode *menu_find_node_by_command_id(MenuNode *node, const char *command_id)
 	return NULL;
 }
 
-void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
+void menu_populate_attribute_filters(MenuState *menu, GraphData *data)
 {
-	if (!root || !data)
+	if (!menu || !menu->root || !data)
 		return;
+	MenuNode *root = menu->root;
 
-	// Clear any existing filter entries to prevent duplicates
-	menu_clear_attribute_filters(root, data);
+	menu_clear_attribute_filters(menu, data);
 
-	// Find "Filter" branch (created by init_menu_tree from the branch anchor)
 	MenuNode *filter_root = find_child_branch(root, "Filter");
 	if (!filter_root)
 		return;
 
-	// Find or create "Node" sub-branch
 	MenuNode *node_branch = find_child_branch(filter_root, "Node");
 	if (!node_branch) {
 		node_branch = create_menu_node("Node", NODE_BRANCH);
@@ -411,7 +380,6 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 		filter_root->children[filter_root->num_children++] = node_branch;
 	}
 
-	// Add "Show All" leaf using registry CommandDef
 	const CommandDef *show_all_def = find_command_def("filter_show_all");
 	MenuNode *show_all = create_menu_node("Show All", NODE_LEAF_COMMAND);
 	if (!show_all)
@@ -427,11 +395,11 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 		node_branch->children = tmp;
 		node_branch->children[node_branch->num_children++] = show_all;
 	}
+	menu_invalidate(menu, MENU_INVALIDATE_LAYOUT | MENU_INVALIDATE_TEXT);
 
 	if (data->num_filterable_attrs == 0)
 		return;
 
-	// Add attribute name sub-branches with value leaves
 	const CommandDef *filter_def = find_command_def("filter_by_attr");
 	if (!filter_def)
 		return;
@@ -477,7 +445,6 @@ void menu_populate_attribute_filters(MenuNode *root, GraphData *data)
 	}
 }
 
-// Helper: recursively remove children from a node (free their trees)
 static void menu_clear_children(MenuNode *node)
 {
 	if (!node)
@@ -490,36 +457,52 @@ static void menu_clear_children(MenuNode *node)
 	node->num_children = 0;
 }
 
-void menu_clear_attribute_filters(MenuNode *root, GraphData *data)
+static bool menu_node_contains(const MenuNode *root, const MenuNode *target)
 {
-	if (!root)
+	if (!root || !target)
+		return false;
+	if (root == target)
+		return true;
+	for (int i = 0; i < root->num_children; i++) {
+		if (menu_node_contains(root->children[i], target))
+			return true;
+	}
+	return false;
+}
+
+void menu_clear_attribute_filters(MenuState *menu, GraphData *data)
+{
+	if (!menu || !menu->root)
 		return;
+	MenuNode *root = menu->root;
 	(void)data;
 
-	// Find "Filter" branch, then "Node" sub-branch, clear its children
 	MenuNode *filter_root = find_child_branch(root, "Filter");
 	if (!filter_root)
 		return;
 	MenuNode *node_branch = find_child_branch(filter_root, "Node");
 	if (!node_branch)
 		return;
+	if (menu_node_contains(node_branch, menu->hovered_node))
+		menu_set_hovered(menu, NULL);
+	if (menu_node_contains(node_branch, menu->active_level) && menu->active_level != node_branch)
+		menu->active_level = node_branch;
 	menu_clear_children(node_branch);
+	menu_invalidate(menu, MENU_INVALIDATE_LAYOUT | MENU_INVALIDATE_TEXT);
 }
 
-void menu_populate_attribute_edge_filters(MenuNode *root, GraphData *data)
+void menu_populate_attribute_edge_filters(MenuState *menu, GraphData *data)
 {
-	if (!root || !data)
+	if (!menu || !menu->root || !data)
 		return;
+	MenuNode *root = menu->root;
 
-	// Clear any existing filter entries to prevent duplicates
-	menu_clear_attribute_edge_filters(root, data);
+	menu_clear_attribute_edge_filters(menu, data);
 
-	// Find "Filter" branch (created by init_menu_tree from the branch anchor)
 	MenuNode *filter_root = find_child_branch(root, "Filter");
 	if (!filter_root)
 		return;
 
-	// Find or create "Edge" sub-branch
 	MenuNode *edge_branch = find_child_branch(filter_root, "Edge");
 	if (!edge_branch) {
 		edge_branch = create_menu_node("Edge", NODE_BRANCH);
@@ -534,7 +517,6 @@ void menu_populate_attribute_edge_filters(MenuNode *root, GraphData *data)
 		filter_root->children[filter_root->num_children++] = edge_branch;
 	}
 
-	// Add "Show All" leaf using registry CommandDef
 	const CommandDef *show_all_def = find_command_def("filter_edge_show_all");
 	MenuNode *show_all = create_menu_node("Show All", NODE_LEAF_COMMAND);
 	if (!show_all)
@@ -550,11 +532,11 @@ void menu_populate_attribute_edge_filters(MenuNode *root, GraphData *data)
 		edge_branch->children = tmp;
 		edge_branch->children[edge_branch->num_children++] = show_all;
 	}
+	menu_invalidate(menu, MENU_INVALIDATE_LAYOUT | MENU_INVALIDATE_TEXT);
 
 	if (data->num_filterable_edge_attrs == 0)
 		return;
 
-	// Add attribute name sub-branches with value leaves
 	const CommandDef *filter_def = find_command_def("filter_by_edge_attr");
 	if (!filter_def)
 		return;
@@ -600,22 +582,26 @@ void menu_populate_attribute_edge_filters(MenuNode *root, GraphData *data)
 	}
 }
 
-void menu_clear_attribute_edge_filters(MenuNode *root, GraphData *data)
+void menu_clear_attribute_edge_filters(MenuState *menu, GraphData *data)
 {
-	if (!root)
+	if (!menu || !menu->root)
 		return;
+	MenuNode *root = menu->root;
 	(void)data;
 
-	// Find "Filter" branch, then "Edge" sub-branch, clear its children
 	MenuNode *filter_root = find_child_branch(root, "Filter");
 	if (!filter_root)
 		return;
 	MenuNode *edge_branch = find_child_branch(filter_root, "Edge");
 	if (!edge_branch)
 		return;
+	if (menu_node_contains(edge_branch, menu->hovered_node))
+		menu_set_hovered(menu, NULL);
+	if (menu_node_contains(edge_branch, menu->active_level) && menu->active_level != edge_branch)
+		menu->active_level = edge_branch;
 	menu_clear_children(edge_branch);
+	menu_invalidate(menu, MENU_INVALIDATE_LAYOUT | MENU_INVALIDATE_TEXT);
 }
-
 
 extern const CommandDef g_command_registry[];
 extern const int g_command_registry_size;
@@ -686,12 +672,16 @@ static MenuNode *create_netz_leaf(const char *label, const StaticNetEntry *entry
 	return leaf;
 }
 
-void menu_populate_netzschleuder_static(MenuNode *root)
+void menu_populate_netzschleuder_static(MenuState *menu)
 {
+	if (!menu || !menu->root)
+		return;
+	MenuNode *root = menu->root;
 	int count = 0;
 	const StaticNetEntry *entries = netzschleuder_static_entries(&count);
 	if (count == 0)
 		return;
+	menu_invalidate(menu, MENU_INVALIDATE_LAYOUT | MENU_INVALIDATE_TEXT);
 
 	MenuNode *netz_branch = find_or_create_path(root, "Data/Repository");
 	if (!netz_branch)
@@ -734,7 +724,6 @@ void menu_populate_netzschleuder_static(MenuNode *root)
 		}
 	}
 
-	// Non-qualifying entries are collected for Phase 3.
 	int *other_indices = malloc(sizeof(int) * (size_t)count);
 	int num_other = 0;
 	char label[256];
@@ -798,14 +787,17 @@ void menu_populate_netzschleuder_static(MenuNode *root)
 	free(tag_counts);
 }
 
-
 static const char *famous_graph_names[] = {
 	"Bull", "Chvatal", "Coxeter", "Cubical", "Diamond", "Dodecahedral", "Folkman", "Franklin", "Frucht", "Grotzsch", "Heawood", "Herschel", "House", "HouseX", "Icosahedral", "Krackhardt_Kite", "Levi", "McGee", "Meredith", "Noperfectmatching", "Nonline", "Octahedral", "Petersen", "Robertson", "Smallestcyclicgroup", "Tetrahedral", "Thomassen", "Tutte", "Uniquely3colorable", "Walther", "Zachary",
 };
 static const int num_famous_graphs = sizeof(famous_graph_names) / sizeof(famous_graph_names[0]);
 
-void menu_populate_famous_graphs(MenuNode *root)
+void menu_populate_famous_graphs(MenuState *menu)
 {
+	if (!menu || !menu->root)
+		return;
+	MenuNode *root = menu->root;
+	menu_invalidate(menu, MENU_INVALIDATE_LAYOUT | MENU_INVALIDATE_TEXT);
 	const CommandDef *cmd_def = find_command_def("igraph_famous");
 	if (!cmd_def)
 		return;

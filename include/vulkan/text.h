@@ -50,13 +50,14 @@ typedef struct
 	VkImage image;
 	VkDeviceMemory memory;
 	VkImageView view;
+	uint64_t image_revision;
 } TextAtlas;
 
 int text_generate_atlas(const char *fontPath, FontAtlas *atlas);
 
 bool text_atlas_init(TextAtlas *ta, int width, int height);
 void text_atlas_clear(TextAtlas *ta);
-void text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, TextRegion *out);
+bool text_atlas_render(TextAtlas *ta, const FontAtlas *font, const char *text, TextRegion *out);
 void text_atlas_ensure_uploaded(TextAtlas *ta, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue);
 void text_atlas_destroy(TextAtlas *ta, VkDevice device);
 
