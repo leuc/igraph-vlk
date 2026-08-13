@@ -12,8 +12,10 @@
 typedef struct
 {
 	const int *node_steps;
+	const int *edge_steps;
 	const float *edge_values;
 	float duration;
+	bool keep_unrevealed_dim;
 } GraphAnimationRequest;
 
 void graph_animation_play(Renderer *renderer, const GraphData *graph, const GraphAnimationRequest *request);

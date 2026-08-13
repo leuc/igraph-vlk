@@ -21,6 +21,10 @@ static void graph_animation_submit(Renderer *renderer, const GraphData *graph, c
 		for (uint32_t i = 0; i < graph->node_count; i++)
 			if (request->node_steps[i] >= 0 && (uint32_t)request->node_steps[i] > max_step)
 				max_step = (uint32_t)request->node_steps[i];
+	if (request->edge_steps)
+		for (uint32_t i = 0; i < graph->edge_count; i++)
+			if (request->edge_steps[i] >= 0 && (uint32_t)request->edge_steps[i] > max_step)
+				max_step = (uint32_t)request->edge_steps[i];
 	float seconds_per_step = max_step > 0 ? request->duration / (float)max_step : 0.0f;
 	RendererAnimNode *nodes = calloc(graph->node_count > 0 ? graph->node_count : 1, sizeof(RendererAnimNode));
 	RendererAnimEdge *edges = calloc(graph->edge_count > 0 ? graph->edge_count : 1, sizeof(RendererAnimEdge));
@@ -32,13 +36,13 @@ static void graph_animation_submit(Renderer *renderer, const GraphData *graph, c
 	}
 	for (uint32_t i = 0; i < graph->node_count; i++)
 		if (request->node_steps)
-			nodes[i].reveal_at = renderer_anim_reveal_at(request->node_steps[i], seconds_per_step);
+			nodes[i].reveal_at = renderer_anim_reveal_at_or_dim(request->node_steps[i], seconds_per_step, request->keep_unrevealed_dim);
 
 	bool all_zero = graph->edge_count > 0;
 	float max_strength = 0.0f;
 	for (uint32_t i = 0; i < graph->edge_count; i++) {
 		float raw = request->edge_values ? request->edge_values[i] : graph->edges[i].weight;
-		edges[i].reveal_at = nodes[graph->edges[i].from].reveal_at;
+		edges[i].reveal_at = request->edge_steps ? renderer_anim_reveal_at_or_dim(request->edge_steps[i], seconds_per_step, request->keep_unrevealed_dim) : nodes[graph->edges[i].from].reveal_at;
 		edges[i].strength = renderer_anim_host_strength(raw);
 		if (edges[i].strength > 0.0f)
 			all_zero = false;

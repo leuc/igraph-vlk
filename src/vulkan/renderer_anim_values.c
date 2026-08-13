@@ -5,6 +5,7 @@
 
 #include "vulkan/renderer_anim_values.h"
 
+#include <float.h>
 #include <math.h>
 
 float renderer_anim_host_strength(float raw_value)
@@ -18,6 +19,11 @@ float renderer_anim_host_strength(float raw_value)
 float renderer_anim_reveal_at(int rank, float seconds_per_step)
 {
 	return rank > 0 && isfinite(seconds_per_step) && seconds_per_step > 0.0f ? rank * seconds_per_step : 0.0f;
+}
+
+float renderer_anim_reveal_at_or_dim(int rank, float seconds_per_step, bool keep_unrevealed_dim)
+{
+	return rank >= 0 ? renderer_anim_reveal_at(rank, seconds_per_step) : keep_unrevealed_dim ? FLT_MAX : 0.0f;
 }
 
 float renderer_anim_base_strength(float raw_value, bool unweighted_fallback)
