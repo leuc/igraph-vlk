@@ -72,12 +72,13 @@ void update_app_state(AppState *state)
 			if (app->pending_command->cmd_def) {
 				printf("[State] Executing data-driven command: %s\n", app->pending_command->display_name);
 
-				ExecutionContext exec_ctx;
+				ExecutionContext exec_ctx = {0};
 				exec_ctx.params = app->pending_command->params;
 				exec_ctx.num_params = app->pending_command->num_params;
 				exec_ctx.update_visuals_callback = NULL;
 				exec_ctx.app_state = state;
 				exec_ctx.running = true;
+				exec_ctx.transition_duration = app->pending_command->cmd_def->transition_duration;
 
 				if (state->worker_ctx.thread_running) {
 					state->current_worker_job = worker_thread_submit_job(&state->worker_ctx, (CommandDef *)app->pending_command->cmd_def, &exec_ctx);
