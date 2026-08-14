@@ -31,12 +31,18 @@ typedef struct
 	igraph_matrix_t snapshot_matrix;
 	bool snapshot_initialized;
 	bool has_new_snapshot;
+	pthread_mutex_t preview_mutex;
+	pthread_cond_t preview_cond;
+	void *preview_data;
+	bool preview_pending;
+	bool preview_acquired;
 
 	// Dynamic job fields
 	IgraphWorkerFunc worker_func;
 	IgraphApplyFunc apply_func;
 	IgraphFreeFunc free_func;
 	IgraphGpuPollFunc gpu_poll_func;
+	IgraphApplyFunc preview_apply_func;
 
 	// Timing
 	struct timespec start_time; // set when job begins executing
@@ -84,6 +90,14 @@ void worker_thread_set_progress(float progress);
 
 // Set status message on the current running job (call from worker thread only)
 void worker_thread_set_status_message(const char *message);
+
+// Publish a borrowed partial result and wait until the main thread applies it.
+// Call from the worker thread only. The result remains owned by the worker.
+bool worker_thread_publish_preview(void *preview_data);
+
+// Acquire/release a borrowed partial result on the main thread.
+void *worker_thread_acquire_preview(WorkerJob *job);
+void worker_thread_release_preview(WorkerJob *job);
 
 // Poll a new real-time snapshot from the worker thread (non-blocking)
 // Returns true if a new snapshot was available and copied into out_matrix

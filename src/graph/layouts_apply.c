@@ -11,7 +11,6 @@
 #include "graph/wrappers_layout.h"
 #include "interaction/state.h"
 #include "vulkan/renderer.h"
-#include "vulkan/renderer_transition.h"
 #include <float.h>
 #include <igraph.h>
 #include <igraph_constants.h>
@@ -168,5 +167,5 @@ void apply_layout_matrix(ExecutionContext *ctx, void *result_data)
 		}
 	}
 
-	renderer_transition_request(renderer, TRANSITION_SOURCE_LAYOUT, ctx->transition_duration, data);
+	renderer_update_graph(renderer, data);
 }

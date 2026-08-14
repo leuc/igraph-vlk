@@ -12,4 +12,9 @@ void *compute_rotor_routing_trigger(ExecutionContext *ctx);
 void apply_rotor_routing_trigger(ExecutionContext *ctx, void *result_data);
 void free_rotor_routing_result(void *result_data);
 
+void *compute_rotor_aggregation_trigger(ExecutionContext *ctx);
+void apply_rotor_aggregation_trigger(ExecutionContext *ctx, void *result_data);
+void apply_rotor_aggregation_preview(ExecutionContext *ctx, void *result_data);
+void free_rotor_aggregation_result(void *result_data);
+
 #endif

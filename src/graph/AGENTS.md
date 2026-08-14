@@ -61,6 +61,7 @@ Rank and Group commands normally persist calculated attributes so GraphML saving
 | Files | Role |
 |------|------|
 | `wrappers_flow.c/.h` | Sampled reachable-pair maximum flow and reveal animation |
+| `rotor_routing.c/.h`, `wrappers_rotor_routing.c/.h` | Single-chip rotor walk and finite-host rotor aggregation with reveal/intensity application |
 | `wrappers_kcore_tree.c/.h` | Chunked k-core hierarchy construction and reveal ordering |
 | `wrappers_path_cover.c/.h` | Minimum path cover, maximum antichain, and minimum chain cover; cyclic directed inputs lose an approximate feedback arc set |
 | `main_path.c/.h` | DAG preparation, six GPU weighting modes, Basket/Global callbacks, and result application |
@@ -112,7 +113,7 @@ Only `src/os/stream.c` reads stdin on its thread. `graph_stream_poll()` is the s
 | `Layout` | Seed, Force-Directed, Hierarchical, Geometric, Bipartite, Embedding, Binary Classification, Layered Sphere |
 | `Rank` | 15 node/edge measures |
 | `Group` | 12 community methods |
-| `Follow` | BFS, DFS, topological order, K-Core Tree, Main Path, sampled max flow, path/antichain/chain covers |
+| `Follow` | Reveal speed, BFS, DFS, topological order, rotor routing/aggregation, K-Core Tree, Main Path, sampled max flow, path/antichain/chain covers |
 | `Structure` | Diameter, radius, average path length, assortativity, density, transitivity |
 | `Filter` | Dynamic Node and Edge attribute filters plus Show All |
 | `Alter` | Feedback-arc removal, simplify, empty-date removal, directedness conversions |

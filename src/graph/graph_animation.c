@@ -35,14 +35,19 @@ static void graph_animation_submit(Renderer *renderer, const GraphData *graph, c
 		return;
 	}
 	for (uint32_t i = 0; i < graph->node_count; i++)
-		if (request->node_steps)
+		if (request->node_steps) {
 			nodes[i].reveal_at = renderer_anim_reveal_at_or_dim(request->node_steps[i], seconds_per_step, request->keep_unrevealed_dim);
+			if (request->reveal_immediately && request->node_steps[i] >= 0)
+				nodes[i].reveal_at = -0.3f;
+		}
 
 	bool all_zero = graph->edge_count > 0;
 	float max_strength = 0.0f;
 	for (uint32_t i = 0; i < graph->edge_count; i++) {
 		float raw = request->edge_values ? request->edge_values[i] : graph->edges[i].weight;
 		edges[i].reveal_at = request->edge_steps ? renderer_anim_reveal_at_or_dim(request->edge_steps[i], seconds_per_step, request->keep_unrevealed_dim) : nodes[graph->edges[i].from].reveal_at;
+		if (request->reveal_immediately && (!request->edge_steps || request->edge_steps[i] >= 0))
+			edges[i].reveal_at = -0.3f;
 		edges[i].strength = renderer_anim_host_strength(raw);
 		if (edges[i].strength > 0.0f)
 			all_zero = false;
