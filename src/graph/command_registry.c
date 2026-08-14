@@ -133,7 +133,6 @@ const CommandDef g_command_registry[] = {
 	{"Follow", "dfs_trigger", "Depth-first search from single source", compute_inline_pass, apply_dfs_trigger, free_noop},
 	{"Follow", "topo_trigger", "Topological sort", compute_inline_pass, apply_topo_trigger, free_noop},
 	{"Follow", "rotor_routing_trigger", "Rotor Routing", compute_rotor_routing_trigger, apply_rotor_routing_trigger, free_rotor_routing_result},
-	{.category_path = "Follow", .command_id = "rotor_aggregation_trigger", .display_name = "Rotor Routing Aggregation", .worker_func = compute_rotor_aggregation_trigger, .apply_func = apply_rotor_aggregation_trigger, .free_func = free_rotor_aggregation_result, .preview_apply_func = apply_rotor_aggregation_preview},
 	{"Follow", "kcore_tree_trigger", "K-Core Tree", compute_kcore_tree_trigger, apply_kcore_tree_trigger, free_kcore_tree_result},
 	{"Follow/Main Path Analysis/Step 1: Weighting", "main_path_splc", "Search Path Link Count (SPLC)", compute_main_path_splc, apply_main_path_weighting, free_main_path_prep, poll_main_path_weighting},
 	{"Follow/Main Path Analysis/Step 1: Weighting", "main_path_unit", "Unit Weight", compute_main_path_unit, apply_main_path_weighting, free_main_path_prep, poll_main_path_weighting},

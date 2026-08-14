@@ -272,7 +272,6 @@ WorkerJob *worker_thread_submit_job(WorkerThreadContext *context, CommandDef *cm
 	job->apply_func = cmd->apply_func;
 	job->free_func = cmd->free_func;
 	job->gpu_poll_func = cmd->gpu_poll_func;
-	job->preview_apply_func = cmd->preview_apply_func;
 
 	if (pthread_mutex_init(&job->mutex, NULL) != 0) {
 		free(ctx_copy);
@@ -281,37 +280,12 @@ WorkerJob *worker_thread_submit_job(WorkerThreadContext *context, CommandDef *cm
 		return NULL;
 	}
 
-	if (pthread_mutex_init(&job->snapshot_mutex, NULL) != 0) {
-		pthread_mutex_destroy(&job->mutex);
-		free(ctx_copy);
-		free(job);
-		pthread_mutex_unlock(&context->queue_mutex);
-		return NULL;
-	}
+	pthread_mutex_init(&job->snapshot_mutex, NULL);
 	job->snapshot_initialized = false;
 	job->has_new_snapshot = false;
 	if (igraph_matrix_init(&job->snapshot_matrix, 0, 0) != IGRAPH_SUCCESS) {
 		pthread_mutex_destroy(&job->mutex);
 		pthread_mutex_destroy(&job->snapshot_mutex);
-		free(ctx_copy);
-		free(job);
-		pthread_mutex_unlock(&context->queue_mutex);
-		return NULL;
-	}
-	if (pthread_mutex_init(&job->preview_mutex, NULL) != 0) {
-		igraph_matrix_destroy(&job->snapshot_matrix);
-		pthread_mutex_destroy(&job->snapshot_mutex);
-		pthread_mutex_destroy(&job->mutex);
-		free(ctx_copy);
-		free(job);
-		pthread_mutex_unlock(&context->queue_mutex);
-		return NULL;
-	}
-	if (pthread_cond_init(&job->preview_cond, NULL) != 0) {
-		pthread_mutex_destroy(&job->preview_mutex);
-		igraph_matrix_destroy(&job->snapshot_matrix);
-		pthread_mutex_destroy(&job->snapshot_mutex);
-		pthread_mutex_destroy(&job->mutex);
 		free(ctx_copy);
 		free(job);
 		pthread_mutex_unlock(&context->queue_mutex);
@@ -378,13 +352,6 @@ void worker_thread_cancel_job(WorkerJob *job)
 	if (job->ctx) {
 		job->ctx->running = false;
 	}
-	pthread_mutex_lock(&job->preview_mutex);
-	if (job->preview_pending && !job->preview_acquired) {
-		job->preview_data = NULL;
-		job->preview_pending = false;
-	}
-	pthread_cond_broadcast(&job->preview_cond);
-	pthread_mutex_unlock(&job->preview_mutex);
 	fprintf(stderr, "[Worker] Cancel requested for job\n");
 }
 
@@ -404,64 +371,6 @@ void worker_thread_set_status_message(const char *message)
 		snprintf(tls_current_job->status_message, sizeof(tls_current_job->status_message), "%s", message);
 		pthread_mutex_unlock(&tls_current_job->mutex);
 	}
-}
-
-bool worker_thread_publish_preview(void *preview_data)
-{
-	WorkerJob *job = tls_current_job;
-	if (!job || !job->preview_apply_func)
-		return true;
-	if (!preview_data || !job->ctx || !job->ctx->running)
-		return false;
-
-	pthread_mutex_lock(&job->preview_mutex);
-	while (job->preview_pending && job->ctx->running)
-		pthread_cond_wait(&job->preview_cond, &job->preview_mutex);
-	if (!job->ctx->running) {
-		pthread_mutex_unlock(&job->preview_mutex);
-		return false;
-	}
-	job->preview_data = preview_data;
-	job->preview_pending = true;
-	while (job->preview_pending) {
-		if (!job->ctx->running && !job->preview_acquired) {
-			job->preview_data = NULL;
-			job->preview_pending = false;
-			break;
-		}
-		pthread_cond_wait(&job->preview_cond, &job->preview_mutex);
-	}
-	bool running = job->ctx->running;
-	pthread_mutex_unlock(&job->preview_mutex);
-	return running;
-}
-
-void *worker_thread_acquire_preview(WorkerJob *job)
-{
-	if (!job || !job->preview_apply_func)
-		return NULL;
-	pthread_mutex_lock(&job->preview_mutex);
-	void *preview_data = NULL;
-	if (job->preview_pending && !job->preview_acquired) {
-		job->preview_acquired = true;
-		preview_data = job->preview_data;
-	}
-	pthread_mutex_unlock(&job->preview_mutex);
-	return preview_data;
-}
-
-void worker_thread_release_preview(WorkerJob *job)
-{
-	if (!job)
-		return;
-	pthread_mutex_lock(&job->preview_mutex);
-	if (job->preview_acquired) {
-		job->preview_data = NULL;
-		job->preview_acquired = false;
-		job->preview_pending = false;
-		pthread_cond_broadcast(&job->preview_cond);
-	}
-	pthread_mutex_unlock(&job->preview_mutex);
 }
 
 // Poll a real-time layout snapshot from the worker thread (non-blocking)
@@ -499,8 +408,6 @@ void worker_job_free(WorkerThreadContext *context, WorkerJob *job)
 		context->current_job = NULL;
 	}
 
-	pthread_cond_destroy(&job->preview_cond);
-	pthread_mutex_destroy(&job->preview_mutex);
 	pthread_mutex_destroy(&job->snapshot_mutex);
 	if (job->snapshot_initialized) {
 		igraph_matrix_destroy(&job->snapshot_matrix);
@@ -523,8 +430,6 @@ void worker_thread_cleanup(WorkerThreadContext *context)
 	// Signal thread to stop
 	pthread_mutex_lock(&context->queue_mutex);
 	context->running = false;
-	if (context->current_job)
-		worker_thread_cancel_job(context->current_job);
 	pthread_cond_signal(&context->queue_cond);
 	pthread_mutex_unlock(&context->queue_mutex);
 

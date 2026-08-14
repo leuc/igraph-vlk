@@ -16,7 +16,6 @@ typedef struct
 	const float *edge_values;
 	float duration;
 	bool keep_unrevealed_dim;
-	bool reveal_immediately;
 } GraphAnimationRequest;
 
 void graph_animation_play(Renderer *renderer, const GraphData *graph, const GraphAnimationRequest *request);

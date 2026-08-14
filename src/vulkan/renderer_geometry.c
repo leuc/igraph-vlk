@@ -18,27 +18,6 @@
 #include "vulkan/renderer_criticality.h"
 #include "vulkan/utils.h"
 
-void renderer_update_node_attributes(Renderer *r, const GraphData *graph)
-{
-	if (!r || !graph || graph->node_count == 0 || r->node.capacity < graph->node_count)
-		return;
-	NodeAttribute *node_attributes = malloc(sizeof(NodeAttribute) * graph->node_count);
-	if (!node_attributes)
-		return;
-	for (uint32_t i = 0; i < graph->node_count; i++) {
-		float size = graph->nodes[i].size;
-		if (size < NODE_SIZE_MIN)
-			size = NODE_SIZE_MIN;
-		glm_vec3_scale(graph->nodes[i].color, graph->nodes[i].emphasis, node_attributes[i].color);
-		node_attributes[i].size = size;
-		node_attributes[i].degree = graph->nodes[i].degree;
-		node_attributes[i].selected = graph->nodes[i].selected;
-		node_attributes[i].visible = graph->nodes[i].visible;
-	}
-	update_buffer_staged(r->core.device, r->commands.commandPool, r->core.graphicsQueue, sizeof(NodeAttribute) * graph->node_count, node_attributes, r->node.staging, r->node.staging_memory, r->node.attribute, &r->core.deviceProperties);
-	free(node_attributes);
-}
-
 void renderer_update_graph(Renderer *r, GraphData *graph)
 {
 	uint32_t previous_node_count = r->node.count;

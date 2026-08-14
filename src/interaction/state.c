@@ -72,7 +72,7 @@ void update_app_state(AppState *state)
 			if (app->pending_command->cmd_def) {
 				printf("[State] Executing data-driven command: %s\n", app->pending_command->display_name);
 
-				ExecutionContext exec_ctx = {0};
+				ExecutionContext exec_ctx;
 				exec_ctx.params = app->pending_command->params;
 				exec_ctx.num_params = app->pending_command->num_params;
 				exec_ctx.update_visuals_callback = NULL;
@@ -149,14 +149,6 @@ void update_app_state(AppState *state)
 			const char *job_msg = worker_thread_get_job_status_message(state->current_worker_job);
 			if (job_msg && job_msg[0]) {
 				snprintf(state->job_status_message, sizeof(state->job_status_message), "%s", job_msg);
-			}
-			if (status == JOB_STATUS_RUNNING && state->current_worker_job->preview_apply_func) {
-				WorkerJob *job = state->current_worker_job;
-				void *preview_data = worker_thread_acquire_preview(job);
-				if (preview_data) {
-					job->preview_apply_func(job->ctx, preview_data);
-					worker_thread_release_preview(job);
-				}
 			}
 
 			if (status == JOB_STATUS_COMPLETED) {

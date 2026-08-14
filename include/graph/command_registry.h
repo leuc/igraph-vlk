@@ -46,7 +46,6 @@ typedef struct CommandDef
 	const CommandParamDef *param_defs; // NULL if no params
 	int num_params;
 	float transition_duration; // 0 = snap, >0 = smooth morph in seconds
-	IgraphApplyFunc preview_apply_func;
 } CommandDef;
 
 extern const CommandDef g_command_registry[];

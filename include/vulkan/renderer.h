@@ -13,7 +13,6 @@
 #include "vulkan/vulkan_types.h"
 
 void renderer_update_graph(Renderer *r, GraphData *graph);
-void renderer_update_node_attributes(Renderer *r, const GraphData *graph);
 void renderer_render_ray(Renderer *r, VkCommandBuffer cmd, vec3 origin, vec3 dir, mat4 view, mat4 proj);
 
 #endif
