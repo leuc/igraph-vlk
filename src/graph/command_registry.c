@@ -18,6 +18,7 @@
 #include "graph/wrappers_layout.h"
 #include "graph/wrappers_path_cover.h"
 #include "graph/wrappers_paths.h"
+#include "graph/wrappers_rotor.h"
 #include "graph/wrappers_structural.h"
 
 const CommandDef g_command_registry[] = {
@@ -127,6 +128,8 @@ const CommandDef g_command_registry[] = {
 	{"Follow", "dfs_trigger", "Depth-first search from single source", compute_inline_pass, apply_dfs_trigger, free_noop},
 	{"Follow", "topo_trigger", "Topological sort", compute_inline_pass, apply_topo_trigger, free_noop},
 	{"Follow", "kcore_tree_trigger", "K-Core Tree", compute_kcore_tree_trigger, apply_kcore_tree_trigger, free_kcore_tree_result},
+	{"Follow", "rotor_walk", "Rotor Walk (Single Agent)", compute_rotor_walk, apply_rotor_routing, free_rotor_routing_result},
+	{"Follow", "rotor_aggregation", "Rotor-Router Aggregation", compute_rotor_aggregation, apply_rotor_routing, free_rotor_routing_result},
 	{"Follow/Main Path Analysis/Step 1: Weighting", "main_path_splc", "Search Path Link Count (SPLC)", compute_main_path_splc, apply_main_path_weighting, free_main_path_prep, poll_main_path_weighting},
 	{"Follow/Main Path Analysis/Step 1: Weighting", "main_path_unit", "Unit Weight", compute_main_path_unit, apply_main_path_weighting, free_main_path_prep, poll_main_path_weighting},
 	{"Follow/Main Path Analysis/Step 1: Weighting", "main_path_spc", "Search Path Count (SPC)", compute_main_path_spc, apply_main_path_weighting, free_main_path_prep, poll_main_path_weighting},

@@ -138,6 +138,7 @@ add_executable(
 	src/graph/main_path.c
 	src/graph/main_path_cache.c
 	src/graph/main_path_search.c
+	src/graph/rotor_routing.c
 	# Layout wrappers (split by algorithm)
 	src/graph/layouts_force_fr.c
 	src/graph/layouts_drl.c
@@ -166,6 +167,7 @@ add_executable(
 	src/graph/wrappers_kcore_tree.c
 	src/graph/wrappers_path_cover.c
 	src/graph/wrappers_paths.c
+	src/graph/wrappers_rotor.c
 	src/graph/wrappers_structural.c
 	src/graph/repo.c
 	src/graph/repo_netzschleuder.c
@@ -277,6 +279,14 @@ if(NOT MSVC)
 	target_link_libraries(ncol_parse_test PRIVATE m)
 endif()
 add_test(NAME ncol_parse_test COMMAND ncol_parse_test)
+
+add_executable(rotor_routing_test tests/rotor_routing_test.c src/graph/rotor_routing.c)
+target_include_directories(rotor_routing_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${IGRAPH_INCLUDE_DIRS})
+target_link_libraries(rotor_routing_test PRIVATE igraph::igraph)
+if(NOT MSVC)
+	target_link_libraries(rotor_routing_test PRIVATE m)
+endif()
+add_test(NAME rotor_routing_test COMMAND rotor_routing_test)
 
 # Standalone test for menu/camera spatial basis math (not installed)
 add_executable(spatial_test tests/spatial_test.c src/interaction/spatial.c)

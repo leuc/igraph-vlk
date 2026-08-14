@@ -60,6 +60,7 @@ Unit tests live in `tests/` and are wired into CMake/CTest.
 
 - **Run all tests**: `ctest --test-dir build --output-on-failure` (or `ctest -C Debug` from inside `build/`). Each test is a `RUN_TEST`-driven executable that asserts with `IGRAPH_ASSERT`; `add_test` registers them in `CMakeLists.txt`.
 - **Graph streaming tests**: `dyn_kcore_test`, `dyn_core_tree_test`, `dyn_core_tree_order_test`, `dyn_leiden_test`, `dyn_layered_sphere_test`, `community_simhash_test`, and `ncol_parse_test`.
+- **Rotor-routing tests**: `rotor_routing_test` covers deterministic single-agent traversal and fixed-host aggregation.
 - **Main-path tests**: `criticality_test` exercises `main_path.comp` headlessly; `main_path_cache_test` and `main_path_search_test` cover cached results and CPU selection variants.
 - **Geometry and rendering tests**: `layered_sphere_common_test`, `spatial_test`, `picking_test`, `renderer_anim_values_test`, and `menu_scene_test`.
 - **Shared test support**: `test_utilities.h`, `validate_coreness.h`, `validate_core_tree.h`, and `criticality_test_harness.*`.

@@ -63,6 +63,7 @@ Rank and Group commands normally persist calculated attributes so GraphML saving
 | `wrappers_flow.c/.h` | Sampled reachable-pair maximum flow and reveal animation |
 | `wrappers_kcore_tree.c/.h` | Chunked k-core hierarchy construction and reveal ordering |
 | `wrappers_path_cover.c/.h` | Minimum path cover, maximum antichain, and minimum chain cover; cyclic directed inputs lose an approximate feedback arc set |
+| `rotor_routing.c/.h`, `wrappers_rotor.c/.h` | Deterministic single-agent rotor walk and fixed-host rotor-router aggregation |
 | `main_path.c/.h` | DAG preparation, six GPU weighting modes, Basket/Global callbacks, and result application |
 | `main_path_cache.c/.h` | Weight, strength, and selection attribute cache validation/loading |
 | `main_path_search.c/.h` | CPU Local, Backward Local, Multiple, Key-Route, and SPLC Valued Network selections |
@@ -112,7 +113,7 @@ Only `src/os/stream.c` reads stdin on its thread. `graph_stream_poll()` is the s
 | `Layout` | Seed, Force-Directed, Hierarchical, Geometric, Bipartite, Embedding, Binary Classification, Layered Sphere |
 | `Rank` | 15 node/edge measures |
 | `Group` | 12 community methods |
-| `Follow` | BFS, DFS, topological order, K-Core Tree, Main Path, sampled max flow, path/antichain/chain covers |
+| `Follow` | BFS, DFS, topological order, K-Core Tree, rotor walk/aggregation, Main Path, sampled max flow, path/antichain/chain covers |
 | `Structure` | Diameter, radius, average path length, assortativity, density, transitivity |
 | `Filter` | Dynamic Node and Edge attribute filters plus Show All |
 | `Alter` | Feedback-arc removal, simplify, empty-date removal, directedness conversions |
