@@ -13,16 +13,36 @@
 #include <GLFW/glfw3.h>
 
 #include "vulkan/images.h"
+#include "vulkan/surface_format.h"
 #include "vulkan/utils.h"
 
-VkSurfaceFormatKHR choose_swap_surface_format(VkSurfaceFormatKHR *formats, uint32_t count)
+static void update_hdr10_surface_support(VulkanSwapchain *swapchain, const VulkanCore *core, const VkSurfaceFormatKHR *formats, uint32_t count, bool report)
 {
-	for (uint32_t i = 0; i < count; i++) {
-		if (formats[i].format == VK_FORMAT_B8G8R8A8_UNORM && formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-			return formats[i];
-		}
+	VkSurfaceFormatKHR hdr10Format = {.format = VK_FORMAT_UNDEFINED, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+	bool supported = core->swapchainColorspaceEnabled && vulkan_find_hdr10_surface_format(formats, count, &hdr10Format);
+	bool changed = supported != swapchain->hdr10Supported;
+	if (supported && swapchain->hdr10Supported) {
+		changed = hdr10Format.format != swapchain->hdr10SurfaceFormat.format || hdr10Format.colorSpace != swapchain->hdr10SurfaceFormat.colorSpace;
 	}
-	return formats[0];
+
+	swapchain->hdr10Supported = supported;
+	swapchain->hdr10SurfaceFormat = hdr10Format;
+	if (!report && !changed) {
+		return;
+	}
+
+	if (supported) {
+		const char *formatName = vulkan_surface_format_name(hdr10Format.format);
+		if (formatName) {
+			printf("[Vulkan] HDR10 surface presentation available: format=%s, colorSpace=VK_COLOR_SPACE_HDR10_ST2084_EXT\n", formatName);
+		} else {
+			printf("[Vulkan] HDR10 surface presentation available: format=%d, colorSpace=VK_COLOR_SPACE_HDR10_ST2084_EXT\n", (int)hdr10Format.format);
+		}
+	} else if (!core->swapchainColorspaceEnabled) {
+		printf("[Vulkan] HDR10 surface presentation unavailable: VK_EXT_swapchain_colorspace is not enabled\n");
+	} else {
+		printf("[Vulkan] HDR10 surface presentation unavailable: surface does not advertise VK_COLOR_SPACE_HDR10_ST2084_EXT\n");
+	}
 }
 
 VkPresentModeKHR choose_swap_present_mode(VkPresentModeKHR *modes, uint32_t count)
@@ -55,6 +75,9 @@ void vulkan_swapchain_create(VulkanSwapchain *swapchain, VulkanCore *core, GLFWw
 	swapchain->depthImage = VK_NULL_HANDLE;
 	swapchain->depthView = VK_NULL_HANDLE;
 	swapchain->depthMemory = VK_NULL_HANDLE;
+	swapchain->imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+	swapchain->hdr10Supported = false;
+	swapchain->hdr10SurfaceFormat = (VkSurfaceFormatKHR){.format = VK_FORMAT_UNDEFINED, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
 
 	VkSurfaceCapabilitiesKHR capabilities;
 	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(core->physicalDevice, core->surface, &capabilities), "Failed to get physical device surface capabilities");
@@ -63,6 +86,7 @@ void vulkan_swapchain_create(VulkanSwapchain *swapchain, VulkanCore *core, GLFWw
 	VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(core->physicalDevice, core->surface, &formatCount, NULL), "Failed to get physical device surface formats (count)");
 	VkSurfaceFormatKHR *surfaceFormats = malloc(sizeof(VkSurfaceFormatKHR) * formatCount);
 	VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(core->physicalDevice, core->surface, &formatCount, surfaceFormats), "Failed to get physical device surface formats");
+	update_hdr10_surface_support(swapchain, core, surfaceFormats, formatCount, true);
 
 	uint32_t presentModeCount;
 	VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(core->physicalDevice, core->surface, &presentModeCount, NULL), "Failed to get physical device surface present modes (count)");
@@ -82,6 +106,7 @@ void vulkan_swapchain_create(VulkanSwapchain *swapchain, VulkanCore *core, GLFWw
 	VK_CHECK(vkCreateSwapchainKHR(core->device, &swapchainInfo, NULL, &swapchain->swapchain), "Failed to create swapchain");
 
 	swapchain->imageFormat = surfaceFormat.format;
+	swapchain->imageColorSpace = surfaceFormat.colorSpace;
 	swapchain->extent = extent;
 	swapchain->imageCount = imageCount;
 
@@ -157,6 +182,7 @@ void vulkan_swapchain_recreate(VulkanSwapchain *swapchain, VulkanCore *core, GLF
 	VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(core->physicalDevice, core->surface, &formatCount, NULL), "Failed to get physical device surface formats (count)");
 	VkSurfaceFormatKHR *surfaceFormats = malloc(sizeof(VkSurfaceFormatKHR) * formatCount);
 	VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(core->physicalDevice, core->surface, &formatCount, surfaceFormats), "Failed to get physical device surface formats");
+	update_hdr10_surface_support(swapchain, core, surfaceFormats, formatCount, false);
 
 	uint32_t presentModeCount;
 	VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(core->physicalDevice, core->surface, &presentModeCount, NULL), "Failed to get physical device surface present modes (count)");
@@ -194,6 +220,7 @@ void vulkan_swapchain_recreate(VulkanSwapchain *swapchain, VulkanCore *core, GLF
 		vkDestroySwapchainKHR(core->device, oldSwapchain, NULL);
 
 	swapchain->imageFormat = surfaceFormat.format;
+	swapchain->imageColorSpace = surfaceFormat.colorSpace;
 	swapchain->extent = extent;
 	swapchain->imageCount = imageCount;
 

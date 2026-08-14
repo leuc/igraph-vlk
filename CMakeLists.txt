@@ -99,6 +99,7 @@ add_executable(
 	src/vulkan/pipeline_compute.c
 	src/vulkan/device.c
 	src/vulkan/swapchain.c
+	src/vulkan/surface_format.c
 	src/vulkan/commands.c
 	src/vulkan/render_pass.c
 	src/vulkan/menu.c
@@ -344,6 +345,11 @@ if(NOT MSVC)
 	target_link_libraries(renderer_anim_values_test PRIVATE m)
 endif()
 add_test(NAME renderer_anim_values_test COMMAND renderer_anim_values_test)
+
+add_executable(surface_format_test tests/surface_format_test.c src/vulkan/surface_format.c)
+target_include_directories(surface_format_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${Vulkan_INCLUDE_DIRS} ${IGRAPH_INCLUDE_DIRS})
+target_link_libraries(surface_format_test PRIVATE igraph::igraph)
+add_test(NAME surface_format_test COMMAND surface_format_test)
 
 add_executable(menu_scene_test tests/menu_scene_test.c src/vulkan/menu_scene.c src/interaction/menu_state.c src/ui/menu_metrics.c)
 target_include_directories(menu_scene_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CGLM_INCLUDE_DIR} ${IGRAPH_INCLUDE_DIRS} ${Vulkan_INCLUDE_DIRS})

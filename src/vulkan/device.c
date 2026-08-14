@@ -136,6 +136,7 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 	core->graphicsQueue = VK_NULL_HANDLE;
 	core->presentQueue = VK_NULL_HANDLE;
 	core->surface = VK_NULL_HANDLE;
+	core->swapchainColorspaceEnabled = false;
 
 	// Query available extensions
 	uint32_t availableExtCount = 0;
@@ -196,6 +197,28 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 		}
 	}
 #endif
+
+	bool hasSwapchainColorspace = false;
+	for (uint32_t i = 0; i < availableExtCount; i++) {
+		if (strcmp(availableExts[i].extensionName, VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME) == 0) {
+			hasSwapchainColorspace = true;
+			break;
+		}
+	}
+	if (hasSwapchainColorspace) {
+		bool alreadyAdded = false;
+		for (uint32_t i = 0; i < instanceExtensionCount; i++) {
+			if (strcmp(instanceExtensions[i], VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME) == 0) {
+				alreadyAdded = true;
+				break;
+			}
+		}
+		if (!alreadyAdded) {
+			instanceExtensions[instanceExtensionCount++] = VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME;
+		}
+		core->swapchainColorspaceEnabled = true;
+		printf("[Vulkan] Enabling optional instance extension: %s\n", VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
+	}
 
 	bool hasPortability = false;
 	for (uint32_t i = 0; i < availableExtCount; i++) {

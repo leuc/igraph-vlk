@@ -6,12 +6,12 @@
 #ifndef VULKAN_SWAPCHAIN_H
 #define VULKAN_SWAPCHAIN_H
 
+#include "vulkan/surface_format.h"
 #include "vulkan/vulkan_types.h"
 
-void vulkan_swapchain_create(VulkanSwapchain *swap, VulkanCore *core, GLFWwindow *window);
-void vulkan_swapchain_recreate(VulkanSwapchain *swap, VulkanCore *core, GLFWwindow *window);
-void vulkan_swapchain_destroy(VulkanSwapchain *swap, VkDevice device);
-VkSurfaceFormatKHR choose_swap_surface_format(VkSurfaceFormatKHR *formats, uint32_t count);
+void vulkan_swapchain_create(VulkanSwapchain *swapchain, VulkanCore *core, GLFWwindow *window);
+void vulkan_swapchain_recreate(VulkanSwapchain *swapchain, VulkanCore *core, GLFWwindow *window);
+void vulkan_swapchain_destroy(VulkanSwapchain *swapchain, VkDevice device);
 VkPresentModeKHR choose_swap_present_mode(VkPresentModeKHR *modes, uint32_t count);
 VkExtent2D choose_swap_extent(VkSurfaceCapabilitiesKHR *caps, GLFWwindow *window);
 

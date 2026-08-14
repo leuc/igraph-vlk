@@ -273,6 +273,7 @@ typedef struct
 	int presentQueueFamily;
 	int computeQueueFamily;
 	VkPhysicalDeviceProperties deviceProperties;
+	bool swapchainColorspaceEnabled;
 } VulkanCore;
 
 typedef struct
@@ -282,7 +283,10 @@ typedef struct
 	VkImageView *views;
 	uint32_t imageCount;
 	VkFormat imageFormat;
+	VkColorSpaceKHR imageColorSpace;
 	VkExtent2D extent;
+	bool hdr10Supported;
+	VkSurfaceFormatKHR hdr10SurfaceFormat;
 
 	VkImage depthImage;
 	VkDeviceMemory depthMemory;
