@@ -289,6 +289,7 @@ typedef struct
 	VkFormat imageFormat;
 	VkColorSpaceKHR imageColorSpace;
 	VkExtent2D extent;
+	bool hdr10ColorspaceEnabled;
 	bool hdr10SurfaceSupported;
 	bool hdr10DisplayKnown;
 	bool hdr10DisplaySupported;
