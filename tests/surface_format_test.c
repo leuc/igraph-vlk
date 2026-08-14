@@ -36,14 +36,22 @@ static int test_hdr10_format_detection(void)
 {
 	const VkSurfaceFormatKHR formats[] = {
 		{.format = VK_FORMAT_B8G8R8A8_UNORM, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
-		{.format = VK_FORMAT_A2B10G10R10_UNORM_PACK32, .colorSpace = VK_COLOR_SPACE_HDR10_ST2084_EXT},
 		{.format = VK_FORMAT_R16G16B16A16_SFLOAT, .colorSpace = VK_COLOR_SPACE_HDR10_ST2084_EXT},
+		{.format = VK_FORMAT_A2R10G10B10_UNORM_PACK32, .colorSpace = VK_COLOR_SPACE_HDR10_ST2084_EXT},
+		{.format = VK_FORMAT_A2B10G10R10_UNORM_PACK32, .colorSpace = VK_COLOR_SPACE_HDR10_ST2084_EXT},
 	};
 	VkSurfaceFormatKHR hdr10;
-	IGRAPH_ASSERT(vulkan_find_hdr10_surface_format(formats, 3, &hdr10));
+	IGRAPH_ASSERT(vulkan_find_hdr10_surface_format(formats, 4, &hdr10));
 	IGRAPH_ASSERT(hdr10.format == VK_FORMAT_A2B10G10R10_UNORM_PACK32);
 	IGRAPH_ASSERT(hdr10.colorSpace == VK_COLOR_SPACE_HDR10_ST2084_EXT);
-	IGRAPH_ASSERT(vulkan_find_hdr10_surface_format(formats, 3, NULL));
+	IGRAPH_ASSERT(vulkan_find_hdr10_surface_format(formats, 4, NULL));
+
+	const VkSurfaceFormatKHR without_a2b10[] = {
+		{.format = VK_FORMAT_R16G16B16A16_SFLOAT, .colorSpace = VK_COLOR_SPACE_HDR10_ST2084_EXT},
+		{.format = VK_FORMAT_A2R10G10B10_UNORM_PACK32, .colorSpace = VK_COLOR_SPACE_HDR10_ST2084_EXT},
+	};
+	IGRAPH_ASSERT(vulkan_find_hdr10_surface_format(without_a2b10, 2, &hdr10));
+	IGRAPH_ASSERT(hdr10.format == VK_FORMAT_A2R10G10B10_UNORM_PACK32);
 	return 0;
 }
 

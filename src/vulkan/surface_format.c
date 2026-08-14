@@ -26,11 +26,28 @@ VkSurfaceFormatKHR choose_swap_surface_format(const VkSurfaceFormatKHR *formats,
 
 bool vulkan_find_hdr10_surface_format(const VkSurfaceFormatKHR *formats, uint32_t count, VkSurfaceFormatKHR *out_format)
 {
+	static const VkFormat preferred_formats[] = {
+		VK_FORMAT_A2B10G10R10_UNORM_PACK32,
+		VK_FORMAT_A2R10G10B10_UNORM_PACK32,
+		VK_FORMAT_R16G16B16A16_SFLOAT,
+	};
+
 	if (out_format) {
 		*out_format = (VkSurfaceFormatKHR){.format = VK_FORMAT_UNDEFINED, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
 	}
 	if (!formats || count == 0) {
 		return false;
+	}
+
+	for (uint32_t preferred = 0; preferred < sizeof(preferred_formats) / sizeof(preferred_formats[0]); preferred++) {
+		for (uint32_t i = 0; i < count; i++) {
+			if (formats[i].format == preferred_formats[preferred] && formats[i].colorSpace == VK_COLOR_SPACE_HDR10_ST2084_EXT) {
+				if (out_format) {
+					*out_format = formats[i];
+				}
+				return true;
+			}
+		}
 	}
 
 	for (uint32_t i = 0; i < count; i++) {
