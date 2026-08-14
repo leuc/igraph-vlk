@@ -149,6 +149,7 @@ static void info_done(void *data, struct wp_image_description_info_v1 *info)
 	if (info != tracker->info) {
 		return;
 	}
+	wp_image_description_info_v1_destroy(tracker->info);
 	tracker->info = NULL;
 	tracker->pending.known = true;
 	tracker->pending.hdr10 = display_hdr_description_is_hdr10(tracker->pending_st2084_pq, tracker->pending_bt2020_primaries);
