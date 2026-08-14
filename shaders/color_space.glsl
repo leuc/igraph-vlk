@@ -3,13 +3,13 @@ layout(constant_id = 0) const bool SCENE_LINEAR_OUTPUT = true;
 layout(std140, binding = 4) uniform ColorOutputState
 {
 	float time;
-	float deltaTime;
-	uint frameCount;
-	float transitionT;
+	float delta_time;
+	uint frame_count;
+	float transition_t;
 	float playhead;
 	float fade;
-	uint revealMask;
-	float hdrHighlights;
+	uint reveal_mask;
+	float hdr_highlights;
 }
 colorOutput;
 
@@ -27,5 +27,5 @@ vec3 scene_output_color(vec3 color)
 
 vec3 scene_output_highlight(vec3 color)
 {
-	return SCENE_LINEAR_OUTPUT ? srgb_to_linear(clamp(color, vec3(0.0), vec3(1.0))) * mix(1.0, 4.0, colorOutput.hdrHighlights) : color;
+	return SCENE_LINEAR_OUTPUT ? srgb_to_linear(clamp(color, vec3(0.0), vec3(1.0))) * mix(1.0, 4.0, colorOutput.hdr_highlights) : color;
 }

@@ -26,7 +26,7 @@ void renderer_render_scene(Renderer *r, const Pipelines *pipelines, VkCommandBuf
 	glm_mat4_copy(proj, eye_ubo.proj);
 	memcpy(r->ubo.mapped[ubo_idx], &eye_ubo, sizeof(UniformBufferObject));
 	bool hdr_scene = pipelines == &r->pipelines && r->swapchain.outputMode == VULKAN_OUTPUT_HDR10;
-	r->anim.data._reserved = hdr_scene ? 1.0f : 0.0f;
+	r->anim.data.hdr_highlights = hdr_scene ? 1.0f : 0.0f;
 	renderer_anim_upload(r, ubo_idx);
 
 	VkClearValue cv[2];

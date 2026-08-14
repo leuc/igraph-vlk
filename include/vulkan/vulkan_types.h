@@ -216,10 +216,11 @@ typedef struct
 	float playhead;
 	float fade;
 	uint32_t reveal_mask;
-	float _reserved;
+	float hdr_highlights;
 } GlobalAnimState;
 
 _Static_assert(sizeof(GlobalAnimState) == 32, "GlobalAnimState must match the std140 block in graphics shaders");
+_Static_assert(offsetof(GlobalAnimState, hdr_highlights) == 28, "GlobalAnimState HDR flag must match the std140 block in graphics shaders");
 
 typedef struct
 {

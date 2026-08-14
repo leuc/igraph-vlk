@@ -17,7 +17,7 @@ layout(binding = 4) uniform GlobalAnimState
 	float playhead;
 	float fade;
 	uint reveal_mask;
-	float _reserved;
+	float hdr_highlights;
 }
 anim;
 
