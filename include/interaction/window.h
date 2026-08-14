@@ -7,6 +7,8 @@
 
 #include <stdbool.h>
 
+#include "color_output.h"
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -25,9 +27,8 @@ typedef struct
 	float content_scale_x;
 	float content_scale_y;
 	DisplayHdrTracker *displayHdrTracker;
-	bool displayHdrKnown;
-	bool displayHdr10;
-	bool displayHdrDirty;
+	DisplayColorInfo displayColor;
+	bool displayColorDirty;
 } WindowState;
 
 /* Opaque forward declaration — window.c includes app_state.h for the full type */

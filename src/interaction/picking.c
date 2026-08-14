@@ -139,6 +139,7 @@ void interaction_pick_object(AppState *state, bool is_double_click)
 		state->last_picked_node = -1;
 	}
 
+	state->renderer.needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(&state->renderer, &state->current_graph);
 }
 

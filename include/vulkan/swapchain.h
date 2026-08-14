@@ -12,7 +12,7 @@
 void vulkan_swapchain_create(VulkanSwapchain *swapchain, VulkanCore *core, GLFWwindow *window);
 void vulkan_swapchain_recreate(VulkanSwapchain *swapchain, VulkanCore *core, GLFWwindow *window);
 void vulkan_swapchain_destroy(VulkanSwapchain *swapchain, VkDevice device);
-void vulkan_swapchain_set_display_hdr10_support(VulkanSwapchain *swapchain, bool known, bool supported);
+bool vulkan_swapchain_set_display_color_info(VulkanSwapchain *swapchain, const DisplayColorInfo *info);
 VkPresentModeKHR choose_swap_present_mode(VkPresentModeKHR *modes, uint32_t count);
 VkExtent2D choose_swap_extent(VkSurfaceCapabilitiesKHR *caps, GLFWwindow *window);
 

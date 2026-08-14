@@ -1,4 +1,7 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "color_space.glsl"
 
 layout(binding = 1) uniform sampler2D textAtlas;
 
@@ -31,5 +34,5 @@ void main()
 
 	if (color.a < 0.01)
 		discard;
-	outColor = color;
+	outColor = vec4(scene_output_color(color.rgb), color.a);
 }

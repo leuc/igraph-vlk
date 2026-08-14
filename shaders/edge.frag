@@ -1,4 +1,7 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "color_space.glsl"
 
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in float fragSelected;
@@ -19,5 +22,6 @@ void main()
 		final_color = min(final_color * 1.4 + vec3(0.1), vec3(1.0));
 		alpha = 1.0;
 	}
-	outColor = vec4(final_color, alpha);
+	vec3 encoded = fragSelected > 0.5 ? scene_output_highlight(final_color) : scene_output_color(final_color);
+	outColor = vec4(encoded, alpha);
 }

@@ -87,13 +87,13 @@ if(USE_OPENXR)
 	endif()
 endif()
 
-set(SHADERS shaders/node.vert shaders/node.frag shaders/edge.vert shaders/edge.frag shaders/label.vert shaders/label.frag shaders/ui.vert shaders/ui.frag shaders/menu.vert shaders/menu.frag shaders/textquad.vert shaders/textquad.frag shaders/routing.comp shaders/main_path.comp shaders/bcgl.comp shaders/ray.vert shaders/ray.frag)
+set(SHADERS shaders/node.vert shaders/node.frag shaders/edge.vert shaders/edge.frag shaders/label.vert shaders/label.frag shaders/ui.vert shaders/ui.frag shaders/menu.vert shaders/menu.frag shaders/textquad.vert shaders/textquad.frag shaders/routing.comp shaders/main_path.comp shaders/bcgl.comp shaders/ray.vert shaders/ray.frag shaders/present.vert shaders/present.frag)
 
 foreach(shader ${SHADERS})
 	get_filename_component(shader_name ${shader} NAME)
 	set(_spirv "${CMAKE_BINARY_DIR}/shaders/${shader_name}.spv")
 	file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/shaders")
-	add_custom_command(OUTPUT ${_spirv} COMMAND ${GLSL_COMPILER} -V ${CMAKE_CURRENT_SOURCE_DIR}/${shader} -o ${_spirv} DEPENDS ${shader} COMMENT "Compiling ${shader_name} to SPIR-V")
+	add_custom_command(OUTPUT ${_spirv} COMMAND ${GLSL_COMPILER} -V -I${CMAKE_CURRENT_SOURCE_DIR}/shaders ${CMAKE_CURRENT_SOURCE_DIR}/${shader} -o ${_spirv} DEPENDS ${shader} shaders/color_space.glsl COMMENT "Compiling ${shader_name} to SPIR-V")
 	list(APPEND SPIRV_SHADERS ${_spirv})
 endforeach()
 
@@ -115,12 +115,14 @@ add_executable(
 	src/vulkan/renderer_compute.c
 	src/vulkan/renderer_ui.c
 	src/vulkan/renderer_pipelines.c
+	src/vulkan/renderer_present.c
 	src/vulkan/pipeline_graphics.c
 	src/vulkan/pipeline_ui.c
 	src/vulkan/pipeline_compute.c
 	src/vulkan/device.c
 	src/vulkan/swapchain.c
 	src/vulkan/surface_format.c
+	src/vulkan/color_space.c
 	src/vulkan/commands.c
 	src/vulkan/render_pass.c
 	src/vulkan/menu.c
@@ -234,7 +236,7 @@ if(USE_OPENXR)
 	target_link_libraries(igraph-vlk PRIVATE OpenXR::openxr_loader)
 endif()
 
-target_compile_definitions(igraph-vlk PRIVATE NODE_VERT_SHADER_PATH="shaders/node.vert.spv" NODE_FRAG_SHADER_PATH="shaders/node.frag.spv" EDGE_VERT_SHADER_PATH="shaders/edge.vert.spv" EDGE_FRAG_SHADER_PATH="shaders/edge.frag.spv" LABEL_VERT_SHADER_PATH="shaders/label.vert.spv" LABEL_FRAG_SHADER_PATH="shaders/label.frag.spv" UI_VERT_SHADER_PATH="shaders/ui.vert.spv" UI_FRAG_SHADER_PATH="shaders/ui.frag.spv" MENU_VERT_SHADER_PATH="shaders/menu.vert.spv" MENU_FRAG_SHADER_PATH="shaders/menu.frag.spv" TEXTQUAD_VERT_SHADER_PATH="shaders/textquad.vert.spv" TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv" ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv" MAIN_PATH_COMP_SHADER_PATH="shaders/main_path.comp.spv" BCGL_COMP_SHADER_PATH="shaders/bcgl.comp.spv" RAY_VERT_SHADER_PATH="shaders/ray.vert.spv" RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv")
+target_compile_definitions(igraph-vlk PRIVATE NODE_VERT_SHADER_PATH="shaders/node.vert.spv" NODE_FRAG_SHADER_PATH="shaders/node.frag.spv" EDGE_VERT_SHADER_PATH="shaders/edge.vert.spv" EDGE_FRAG_SHADER_PATH="shaders/edge.frag.spv" LABEL_VERT_SHADER_PATH="shaders/label.vert.spv" LABEL_FRAG_SHADER_PATH="shaders/label.frag.spv" UI_VERT_SHADER_PATH="shaders/ui.vert.spv" UI_FRAG_SHADER_PATH="shaders/ui.frag.spv" MENU_VERT_SHADER_PATH="shaders/menu.vert.spv" MENU_FRAG_SHADER_PATH="shaders/menu.frag.spv" TEXTQUAD_VERT_SHADER_PATH="shaders/textquad.vert.spv" TEXTQUAD_FRAG_SHADER_PATH="shaders/textquad.frag.spv" ROUTING_COMP_SHADER_PATH="shaders/routing.comp.spv" MAIN_PATH_COMP_SHADER_PATH="shaders/main_path.comp.spv" BCGL_COMP_SHADER_PATH="shaders/bcgl.comp.spv" RAY_VERT_SHADER_PATH="shaders/ray.vert.spv" RAY_FRAG_SHADER_PATH="shaders/ray.frag.spv" PRESENT_VERT_SHADER_PATH="shaders/present.vert.spv" PRESENT_FRAG_SHADER_PATH="shaders/present.frag.spv")
 
 # Standalone test for dynamic k-core maintenance (not installed)
 enable_testing()
@@ -384,6 +386,14 @@ add_executable(display_hdr_test tests/display_hdr_test.c src/interaction/display
 target_include_directories(display_hdr_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${Vulkan_INCLUDE_DIRS} ${IGRAPH_INCLUDE_DIRS})
 target_link_libraries(display_hdr_test PRIVATE igraph::igraph)
 add_test(NAME display_hdr_test COMMAND display_hdr_test)
+
+add_executable(color_space_test tests/color_space_test.c src/vulkan/color_space.c)
+target_include_directories(color_space_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${IGRAPH_INCLUDE_DIRS})
+target_link_libraries(color_space_test PRIVATE igraph::igraph)
+if(NOT MSVC)
+	target_link_libraries(color_space_test PRIVATE m)
+endif()
+add_test(NAME color_space_test COMMAND color_space_test)
 
 add_executable(menu_scene_test tests/menu_scene_test.c src/vulkan/menu_scene.c src/interaction/menu_state.c src/ui/menu_metrics.c)
 target_include_directories(menu_scene_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CGLM_INCLUDE_DIR} ${IGRAPH_INCLUDE_DIRS} ${Vulkan_INCLUDE_DIRS})

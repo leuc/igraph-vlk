@@ -6,6 +6,8 @@
 #include "vulkan/renderer_xr.h"
 
 #include "vulkan/images.h"
+#include "vulkan/pipeline_graphics.h"
+#include "vulkan/pipeline_ui.h"
 #include "vulkan/utils.h"
 
 #ifdef USE_OPENXR
@@ -16,18 +18,17 @@ void renderer_setup_xr(Renderer *r, XrContext *xr)
 	r->xrFramebuffers = malloc(sizeof(VkFramebuffer *) * xr->view_count);
 	r->xrFramebufferImageCount = malloc(sizeof(uint32_t) * xr->view_count);
 
-	VkRenderPass xrRenderPass = r->renderPass.renderPass;
-	if (xr->swapchain_format != r->swapchain.imageFormat) {
-		VkAttachmentDescription cAttXR = {.format = xr->swapchain_format, .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE, .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-		VkAttachmentDescription dAttXR = {.format = VK_FORMAT_D32_SFLOAT, .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
-		VkAttachmentReference cAttRefXR = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-		VkAttachmentReference dAttRefXR = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
-		VkSubpassDescription subXR = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS, .colorAttachmentCount = 1, .pColorAttachments = &cAttRefXR, .pDepthStencilAttachment = &dAttRefXR};
-		VkAttachmentDescription attsXR[] = {cAttXR, dAttXR};
-		VkRenderPassCreateInfo rpInfoXR = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, .attachmentCount = 2, .pAttachments = attsXR, .subpassCount = 1, .pSubpasses = &subXR};
-		VK_CHECK(vkCreateRenderPass(r->core.device, &rpInfoXR, NULL, &r->renderPassXR), "Failed to create XR render pass");
-		xrRenderPass = r->renderPassXR;
-	}
+	VkAttachmentDescription cAttXR = {.format = xr->swapchain_format, .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE, .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+	VkAttachmentDescription dAttXR = {.format = VK_FORMAT_D32_SFLOAT, .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+	VkAttachmentReference cAttRefXR = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+	VkAttachmentReference dAttRefXR = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+	VkSubpassDescription subXR = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS, .colorAttachmentCount = 1, .pColorAttachments = &cAttRefXR, .pDepthStencilAttachment = &dAttRefXR};
+	VkAttachmentDescription attsXR[] = {cAttXR, dAttXR};
+	VkRenderPassCreateInfo rpInfoXR = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, .attachmentCount = 2, .pAttachments = attsXR, .subpassCount = 1, .pSubpasses = &subXR};
+	VK_CHECK(vkCreateRenderPass(r->core.device, &rpInfoXR, NULL, &r->renderPassXR), "Failed to create XR render pass");
+	VkRenderPass xrRenderPass = r->renderPassXR;
+	renderer_create_graphics_pipelines(r, &r->xrPipelines, xrRenderPass, false);
+	renderer_create_ui_pipelines(r, &r->xrPipelines, xrRenderPass, false);
 
 	r->xrDepthImages = malloc(sizeof(VkImage) * xr->view_count);
 	r->xrDepthImageMemories = malloc(sizeof(VkDeviceMemory) * xr->view_count);

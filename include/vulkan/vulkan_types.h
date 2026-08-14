@@ -16,6 +16,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "color_output.h"
 #include "graph/graph_types.h"
 
 #include "vulkan/criticality_types.h"
@@ -274,6 +275,8 @@ typedef struct
 	int computeQueueFamily;
 	VkPhysicalDeviceProperties deviceProperties;
 	bool swapchainColorspaceEnabled;
+	bool hdrMetadataEnabled;
+	PFN_vkSetHdrMetadataEXT setHdrMetadata;
 } VulkanCore;
 
 typedef struct
@@ -291,6 +294,11 @@ typedef struct
 	bool hdr10StatusReported;
 	bool hdr10Supported;
 	VkSurfaceFormatKHR hdr10SurfaceFormat;
+	DisplayColorInfo displayColor;
+	VulkanOutputMode outputMode;
+	VulkanOutputMode desiredOutputMode;
+	bool hdr10Suppressed;
+	uint32_t hdr10SuppressedRevision;
 
 	VkImage depthImage;
 	VkDeviceMemory depthMemory;
@@ -302,6 +310,14 @@ typedef struct
 {
 	VkRenderPass renderPass;
 	VkFramebuffer *framebuffers;
+	VkRenderPass presentRenderPass;
+	VkFramebuffer *presentFramebuffers;
+	VkImage *colorImages;
+	VkDeviceMemory *colorMemories;
+	VkImageView *colorViews;
+	VkImage *depthImages;
+	VkDeviceMemory *depthMemories;
+	VkImageView *depthViews;
 	uint32_t imageCount;
 } VulkanRenderPass;
 
@@ -325,6 +341,7 @@ typedef struct
 	VkPipeline menu;
 	VkPipeline textQuad;
 	VkPipeline ray;
+	VkPipeline present;
 	VkPipeline compute_spherical;
 	VkPipeline compute_criticality;
 } Pipelines;
@@ -341,6 +358,9 @@ typedef struct
 	VkDescriptorSetLayout crit_compute_layout;
 	VkDescriptorPool crit_pool;
 	VkDescriptorSet crit_set;
+	VkDescriptorSetLayout present_layout;
+	VkDescriptorPool present_pool;
+	VkDescriptorSet *present_sets;
 } Descriptors;
 
 // Main-path dynamic-programming buffers. Levels are uploaded once as a single
@@ -515,7 +535,11 @@ typedef struct Renderer
 	VkFormat xrFormat;		   // XR swapchain format (may differ from desktop)
 	Descriptors descriptors;
 	VkPipelineLayout pipelineLayout;
+	VkPipelineLayout presentPipelineLayout;
 	Pipelines pipelines;
+	Pipelines xrPipelines;
+	VkSampler presentSampler;
+	RendererColorState colorState;
 
 	EdgeRoutingMode currentRoutingMode;
 

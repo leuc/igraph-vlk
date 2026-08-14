@@ -203,9 +203,7 @@ void xr_render_frame(AppState *app, XrTime *last_predicted_display_time, int *co
 			xr_context_get_projection_matrix(&app->xr_ctx, i, 0.1f, 1000.0f, eye_proj);
 			eye_proj[1][1] *= -1.0f;
 
-			VkRenderPass xrRP = app->renderer.renderPassXR != VK_NULL_HANDLE ? app->renderer.renderPassXR : app->renderer.renderPass.renderPass;
-
-			renderer_render_scene(&app->renderer, app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], xrRP, app->renderer.xrFramebuffers[i][imageIndices[i]], (VkExtent2D){app->xr_ctx.swapchains[i].width, app->xr_ctx.swapchains[i].height}, eye_view, eye_proj, i, has_ray, ray_origin, ray_dir);
+			renderer_render_scene(&app->renderer, &app->renderer.xrPipelines, app->renderer.commands.commandBuffers[app->renderer.commands.currentFrame], app->renderer.renderPassXR, app->renderer.xrFramebuffers[i][imageIndices[i]], (VkExtent2D){app->xr_ctx.swapchains[i].width, app->xr_ctx.swapchains[i].height}, eye_view, eye_proj, i, has_ray, ray_origin, ray_dir);
 
 			projectionViews[i] = (XrCompositionLayerProjectionView){.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
 																	.pose = app->xr_ctx.views[i].pose,

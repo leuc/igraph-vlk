@@ -1,4 +1,7 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "color_space.glsl"
 
 layout(location = 0) out vec4 outColor;
 layout(location = 4) in vec2 fragTexCoord;
@@ -25,5 +28,5 @@ void main()
 		}
 	}
 
-	outColor = baseColor;
+	outColor = vec4(scene_output_color(baseColor.rgb), baseColor.a);
 }

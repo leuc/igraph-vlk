@@ -59,6 +59,18 @@ static int test_driver_advertised_hdr10_format(void)
 	return 0;
 }
 
+static int test_float_hdr10_output_format(void)
+{
+	const VkSurfaceFormatKHR formats[] = {
+		{.format = VK_FORMAT_B8G8R8A8_UNORM, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
+		{.format = VK_FORMAT_R16G16B16A16_SFLOAT, .colorSpace = VK_COLOR_SPACE_HDR10_ST2084_EXT},
+	};
+	VkSurfaceFormatKHR selected = vulkan_choose_output_surface_format(formats, 2, true);
+	IGRAPH_ASSERT(selected.format == VK_FORMAT_R16G16B16A16_SFLOAT);
+	IGRAPH_ASSERT(selected.colorSpace == VK_COLOR_SPACE_HDR10_ST2084_EXT);
+	return 0;
+}
+
 static int test_sdr_surface_format_selection(void)
 {
 	const VkSurfaceFormatKHR formats[] = {
@@ -73,6 +85,12 @@ static int test_sdr_surface_format_selection(void)
 	selected = choose_swap_surface_format(formats, 1);
 	IGRAPH_ASSERT(selected.format == formats[0].format);
 	IGRAPH_ASSERT(selected.colorSpace == formats[0].colorSpace);
+
+	selected = vulkan_choose_output_surface_format(formats, 3, true);
+	IGRAPH_ASSERT(selected.format == VK_FORMAT_A2B10G10R10_UNORM_PACK32);
+	IGRAPH_ASSERT(selected.colorSpace == VK_COLOR_SPACE_HDR10_ST2084_EXT);
+	selected = vulkan_choose_output_surface_format(formats, 3, false);
+	IGRAPH_ASSERT(selected.format == VK_FORMAT_B8G8R8A8_UNORM);
 	return 0;
 }
 
@@ -91,6 +109,7 @@ int main(void)
 	RUN_TEST(test_sdr_only_formats);
 	RUN_TEST(test_hdr10_format_detection);
 	RUN_TEST(test_driver_advertised_hdr10_format);
+	RUN_TEST(test_float_hdr10_output_format);
 	RUN_TEST(test_sdr_surface_format_selection);
 	RUN_TEST(test_effective_hdr10_support);
 	return 0;

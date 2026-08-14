@@ -31,13 +31,14 @@ static int test_non_bt2020_coordinates(void)
 
 static int test_status_change_consumed_once(void)
 {
-	WindowState window = {.displayHdrKnown = true, .displayHdr10 = true, .displayHdrDirty = true};
-	bool known = false;
-	bool hdr10 = false;
-	IGRAPH_ASSERT(window_consume_display_hdr_status(&window, &known, &hdr10));
-	IGRAPH_ASSERT(known);
-	IGRAPH_ASSERT(hdr10);
-	IGRAPH_ASSERT(!window_consume_display_hdr_status(&window, &known, &hdr10));
+	WindowState window = {.displayColor = {.known = true, .hdr10 = true, .reference_luminance = 203.0f, .revision = 42}, .displayColorDirty = true};
+	DisplayColorInfo info = {0};
+	IGRAPH_ASSERT(window_consume_display_color_info(&window, &info));
+	IGRAPH_ASSERT(info.known);
+	IGRAPH_ASSERT(info.hdr10);
+	IGRAPH_ASSERT(info.reference_luminance == 203.0f);
+	IGRAPH_ASSERT(info.revision == 42);
+	IGRAPH_ASSERT(!window_consume_display_color_info(&window, &info));
 	return 0;
 }
 

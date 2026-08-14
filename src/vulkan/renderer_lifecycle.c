@@ -19,6 +19,7 @@
 #include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_geometry.h"
 #include "vulkan/renderer_pipelines.h"
+#include "vulkan/renderer_present.h"
 #include "vulkan/renderer_transition.h"
 #include "vulkan/swapchain.h"
 #include "vulkan/text.h"
@@ -66,6 +67,8 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	r->xrDepthImageViews = NULL;
 	r->renderPassXR = VK_NULL_HANDLE;
 	r->xrFormat = VK_FORMAT_UNDEFINED;
+	r->pipelines = (Pipelines){0};
+	r->xrPipelines = (Pipelines){0};
 	r->currentRoutingMode = ROUTING_MODE_STRAIGHT;
 	glfwSetWindowTitle(window, "igraph-vlk");
 
@@ -108,6 +111,7 @@ bool renderer_init(Renderer *r, GLFWwindow *window, GraphData *graph, void *xr)
 	VkSamplerCreateInfo samplerInfo = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = VK_FILTER_LINEAR, .minFilter = VK_FILTER_LINEAR, .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR, .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE};
 	VK_CHECK(vkCreateSampler(r->core.device, &samplerInfo, NULL, &r->texture.sampler), "Failed to create texture sampler");
 
+	renderer_present_init(r);
 	renderer_create_pipelines(r);
 
 	{
@@ -292,13 +296,7 @@ bool renderer_recreate_swapchain(Renderer *r)
 		return false;
 	}
 
-	// Destroy old framebuffers (render pass survives — format-based, not extent-based)
-	for (uint32_t i = 0; i < r->renderPass.imageCount; i++) {
-		if (r->renderPass.framebuffers[i] != VK_NULL_HANDLE)
-			vkDestroyFramebuffer(r->core.device, r->renderPass.framebuffers[i], NULL);
-	}
-	free(r->renderPass.framebuffers);
-	r->renderPass.framebuffers = NULL;
+	vulkan_render_pass_destroy(&r->renderPass, r->core.device);
 
 	// Destroy old renderFinishedSemaphores (sized to old swapchain image count)
 	for (uint32_t i = 0; i < r->commands.imageCount; i++) {
@@ -311,13 +309,8 @@ bool renderer_recreate_swapchain(Renderer *r)
 	// Recreate swapchain (passes old swapchain handle for driver optimization)
 	vulkan_swapchain_recreate(&r->swapchain, &r->core, r->window);
 
-	// Recreate framebuffers with new extent
-	r->renderPass.imageCount = r->swapchain.imageCount;
-	r->renderPass.framebuffers = malloc(sizeof(VkFramebuffer) * r->swapchain.imageCount);
-	for (uint32_t i = 0; i < r->swapchain.imageCount; i++) {
-		VkImageView attachmentViews[] = {r->swapchain.views[i], r->swapchain.depthView};
-		VK_CHECK(vkCreateFramebuffer(r->core.device, &VK_FRAMEBUFFER_INFO(r->renderPass.renderPass, attachmentViews, r->swapchain.extent.width, r->swapchain.extent.height), NULL, &r->renderPass.framebuffers[i]), "Failed to create framebuffer");
-	}
+	vulkan_render_pass_create(&r->renderPass, &r->core, &r->swapchain);
+	renderer_present_recreate(r);
 
 	// Recreate renderFinishedSemaphores for new image count
 	r->commands.imageCount = r->swapchain.imageCount;

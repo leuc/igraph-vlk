@@ -8,25 +8,33 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "vulkan/color_space.h"
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_criticality.h"
 #include "vulkan/renderer_lifecycle.h"
+#include "vulkan/renderer_present.h"
 #include "vulkan/utils.h"
 
 #include "graph/graph_types.h"
 
-void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index, bool has_ray, vec3 ray_origin, vec3 ray_dir)
+void renderer_render_scene(Renderer *r, const Pipelines *pipelines, VkCommandBuffer cmd, VkRenderPass rp, VkFramebuffer fb, VkExtent2D extent, mat4 view, mat4 proj, uint32_t view_index, bool has_ray, vec3 ray_origin, vec3 ray_dir)
 {
 	uint32_t ubo_idx = r->commands.currentFrame * MAX_VIEWS + view_index;
 	UniformBufferObject eye_ubo = r->ubo.data;
 	glm_mat4_copy(view, eye_ubo.view);
 	glm_mat4_copy(proj, eye_ubo.proj);
 	memcpy(r->ubo.mapped[ubo_idx], &eye_ubo, sizeof(UniformBufferObject));
+	bool hdr_scene = pipelines == &r->pipelines && r->swapchain.outputMode == VULKAN_OUTPUT_HDR10;
+	r->anim.data._reserved = hdr_scene ? 1.0f : 0.0f;
 	renderer_anim_upload(r, ubo_idx);
 
 	VkClearValue cv[2];
-	cv[0].color = (VkClearColorValue){0.01f, 0.01f, 0.02f, 1.0f};
+	if (pipelines == &r->pipelines) {
+		cv[0].color = (VkClearColorValue){color_srgb_to_linear(0.01f), color_srgb_to_linear(0.01f), color_srgb_to_linear(0.02f), 1.0f};
+	} else {
+		cv[0].color = (VkClearColorValue){0.01f, 0.01f, 0.02f, 1.0f};
+	}
 	cv[1].depthStencil = (VkClearDepthStencilValue){1.0f, 0};
 	VkRenderPassBeginInfo rpi = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, .renderPass = rp, .framebuffer = fb, .renderArea = {{0, 0}, {extent.width, extent.height}}, .clearValueCount = 2, .pClearValues = cv};
 	vkCmdBeginRenderPass(cmd, &rpi, VK_SUBPASS_CONTENTS_INLINE);
@@ -39,7 +47,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.sets[ubo_idx], 0, NULL);
 
 	if (r->showEdges && r->edge.count > 0) {
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.edge);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines->edge);
 		// Push segments per edge for edge index calculation
 		int segments = (r->currentRoutingMode == ROUTING_MODE_STRAIGHT) ? 1 : 15;
 		uint32_t segs = (uint32_t)segments;
@@ -51,7 +59,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdDraw(cmd, r->edge.vertex_count, 1, 0, 0);
 	}
 	if (r->showNodes && r->node.count > 0) {
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.node);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines->node);
 		VkBuffer prevNodeBuf = (r->transition.active && r->transition.prev_node_position != VK_NULL_HANDLE) ? r->transition.prev_node_position : r->node.position;
 		VkBuffer vbs[] = {r->nodeVertexBuffer, r->node.position, r->node.attribute, prevNodeBuf};
 		VkDeviceSize vos[] = {0, 0, 0, 0};
@@ -60,7 +68,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	}
 	// Node labels (opaque, depth-writing) — draw before menu so menu occludes them
 	if (r->label.count > 0 && r->label.instance != VK_NULL_HANDLE) {
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.label);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines->label);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.node_label_sets[ubo_idx], 0, NULL);
 		VkBuffer nVs[] = {r->quad.vertex, r->label.instance};
 		VkDeviceSize nOs[] = {0, 0};
@@ -71,7 +79,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	}
 	// Detail card (single instance, dedicated atlas)
 	if (r->detail.visible && r->detail.instance != VK_NULL_HANDLE) {
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.label);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines->label);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.detail_card_sets[ubo_idx], 0, NULL);
 		VkBuffer dVs[] = {r->quad.vertex, r->detail.instance};
 		VkDeviceSize dOs[] = {0, 0};
@@ -81,7 +89,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.sets[ubo_idx], 0, NULL);
 	}
 	if (r->menu.visible && r->menu.node_count > 0 && r->menu.instance != VK_NULL_HANDLE) {
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.menu);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines->menu);
 		VkBuffer mVs[] = {r->quad.vertex, r->menu.instance};
 		VkDeviceSize mOs[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, mVs, mOs);
@@ -89,7 +97,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		vkCmdDrawIndexed(cmd, r->quad.index_count, r->menu.node_count, 0, 0, 0);
 	}
 	if (r->menu.visible && r->menu.text_quad_instance_count > 0 && r->menu.text_quad_instance != VK_NULL_HANDLE) {
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.textQuad);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines->textQuad);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelineLayout, 0, 1, &r->descriptors.text_quad_sets[ubo_idx], 0, NULL);
 		VkBuffer tVs[] = {r->quad.vertex, r->menu.text_quad_instance};
 		VkDeviceSize tOs[] = {0, 0};
@@ -101,7 +109,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 	if (r->showUI) {
 		float viewportSize[2] = {(float)extent.width, (float)extent.height};
 		vkCmdPushConstants(cmd, r->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(mat4) * 2 + sizeof(float) + sizeof(uint32_t), sizeof(float) * 2, viewportSize);
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.ui);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines->ui);
 		VkBuffer bVs[] = {r->uiBgVertexBuffer, r->uiBgInstanceBuffer};
 		VkDeviceSize bOs[] = {0, 0};
 		vkCmdBindVertexBuffers(cmd, 0, 2, bVs, bOs);
@@ -114,7 +122,7 @@ void renderer_render_scene(Renderer *r, VkCommandBuffer cmd, VkRenderPass rp, Vk
 		}
 	}
 	if (has_ray)
-		renderer_render_ray(r, cmd, ray_origin, ray_dir, view, proj);
+		renderer_render_ray(r, pipelines->ray, cmd, ray_origin, ray_dir, view, proj);
 	vkCmdEndRenderPass(cmd);
 }
 
@@ -156,7 +164,8 @@ void renderer_draw_frame(Renderer *r, GraphData *graph)
 		}
 	}
 
-	renderer_render_scene(r, r->commands.commandBuffers[r->commands.currentFrame], r->renderPass.renderPass, r->renderPass.framebuffers[imageIndex], r->swapchain.extent, r->ubo.data.view, r->ubo.data.proj, 0, false, (vec3){0}, (vec3){0});
+	renderer_render_scene(r, &r->pipelines, r->commands.commandBuffers[r->commands.currentFrame], r->renderPass.renderPass, r->renderPass.framebuffers[imageIndex], r->swapchain.extent, r->ubo.data.view, r->ubo.data.proj, 0, false, (vec3){0}, (vec3){0});
+	renderer_present_record(r, r->commands.commandBuffers[r->commands.currentFrame], imageIndex);
 	VK_CHECK(vkEndCommandBuffer(r->commands.commandBuffers[r->commands.currentFrame]), "Failed to end command buffer");
 
 	VkPipelineStageFlags waitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;

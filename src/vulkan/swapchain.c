@@ -12,7 +12,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "vulkan/images.h"
+#include "vulkan/color_space.h"
 #include "vulkan/surface_format.h"
 #include "vulkan/utils.h"
 
@@ -21,6 +21,7 @@ static void update_effective_hdr10_support(VulkanSwapchain *swapchain, bool repo
 	bool supported = vulkan_hdr10_presentation_supported(swapchain->hdr10SurfaceSupported, swapchain->hdr10DisplayKnown, swapchain->hdr10DisplaySupported);
 	bool changed = supported != swapchain->hdr10Supported;
 	swapchain->hdr10Supported = supported;
+	swapchain->desiredOutputMode = supported && !(swapchain->hdr10Suppressed && swapchain->hdr10SuppressedRevision == swapchain->displayColor.revision) ? VULKAN_OUTPUT_HDR10 : VULKAN_OUTPUT_SDR;
 	if (!report && swapchain->hdr10StatusReported && !changed) {
 		return;
 	}
@@ -74,12 +75,56 @@ static void update_hdr10_surface_support(VulkanSwapchain *swapchain, const Vulka
 	}
 }
 
-void vulkan_swapchain_set_display_hdr10_support(VulkanSwapchain *swapchain, bool known, bool supported)
+bool vulkan_swapchain_set_display_color_info(VulkanSwapchain *swapchain, const DisplayColorInfo *info)
 {
-	bool changed = known != swapchain->hdr10DisplayKnown || supported != swapchain->hdr10DisplaySupported;
-	swapchain->hdr10DisplayKnown = known;
-	swapchain->hdr10DisplaySupported = known && supported;
+	VulkanOutputMode previous = swapchain->desiredOutputMode;
+	if (!info) {
+		return false;
+	}
+	bool revision_changed = swapchain->displayColor.revision != info->revision;
+	bool changed = swapchain->hdr10DisplayKnown != info->known || swapchain->hdr10DisplaySupported != (info->known && info->hdr10);
+	if (revision_changed) {
+		swapchain->hdr10Suppressed = false;
+	}
+	swapchain->displayColor = *info;
+	swapchain->hdr10DisplayKnown = info->known;
+	swapchain->hdr10DisplaySupported = info->known && info->hdr10;
 	update_effective_hdr10_support(swapchain, changed);
+	return revision_changed || previous != swapchain->desiredOutputMode;
+}
+
+static ColorPrimaries metadata_primaries(const DisplayColorInfo *display)
+{
+	if (display->has_target_primaries) {
+		return display->target_primaries;
+	}
+	if (display->has_primaries) {
+		return display->primaries;
+	}
+	return (ColorPrimaries){.r_x = 0.708f, .r_y = 0.292f, .g_x = 0.170f, .g_y = 0.797f, .b_x = 0.131f, .b_y = 0.046f, .w_x = 0.3127f, .w_y = 0.3290f};
+}
+
+static void vulkan_swapchain_apply_hdr_metadata(VulkanSwapchain *swapchain, VulkanCore *core)
+{
+	if (swapchain->outputMode != VULKAN_OUTPUT_HDR10 || !core->hdrMetadataEnabled || !core->setHdrMetadata) {
+		return;
+	}
+	RendererColorState color = renderer_color_state(VULKAN_OUTPUT_HDR10, &swapchain->displayColor);
+	ColorPrimaries p = metadata_primaries(&swapchain->displayColor);
+	float min_luminance = swapchain->displayColor.has_target_luminance ? swapchain->displayColor.target_min_luminance : swapchain->displayColor.min_luminance;
+	float max_fall = swapchain->displayColor.target_max_fall > 0.0f && swapchain->displayColor.target_max_fall < color.reference_nits ? swapchain->displayColor.target_max_fall : color.reference_nits;
+	VkHdrMetadataEXT metadata = {
+		.sType = VK_STRUCTURE_TYPE_HDR_METADATA_EXT,
+		.displayPrimaryRed = {p.r_x, p.r_y},
+		.displayPrimaryGreen = {p.g_x, p.g_y},
+		.displayPrimaryBlue = {p.b_x, p.b_y},
+		.whitePoint = {p.w_x, p.w_y},
+		.maxLuminance = color.peak_nits,
+		.minLuminance = min_luminance,
+		.maxContentLightLevel = color.highlight_nits,
+		.maxFrameAverageLightLevel = max_fall,
+	};
+	core->setHdrMetadata(core->device, 1, &swapchain->swapchain, &metadata);
 }
 
 VkPresentModeKHR choose_swap_present_mode(VkPresentModeKHR *modes, uint32_t count)
@@ -113,12 +158,18 @@ void vulkan_swapchain_create(VulkanSwapchain *swapchain, VulkanCore *core, GLFWw
 	swapchain->depthView = VK_NULL_HANDLE;
 	swapchain->depthMemory = VK_NULL_HANDLE;
 	swapchain->imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+	swapchain->depthFormat = VK_FORMAT_D32_SFLOAT;
 	swapchain->hdr10SurfaceSupported = false;
 	swapchain->hdr10DisplayKnown = false;
 	swapchain->hdr10DisplaySupported = false;
 	swapchain->hdr10StatusReported = false;
 	swapchain->hdr10Supported = false;
 	swapchain->hdr10SurfaceFormat = (VkSurfaceFormatKHR){.format = VK_FORMAT_UNDEFINED, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+	swapchain->displayColor = (DisplayColorInfo){0};
+	swapchain->outputMode = VULKAN_OUTPUT_SDR;
+	swapchain->desiredOutputMode = VULKAN_OUTPUT_SDR;
+	swapchain->hdr10Suppressed = false;
+	swapchain->hdr10SuppressedRevision = 0;
 
 	VkSurfaceCapabilitiesKHR capabilities;
 	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(core->physicalDevice, core->surface, &capabilities), "Failed to get physical device surface capabilities");
@@ -134,7 +185,7 @@ void vulkan_swapchain_create(VulkanSwapchain *swapchain, VulkanCore *core, GLFWw
 	VkPresentModeKHR *presentModes = malloc(sizeof(VkPresentModeKHR) * presentModeCount);
 	VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(core->physicalDevice, core->surface, &presentModeCount, presentModes), "Failed to get physical device surface present modes");
 
-	VkSurfaceFormatKHR surfaceFormat = choose_swap_surface_format(surfaceFormats, formatCount);
+	VkSurfaceFormatKHR surfaceFormat = vulkan_choose_output_surface_format(surfaceFormats, formatCount, swapchain->desiredOutputMode == VULKAN_OUTPUT_HDR10);
 	VkPresentModeKHR presentMode = choose_swap_present_mode(presentModes, presentModeCount);
 	VkExtent2D extent = choose_swap_extent(&capabilities, window);
 
@@ -144,30 +195,38 @@ void vulkan_swapchain_create(VulkanSwapchain *swapchain, VulkanCore *core, GLFWw
 
 	VkSwapchainCreateInfoKHR swapchainInfo = {.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR, .surface = core->surface, .minImageCount = imageCount, .imageFormat = surfaceFormat.format, .imageColorSpace = surfaceFormat.colorSpace, .imageExtent = extent, .imageArrayLayers = 1, .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = capabilities.currentTransform, .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, .presentMode = presentMode, .clipped = VK_TRUE};
 
-	VK_CHECK(vkCreateSwapchainKHR(core->device, &swapchainInfo, NULL, &swapchain->swapchain), "Failed to create swapchain");
+	VkResult createResult = vkCreateSwapchainKHR(core->device, &swapchainInfo, NULL, &swapchain->swapchain);
+	if (createResult != VK_SUCCESS && swapchain->desiredOutputMode == VULKAN_OUTPUT_HDR10) {
+		fprintf(stderr, "[Vulkan] HDR10 swapchain creation failed (%d); falling back to SDR for display revision %u\n", createResult, swapchain->displayColor.revision);
+		swapchain->hdr10Suppressed = true;
+		swapchain->hdr10SuppressedRevision = swapchain->displayColor.revision;
+		swapchain->desiredOutputMode = VULKAN_OUTPUT_SDR;
+		surfaceFormat = choose_swap_surface_format(surfaceFormats, formatCount);
+		swapchainInfo.imageFormat = surfaceFormat.format;
+		swapchainInfo.imageColorSpace = surfaceFormat.colorSpace;
+		createResult = vkCreateSwapchainKHR(core->device, &swapchainInfo, NULL, &swapchain->swapchain);
+	}
+	VK_CHECK(createResult, "Failed to create swapchain");
 
 	swapchain->imageFormat = surfaceFormat.format;
 	swapchain->imageColorSpace = surfaceFormat.colorSpace;
 	swapchain->extent = extent;
 	swapchain->imageCount = imageCount;
+	swapchain->outputMode = surfaceFormat.colorSpace == VK_COLOR_SPACE_HDR10_ST2084_EXT ? VULKAN_OUTPUT_HDR10 : VULKAN_OUTPUT_SDR;
 
 	VK_CHECK(vkGetSwapchainImagesKHR(core->device, swapchain->swapchain, &imageCount, NULL), "Failed to get swapchain images (count)");
 	swapchain->images = malloc(sizeof(VkImage) * imageCount);
 	VK_CHECK(vkGetSwapchainImagesKHR(core->device, swapchain->swapchain, &imageCount, swapchain->images), "Failed to get swapchain images");
+	swapchain->imageCount = imageCount;
 
 	swapchain->views = malloc(sizeof(VkImageView) * imageCount);
 	for (uint32_t i = 0; i < imageCount; i++) {
 		VK_CHECK(vkCreateImageView(core->device, &VK_IMAGE_VIEW_2D(swapchain->images[i], swapchain->imageFormat, VK_IMAGE_ASPECT_COLOR_BIT), NULL, &swapchain->views[i]), "Failed to create image views");
 	}
 
-	// Depth Buffer
-	swapchain->depthFormat = VK_FORMAT_D32_SFLOAT;
-	create_image(core->device, core->physicalDevice, extent.width, extent.height, swapchain->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &swapchain->depthImage, &swapchain->depthMemory);
-
-	VK_CHECK(vkCreateImageView(core->device, &VK_IMAGE_VIEW_2D(swapchain->depthImage, swapchain->depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT), NULL, &swapchain->depthView), "Failed to create depth image view");
-
 	free(surfaceFormats);
 	free(presentModes);
+	vulkan_swapchain_apply_hdr_metadata(swapchain, core);
 }
 
 void vulkan_swapchain_destroy(VulkanSwapchain *swapchain, VkDevice device)
@@ -196,14 +255,6 @@ void vulkan_swapchain_recreate(VulkanSwapchain *swapchain, VulkanCore *core, GLF
 {
 	VkSwapchainKHR oldSwapchain = swapchain->swapchain;
 
-	// Destroy old depth buffer
-	vkDestroyImageView(core->device, swapchain->depthView, NULL);
-	vkDestroyImage(core->device, swapchain->depthImage, NULL);
-	vkFreeMemory(core->device, swapchain->depthMemory, NULL);
-	swapchain->depthView = VK_NULL_HANDLE;
-	swapchain->depthImage = VK_NULL_HANDLE;
-	swapchain->depthMemory = VK_NULL_HANDLE;
-
 	// Destroy old image views
 	for (uint32_t i = 0; i < swapchain->imageCount; i++) {
 		if (swapchain->views[i] != VK_NULL_HANDLE)
@@ -230,7 +281,7 @@ void vulkan_swapchain_recreate(VulkanSwapchain *swapchain, VulkanCore *core, GLF
 	VkPresentModeKHR *presentModes = malloc(sizeof(VkPresentModeKHR) * presentModeCount);
 	VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(core->physicalDevice, core->surface, &presentModeCount, presentModes), "Failed to get physical device surface present modes");
 
-	VkSurfaceFormatKHR surfaceFormat = choose_swap_surface_format(surfaceFormats, formatCount);
+	VkSurfaceFormatKHR surfaceFormat = vulkan_choose_output_surface_format(surfaceFormats, formatCount, swapchain->desiredOutputMode == VULKAN_OUTPUT_HDR10);
 	VkPresentModeKHR presentMode = choose_swap_present_mode(presentModes, presentModeCount);
 
 	uint32_t imageCount = capabilities.minImageCount + 1;
@@ -254,7 +305,18 @@ void vulkan_swapchain_recreate(VulkanSwapchain *swapchain, VulkanCore *core, GLF
 		.clipped = VK_TRUE,
 		.oldSwapchain = oldSwapchain,
 	};
-	VK_CHECK(vkCreateSwapchainKHR(core->device, &swapchainInfo, NULL, &swapchain->swapchain), "Failed to recreate swapchain");
+	VkResult createResult = vkCreateSwapchainKHR(core->device, &swapchainInfo, NULL, &swapchain->swapchain);
+	if (createResult != VK_SUCCESS && swapchain->desiredOutputMode == VULKAN_OUTPUT_HDR10) {
+		fprintf(stderr, "[Vulkan] HDR10 swapchain creation failed (%d); falling back to SDR for display revision %u\n", createResult, swapchain->displayColor.revision);
+		swapchain->hdr10Suppressed = true;
+		swapchain->hdr10SuppressedRevision = swapchain->displayColor.revision;
+		swapchain->desiredOutputMode = VULKAN_OUTPUT_SDR;
+		surfaceFormat = choose_swap_surface_format(surfaceFormats, formatCount);
+		swapchainInfo.imageFormat = surfaceFormat.format;
+		swapchainInfo.imageColorSpace = surfaceFormat.colorSpace;
+		createResult = vkCreateSwapchainKHR(core->device, &swapchainInfo, NULL, &swapchain->swapchain);
+	}
+	VK_CHECK(createResult, "Failed to recreate swapchain");
 
 	// Destroy old swapchain handle now that new one is created
 	if (oldSwapchain != VK_NULL_HANDLE)
@@ -264,22 +326,20 @@ void vulkan_swapchain_recreate(VulkanSwapchain *swapchain, VulkanCore *core, GLF
 	swapchain->imageColorSpace = surfaceFormat.colorSpace;
 	swapchain->extent = extent;
 	swapchain->imageCount = imageCount;
+	swapchain->outputMode = surfaceFormat.colorSpace == VK_COLOR_SPACE_HDR10_ST2084_EXT ? VULKAN_OUTPUT_HDR10 : VULKAN_OUTPUT_SDR;
 
 	// Get new swapchain images and create image views
 	VK_CHECK(vkGetSwapchainImagesKHR(core->device, swapchain->swapchain, &imageCount, NULL), "Failed to get swapchain images (count)");
 	swapchain->images = malloc(sizeof(VkImage) * imageCount);
 	VK_CHECK(vkGetSwapchainImagesKHR(core->device, swapchain->swapchain, &imageCount, swapchain->images), "Failed to get swapchain images");
+	swapchain->imageCount = imageCount;
 
 	swapchain->views = malloc(sizeof(VkImageView) * imageCount);
 	for (uint32_t i = 0; i < imageCount; i++) {
 		VK_CHECK(vkCreateImageView(core->device, &VK_IMAGE_VIEW_2D(swapchain->images[i], swapchain->imageFormat, VK_IMAGE_ASPECT_COLOR_BIT), NULL, &swapchain->views[i]), "Failed to create image views");
 	}
 
-	// Create new depth buffer with new extent
-	create_image(core->device, core->physicalDevice, extent.width, extent.height, swapchain->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &swapchain->depthImage, &swapchain->depthMemory);
-
-	VK_CHECK(vkCreateImageView(core->device, &VK_IMAGE_VIEW_2D(swapchain->depthImage, swapchain->depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT), NULL, &swapchain->depthView), "Failed to create depth image view");
-
 	free(surfaceFormats);
 	free(presentModes);
+	vulkan_swapchain_apply_hdr_metadata(swapchain, core);
 }

@@ -166,6 +166,22 @@ static int test_quad_behind_ray_origin_misses(void)
 	return 0;
 }
 
+static int test_pick_marks_graph_attributes_dirty(void)
+{
+	Node node = {.position = {0.0f, 0.0f, 0.0f}, .size = 2.0f, .visible = 1.0f};
+	AppState state = {0};
+	state.current_graph.nodes = &node;
+	state.current_graph.node_count = 1;
+	state.camera.pos[2] = -5.0f;
+	state.camera.front[2] = 1.0f;
+
+	interaction_pick_object(&state, false);
+
+	IGRAPH_ASSERT(node.selected == 1.0f);
+	IGRAPH_ASSERT(state.renderer.needsAttributeUpload == VK_TRUE);
+	return 0;
+}
+
 int main(void)
 {
 	RUN_TEST(test_sphere_hit_through_center);
@@ -180,5 +196,6 @@ int main(void)
 	RUN_TEST(test_quad_miss_outside_bounds);
 	RUN_TEST(test_quad_parallel_ray_misses);
 	RUN_TEST(test_quad_behind_ray_origin_misses);
+	RUN_TEST(test_pick_marks_graph_attributes_dirty);
 	return 0;
 }

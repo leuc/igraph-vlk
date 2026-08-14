@@ -15,6 +15,7 @@
 #include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_bcgl.h"
 #include "vulkan/renderer_criticality.h"
+#include "vulkan/renderer_present.h"
 #include "vulkan/renderer_transition.h"
 #include "vulkan/swapchain.h"
 #include "vulkan/text.h"
@@ -75,6 +76,20 @@ static void cleanup_menu_label_atlases(Renderer *r)
 
 static void cleanup_xr_resources(Renderer *r)
 {
+	if (r->xrPipelines.ui != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->xrPipelines.ui, NULL);
+	if (r->xrPipelines.label != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->xrPipelines.label, NULL);
+	if (r->xrPipelines.menu != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->xrPipelines.menu, NULL);
+	if (r->xrPipelines.textQuad != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->xrPipelines.textQuad, NULL);
+	if (r->xrPipelines.ray != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->xrPipelines.ray, NULL);
+	if (r->xrPipelines.edge != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->xrPipelines.edge, NULL);
+	if (r->xrPipelines.node != VK_NULL_HANDLE)
+		vkDestroyPipeline(r->core.device, r->xrPipelines.node, NULL);
 	if (!r->xrFramebuffers)
 		return;
 	for (uint32_t i = 0; i < r->xr_view_count; i++) {
@@ -99,6 +114,7 @@ static void cleanup_xr_resources(Renderer *r)
 
 static void cleanup_renderer_resources(Renderer *r)
 {
+	renderer_present_destroy(r);
 	renderer_destroy_criticality_buffers(r);
 	if (r->descriptors.crit_pool != VK_NULL_HANDLE)
 		vkDestroyDescriptorPool(r->core.device, r->descriptors.crit_pool, NULL);

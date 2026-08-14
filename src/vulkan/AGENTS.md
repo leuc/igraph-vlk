@@ -9,7 +9,8 @@ Per-directory guide for `src/vulkan/`, `include/vulkan/`, and `shaders/`. See ro
 | `renderer.h`, `vulkan_types.h` | Public graph/ray update API and aggregate renderer/resource state |
 | `renderer_lifecycle.c/.h` | Renderer initialization, frame-idle waits, and resize recreation |
 | `renderer_cleanup.c/.h` | Central destruction of renderer, compute, menu, label, swapchain, and optional XR resources |
-| `renderer_draw.c/.h` | Desktop frame acquisition, command recording, pass submission, and presentation |
+| `renderer_draw.c/.h` | Desktop frame acquisition, linear scene recording, submission, and presentation |
+| `renderer_present.c/.h`, `color_space.c/.h` | SDR/HDR10 output transform, luminance policy, presentation descriptors, and fullscreen pipeline |
 | `renderer_camera.c/.h` | Per-view camera uniform updates |
 | `renderer_pipelines.c/.h` | Creation of graph, label, ray, menu, text, and compute pipelines/descriptors |
 | `renderer_xr.c/.h` | XR swapchain image framebuffers and depth resources |
@@ -53,7 +54,7 @@ Main Path supports SPLC, Unit, SPC, SPE, NPPC, and SPNP. Weighting progresses no
 | `buffers.c/.h` | Host/device buffer allocation, staging, copy, map/update helpers |
 | `images.c/.h` | Image allocation, views, formats, and transitions |
 | `commands.c/.h` | Command pools/buffers and one-shot command helpers |
-| `render_pass.c/.h` | Desktop and XR-compatible render-pass creation |
+| `render_pass.c/.h` | Linear desktop scene targets plus swapchain presentation passes |
 | `pipeline_graphics.c/.h` | Graphics shader/module/pipeline helpers |
 | `pipeline_compute.c/.h` | Compute shader/module/pipeline helpers |
 | `pipeline_ui.c/.h` | Vertex formats and pipelines for HUD/menu/text quads |

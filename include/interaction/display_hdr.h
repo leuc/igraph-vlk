@@ -13,7 +13,7 @@
 
 bool window_display_hdr_init(WindowState *window);
 void window_display_hdr_cleanup(WindowState *window);
-bool window_consume_display_hdr_status(WindowState *window, bool *known, bool *hdr10);
+bool window_consume_display_color_info(WindowState *window, DisplayColorInfo *info);
 bool display_hdr_is_bt2020_primaries(int32_t r_x, int32_t r_y, int32_t g_x, int32_t g_y, int32_t b_x, int32_t b_y, int32_t w_x, int32_t w_y);
 bool display_hdr_description_is_hdr10(bool has_st2084_pq, bool has_bt2020_primaries);
 

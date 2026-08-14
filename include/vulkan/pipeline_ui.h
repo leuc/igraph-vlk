@@ -8,6 +8,6 @@
 
 #include "vulkan/vulkan_types.h"
 
-void renderer_create_ui_pipelines(Renderer *r);
+void renderer_create_ui_pipelines(Renderer *r, Pipelines *pipelines, VkRenderPass render_pass, bool linear_output);
 
 #endif // PIPELINE_UI_H

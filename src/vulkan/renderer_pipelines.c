@@ -10,7 +10,7 @@
 
 void renderer_create_pipelines(Renderer *r)
 {
-	renderer_create_graphics_pipelines(r);
-	renderer_create_ui_pipelines(r);
+	renderer_create_graphics_pipelines(r, &r->pipelines, r->renderPass.renderPass, true);
+	renderer_create_ui_pipelines(r, &r->pipelines, r->renderPass.renderPass, true);
 	renderer_create_compute_pipelines(r);
 }

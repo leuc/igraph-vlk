@@ -1,4 +1,7 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "color_space.glsl"
 
 layout(binding = 1) uniform sampler2D texSampler;
 
@@ -14,8 +17,8 @@ void main()
 		float alpha = texture(texSampler, fragTexCoord).r;
 		if (alpha < 0.1)
 			discard;
-		outColor = vec4(fragColor.rgb, alpha * fragColor.a);
+		outColor = vec4(scene_output_color(fragColor.rgb), alpha * fragColor.a);
 	} else {
-		outColor = fragColor;
+		outColor = vec4(scene_output_color(fragColor.rgb), fragColor.a);
 	}
 }

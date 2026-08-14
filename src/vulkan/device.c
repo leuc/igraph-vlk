@@ -137,6 +137,8 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 	core->presentQueue = VK_NULL_HANDLE;
 	core->surface = VK_NULL_HANDLE;
 	core->swapchainColorspaceEnabled = false;
+	core->hdrMetadataEnabled = false;
+	core->setHdrMetadata = NULL;
 
 	// Query available extensions
 	uint32_t availableExtCount = 0;
@@ -150,7 +152,7 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 
 	const char *instanceExtensions[64];
 	uint32_t instanceExtensionCount = 0;
-	char *instanceExtensionStrdup[64];
+	char *instanceExtensionStrdup[64] = {0};
 	uint32_t instanceExtensionStrdupCount = 0;
 
 	for (uint32_t i = 0; i < glfwExtCount; i++) {
@@ -336,7 +338,7 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 	// Build device extension list
 	const char *deviceExtensions[64];
 	uint32_t deviceExtensionCount = 0;
-	char *deviceExtensionStrdup[64];
+	char *deviceExtensionStrdup[64] = {0};
 	uint32_t deviceExtensionStrdupCount = 0;
 
 	// Add required extensions (must be supported)
@@ -347,6 +349,12 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 			fprintf(stderr, "[Vulkan] FATAL: Required device extension %s not supported.\n", REQUIRED_DEVICE_EXTENSIONS[i]);
 			exit_with_error("Missing required Vulkan device extension");
 		}
+	}
+
+	if (has_device_extension(core->physicalDevice, VK_EXT_HDR_METADATA_EXTENSION_NAME)) {
+		deviceExtensions[deviceExtensionCount++] = VK_EXT_HDR_METADATA_EXTENSION_NAME;
+		core->hdrMetadataEnabled = true;
+		printf("[Vulkan] Enabling optional device extension: %s\n", VK_EXT_HDR_METADATA_EXTENSION_NAME);
 	}
 
 	// Add VK_KHR_portability_subset if both portability enumeration and the subset extension are available
@@ -395,6 +403,13 @@ void vulkan_device_create(VulkanCore *core, GLFWwindow *window, void *xr)
 
 	VkDeviceCreateInfo deviceInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = NULL, .queueCreateInfoCount = queueCreateInfoCount, .pQueueCreateInfos = queueCreateInfos, .enabledExtensionCount = deviceExtensionCount, .ppEnabledExtensionNames = deviceExtensions, .pEnabledFeatures = NULL, .ppEnabledLayerNames = (enabledLayerCount > 0) ? enabledLayers : NULL, .enabledLayerCount = enabledLayerCount};
 	VK_CHECK(vkCreateDevice(core->physicalDevice, &deviceInfo, NULL, &core->device), "Failed to create logical device");
+	if (core->hdrMetadataEnabled) {
+		core->setHdrMetadata = (PFN_vkSetHdrMetadataEXT)vkGetDeviceProcAddr(core->device, "vkSetHdrMetadataEXT");
+		if (!core->setHdrMetadata) {
+			core->hdrMetadataEnabled = false;
+			fprintf(stderr, "[Vulkan] vkSetHdrMetadataEXT is unavailable despite extension enablement\n");
+		}
+	}
 
 	for (uint32_t i = 0; i < deviceExtensionStrdupCount; i++)
 		free(deviceExtensionStrdup[i]);

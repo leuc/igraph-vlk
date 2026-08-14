@@ -211,7 +211,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 	VK_CHECK(vkQueueSubmit(r->core.graphicsQueue, 0, NULL, r->graphUpdateFences[ringIdx]), "Failed to signal graph update fence");
 }
 
-void renderer_render_ray(Renderer *r, VkCommandBuffer cmd, vec3 origin, vec3 dir, mat4 view, mat4 proj)
+void renderer_render_ray(Renderer *r, VkPipeline pipeline, VkCommandBuffer cmd, vec3 origin, vec3 dir, mat4 view, mat4 proj)
 {
 	// Ray length
 	float length = 5.0f;
@@ -232,7 +232,7 @@ void renderer_render_ray(Renderer *r, VkCommandBuffer cmd, vec3 origin, vec3 dir
 	}
 	update_buffer(r->core.device, r->rayVertexBufferMemory, sizeof(vertices), vertices);
 
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines.ray);
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
 	struct
 	{

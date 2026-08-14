@@ -16,6 +16,11 @@ VkSurfaceFormatKHR choose_swap_surface_format(const VkSurfaceFormatKHR *formats,
 			return formats[i];
 		}
 	}
+	for (uint32_t i = 0; i < count; i++) {
+		if (formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+			return formats[i];
+		}
+	}
 	return formats[0];
 }
 
@@ -37,6 +42,15 @@ bool vulkan_find_hdr10_surface_format(const VkSurfaceFormatKHR *formats, uint32_
 		}
 	}
 	return false;
+}
+
+VkSurfaceFormatKHR vulkan_choose_output_surface_format(const VkSurfaceFormatKHR *formats, uint32_t count, bool hdr10)
+{
+	VkSurfaceFormatKHR selected;
+	if (hdr10 && vulkan_find_hdr10_surface_format(formats, count, &selected)) {
+		return selected;
+	}
+	return choose_swap_surface_format(formats, count);
 }
 
 bool vulkan_hdr10_presentation_supported(bool surface_supported, bool display_known, bool display_supported)

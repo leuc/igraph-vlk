@@ -42,11 +42,10 @@
 
 static void sync_display_hdr_status(AppState *app, bool refresh_surface)
 {
-	bool known;
-	bool hdr10;
-	if (window_consume_display_hdr_status(&app->win, &known, &hdr10)) {
-		vulkan_swapchain_set_display_hdr10_support(&app->renderer.swapchain, known, hdr10);
-		if (refresh_surface && known) {
+	DisplayColorInfo info;
+	if (window_consume_display_color_info(&app->win, &info)) {
+		bool output_changed = vulkan_swapchain_set_display_color_info(&app->renderer.swapchain, &info);
+		if (refresh_surface && output_changed) {
 			app->renderer.framebufferResized = true;
 		}
 	}

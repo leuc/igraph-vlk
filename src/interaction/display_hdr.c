@@ -50,17 +50,31 @@ struct DisplayHdrTracker
 	struct wp_image_description_info_v1 *info;
 	bool pending_st2084_pq;
 	bool pending_bt2020_primaries;
+	DisplayColorInfo pending;
 };
 
-static void tracker_set_status(DisplayHdrTracker *tracker, bool known, bool hdr10)
+static ColorPrimaries color_primaries_from_wayland(int32_t r_x, int32_t r_y, int32_t g_x, int32_t g_y, int32_t b_x, int32_t b_y, int32_t w_x, int32_t w_y)
 {
-	WindowState *window = tracker->window;
-	if (window->displayHdrKnown == known && window->displayHdr10 == hdr10) {
-		return;
-	}
-	window->displayHdrKnown = known;
-	window->displayHdr10 = hdr10;
-	window->displayHdrDirty = true;
+	return (ColorPrimaries){.r_x = (float)r_x / 1000000.0f, .r_y = (float)r_y / 1000000.0f, .g_x = (float)g_x / 1000000.0f, .g_y = (float)g_y / 1000000.0f, .b_x = (float)b_x / 1000000.0f, .b_y = (float)b_y / 1000000.0f, .w_x = (float)w_x / 1000000.0f, .w_y = (float)w_y / 1000000.0f};
+}
+
+static ColorPrimaries bt2020_primaries(void)
+{
+	return color_primaries_from_wayland(708000, 292000, 170000, 797000, 131000, 46000, 312700, 329000);
+}
+
+static void tracker_commit(DisplayHdrTracker *tracker, const DisplayColorInfo *info)
+{
+	tracker->window->displayColor = *info;
+	tracker->window->displayColorDirty = true;
+}
+
+static void tracker_set_unknown(DisplayHdrTracker *tracker)
+{
+	DisplayColorInfo info = tracker->window->displayColor;
+	info.known = false;
+	info.hdr10 = false;
+	tracker_commit(tracker, &info);
 }
 
 static void manager_supported_intent(void *data, struct wp_color_manager_v1 *manager, uint32_t intent)
@@ -136,8 +150,9 @@ static void info_done(void *data, struct wp_image_description_info_v1 *info)
 		return;
 	}
 	tracker->info = NULL;
-	bool hdr10 = display_hdr_description_is_hdr10(tracker->pending_st2084_pq, tracker->pending_bt2020_primaries);
-	tracker_set_status(tracker, true, hdr10);
+	tracker->pending.known = true;
+	tracker->pending.hdr10 = display_hdr_description_is_hdr10(tracker->pending_st2084_pq, tracker->pending_bt2020_primaries);
+	tracker_commit(tracker, &tracker->pending);
 	if (tracker->description) {
 		wp_image_description_v1_destroy(tracker->description);
 		tracker->description = NULL;
@@ -157,6 +172,8 @@ static void info_primaries(void *data, struct wp_image_description_info_v1 *info
 	(void)info;
 	DisplayHdrTracker *tracker = data;
 	tracker->pending_bt2020_primaries |= display_hdr_is_bt2020_primaries(r_x, r_y, g_x, g_y, b_x, b_y, w_x, w_y);
+	tracker->pending.primaries = color_primaries_from_wayland(r_x, r_y, g_x, g_y, b_x, b_y, w_x, w_y);
+	tracker->pending.has_primaries = true;
 }
 
 static void info_primaries_named(void *data, struct wp_image_description_info_v1 *info, uint32_t primaries)
@@ -164,6 +181,10 @@ static void info_primaries_named(void *data, struct wp_image_description_info_v1
 	(void)info;
 	DisplayHdrTracker *tracker = data;
 	tracker->pending_bt2020_primaries |= primaries == WP_COLOR_MANAGER_V1_PRIMARIES_BT2020;
+	if (primaries == WP_COLOR_MANAGER_V1_PRIMARIES_BT2020) {
+		tracker->pending.primaries = bt2020_primaries();
+		tracker->pending.has_primaries = true;
+	}
 }
 
 static void info_tf_power(void *data, struct wp_image_description_info_v1 *info, uint32_t exponent)
@@ -182,47 +203,43 @@ static void info_tf_named(void *data, struct wp_image_description_info_v1 *info,
 
 static void info_luminances(void *data, struct wp_image_description_info_v1 *info, uint32_t min_lum, uint32_t max_lum, uint32_t reference_lum)
 {
-	(void)data;
 	(void)info;
-	(void)min_lum;
-	(void)max_lum;
-	(void)reference_lum;
+	DisplayHdrTracker *tracker = data;
+	tracker->pending.min_luminance = (float)min_lum / 10000.0f;
+	tracker->pending.max_luminance = (float)max_lum;
+	tracker->pending.reference_luminance = (float)reference_lum;
+	tracker->pending.has_luminance = true;
 }
 
 static void info_target_primaries(void *data, struct wp_image_description_info_v1 *info, int32_t r_x, int32_t r_y, int32_t g_x, int32_t g_y, int32_t b_x, int32_t b_y, int32_t w_x, int32_t w_y)
 {
-	(void)data;
 	(void)info;
-	(void)r_x;
-	(void)r_y;
-	(void)g_x;
-	(void)g_y;
-	(void)b_x;
-	(void)b_y;
-	(void)w_x;
-	(void)w_y;
+	DisplayHdrTracker *tracker = data;
+	tracker->pending.target_primaries = color_primaries_from_wayland(r_x, r_y, g_x, g_y, b_x, b_y, w_x, w_y);
+	tracker->pending.has_target_primaries = true;
 }
 
 static void info_target_luminance(void *data, struct wp_image_description_info_v1 *info, uint32_t min_lum, uint32_t max_lum)
 {
-	(void)data;
 	(void)info;
-	(void)min_lum;
-	(void)max_lum;
+	DisplayHdrTracker *tracker = data;
+	tracker->pending.target_min_luminance = (float)min_lum / 10000.0f;
+	tracker->pending.target_max_luminance = (float)max_lum;
+	tracker->pending.has_target_luminance = true;
 }
 
 static void info_target_max_cll(void *data, struct wp_image_description_info_v1 *info, uint32_t max_cll)
 {
-	(void)data;
 	(void)info;
-	(void)max_cll;
+	DisplayHdrTracker *tracker = data;
+	tracker->pending.target_max_cll = (float)max_cll;
 }
 
 static void info_target_max_fall(void *data, struct wp_image_description_info_v1 *info, uint32_t max_fall)
 {
-	(void)data;
 	(void)info;
-	(void)max_fall;
+	DisplayHdrTracker *tracker = data;
+	tracker->pending.target_max_fall = (float)max_fall;
 }
 
 static const struct wp_image_description_info_v1_listener info_listener = {
@@ -246,18 +263,18 @@ static void description_failed(void *data, struct wp_image_description_v1 *descr
 		return;
 	}
 	fprintf(stderr, "[Wayland] Failed to read current display color description (%u): %s\n", cause, message ? message : "unknown error");
-	tracker_set_status(tracker, false, false);
+	tracker_set_unknown(tracker);
 	wp_image_description_v1_destroy(description);
 	tracker->description = NULL;
 }
 
 static void description_ready(void *data, struct wp_image_description_v1 *description, uint32_t identity)
 {
-	(void)identity;
 	DisplayHdrTracker *tracker = data;
 	if (description != tracker->description) {
 		return;
 	}
+	tracker->pending.revision = identity;
 	tracker->info = wp_image_description_v1_get_information(description);
 	if (tracker->info) {
 		wp_image_description_info_v1_add_listener(tracker->info, &info_listener, tracker);
@@ -282,7 +299,7 @@ static void tracker_query_preferred(DisplayHdrTracker *tracker)
 	}
 	tracker->pending_st2084_pq = false;
 	tracker->pending_bt2020_primaries = false;
-	tracker_set_status(tracker, false, false);
+	tracker->pending = (DisplayColorInfo){0};
 
 	tracker->description = wp_color_management_surface_feedback_v1_get_preferred(tracker->feedback);
 	if (tracker->description) {
@@ -329,9 +346,8 @@ static void tracker_destroy(DisplayHdrTracker *tracker)
 
 bool window_display_hdr_init(WindowState *window)
 {
-	window->displayHdrKnown = false;
-	window->displayHdr10 = false;
-	window->displayHdrDirty = true;
+	window->displayColor = (DisplayColorInfo){0};
+	window->displayColorDirty = true;
 	window->displayHdrTracker = NULL;
 
 #ifdef HAVE_WAYLAND_COLOR_MANAGEMENT
@@ -390,17 +406,14 @@ void window_display_hdr_cleanup(WindowState *window)
 	window->displayHdrTracker = NULL;
 }
 
-bool window_consume_display_hdr_status(WindowState *window, bool *known, bool *hdr10)
+bool window_consume_display_color_info(WindowState *window, DisplayColorInfo *info)
 {
-	if (!window->displayHdrDirty) {
+	if (!window->displayColorDirty) {
 		return false;
 	}
-	window->displayHdrDirty = false;
-	if (known) {
-		*known = window->displayHdrKnown;
-	}
-	if (hdr10) {
-		*hdr10 = window->displayHdr10;
+	window->displayColorDirty = false;
+	if (info) {
+		*info = window->displayColor;
 	}
 	return true;
 }

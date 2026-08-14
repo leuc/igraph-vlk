@@ -1,4 +1,7 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "color_space.glsl"
 
 layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec3 fragColor;
@@ -8,6 +11,11 @@ layout(location = 4) in float fragVisible;
 layout(location = 5) in float fragReveal;
 
 layout(location = 0) out vec4 outColor;
+
+vec3 node_output_color(vec3 color)
+{
+	return fragSelected > 0.5 ? scene_output_highlight(color) : scene_output_color(color);
+}
 
 void main()
 {
@@ -26,7 +34,7 @@ void main()
 	if (deg == 0) {
 		if (dist > 0.15)
 			discard;
-		outColor = vec4(c, 1.0);
+		outColor = vec4(node_output_color(c), 1.0);
 		return;
 	}
 
@@ -34,7 +42,7 @@ void main()
 	if (deg == 1) {
 		if (dist > 1.0)
 			discard;
-		outColor = vec4(c, 1.0);
+		outColor = vec4(node_output_color(c), 1.0);
 		return;
 	}
 
@@ -45,7 +53,7 @@ void main()
 		vec3 hc = c;
 		if (uv.x > 0.0)
 			hc = c * 0.7;
-		outColor = vec4(hc, 1.0);
+		outColor = vec4(node_output_color(hc), 1.0);
 		return;
 	}
 
@@ -58,5 +66,5 @@ void main()
 	if (d < 0.0)
 		discard;
 
-	outColor = vec4(c, 1.0);
+	outColor = vec4(node_output_color(c), 1.0);
 }
