@@ -6,7 +6,7 @@ Per-directory guide for `src/interaction/` and `include/interaction/`. See root 
 
 | Files | Role |
 |------|------|
-| `window.c/.h` | GLFW lifecycle, focus handling, fullscreen, monitor cycling, and window state |
+| `window.c/.h`, `display_hdr.c/.h` | GLFW lifecycle, fullscreen/monitor controls, and Wayland per-display HDR10 tracking |
 | `camera.c/.h` | FPS camera movement, yaw/pitch vectors, and speed modifiers |
 | `input.c/.h` | GLFW callbacks, keyboard/mouse dispatch, controller mapping load, and continuous input |
 | `gamepad.c/.h` | Mapped and raw-controller polling, deadzones, movement/look, menu activation, and layout scaling |

@@ -5,6 +5,7 @@
 
 #include "interaction/window.h"
 #include "app_state.h"
+#include "interaction/display_hdr.h"
 #include <limits.h>
 #include <stdio.h>
 
@@ -141,8 +142,18 @@ bool window_create(AppState *state)
 	if (can_position)
 		glfwSetWindowPos(state->win.handle, cx, cy);
 	glfwShowWindow(state->win.handle);
+	window_display_hdr_init(&state->win);
 
 	return true;
+}
+
+void window_destroy(WindowState *win)
+{
+	window_display_hdr_cleanup(win);
+	if (win->handle) {
+		glfwDestroyWindow(win->handle);
+		win->handle = NULL;
+	}
 }
 
 void window_toggle_fullscreen(WindowState *win)

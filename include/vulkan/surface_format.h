@@ -13,6 +13,7 @@
 
 VkSurfaceFormatKHR choose_swap_surface_format(const VkSurfaceFormatKHR *formats, uint32_t count);
 bool vulkan_find_hdr10_surface_format(const VkSurfaceFormatKHR *formats, uint32_t count, VkSurfaceFormatKHR *out_format);
+bool vulkan_hdr10_presentation_supported(bool surface_supported, bool display_known, bool display_supported);
 const char *vulkan_surface_format_name(VkFormat format);
 
 #endif // VULKAN_SURFACE_FORMAT_H

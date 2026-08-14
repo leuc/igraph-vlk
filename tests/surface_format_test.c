@@ -76,6 +76,15 @@ static int test_sdr_surface_format_selection(void)
 	return 0;
 }
 
+static int test_effective_hdr10_support(void)
+{
+	IGRAPH_ASSERT(vulkan_hdr10_presentation_supported(true, true, true));
+	IGRAPH_ASSERT(!vulkan_hdr10_presentation_supported(false, true, true));
+	IGRAPH_ASSERT(!vulkan_hdr10_presentation_supported(true, false, true));
+	IGRAPH_ASSERT(!vulkan_hdr10_presentation_supported(true, true, false));
+	return 0;
+}
+
 int main(void)
 {
 	RUN_TEST(test_empty_formats);
@@ -83,5 +92,6 @@ int main(void)
 	RUN_TEST(test_hdr10_format_detection);
 	RUN_TEST(test_driver_advertised_hdr10_format);
 	RUN_TEST(test_sdr_surface_format_selection);
+	RUN_TEST(test_effective_hdr10_support);
 	return 0;
 }

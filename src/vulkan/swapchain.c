@@ -16,16 +16,42 @@
 #include "vulkan/surface_format.h"
 #include "vulkan/utils.h"
 
+static void update_effective_hdr10_support(VulkanSwapchain *swapchain, bool report)
+{
+	bool supported = vulkan_hdr10_presentation_supported(swapchain->hdr10SurfaceSupported, swapchain->hdr10DisplayKnown, swapchain->hdr10DisplaySupported);
+	bool changed = supported != swapchain->hdr10Supported;
+	swapchain->hdr10Supported = supported;
+	if (!report && swapchain->hdr10StatusReported && !changed) {
+		return;
+	}
+	swapchain->hdr10StatusReported = true;
+
+	if (supported) {
+		const char *formatName = vulkan_surface_format_name(swapchain->hdr10SurfaceFormat.format);
+		if (formatName) {
+			printf("[Vulkan] HDR10 available on current display set: format=%s, colorSpace=VK_COLOR_SPACE_HDR10_ST2084_EXT\n", formatName);
+		} else {
+			printf("[Vulkan] HDR10 available on current display set: format=%d, colorSpace=VK_COLOR_SPACE_HDR10_ST2084_EXT\n", (int)swapchain->hdr10SurfaceFormat.format);
+		}
+	} else if (!swapchain->hdr10SurfaceSupported) {
+		printf("[Vulkan] HDR10 unavailable on current display set: Vulkan surface does not advertise VK_COLOR_SPACE_HDR10_ST2084_EXT\n");
+	} else if (!swapchain->hdr10DisplayKnown) {
+		printf("[Vulkan] HDR10 unavailable on current display set: output color state is unknown\n");
+	} else {
+		printf("[Vulkan] HDR10 unavailable on current display set: compositor prefers a non-HDR10 output encoding\n");
+	}
+}
+
 static void update_hdr10_surface_support(VulkanSwapchain *swapchain, const VulkanCore *core, const VkSurfaceFormatKHR *formats, uint32_t count, bool report)
 {
 	VkSurfaceFormatKHR hdr10Format = {.format = VK_FORMAT_UNDEFINED, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
 	bool supported = core->swapchainColorspaceEnabled && vulkan_find_hdr10_surface_format(formats, count, &hdr10Format);
-	bool changed = supported != swapchain->hdr10Supported;
-	if (supported && swapchain->hdr10Supported) {
+	bool changed = supported != swapchain->hdr10SurfaceSupported;
+	if (supported && swapchain->hdr10SurfaceSupported) {
 		changed = hdr10Format.format != swapchain->hdr10SurfaceFormat.format || hdr10Format.colorSpace != swapchain->hdr10SurfaceFormat.colorSpace;
 	}
 
-	swapchain->hdr10Supported = supported;
+	swapchain->hdr10SurfaceSupported = supported;
 	swapchain->hdr10SurfaceFormat = hdr10Format;
 	if (!report && !changed) {
 		return;
@@ -34,15 +60,26 @@ static void update_hdr10_surface_support(VulkanSwapchain *swapchain, const Vulka
 	if (supported) {
 		const char *formatName = vulkan_surface_format_name(hdr10Format.format);
 		if (formatName) {
-			printf("[Vulkan] HDR10 surface presentation available: format=%s, colorSpace=VK_COLOR_SPACE_HDR10_ST2084_EXT\n", formatName);
+			printf("[Vulkan] HDR10 surface format available: format=%s, colorSpace=VK_COLOR_SPACE_HDR10_ST2084_EXT\n", formatName);
 		} else {
-			printf("[Vulkan] HDR10 surface presentation available: format=%d, colorSpace=VK_COLOR_SPACE_HDR10_ST2084_EXT\n", (int)hdr10Format.format);
+			printf("[Vulkan] HDR10 surface format available: format=%d, colorSpace=VK_COLOR_SPACE_HDR10_ST2084_EXT\n", (int)hdr10Format.format);
 		}
 	} else if (!core->swapchainColorspaceEnabled) {
-		printf("[Vulkan] HDR10 surface presentation unavailable: VK_EXT_swapchain_colorspace is not enabled\n");
+		printf("[Vulkan] HDR10 surface format unavailable: VK_EXT_swapchain_colorspace is not enabled\n");
 	} else {
-		printf("[Vulkan] HDR10 surface presentation unavailable: surface does not advertise VK_COLOR_SPACE_HDR10_ST2084_EXT\n");
+		printf("[Vulkan] HDR10 surface format unavailable: surface does not advertise VK_COLOR_SPACE_HDR10_ST2084_EXT\n");
 	}
+	if (swapchain->hdr10StatusReported) {
+		update_effective_hdr10_support(swapchain, true);
+	}
+}
+
+void vulkan_swapchain_set_display_hdr10_support(VulkanSwapchain *swapchain, bool known, bool supported)
+{
+	bool changed = known != swapchain->hdr10DisplayKnown || supported != swapchain->hdr10DisplaySupported;
+	swapchain->hdr10DisplayKnown = known;
+	swapchain->hdr10DisplaySupported = known && supported;
+	update_effective_hdr10_support(swapchain, changed);
 }
 
 VkPresentModeKHR choose_swap_present_mode(VkPresentModeKHR *modes, uint32_t count)
@@ -76,6 +113,10 @@ void vulkan_swapchain_create(VulkanSwapchain *swapchain, VulkanCore *core, GLFWw
 	swapchain->depthView = VK_NULL_HANDLE;
 	swapchain->depthMemory = VK_NULL_HANDLE;
 	swapchain->imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+	swapchain->hdr10SurfaceSupported = false;
+	swapchain->hdr10DisplayKnown = false;
+	swapchain->hdr10DisplaySupported = false;
+	swapchain->hdr10StatusReported = false;
 	swapchain->hdr10Supported = false;
 	swapchain->hdr10SurfaceFormat = (VkSurfaceFormatKHR){.format = VK_FORMAT_UNDEFINED, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
 

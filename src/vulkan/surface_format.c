@@ -39,6 +39,11 @@ bool vulkan_find_hdr10_surface_format(const VkSurfaceFormatKHR *formats, uint32_
 	return false;
 }
 
+bool vulkan_hdr10_presentation_supported(bool surface_supported, bool display_known, bool display_supported)
+{
+	return surface_supported && display_known && display_supported;
+}
+
 const char *vulkan_surface_format_name(VkFormat format)
 {
 	switch (format) {

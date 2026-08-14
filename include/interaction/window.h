@@ -10,6 +10,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+typedef struct DisplayHdrTracker DisplayHdrTracker;
+
 /**
  * Window geometry, display mode, and platform capabilities.
  * Grouped for clean separation from the rest of AppState.
@@ -22,6 +24,10 @@ typedef struct
 	int x, y, w, h;
 	float content_scale_x;
 	float content_scale_y;
+	DisplayHdrTracker *displayHdrTracker;
+	bool displayHdrKnown;
+	bool displayHdr10;
+	bool displayHdrDirty;
 } WindowState;
 
 /* Opaque forward declaration — window.c includes app_state.h for the full type */
@@ -35,6 +41,7 @@ typedef struct AppState AppState;
  * @return true on success, false on failure
  */
 bool window_create(AppState *state);
+void window_destroy(WindowState *win);
 
 /**
  * Toggle between fullscreen and windowed mode.

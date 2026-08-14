@@ -11,6 +11,7 @@
 #include "graph/stream.h"
 #include "graph/wrappers_layout.h"
 #include "interaction/camera.h"
+#include "interaction/display_hdr.h"
 #include "interaction/input.h"
 #include "interaction/menu.h"
 #include "interaction/state.h"
@@ -27,6 +28,7 @@
 #include "vulkan/renderer_labels.h"
 #include "vulkan/renderer_lifecycle.h"
 #include "vulkan/renderer_transition.h"
+#include "vulkan/swapchain.h"
 
 #ifdef USE_OPENXR
 #include "xr/openxr_frame.h"
@@ -37,6 +39,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static void sync_display_hdr_status(AppState *app, bool refresh_surface)
+{
+	bool known;
+	bool hdr10;
+	if (window_consume_display_hdr_status(&app->win, &known, &hdr10)) {
+		vulkan_swapchain_set_display_hdr10_support(&app->renderer.swapchain, known, hdr10);
+		if (refresh_surface && known) {
+			app->renderer.framebufferResized = true;
+		}
+	}
+}
 
 int main(int argc, char **argv)
 {
@@ -111,7 +125,7 @@ int main(int argc, char **argv)
 			if (app.graph_stream)
 				graph_stream_destroy(app.graph_stream);
 			graph_free_data(&app.current_graph);
-			glfwDestroyWindow(app.win.handle);
+			window_destroy(&app.win);
 			glfwTerminate();
 			return EXIT_FAILURE;
 		}
@@ -137,10 +151,11 @@ int main(int argc, char **argv)
 		if (app.vr_enabled)
 			xr_context_cleanup(&app.xr_ctx);
 #endif
-		glfwDestroyWindow(app.win.handle);
+		window_destroy(&app.win);
 		glfwTerminate();
 		return EXIT_FAILURE;
 	}
+	sync_display_hdr_status(&app, false);
 
 #ifdef USE_OPENXR
 	if (app.vr_enabled) {
@@ -151,7 +166,7 @@ int main(int argc, char **argv)
 				graph_stream_destroy(app.graph_stream);
 			graph_free_data(&app.current_graph);
 			renderer_cleanup(&app.renderer);
-			glfwDestroyWindow(app.win.handle);
+			window_destroy(&app.win);
 			glfwTerminate();
 			return EXIT_FAILURE;
 		}
@@ -184,7 +199,7 @@ int main(int argc, char **argv)
 #ifdef USE_OPENXR
 		xr_context_cleanup(&app.xr_ctx);
 #endif
-		glfwDestroyWindow(app.win.handle);
+		window_destroy(&app.win);
 		glfwTerminate();
 		return EXIT_FAILURE;
 	}
@@ -206,6 +221,7 @@ int main(int argc, char **argv)
 #endif
 
 	while (!glfwWindowShouldClose(app.win.handle)) {
+		sync_display_hdr_status(&app, true);
 		float currentFrame = (float)glfwGetTime();
 		app.delta_time = currentFrame - app.time;
 		app.time = currentFrame;
@@ -303,7 +319,7 @@ int main(int argc, char **argv)
 #ifdef USE_OPENXR
 	xr_context_cleanup(&app.xr_ctx);
 #endif
-	glfwDestroyWindow(app.win.handle);
+	window_destroy(&app.win);
 	glfwTerminate();
 
 	return 0;

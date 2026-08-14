@@ -16,11 +16,11 @@ find_package(CURL REQUIRED)
 find_path(CGLM_INCLUDE_DIR cglm/cglm.h)
 find_program(GLSL_COMPILER NAMES glslangValidator glslc REQUIRED)
 find_package(zstd QUIET)
+find_package(PkgConfig QUIET)
 
 # falling back to pkg-config
 if(NOT zstd_FOUND)
     # cmake_pkg_config doesn't exist on cmake 3.22 Ubuntu 22.04
-    find_package(PkgConfig QUIET)
     if(PKG_CONFIG_FOUND)
         pkg_check_modules(zstd QUIET libzstd)
     endif()
@@ -45,6 +45,27 @@ elseif(NOT TARGET zstd::libzstd AND zstd_LINK_LIBRARIES)
 endif()
 
 set(OPENXR_SOURCES src/xr/openxr_context.c src/xr/openxr_vulkan.c src/xr/openxr_session.c src/xr/openxr_input.c src/xr/openxr_view.c src/xr/openxr_frame.c src/vulkan/renderer_xr.c)
+
+set(WAYLAND_COLOR_MANAGEMENT_ENABLED OFF)
+if(UNIX AND NOT APPLE AND PKG_CONFIG_FOUND)
+	pkg_check_modules(WAYLAND_CLIENT QUIET IMPORTED_TARGET wayland-client)
+	find_program(WAYLAND_SCANNER NAMES wayland-scanner)
+	if(TARGET PkgConfig::WAYLAND_CLIENT AND WAYLAND_SCANNER)
+		set(WAYLAND_COLOR_MANAGEMENT_ENABLED ON)
+		set(WAYLAND_COLOR_PROTOCOL_XML ${CMAKE_CURRENT_SOURCE_DIR}/protocols/color-management-v1.xml)
+		set(WAYLAND_COLOR_PROTOCOL_HEADER ${CMAKE_BINARY_DIR}/generated/color-management-v1-client-protocol.h)
+		set(WAYLAND_COLOR_PROTOCOL_SOURCE ${CMAKE_BINARY_DIR}/generated/color-management-v1-protocol.c)
+		file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/generated)
+		add_custom_command(
+			OUTPUT ${WAYLAND_COLOR_PROTOCOL_HEADER} ${WAYLAND_COLOR_PROTOCOL_SOURCE}
+			COMMAND ${WAYLAND_SCANNER} client-header ${WAYLAND_COLOR_PROTOCOL_XML} ${WAYLAND_COLOR_PROTOCOL_HEADER}
+			COMMAND ${WAYLAND_SCANNER} private-code ${WAYLAND_COLOR_PROTOCOL_XML} ${WAYLAND_COLOR_PROTOCOL_SOURCE}
+			DEPENDS ${WAYLAND_COLOR_PROTOCOL_XML}
+			COMMENT "Generating Wayland color-management client protocol"
+		)
+		add_custom_target(wayland_color_protocol DEPENDS ${WAYLAND_COLOR_PROTOCOL_HEADER} ${WAYLAND_COLOR_PROTOCOL_SOURCE})
+	endif()
+endif()
 
 # Platform detection for GLFW-specific window hints
 if(APPLE)
@@ -176,6 +197,7 @@ add_executable(
 	src/graph/command_registry.c
 	# Interaction modules
 	src/interaction/camera.c
+	src/interaction/display_hdr.c
 	src/interaction/input.c
 	src/interaction/menu.c
 	src/interaction/menu_state.c
@@ -188,11 +210,18 @@ add_executable(
 	src/ui/hud.c
 	src/ui/menu.c
 	src/ui/menu_metrics.c
+	${WAYLAND_COLOR_PROTOCOL_SOURCE}
 	${SPIRV_SHADERS})
 
 target_include_directories(igraph-vlk PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include/graph ${Vulkan_INCLUDE_DIRS} ${CGLM_INCLUDE_DIR} ${IGRAPH_INCLUDE_DIRS} ${CMAKE_BINARY_DIR})
 
 target_link_libraries(igraph-vlk PRIVATE Vulkan::Vulkan glfw igraph::igraph CURL::libcurl zstd::libzstd)
+if(WAYLAND_COLOR_MANAGEMENT_ENABLED)
+	add_dependencies(igraph-vlk wayland_color_protocol)
+	target_compile_definitions(igraph-vlk PRIVATE HAVE_WAYLAND_COLOR_MANAGEMENT=1)
+	target_include_directories(igraph-vlk PRIVATE ${CMAKE_BINARY_DIR}/generated)
+	target_link_libraries(igraph-vlk PRIVATE PkgConfig::WAYLAND_CLIENT)
+endif()
 if(OpenMP_C_FOUND)
 	target_link_libraries(igraph-vlk PRIVATE OpenMP::OpenMP_C)
 endif()
@@ -350,6 +379,11 @@ add_executable(surface_format_test tests/surface_format_test.c src/vulkan/surfac
 target_include_directories(surface_format_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${Vulkan_INCLUDE_DIRS} ${IGRAPH_INCLUDE_DIRS})
 target_link_libraries(surface_format_test PRIVATE igraph::igraph)
 add_test(NAME surface_format_test COMMAND surface_format_test)
+
+add_executable(display_hdr_test tests/display_hdr_test.c src/interaction/display_hdr.c)
+target_include_directories(display_hdr_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests ${Vulkan_INCLUDE_DIRS} ${IGRAPH_INCLUDE_DIRS})
+target_link_libraries(display_hdr_test PRIVATE igraph::igraph)
+add_test(NAME display_hdr_test COMMAND display_hdr_test)
 
 add_executable(menu_scene_test tests/menu_scene_test.c src/vulkan/menu_scene.c src/interaction/menu_state.c src/ui/menu_metrics.c)
 target_include_directories(menu_scene_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CGLM_INCLUDE_DIR} ${IGRAPH_INCLUDE_DIRS} ${Vulkan_INCLUDE_DIRS})

@@ -49,7 +49,7 @@ Main Path supports SPLC, Unit, SPC, SPE, NPPC, and SPNP. Weighting progresses no
 | Files | Role |
 |------|------|
 | `device.c/.h` | Physical/logical device selection, features, queues, and extensions |
-| `swapchain.c/.h` | Swapchain images/views, extent/format choice, acquisition, and recreation |
+| `swapchain.c/.h`, `surface_format.c/.h` | Swapchain lifecycle, format choice, and effective surface/display HDR10 capability |
 | `buffers.c/.h` | Host/device buffer allocation, staging, copy, map/update helpers |
 | `images.c/.h` | Image allocation, views, formats, and transitions |
 | `commands.c/.h` | Command pools/buffers and one-shot command helpers |
