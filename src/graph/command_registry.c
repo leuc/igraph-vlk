@@ -18,7 +18,6 @@
 #include "graph/wrappers_layout.h"
 #include "graph/wrappers_path_cover.h"
 #include "graph/wrappers_paths.h"
-#include "graph/wrappers_rotor_routing.h"
 #include "graph/wrappers_structural.h"
 
 const CommandDef g_command_registry[] = {
@@ -127,7 +126,6 @@ const CommandDef g_command_registry[] = {
 	{"Follow", "bfs_trigger", "Breadth-first search from single source", compute_inline_pass, apply_bfs_trigger, free_noop},
 	{"Follow", "dfs_trigger", "Depth-first search from single source", compute_inline_pass, apply_dfs_trigger, free_noop},
 	{"Follow", "topo_trigger", "Topological sort", compute_inline_pass, apply_topo_trigger, free_noop},
-	{"Follow", "rotor_routing_trigger", "Rotor Routing", compute_rotor_routing_trigger, apply_rotor_routing_trigger, free_rotor_routing_result},
 	{"Follow", "kcore_tree_trigger", "K-Core Tree", compute_kcore_tree_trigger, apply_kcore_tree_trigger, free_kcore_tree_result},
 	{"Follow/Main Path Analysis/Step 1: Weighting", "main_path_splc", "Search Path Link Count (SPLC)", compute_main_path_splc, apply_main_path_weighting, free_main_path_prep, poll_main_path_weighting},
 	{"Follow/Main Path Analysis/Step 1: Weighting", "main_path_unit", "Unit Weight", compute_main_path_unit, apply_main_path_weighting, free_main_path_prep, poll_main_path_weighting},

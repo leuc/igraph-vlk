@@ -135,7 +135,6 @@ add_executable(
 	src/graph/layered_sphere_common.c
 	src/graph/graph_actions.c
 	src/graph/graph_animation.c
-	src/graph/rotor_routing.c
 	src/graph/main_path.c
 	src/graph/main_path_cache.c
 	src/graph/main_path_search.c
@@ -167,7 +166,6 @@ add_executable(
 	src/graph/wrappers_kcore_tree.c
 	src/graph/wrappers_path_cover.c
 	src/graph/wrappers_paths.c
-	src/graph/wrappers_rotor_routing.c
 	src/graph/wrappers_structural.c
 	src/graph/repo.c
 	src/graph/repo_netzschleuder.c
@@ -336,15 +334,6 @@ if(NOT MSVC)
 	target_link_libraries(renderer_anim_values_test PRIVATE m)
 endif()
 add_test(NAME renderer_anim_values_test COMMAND renderer_anim_values_test)
-
-# Deterministic single-agent rotor-walk scheduling and reveal ranks.
-add_executable(rotor_routing_test tests/rotor_routing_test.c src/graph/rotor_routing.c)
-target_include_directories(rotor_routing_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${IGRAPH_INCLUDE_DIRS})
-target_link_libraries(rotor_routing_test PRIVATE igraph::igraph)
-if(NOT MSVC)
-	target_link_libraries(rotor_routing_test PRIVATE m)
-endif()
-add_test(NAME rotor_routing_test COMMAND rotor_routing_test)
 
 add_executable(menu_scene_test tests/menu_scene_test.c src/vulkan/menu_scene.c src/interaction/menu_state.c src/ui/menu_metrics.c)
 target_include_directories(menu_scene_test PRIVATE ${CMAKE_SOURCE_DIR}/include ${CGLM_INCLUDE_DIR} ${IGRAPH_INCLUDE_DIRS} ${Vulkan_INCLUDE_DIRS})

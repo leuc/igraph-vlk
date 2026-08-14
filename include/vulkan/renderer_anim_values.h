@@ -10,7 +10,6 @@
 
 float renderer_anim_host_strength(float raw_value);
 float renderer_anim_reveal_at(int rank, float seconds_per_step);
-float renderer_anim_reveal_at_or_dim(int rank, float seconds_per_step, bool keep_unrevealed_dim);
 float renderer_anim_base_strength(float raw_value, bool unweighted_fallback);
 
 #endif
