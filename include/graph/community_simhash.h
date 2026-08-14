@@ -22,6 +22,8 @@
 #ifndef GRAPH_COMMUNITY_SIMHASH_H
 #define GRAPH_COMMUNITY_SIMHASH_H
 
+#include "graph/graph_types.h"
+
 #include <igraph/igraph.h>
 
 // 64-bit order-independent fingerprint of an explicit community member list.
@@ -41,9 +43,6 @@ void community_simhash_batch(const igraph_integer_t *membership, igraph_integer_
 // Hamming distance between two SimHashes (number of differing bits).
 int community_simhash_hamming(uint64_t a, uint64_t b);
 
-// Deterministic color from a SimHash, using the same golden-ratio hue
-// stepping + HSV->RGB conversion as community_id_to_rgb(). Feeds the 64-bit
-// hash instead of a volatile comm_id, so a stable community keeps its color.
-void community_simhash_to_rgb(uint64_t hash, float out_rgb[3]);
+GraphColor community_simhash_to_color(uint64_t hash);
 
 #endif // GRAPH_COMMUNITY_SIMHASH_H

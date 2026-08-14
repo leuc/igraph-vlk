@@ -8,8 +8,15 @@
 
 #include "graph/graph_types.h"
 
+#include <stdint.h>
+
 #define EMPHASIS_FULL 1.0f
 #define EMPHASIS_DIMMED 0.25f
+
+uint64_t graph_color_hash_string(const char *value);
+uint64_t graph_color_hash_u64(uint64_t value);
+GraphColor graph_color_generate(uint64_t key);
+GraphColor graph_color_from_srgb(float red, float green, float blue);
 
 /**
  * Reset node/edge emphasis to full brightness (emphasis = 1.0f).

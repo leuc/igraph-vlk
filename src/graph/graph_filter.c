@@ -6,6 +6,8 @@
 #define _GNU_SOURCE
 #include "graph/graph_filter.h"
 
+#include "graph/graph_color.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -104,9 +106,7 @@ void graph_highlight_infrastructure(GraphData *data)
 	igraph_articulation_points(&data->g, &ap);
 	for (int i = 0; i < igraph_vector_int_size(&ap); i++) {
 		int v_idx = VECTOR(ap)[i];
-		data->nodes[v_idx].color[0] = 1.0f;
-		data->nodes[v_idx].color[1] = 0.2f;
-		data->nodes[v_idx].color[2] = 0.2f;
+		data->nodes[v_idx].color = graph_color_from_srgb(1.0f, 0.2f, 0.2f);
 	}
 	igraph_vector_int_destroy(&ap);
 
@@ -121,12 +121,8 @@ void graph_highlight_infrastructure(GraphData *data)
 		igraph_integer_t from, to;
 		igraph_edge(&data->g, VECTOR(bridges)[i], &from, &to);
 		// Optionally color nodes connected to bridges differently
-		data->nodes[from].color[0] = 1.0f;
-		data->nodes[from].color[1] = 0.5f;
-		data->nodes[from].color[2] = 0.0f;
-		data->nodes[to].color[0] = 1.0f;
-		data->nodes[to].color[1] = 0.5f;
-		data->nodes[to].color[2] = 0.0f;
+		data->nodes[from].color = graph_color_from_srgb(1.0f, 0.5f, 0.0f);
+		data->nodes[to].color = graph_color_from_srgb(1.0f, 0.5f, 0.0f);
 	}
 	igraph_vector_int_destroy(&bridges);
 }

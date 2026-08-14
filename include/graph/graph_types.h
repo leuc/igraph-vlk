@@ -35,8 +35,14 @@ typedef struct
 
 typedef struct
 {
+	vec3 sdr_srgb;
+	vec3 hdr_linear_bt2020;
+} GraphColor;
+
+typedef struct
+{
 	vec3 position;
-	vec3 color;
+	GraphColor color;
 	float size;
 	char *label;
 	int degree;

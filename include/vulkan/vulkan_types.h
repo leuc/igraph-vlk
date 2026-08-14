@@ -100,7 +100,8 @@ typedef struct
 
 typedef struct
 {
-	vec3 color;
+	vec3 sdr_srgb;
+	vec3 hdr_linear_bt2020;
 	float size;
 	int degree;
 	float selected;
@@ -114,7 +115,8 @@ typedef struct
 
 typedef struct
 {
-	vec3 color;
+	vec3 sdr_srgb;
+	vec3 hdr_linear_bt2020;
 	float selected;
 	float normalized_pos;
 	float visible;

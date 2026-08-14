@@ -33,6 +33,17 @@ static int test_bt709_white_stays_white(void)
 	return 0;
 }
 
+static int test_srgb_authored_color_enters_bt2020_scene(void)
+{
+	const float input[3] = {1.0f, 0.0f, 0.0f};
+	float output[3];
+	color_srgb_to_linear_bt2020(input, output);
+	IGRAPH_ASSERT(near(output[0], 0.6274040f, 1e-6f));
+	IGRAPH_ASSERT(near(output[1], 0.0690970f, 1e-6f));
+	IGRAPH_ASSERT(near(output[2], 0.0163916f, 1e-6f));
+	return 0;
+}
+
 static int test_st2084_reference_values(void)
 {
 	const float nits[] = {0.0f, 100.0f, 203.0f, 1000.0f, 10000.0f};
@@ -66,6 +77,7 @@ int main(void)
 {
 	RUN_TEST(test_srgb_transfer);
 	RUN_TEST(test_bt709_white_stays_white);
+	RUN_TEST(test_srgb_authored_color_enters_bt2020_scene);
 	RUN_TEST(test_st2084_reference_values);
 	RUN_TEST(test_display_luminance_policy);
 	return 0;

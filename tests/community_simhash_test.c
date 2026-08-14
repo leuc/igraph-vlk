@@ -16,6 +16,7 @@
 #include "test_utilities.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 static int test_order_independent(void)
 {
@@ -76,28 +77,26 @@ static int test_membership_scan_matches_explicit(void)
 
 static int test_color_deterministic(void)
 {
-	float c1[3], c2[3];
-	community_simhash_to_rgb(0xDEADBEEFCAFEBABEULL, c1);
-	community_simhash_to_rgb(0xDEADBEEFCAFEBABEULL, c2);
-	IGRAPH_ASSERT(c1[0] == c2[0] && c1[1] == c2[1] && c1[2] == c2[2]);
-	// RGB components must be finite and within [0,1].
+	GraphColor c1 = community_simhash_to_color(0xDEADBEEFCAFEBABEULL);
+	GraphColor c2 = community_simhash_to_color(0xDEADBEEFCAFEBABEULL);
+	IGRAPH_ASSERT(memcmp(&c1, &c2, sizeof(c1)) == 0);
 	for (int i = 0; i < 3; i++) {
-		IGRAPH_ASSERT(c1[i] >= 0.0f && c1[i] <= 1.0f);
+		IGRAPH_ASSERT(c1.sdr_srgb[i] >= 0.0f && c1.sdr_srgb[i] <= 1.0f);
+		IGRAPH_ASSERT(c1.hdr_linear_bt2020[i] >= 0.0f && c1.hdr_linear_bt2020[i] <= 1.0f);
 	}
 	return 0;
 }
 
 static int test_color_stable_across_renumber(void)
 {
-	// Two different representative ids for the SAME member set must hash to
-	// the same value (the whole point: colors survive Leiden renumbering).
-	igraph_integer_t set_a[] = {4, 8, 15, 16, 23, 42};
-	igraph_integer_t set_b[] = {42, 23, 16, 15, 8, 4}; // identical set
-	uint64_t h = community_simhash_from_members(set_a, 6);
-	float c1[3], c2[3];
-	community_simhash_to_rgb(h, c1);
-	community_simhash_to_rgb(h, c2); // same hash -> same color
-	IGRAPH_ASSERT(c1[0] == c2[0] && c1[1] == c2[1] && c1[2] == c2[2]);
+	igraph_integer_t membership_a[10] = {-1, 3, -1, 3, -1, 3, -1, -1, -1, -1};
+	igraph_integer_t membership_b[10] = {-1, 9, -1, 9, -1, 9, -1, -1, -1, -1};
+	uint64_t hash_a = community_simhash_from_membership(membership_a, 10, 3);
+	uint64_t hash_b = community_simhash_from_membership(membership_b, 10, 9);
+	GraphColor c1 = community_simhash_to_color(hash_a);
+	GraphColor c2 = community_simhash_to_color(hash_b);
+	IGRAPH_ASSERT(hash_a == hash_b);
+	IGRAPH_ASSERT(memcmp(&c1, &c2, sizeof(c1)) == 0);
 	return 0;
 }
 

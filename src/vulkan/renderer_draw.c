@@ -31,7 +31,10 @@ void renderer_render_scene(Renderer *r, const Pipelines *pipelines, VkCommandBuf
 
 	VkClearValue cv[2];
 	if (pipelines == &r->pipelines) {
-		cv[0].color = (VkClearColorValue){color_srgb_to_linear(0.01f), color_srgb_to_linear(0.01f), color_srgb_to_linear(0.02f), 1.0f};
+		float background_srgb[3] = {0.01f, 0.01f, 0.02f};
+		float background_bt2020[3];
+		color_srgb_to_linear_bt2020(background_srgb, background_bt2020);
+		cv[0].color = (VkClearColorValue){background_bt2020[0], background_bt2020[1], background_bt2020[2], 1.0f};
 	} else {
 		cv[0].color = (VkClearColorValue){0.01f, 0.01f, 0.02f, 1.0f};
 	}

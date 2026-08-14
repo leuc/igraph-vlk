@@ -14,7 +14,6 @@
 #include "graph/graph_core.h"
 #include "graph/main_path_cache.h"
 #include "graph/main_path_search.h"
-#include "graph/wrappers_community.h"
 #include "vulkan/renderer.h"
 #include "vulkan/renderer_anim.h"
 #include "vulkan/renderer_criticality.h"
@@ -662,7 +661,7 @@ void apply_main_path_selection(ExecutionContext *ctx, void *result_data)
 		if (!result->flags[v])
 			graph->nodes[v].emphasis = EMPHASIS_DIMMED;
 		else if (result->component_id)
-			community_id_to_rgb(result->component_id[v], graph->nodes[v].color);
+			graph->nodes[v].color = graph_color_generate(graph_color_hash_u64((uint64_t)result->component_id[v]));
 	}
 	renderer->needsAttributeUpload = VK_TRUE;
 	renderer_update_graph(renderer, graph);

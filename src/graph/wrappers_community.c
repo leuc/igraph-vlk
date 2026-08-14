@@ -5,6 +5,7 @@
 
 #include "graph/wrappers_community.h"
 #include "app_state.h"
+#include "graph/community_simhash.h"
 #include "graph/graph_animation.h"
 #include "graph/graph_color.h"
 #include "interaction/state.h"
@@ -615,19 +616,6 @@ void *compute_igraph_community_fluid_communities(ExecutionContext *ctx)
 	return membership;
 }
 
-
-void community_id_to_rgb(igraph_integer_t comm_id, float out_rgb[3])
-{
-	float hue = (float)comm_id * 0.618033988749895f;
-	hue -= floorf(hue);
-	float h = hue * 6.0f;
-	int hi = (int)floorf(h);
-	float f = h - hi;
-	out_rgb[0] = (hi == 0 || hi == 5) ? 1.0f : (hi == 1 || hi == 2) ? 1.0f - f : f;
-	out_rgb[1] = (hi == 0 || hi == 3) ? f : (hi == 1 || hi == 2) ? 1.0f : 1.0f - f;
-	out_rgb[2] = (hi == 0 || hi == 4) ? 1.0f - f : (hi == 2 || hi == 3) ? f : 1.0f;
-}
-
 void apply_community_membership(ExecutionContext *ctx, void *result_data)
 {
 	if (!ctx || !ctx->app_state || !result_data) {
@@ -675,13 +663,26 @@ void apply_community_membership(ExecutionContext *ctx, void *result_data)
 		if (cluster_sizes[i] > max_cluster_size)
 			max_cluster_size = cluster_sizes[i];
 	}
+	igraph_integer_t *community_ids = malloc((size_t)cluster_count * sizeof(igraph_integer_t));
+	uint64_t *community_hashes = calloc((size_t)cluster_count, sizeof(uint64_t));
+	if (!community_ids || !community_hashes) {
+		free(community_ids);
+		free(community_hashes);
+		free(cluster_sizes);
+		return;
+	}
+	for (int comm = 0; comm < cluster_count; comm++)
+		community_ids[comm] = comm;
+	community_simhash_batch(VECTOR(*membership), data->node_count, community_ids, cluster_count, community_hashes);
 
 	for (int i = 0; i < data->node_count; i++) {
 		int comm = VECTOR(*membership)[i];
 		if (comm < cluster_count)
-			community_id_to_rgb(comm, data->nodes[i].color);
+			data->nodes[i].color = community_simhash_to_color(community_hashes[comm]);
 	}
 
+	free(community_ids);
+	free(community_hashes);
 	free(cluster_sizes);
 
 	// Mark attributes dirty and refresh renderer

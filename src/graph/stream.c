@@ -19,8 +19,8 @@
 #include "graph/dyn_k-core.h"
 #include "graph/dyn_layered_sphere.h"
 #include "graph/dyn_leiden.h"
+#include "graph/graph_color.h"
 #include "graph/ncol_parse.h"
-#include "graph/wrappers_community.h"
 #include "os/stream.h"
 #include "ui/menu.h"
 
@@ -250,9 +250,7 @@ static bool ensure_vertex(GraphStream *gs, GraphData *data, const char *name, ig
 	n->position[0] = 0.0f;
 	n->position[1] = 0.0f;
 	n->position[2] = 0.0f;
-	n->color[0] = 0.6f;
-	n->color[1] = 0.6f;
-	n->color[2] = 0.6f;
+	n->color = graph_color_generate(graph_color_hash_string(name));
 	n->size = 1.0f;
 	n->label = strdup(name);
 	n->degree = 0;
@@ -411,10 +409,7 @@ static void stream_apply_coreness_sizes(GraphStream *gs, GraphData *data, const 
 	}
 }
 
-// Mirror maintained community membership into node colors. Unlike coreness
-// sizes, a community's color depends only on its own id (golden-ratio hue
-// stepping, see community_id_to_rgb()), never on a global maximum, so there
-// is no "rescale everything" case to handle here.
+// Mirror maintained community membership into stable member-set colors.
 
 static void stream_apply_community_colors(GraphStream *gs, GraphData *data, const igraph_vector_int_t *changed)
 {
@@ -431,7 +426,7 @@ static void stream_apply_community_colors(GraphStream *gs, GraphData *data, cons
 			// representative vertex id, so a community keeps its color across
 			// merges/splits instead of thrashing every poll.
 			uint64_t h = community_simhash_from_membership(comm, vcount, comm[vid]);
-			community_simhash_to_rgb(h, data->nodes[vid].color);
+			data->nodes[vid].color = community_simhash_to_color(h);
 		}
 	}
 }

@@ -21,7 +21,7 @@ void graph_free_data(GraphData *data);
 /**
  * Build the entire visualization arrays (nodes + edges) from the igraph graph.
  * Call after loading a new graph, generating a new graph, or filtering vertices.
- * Node colors are randomized, positions are synced from the layout matrix.
+ * Node colors are generated from stable keys, positions are synced from the layout matrix.
  * @param data Pointer to GraphData to build
  */
 bool graph_build_visualization(GraphData *data);

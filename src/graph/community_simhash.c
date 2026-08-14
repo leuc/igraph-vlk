@@ -7,7 +7,8 @@
 
 #include "graph/community_simhash.h"
 
-#include <math.h>
+#include "graph/graph_color.h"
+
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -129,17 +130,7 @@ int community_simhash_hamming(uint64_t a, uint64_t b)
 	return __builtin_popcountll(a ^ b);
 }
 
-void community_simhash_to_rgb(uint64_t hash, float out_rgb[3])
+GraphColor community_simhash_to_color(uint64_t hash)
 {
-	// Golden-ratio hue stepping, identical to community_id_to_rgb(), but fed
-	// the 64-bit SimHash instead of a volatile comm_id. The hash is treated
-	// as a unit-fraction hue in [0,1).
-	float hue = (float)(hash >> 11) / (float)(1ULL << 53);
-	hue -= floorf(hue);
-	float h = hue * 6.0f;
-	int hi = (int)floorf(h);
-	float f = h - hi;
-	out_rgb[0] = (hi == 0 || hi == 5) ? 1.0f : (hi == 1 || hi == 2) ? 1.0f - f : f;
-	out_rgb[1] = (hi == 0 || hi == 3) ? f : (hi == 1 || hi == 2) ? 1.0f : 1.0f - f;
-	out_rgb[2] = (hi == 0 || hi == 4) ? 1.0f - f : (hi == 2 || hi == 3) ? f : 1.0f;
+	return graph_color_generate(hash);
 }

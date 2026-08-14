@@ -41,6 +41,12 @@ void color_linear_bt709_to_bt2020(const float input[3], float output[3])
 	output[2] = 0.0163916f * input[0] + 0.0880132f * input[1] + 0.8955950f * input[2];
 }
 
+void color_srgb_to_linear_bt2020(const float input[3], float output[3])
+{
+	float linear_bt709[3] = {color_srgb_to_linear(input[0]), color_srgb_to_linear(input[1]), color_srgb_to_linear(input[2])};
+	color_linear_bt709_to_bt2020(linear_bt709, output);
+}
+
 float color_st2084_encode(float nits)
 {
 	const float m1 = 2610.0f / 16384.0f;

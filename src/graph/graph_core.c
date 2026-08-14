@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "graph/graph_color.h"
 #include "graph/wrappers_layout.h"
 
 // (Re)scan vertex attributes for low-cardinality string/boolean ones and
@@ -289,6 +290,7 @@ bool graph_build_visualization(GraphData *data)
 		return false;
 	bool has_node_attr = data->node_attr_name && igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, data->node_attr_name);
 	bool has_label = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, "label");
+	bool has_name = igraph_cattribute_has_attr(&data->g, IGRAPH_ATTRIBUTE_VERTEX, "name");
 	float max_n_val = 0.0f;
 	if (has_node_attr) {
 		for (int i = 0; i < data->node_count; i++) {
@@ -299,9 +301,8 @@ bool graph_build_visualization(GraphData *data)
 	}
 
 	for (int i = 0; i < data->node_count; i++) {
-		data->nodes[i].color[0] = (float)rand() / RAND_MAX;
-		data->nodes[i].color[1] = (float)rand() / RAND_MAX;
-		data->nodes[i].color[2] = (float)rand() / RAND_MAX;
+		uint64_t color_key = has_name ? graph_color_hash_string(VAS(&data->g, "name", i)) : graph_color_hash_u64((uint64_t)i);
+		data->nodes[i].color = graph_color_generate(color_key);
 		data->nodes[i].size = (has_node_attr && max_n_val > 0) ? (float)VAN(&data->g, data->node_attr_name, i) / max_n_val : 1.0f;
 		data->nodes[i].label = has_label ? strdup(VAS(&data->g, "label", i)) : NULL;
 		data->nodes[i].visible = 1.0f;

@@ -4,17 +4,18 @@
 #include "color_space.glsl"
 
 layout(location = 0) in vec2 fragTexCoord;
-layout(location = 1) in vec3 fragColor;
-layout(location = 2) in flat int fragDegree;
-layout(location = 3) in float fragSelected;
-layout(location = 4) in float fragVisible;
-layout(location = 5) in float fragReveal;
+layout(location = 1) in vec3 fragSdrColor;
+layout(location = 2) in vec3 fragHdrColor;
+layout(location = 3) in flat int fragDegree;
+layout(location = 4) in float fragSelected;
+layout(location = 5) in float fragVisible;
+layout(location = 6) in float fragReveal;
 
 layout(location = 0) out vec4 outColor;
 
 vec3 node_output_color(vec3 color)
 {
-	return fragSelected > 0.5 ? scene_output_highlight(color) : scene_output_color(color);
+	return fragSelected > 0.5 ? graph_scene_highlight(color) : color;
 }
 
 void main()
@@ -22,9 +23,9 @@ void main()
 	if (fragVisible < 0.5)
 		discard;
 
-	vec3 c = mix(vec3(0.15), fragColor, fragReveal);
+	vec3 c = mix(scene_output_color(vec3(0.15)), graph_scene_color(fragSdrColor, fragHdrColor), fragReveal);
 	if (fragSelected > 0.5)
-		c = min(c * 1.4 + vec3(0.1), vec3(1.0));
+		c = min(c * 1.4 + scene_output_color(vec3(0.1)), vec3(1.0));
 
 	vec2 uv = fragTexCoord;
 	float dist = length(uv);

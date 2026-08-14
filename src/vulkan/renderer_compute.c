@@ -32,7 +32,7 @@ VkResult renderer_dispatch_edge_routing(Renderer *r, GraphData *graph, CompEdge 
 	for (uint32_t i = 0; i < graph->node_count; i++) {
 		glm_vec3_scale(graph->nodes[i].position, r->layoutScale, cNodes[i].position);
 		cNodes[i].pad1 = 0;
-		memcpy(cNodes[i].color, graph->nodes[i].color, sizeof(vec3));
+		memcpy(cNodes[i].color, graph->nodes[i].color.sdr_srgb, sizeof(vec3));
 		cNodes[i].size = graph->nodes[i].size;
 		cNodes[i].degree = graph->nodes[i].degree;
 		cNodes[i].pad2 = cNodes[i].pad3 = cNodes[i].pad4 = 0;

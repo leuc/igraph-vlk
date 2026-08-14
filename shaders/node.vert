@@ -33,19 +33,21 @@ layout(std430, binding = 5) readonly buffer NodeAnimation
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 instancePos;
-layout(location = 2) in vec3 instanceColor;
-layout(location = 3) in float instanceSize;
-layout(location = 4) in int instanceDegree;
-layout(location = 5) in float instanceSelected;
-layout(location = 6) in float instanceVisible;
-layout(location = 7) in vec3 prevInstancePos;
+layout(location = 2) in vec3 instanceSdrColor;
+layout(location = 3) in vec3 instanceHdrColor;
+layout(location = 4) in float instanceSize;
+layout(location = 5) in int instanceDegree;
+layout(location = 6) in float instanceSelected;
+layout(location = 7) in float instanceVisible;
+layout(location = 8) in vec3 prevInstancePos;
 
 layout(location = 0) out vec2 fragTexCoord;
-layout(location = 1) out vec3 fragColor;
-layout(location = 2) out flat int fragDegree;
-layout(location = 3) out float fragSelected;
-layout(location = 4) out float fragVisible;
-layout(location = 5) out float fragReveal;
+layout(location = 1) out vec3 fragSdrColor;
+layout(location = 2) out vec3 fragHdrColor;
+layout(location = 3) out flat int fragDegree;
+layout(location = 4) out float fragSelected;
+layout(location = 5) out float fragVisible;
+layout(location = 6) out float fragReveal;
 
 float reveal_value(float reveal_at)
 {
@@ -77,7 +79,8 @@ void main()
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(worldPos, 1.0);
 
 	fragTexCoord = inPosition.xy; // Pass the local flattened X/Y coordinates to the SDF cutter
-	fragColor = instanceColor;
+	fragSdrColor = instanceSdrColor;
+	fragHdrColor = instanceHdrColor;
 	fragDegree = instanceDegree;
 	fragSelected = instanceSelected;
 	fragVisible = instanceVisible;
