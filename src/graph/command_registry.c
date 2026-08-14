@@ -14,7 +14,6 @@
 #include "graph/wrappers_cycles.h"
 #include "graph/wrappers_filter.h"
 #include "graph/wrappers_flow.h"
-#include "graph/wrappers_follow_speed.h"
 #include "graph/wrappers_kcore_tree.h"
 #include "graph/wrappers_layout.h"
 #include "graph/wrappers_path_cover.h"
@@ -125,10 +124,6 @@ const CommandDef g_command_registry[] = {
 	{"Group", "igraph_community_voronoi", "Voronoi", compute_igraph_community_voronoi, apply_community_membership, free_community_membership},
 	{"Group", "igraph_community_fluid_communities", "Fluid Communities", compute_igraph_community_fluid_communities, apply_community_membership, free_community_membership},
 
-	{"Follow/Speed", "follow_speed_3sec", "[x] 3sec", compute_inline_pass, apply_follow_speed_3sec, free_noop},
-	{"Follow/Speed", "follow_speed_9sec", "[ ] 9sec", compute_inline_pass, apply_follow_speed_9sec, free_noop},
-	{"Follow/Speed", "follow_speed_18sec", "[ ] 18sec", compute_inline_pass, apply_follow_speed_18sec, free_noop},
-	{"Follow/Speed", "follow_speed_27sec", "[ ] 27sec", compute_inline_pass, apply_follow_speed_27sec, free_noop},
 	{"Follow", "bfs_trigger", "Breadth-first search from single source", compute_inline_pass, apply_bfs_trigger, free_noop},
 	{"Follow", "dfs_trigger", "Depth-first search from single source", compute_inline_pass, apply_dfs_trigger, free_noop},
 	{"Follow", "topo_trigger", "Topological sort", compute_inline_pass, apply_topo_trigger, free_noop},

@@ -355,7 +355,7 @@ void apply_path_cover_result(ExecutionContext *ctx, void *result_data)
 		return;
 	}
 
-	GraphAnimationRequest request = {.node_steps = result->ranks, .duration = state->follow_reveal_duration};
+	GraphAnimationRequest request = {.node_steps = result->ranks, .duration = 3.0f};
 	graph_animation_play(&state->renderer, graph, &request);
 
 	// Non-antichain vertices are dimmed (not overwritten) so the antichain

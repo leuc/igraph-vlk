@@ -158,7 +158,7 @@ void apply_main_path_weighting(ExecutionContext *ctx, void *result_data)
 	if (!graph_rebuild_edges(graph))
 		return;
 	renderer_update_graph(&state->renderer, graph);
-	if (!renderer_init_criticality_buffers(&state->renderer, graph, &prep->levels, prep->num_levels, prep->weight_mode) || !renderer_start_main_path_weighting(&state->renderer, graph, &prep->levels, state->follow_reveal_duration))
+	if (!renderer_init_criticality_buffers(&state->renderer, graph, &prep->levels, prep->num_levels, prep->weight_mode) || !renderer_start_main_path_weighting(&state->renderer, graph, &prep->levels))
 		fprintf(stderr, "[Main Path] failed to initialize weighting\n");
 	state->renderer.label.tree_needs_rebuild = true;
 }

@@ -183,7 +183,7 @@ void apply_kcore_tree_trigger(ExecutionContext *ctx, void *result_data)
 
 	graph_reset_emphasis(graph);
 	graph_animation_clear(&state->renderer, graph);
-	GraphAnimationRequest request = {.node_steps = result->ranks, .duration = state->follow_reveal_duration};
+	GraphAnimationRequest request = {.node_steps = result->ranks, .duration = 3.0f};
 	graph_animation_play(&state->renderer, graph, &request);
 }
 

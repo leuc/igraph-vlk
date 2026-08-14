@@ -43,7 +43,6 @@ int main(int argc, char **argv)
 	os_path_init();
 
 	AppState app = {0};
-	app.follow_reveal_duration = 3.0f;
 
 	// Attribute operations require the C attribute handler before graph creation.
 	igraph_set_attribute_table(&igraph_cattribute_table);
