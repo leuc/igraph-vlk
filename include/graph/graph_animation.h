@@ -18,8 +18,8 @@ typedef struct
 
 void graph_animation_play(Renderer *renderer, const GraphData *graph, const GraphAnimationRequest *request);
 void graph_animation_clear(Renderer *renderer, const GraphData *graph);
-void graph_animation_play_bfs(Renderer *renderer, const GraphData *graph);
-void graph_animation_play_dfs(Renderer *renderer, const GraphData *graph);
-void graph_animation_play_topological(Renderer *renderer, const GraphData *graph);
+void graph_animation_play_bfs(Renderer *renderer, const GraphData *graph, float duration);
+void graph_animation_play_dfs(Renderer *renderer, const GraphData *graph, float duration);
+void graph_animation_play_topological(Renderer *renderer, const GraphData *graph, float duration);
 
 #endif

@@ -24,6 +24,7 @@ void app_context_init(AppContext *ctx, MenuNode *root_menu)
 	ctx->menu.layout_revision = 1;
 	ctx->menu.text_revision = 1;
 	ctx->menu.scene_revision = 1;
+	ctx->menu.follow_animation_duration = FOLLOW_ANIMATION_DURATION_DEFAULT;
 }
 
 void app_context_destroy(AppContext *ctx)
@@ -79,6 +80,7 @@ void update_app_state(AppState *state)
 				exec_ctx.app_state = state;
 				exec_ctx.running = true;
 				exec_ctx.transition_duration = app->pending_command->cmd_def->transition_duration;
+				exec_ctx.follow_animation_duration = app->menu.follow_animation_duration;
 
 				if (state->worker_ctx.thread_running) {
 					state->current_worker_job = worker_thread_submit_job(&state->worker_ctx, (CommandDef *)app->pending_command->cmd_def, &exec_ctx);
@@ -255,6 +257,43 @@ void handle_menu_selection(AppContext *app, MenuNode *selected_node)
 
 		check_pending_command_requirements(app);
 	}
+}
+
+static void *compute_follow_animation_speed(float duration)
+{
+	return (void *)(uintptr_t)(unsigned int)duration;
+}
+
+void *compute_follow_animation_speed_3(ExecutionContext *ctx)
+{
+	(void)ctx;
+	return compute_follow_animation_speed(3.0f);
+}
+
+void *compute_follow_animation_speed_9(ExecutionContext *ctx)
+{
+	(void)ctx;
+	return compute_follow_animation_speed(9.0f);
+}
+
+void *compute_follow_animation_speed_18(ExecutionContext *ctx)
+{
+	(void)ctx;
+	return compute_follow_animation_speed(18.0f);
+}
+
+void *compute_follow_animation_speed_27(ExecutionContext *ctx)
+{
+	(void)ctx;
+	return compute_follow_animation_speed(27.0f);
+}
+
+void apply_follow_animation_speed(ExecutionContext *ctx, void *result_data)
+{
+	if (!ctx || !ctx->app_state || !result_data)
+		return;
+	float duration = (float)(uintptr_t)result_data;
+	menu_set_follow_animation_duration(&ctx->app_state->app_ctx.menu, duration);
 }
 
 void apply_quit(ExecutionContext *ctx, void *result_data)

@@ -236,7 +236,7 @@ void apply_maxflow_sampling(ExecutionContext *ctx, void *result_data)
 		fprintf(stderr, "[maxflow apply] graph_rebuild_edges failed\n");
 		return;
 	}
-	GraphAnimationRequest request = {.node_steps = flow_result->node_ranks, .edge_values = flow_result->edge_flows, .duration = 4.0f};
+	GraphAnimationRequest request = {.node_steps = flow_result->node_ranks, .edge_values = flow_result->edge_flows, .duration = ctx->follow_animation_duration};
 	graph_animation_play(&state->renderer, graph_data, &request);
 
 	renderer_update_graph(&state->renderer, graph_data);

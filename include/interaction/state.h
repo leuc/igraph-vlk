@@ -14,6 +14,8 @@
 
 struct CommandDef;
 
+#define FOLLOW_ANIMATION_DURATION_DEFAULT 3.0f
+
 typedef enum {
 	PARAM_TYPE_INT,
 	PARAM_TYPE_FLOAT,
@@ -53,6 +55,7 @@ typedef struct
 	bool running;
 	// Transition duration for layout morphing (0 = snap, >0 = smooth transition)
 	float transition_duration;
+	float follow_animation_duration;
 } ExecutionContext;
 
 typedef struct
@@ -143,6 +146,7 @@ typedef struct
 	uint64_t applied_layout_revision;
 	uint64_t text_revision;
 	uint64_t scene_revision;
+	float follow_animation_duration;
 } MenuState;
 
 typedef struct AppContext
@@ -166,6 +170,13 @@ void check_pending_command_requirements(AppContext *app);
 void menu_invalidate(MenuState *menu, MenuInvalidation flags);
 bool menu_set_hovered(MenuState *menu, MenuNode *node);
 void menu_set_info_card(MenuState *menu, const InfoCardData *data);
+bool menu_set_follow_animation_duration(MenuState *menu, float duration);
+
+void *compute_follow_animation_speed_3(ExecutionContext *ctx);
+void *compute_follow_animation_speed_9(ExecutionContext *ctx);
+void *compute_follow_animation_speed_18(ExecutionContext *ctx);
+void *compute_follow_animation_speed_27(ExecutionContext *ctx);
+void apply_follow_animation_speed(ExecutionContext *ctx, void *result_data);
 
 void apply_quit(ExecutionContext *ctx, void *result_data);
 

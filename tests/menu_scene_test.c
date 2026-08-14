@@ -145,10 +145,47 @@ static void test_revisions(void)
 	assert(menu.scene_revision == 5);
 }
 
+static void test_follow_animation_speed(void)
+{
+	const char *ids[] = {"follow_speed_3", "follow_speed_9", "follow_speed_18", "follow_speed_27"};
+	const char *initial_labels[] = {"(x) 3 sec", "( ) 9 sec", "( ) 18 sec", "( ) 27 sec"};
+	const char *selected_labels[] = {"( ) 3 sec", "( ) 9 sec", "(x) 18 sec", "( ) 27 sec"};
+	MenuNode root;
+	MenuNode nodes[4];
+	MenuNode *children[4];
+	IgraphCommand commands[4];
+	init_node(&root, NODE_BRANCH, "Speed");
+	root.num_children = 4;
+	root.children = children;
+	for (int i = 0; i < 4; i++) {
+		init_node(&nodes[i], NODE_LEAF_COMMAND, strdup(initial_labels[i]));
+		memset(&commands[i], 0, sizeof(commands[i]));
+		commands[i].id_name = ids[i];
+		commands[i].display_name = strdup(initial_labels[i]);
+		nodes[i].command = &commands[i];
+		children[i] = &nodes[i];
+	}
+
+	MenuState menu = {.root = &root, .layout_revision = 1, .text_revision = 1, .scene_revision = 1, .follow_animation_duration = FOLLOW_ANIMATION_DURATION_DEFAULT};
+	assert(menu_set_follow_animation_duration(&menu, 18.0f));
+	assert(menu.follow_animation_duration == 18.0f);
+	assert(menu.layout_revision == 2);
+	assert(menu.text_revision == 2);
+	assert(menu.scene_revision == 2);
+	for (int i = 0; i < 4; i++) {
+		assert(strcmp(nodes[i].label, selected_labels[i]) == 0);
+		assert(strcmp(commands[i].display_name, selected_labels[i]) == 0);
+		free((void *)nodes[i].label);
+		free((void *)commands[i].display_name);
+	}
+	assert(!menu_set_follow_animation_duration(&menu, 12.0f));
+}
+
 int main(void)
 {
 	test_scene_counts();
 	test_capacity_growth();
 	test_revisions();
+	test_follow_animation_speed();
 	return 0;
 }

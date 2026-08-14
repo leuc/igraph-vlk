@@ -17,8 +17,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define ROTOR_ROUTING_ANIMATION_DURATION 4.0f
-
 typedef struct
 {
 	ExecutionContext *ctx;
@@ -73,13 +71,13 @@ void *compute_rotor_aggregation(ExecutionContext *ctx)
 	return compute_rotor_routing(ctx, ROTOR_ROUTING_AGGREGATION, "Rotor Aggregation");
 }
 
-static float rotor_routing_reveal_at(uint64_t first_move, uint64_t total_moves)
+static float rotor_routing_reveal_at(uint64_t first_move, uint64_t total_moves, float duration)
 {
 	if (first_move == UINT64_MAX)
 		return FLT_MAX;
 	if (total_moves == 0)
 		return 0.0f;
-	return ROTOR_ROUTING_ANIMATION_DURATION * (float)((double)first_move / (double)total_moves);
+	return duration * (float)((double)first_move / (double)total_moves);
 }
 
 void apply_rotor_routing(ExecutionContext *ctx, void *result_data)
@@ -98,10 +96,10 @@ void apply_rotor_routing(ExecutionContext *ctx, void *result_data)
 	}
 
 	for (uint32_t node = 0; node < result->node_count; node++)
-		nodes[node].reveal_at = rotor_routing_reveal_at(result->node_first_move[node], result->total_moves);
+		nodes[node].reveal_at = rotor_routing_reveal_at(result->node_first_move[node], result->total_moves, ctx->follow_animation_duration);
 	float maximum = 0.0f;
 	for (uint32_t edge = 0; edge < result->edge_count; edge++) {
-		edges[edge].reveal_at = rotor_routing_reveal_at(result->edge_first_move[edge], result->total_moves);
+		edges[edge].reveal_at = rotor_routing_reveal_at(result->edge_first_move[edge], result->total_moves, ctx->follow_animation_duration);
 		edges[edge].strength = result->mode == ROTOR_ROUTING_AGGREGATION ? renderer_anim_host_strength((float)result->edge_traversals[edge]) : (result->edge_traversals[edge] > 0 ? 1.0f : 0.0f);
 		if (edges[edge].strength > maximum)
 			maximum = edges[edge].strength;

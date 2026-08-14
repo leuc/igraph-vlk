@@ -124,6 +124,10 @@ const CommandDef g_command_registry[] = {
 	{"Group", "igraph_community_voronoi", "Voronoi", compute_igraph_community_voronoi, apply_community_membership, free_community_membership},
 	{"Group", "igraph_community_fluid_communities", "Fluid Communities", compute_igraph_community_fluid_communities, apply_community_membership, free_community_membership},
 
+	{"Follow/Speed", "follow_speed_3", "(x) 3 sec", compute_follow_animation_speed_3, apply_follow_animation_speed, free_noop},
+	{"Follow/Speed", "follow_speed_9", "( ) 9 sec", compute_follow_animation_speed_9, apply_follow_animation_speed, free_noop},
+	{"Follow/Speed", "follow_speed_18", "( ) 18 sec", compute_follow_animation_speed_18, apply_follow_animation_speed, free_noop},
+	{"Follow/Speed", "follow_speed_27", "( ) 27 sec", compute_follow_animation_speed_27, apply_follow_animation_speed, free_noop},
 	{"Follow", "bfs_trigger", "Breadth-first search from single source", compute_inline_pass, apply_bfs_trigger, free_noop},
 	{"Follow", "dfs_trigger", "Depth-first search from single source", compute_inline_pass, apply_dfs_trigger, free_noop},
 	{"Follow", "topo_trigger", "Topological sort", compute_inline_pass, apply_topo_trigger, free_noop},
