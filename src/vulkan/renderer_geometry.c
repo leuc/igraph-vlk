@@ -12,18 +12,23 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "graph/graph_color.h"
 #include "interaction/camera.h"
 #include "interaction/state.h"
 #include "vulkan/buffers.h"
+#include "vulkan/color_space.h"
 #include "vulkan/renderer_criticality.h"
 #include "vulkan/utils.h"
 
-static void scale_graph_color(const GraphColor *color, float scale, vec3 sdr_srgb, vec3 hdr_linear_bt2020)
+static void graph_color_with_emphasis(const GraphColor *color, float emphasis, vec3 sdr_srgb, vec3 hdr_linear_bt2020)
 {
-	for (int channel = 0; channel < 3; channel++) {
-		sdr_srgb[channel] = color->sdr_srgb[channel] * scale;
-		hdr_linear_bt2020[channel] = color->hdr_linear_bt2020[channel] * scale;
-	}
+	for (int channel = 0; channel < 3; channel++)
+		sdr_srgb[channel] = color->sdr_srgb[channel] * emphasis;
+	if (emphasis < EMPHASIS_FULL)
+		color_srgb_to_linear_bt2020(sdr_srgb, hdr_linear_bt2020);
+	else
+		for (int channel = 0; channel < 3; channel++)
+			hdr_linear_bt2020[channel] = color->hdr_linear_bt2020[channel];
 }
 
 void renderer_update_graph(Renderer *r, GraphData *graph)
@@ -91,7 +96,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 		if (size < NODE_SIZE_MIN)
 			size = NODE_SIZE_MIN;
 		glm_vec3_scale(graph->nodes[i].position, r->layoutScale, nodePositions[i].pos);
-		scale_graph_color(&graph->nodes[i].color, graph->nodes[i].emphasis, nodeAttributes[i].sdr_srgb, nodeAttributes[i].hdr_linear_bt2020);
+		graph_color_with_emphasis(&graph->nodes[i].color, graph->nodes[i].emphasis, nodeAttributes[i].sdr_srgb, nodeAttributes[i].hdr_linear_bt2020);
 		nodeAttributes[i].size = size;
 		nodeAttributes[i].degree = graph->nodes[i].degree;
 		nodeAttributes[i].selected = graph->nodes[i].selected;
@@ -155,7 +160,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 				}
 
 				memcpy(edgePositions[idx].pos, cEdges[i].path[p], 12);
-				scale_graph_color(&graph->nodes[graph->edges[i].from].color, graph->nodes[graph->edges[i].from].emphasis * graph->edges[i].emphasis, edgeAttributes[idx].sdr_srgb, edgeAttributes[idx].hdr_linear_bt2020);
+				graph_color_with_emphasis(&graph->nodes[graph->edges[i].from].color, graph->nodes[graph->edges[i].from].emphasis * graph->edges[i].emphasis, edgeAttributes[idx].sdr_srgb, edgeAttributes[idx].hdr_linear_bt2020);
 				edgeAttributes[idx].selected = graph->edges[i].selected;
 				edgeAttributes[idx].normalized_pos = current_segment_start_len / (total_length > 0.0f ? total_length : 1.0f);
 				edgeAttributes[idx].visible = (graph->nodes[graph->edges[i].from].visible > 0.5f && graph->nodes[graph->edges[i].to].visible > 0.5f && graph->edges[i].visible > 0.5f) ? 1.0f : 0.0f;
@@ -163,7 +168,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 				idx++;
 
 				memcpy(edgePositions[idx].pos, cEdges[i].path[p + 1], 12);
-				scale_graph_color(&graph->nodes[graph->edges[i].to].color, graph->nodes[graph->edges[i].to].emphasis * graph->edges[i].emphasis, edgeAttributes[idx].sdr_srgb, edgeAttributes[idx].hdr_linear_bt2020);
+				graph_color_with_emphasis(&graph->nodes[graph->edges[i].to].color, graph->nodes[graph->edges[i].to].emphasis * graph->edges[i].emphasis, edgeAttributes[idx].sdr_srgb, edgeAttributes[idx].hdr_linear_bt2020);
 				edgeAttributes[idx].selected = graph->edges[i].selected;
 				edgeAttributes[idx].normalized_pos = (current_segment_start_len + segment_length) / (total_length > 0.0f ? total_length : 1.0f);
 				edgeAttributes[idx].visible = edgeAttributes[idx - 1].visible;
@@ -183,7 +188,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 			float edge_vis = (graph->nodes[graph->edges[i].from].visible > 0.5f && graph->nodes[graph->edges[i].to].visible > 0.5f && graph->edges[i].visible > 0.5f) ? 1.0f : 0.0f;
 
 			memcpy(edgePositions[idx].pos, p1, 12);
-			scale_graph_color(&graph->nodes[graph->edges[i].from].color, graph->nodes[graph->edges[i].from].emphasis * graph->edges[i].emphasis, edgeAttributes[idx].sdr_srgb, edgeAttributes[idx].hdr_linear_bt2020);
+			graph_color_with_emphasis(&graph->nodes[graph->edges[i].from].color, graph->nodes[graph->edges[i].from].emphasis * graph->edges[i].emphasis, edgeAttributes[idx].sdr_srgb, edgeAttributes[idx].hdr_linear_bt2020);
 			edgeAttributes[idx].selected = graph->edges[i].selected;
 			edgeAttributes[idx].normalized_pos = 0.0f;
 			edgeAttributes[idx].visible = edge_vis;
@@ -191,7 +196,7 @@ void renderer_update_graph(Renderer *r, GraphData *graph)
 			idx++;
 
 			memcpy(edgePositions[idx].pos, p2, 12);
-			scale_graph_color(&graph->nodes[graph->edges[i].to].color, graph->nodes[graph->edges[i].to].emphasis * graph->edges[i].emphasis, edgeAttributes[idx].sdr_srgb, edgeAttributes[idx].hdr_linear_bt2020);
+			graph_color_with_emphasis(&graph->nodes[graph->edges[i].to].color, graph->nodes[graph->edges[i].to].emphasis * graph->edges[i].emphasis, edgeAttributes[idx].sdr_srgb, edgeAttributes[idx].hdr_linear_bt2020);
 			edgeAttributes[idx].selected = graph->edges[i].selected;
 			edgeAttributes[idx].normalized_pos = 1.0f;
 			edgeAttributes[idx].visible = edge_vis;

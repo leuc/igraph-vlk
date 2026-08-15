@@ -112,8 +112,8 @@ GraphColor graph_color_generate(uint64_t key)
 {
 	const float tau = 6.2831853071795864769f;
 	float hue = hash_unit_float(graph_color_mix(key ^ 0x243F6A8885A308D3ULL)) * tau;
-	float lightness = 0.65f + hash_unit_float(graph_color_mix(key ^ 0x13198A2E03707344ULL)) * 0.18f;
-	float chroma = 0.14f + hash_unit_float(graph_color_mix(key ^ 0xA4093822299F31D0ULL)) * 0.10f;
+	float lightness = 0.56f + hash_unit_float(graph_color_mix(key ^ 0x13198A2E03707344ULL)) * 0.20f;
+	float chroma = 0.20f + hash_unit_float(graph_color_mix(key ^ 0xA4093822299F31D0ULL)) * 0.12f;
 	GraphColor color;
 	float linear_srgb[3];
 	gamut_mapped_oklch(lightness, chroma, hue, false, linear_srgb);
