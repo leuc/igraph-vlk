@@ -102,7 +102,7 @@ static bool update_hdr10_state(VulkanSwapchain *swapchain, const VulkanCore *cor
 		swapchain->hdr10StatusReported = true;
 	}
 
-	return display && (previous_revision != display->revision || mode_changed);
+	return mode_changed || (display && previous_revision != display->revision);
 }
 
 bool vulkan_swapchain_set_display_color_info(VulkanSwapchain *swapchain, const DisplayColorInfo *info)
